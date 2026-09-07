@@ -1,0 +1,24 @@
+# Subsystem Modeling
+
+> An open-source project for verifiable system diagrams: Subsystem Models that agents and humans can check against real code, not disposable sketches.
+
+Subsystem Models describe one slice of a codebase as named components (anchored to real symbols), typed edges, and optional execution flows (throughlines). The goal is a mental model you can refine and verify against the code.
+
+## Get started
+
+To make your first Subsystem Model, install the agent skill:
+
+- [create-subsystem-model](https://skills.sh/principal-ai/subsystem-modeling/create-subsystem-model): Agent skill that authors a model and creates it with `npx -y @principal-ai/principal-studio-cli subsystem-model create`, then opens it in Subsystems Studio.
+
+Example prompt after installing the skill:
+
+> Diagram the checkout subsystem in this repo as a Subsystem Model, then open it in Subsystems Studio.
+
+## Docs
+
+- [Try it yourself](https://principal-ai.github.io/subsystem-modeling/start): Install steps and example prompt
+- [Examples](https://principal-ai.github.io/subsystem-modeling/examples/): Gallery of Subsystem Models
+- [Schema](https://principal-ai.github.io/subsystem-modeling/schema): Subsystem Model JSON schema
+- [About](https://principal-ai.github.io/subsystem-modeling/about): Mission and design goals
+- [GitHub repo](https://github.com/principal-ai/subsystem-modeling): Source, packages, and skill definition
+- [Skill source](https://github.com/principal-ai/subsystem-modeling/blob/main/skills/create-subsystem-model/SKILL.md): Full create-subsystem-model skill markdown in the repo
