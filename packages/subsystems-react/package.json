@@ -1,7 +1,7 @@
 {
   "name": "@principal-ai/subsystems-react",
-  "version": "0.17.0",
-  "description": "React components for graph-based principal view framework",
+  "version": "0.18.0",
+  "description": "React UI for Subsystem Models — graph, Pierre code views, and session-event feeds",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {

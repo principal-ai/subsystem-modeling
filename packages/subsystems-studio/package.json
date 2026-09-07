@@ -44,7 +44,7 @@
     "@principal-ai/file-city-react": "^0.5.91",
     "@principal-ai/logo-component": "^0.1.23",
     "@principal-ai/subsystems-core": "^0.29.0",
-    "@principal-ai/subsystems-react": "0.17.0",
+    "@principal-ai/subsystems-react": "0.18.0",
     "@principal-ai/repository-abstraction": "^0.5.7",
     "@types/bun": "latest",
     "@types/react": "^19.2.17",
