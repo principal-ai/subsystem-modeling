@@ -142,7 +142,7 @@ function OrdersApiDemo() {
 }
 
 const meta = {
-  title: 'Examples/TypeScript/Orders API',
+  title: 'TypeScript/Orders API',
   component: SubsystemComponentGraph,
   parameters: {
     layout: 'fullscreen',

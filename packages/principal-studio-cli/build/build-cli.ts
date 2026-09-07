@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Build script for Principal View CLI
+ * Build script for Principal AI CLI
  * Uses esbuild to create a bundled CLI executable
  */
 
@@ -41,4 +41,4 @@ await esbuild.build({
 // Make the CLI executable
 await chmod('dist/index.cjs', 0o755);
 
-console.log('✅ Principal View CLI bundle built successfully');
+console.log('✅ Principal AI CLI bundle built successfully');
