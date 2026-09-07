@@ -41,32 +41,6 @@ const config: StorybookConfig = {
       };
     }
 
-    // Allow access to external canvas files from Backlog.md repository
-    // and the package directory itself for Storybook modules. The principal-studio
-    // package dir is included so the Concepts stories can import
-    // ChangeTypeVisual from its source across the package boundary.
-    if (config.server) {
-      config.server.fs = {
-        ...config.server.fs,
-        allow: [
-          ...(config.server.fs?.allow || []),
-          '/Users/griever/Developer/backlog-adaptation/Backlog.md/.principal-views',
-          '/Users/griever/Developer/visual-validation/principal-view-core-library/packages/subsystems-react',
-          '/Users/griever/Developer/visual-validation/principal-view-core-library/packages/subsystems-studio',
-        ],
-      };
-    } else {
-      config.server = {
-        fs: {
-          allow: [
-            '/Users/griever/Developer/backlog-adaptation/Backlog.md/.principal-views',
-            '/Users/griever/Developer/visual-validation/principal-view-core-library/packages/subsystems-react',
-            '/Users/griever/Developer/visual-validation/principal-view-core-library/packages/subsystems-studio',
-          ],
-        },
-      };
-    }
-
     return config;
   },
 };

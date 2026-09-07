@@ -32,7 +32,7 @@ import {
   applyNodeChanges,
 } from '@xyflow/react';
 import { useTheme } from '@principal-ade/industry-theme';
-import { ChevronDown, ChevronUp, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Pause, Play, X } from 'lucide-react';
 import { IndustryMarkdownSlide } from 'themed-markdown';
 import {
   buildSubsystemGraph,
@@ -58,6 +58,8 @@ const EDGE_LABEL_MAX_EDGE_FRACTION = 0.55;
 /** Rough monospace width at fontSize 10 + horizontal padding/border. */
 const EDGE_LABEL_CHAR_PX = 6.2;
 const EDGE_LABEL_PAD_PX = 18;
+/** Pause (ms) between steps when a throughline autoplays. */
+const THROUGHLINE_PLAY_PAUSE_MS = 2500;
 
 /** Context passed to `renderThroughlineViewer` when a flow/step is focused. */
 export interface ThroughlineViewerContext {
@@ -202,6 +204,12 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   const [focusedThroughlineId, setFocusedThroughlineId] = useState<string | null>(null);
   // `null` = whole flow focused; a number = that single step's edge focused.
   const [focusedStepIndex, setFocusedStepIndex] = useState<number | null>(null);
+  // Hovered step in the flows panel: dims every canvas node/edge not involved
+  // with that step (transient — no camera move, no drawer, no focus change).
+  const [hoveredThroughlineStep, setHoveredThroughlineStep] = useState<{
+    throughlineId: string;
+    stepIndex: number;
+  } | null>(null);
   // Sidebar bottom half: which panel is shown when throughlines exist.
   const [sidebarView, setSidebarView] = useState<'files' | 'flows'>(() =>
     throughlines?.length ? 'flows' : 'files',
@@ -434,6 +442,19 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
     }
     return ids.size > 0 ? ids : null;
   };
+  // Edge/nodes involved in the hovered step — dim everything else.
+  const hoverEdgeIds = useMemo(() => {
+    if (!hoveredThroughlineStep || !throughlines) return null;
+    const tl = throughlines.find((t) => t.id === hoveredThroughlineStep.throughlineId);
+    if (!tl) return null;
+    const step = tl.steps[hoveredThroughlineStep.stepIndex];
+    return step ? new Set([step.edgeId]) : null;
+  }, [throughlines, hoveredThroughlineStep]);
+  const hoverNodeIds = useMemo(
+    () => endpointsOf(hoverEdgeIds),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [baseEdges, hoverEdgeIds],
+  );
   const openedNodeIds = useMemo(
     () => endpointsOf(openedEdgeIds),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -467,6 +488,8 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   // `isSelected` rides in data because the node's stopPropagation() keeps
   // React Flow's own selection state from updating.
   const dispNodes = useMemo(() => {
+    // While a step is hovered, only the hovered step's endpoints stay bright;
+    // everything else is dimmed (never hidden) so the step's context survives.
     return xyflowNodesBase.map((n) => {
       // Boundary frames follow their members: hidden when no member is
       // visible, dimmed when members are dimmed. Never selectable.
@@ -478,13 +501,17 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
           anyOpened: openedNodeIds != null,
           anySelected: brightNodeIds != null,
         });
+        const dimmed = hoverNodeIds
+          ? !memberIds.some((id) => hoverNodeIds.has(id))
+          : vis.dimmed;
+        const hidden = hoverNodeIds ? false : vis.hidden;
         return {
           ...n,
-          hidden: vis.hidden,
+          hidden,
           selectable: false,
           data: {
             ...(n.data as object),
-            ...(vis.dimmed && { dimmed: true }),
+            ...(dimmed && { dimmed: true }),
           },
         };
       }
@@ -497,22 +524,24 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
         anyOpened: openedNodeIds != null,
         anySelected: brightNodeIds != null,
       });
-      if (fileMatch === undefined && !isSelected && !vis.dimmed) {
+      const dimmed = hoverNodeIds ? !hoverNodeIds.has(n.id) : vis.dimmed;
+      const hidden = hoverNodeIds ? false : vis.hidden;
+      if (fileMatch === undefined && !isSelected && !dimmed) {
         const { fileMatch: _f, isSelected: _s, dimmed: _d, ...rest } = n.data as Record<string, unknown>;
-        return { ...n, hidden: vis.hidden, data: rest };
+        return { ...n, hidden, data: rest };
       }
       return {
         ...n,
-        hidden: vis.hidden,
+        hidden,
         data: {
           ...(n.data as object),
           ...(fileMatch !== undefined && { fileMatch }),
           ...(isSelected && { isSelected }),
-          ...(vis.dimmed && { dimmed: true }),
+          ...(dimmed && { dimmed: true }),
         },
       };
     });
-  }, [xyflowNodesBase, openFile, selected, focusNodeIds, openedNodeIds, brightNodeIds]);
+  }, [xyflowNodesBase, openFile, selected, focusNodeIds, openedNodeIds, brightNodeIds, hoverNodeIds]);
 
   const baseNodesKey = useMemo(() => nodes.map((n) => n.id).sort().join(','), [nodes]);
   const baseEdgesKey = useMemo(
@@ -533,7 +562,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
         markerEnd: nextMarker,
       };
     };
-    if (openedEdgeIds || focusEdgeIds) {
+    if (openedEdgeIds || focusEdgeIds || hoverEdgeIds) {
       return baseEdges.map((e) => {
         const vis = flowElementVisibility({
           inOpened: openedEdgeIds?.has(e.id) === true,
@@ -541,12 +570,14 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
           anyOpened: openedEdgeIds != null,
           anySelected: focusEdgeIds != null,
         });
-        return { ...paint(e, vis.dimmed), hidden: vis.hidden };
+        const dimmed = hoverEdgeIds ? !hoverEdgeIds.has(e.id) : vis.dimmed;
+        const hidden = hoverEdgeIds ? false : vis.hidden;
+        return { ...paint(e, dimmed), hidden };
       });
     }
     if (!selectedEdgeId) return baseEdges;
     return baseEdges.map((e) => paint(e, e.id !== selectedEdgeId));
-  }, [baseEdges, selectedEdgeId, openedEdgeIds, focusEdgeIds]);
+  }, [baseEdges, selectedEdgeId, openedEdgeIds, focusEdgeIds, hoverEdgeIds]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -1045,7 +1076,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
                     flex: 1,
                     minHeight: 0,
                     overflowY: 'auto',
-                    padding: '0 4px 12px',
+                    padding: '0 0 12px',
                   }}
                 >
                   {throughlines.map((tl) => (
@@ -1059,6 +1090,10 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
                       onFocusFlow={focusThroughlineEdges}
                       onClearFocus={clearThroughlineFocus}
                       onFocusStep={focusThroughlineStep}
+                      onHoverStep={(tl, i) =>
+                        setHoveredThroughlineStep({ throughlineId: tl.id, stepIndex: i })
+                      }
+                      onLeaveStep={() => setHoveredThroughlineStep(null)}
                     />
                   ))}
                 </div>
@@ -1388,6 +1423,8 @@ function ThroughlineFlow({
   onFocusFlow,
   onClearFocus,
   onFocusStep,
+  onHoverStep,
+  onLeaveStep,
 }: {
   throughline: SubsystemThroughline;
   edges: SubsystemComponentEdge[];
@@ -1398,6 +1435,8 @@ function ThroughlineFlow({
   onFocusFlow: (tl: SubsystemThroughline) => void;
   onClearFocus: () => void;
   onFocusStep: (tl: SubsystemThroughline, stepIndex: number) => void;
+  onHoverStep: (tl: SubsystemThroughline, stepIndex: number) => void;
+  onLeaveStep: () => void;
 }) {
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -1406,8 +1445,52 @@ function ThroughlineFlow({
   const wholeFlowActive = active !== null && active.stepIndex === null;
   const [headerHover, setHeaderHover] = useState(false);
   const [closeHover, setCloseHover] = useState(false);
+  const [playHover, setPlayHover] = useState(false);
   const [hoveredStep, setHoveredStep] = useState<number | null>(null);
   const stepButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  // Autoplay: stepping through the flow's steps with a pause between each.
+  const [playing, setPlaying] = useState(false);
+  const playTimerRef = useRef<number | null>(null);
+
+  const stopPlaying = useCallback(() => {
+    if (playTimerRef.current != null) {
+      window.clearTimeout(playTimerRef.current);
+      playTimerRef.current = null;
+    }
+    setPlaying(false);
+  }, []);
+
+  // Clear any pending timer on unmount.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => () => stopPlaying(), []);
+
+  const startPlaying = useCallback(() => {
+    if (collapsed) onToggleCollapsed(throughline.id);
+    if (active === null || active.stepIndex !== null) onFocusFlow(throughline);
+    const stepCount = throughline.steps.length;
+    if (stepCount === 0) return;
+    setPlaying(true);
+    let i = 0;
+    const tick = () => {
+      if (i >= stepCount) {
+        playTimerRef.current = null;
+        setPlaying(false);
+        return;
+      }
+      onFocusStep(throughline, i);
+      i += 1;
+      playTimerRef.current = window.setTimeout(tick, THROUGHLINE_PLAY_PAUSE_MS);
+    };
+    tick();
+  }, [collapsed, active, onToggleCollapsed, onFocusFlow, throughline, onFocusStep]);
+
+  const togglePlay = useCallback(() => {
+    if (playing) {
+      stopPlaying();
+    } else {
+      startPlaying();
+    }
+  }, [playing, stopPlaying, startPlaying]);
 
   // Keep DOM focus on the active step so the browser focus ring (and
   // subsequent arrow keys) follow arrow navigation, not the originally
@@ -1418,7 +1501,7 @@ function ThroughlineFlow({
   }, [active?.stepIndex]);
 
   return (
-    <div style={{ margin: '4px 0', borderRadius: 8 }}>
+    <div>
       <div
         onMouseEnter={() => setHeaderHover(true)}
         onMouseLeave={() => setHeaderHover(false)}
@@ -1426,7 +1509,6 @@ function ThroughlineFlow({
           display: 'flex',
           alignItems: 'center',
           gap: 4,
-          borderRadius: 6,
           background: wholeFlowActive || headerHover ? hoverBg : 'transparent',
           transition: 'background 120ms ease',
         }}
@@ -1449,8 +1531,7 @@ function ThroughlineFlow({
             display: 'flex',
             alignItems: 'center',
             minWidth: 0,
-            padding: '6px 8px',
-            borderRadius: 6,
+            padding: '10px 8px',
             border: 'none',
             background: 'transparent',
             textAlign: 'left',
@@ -1472,6 +1553,35 @@ function ThroughlineFlow({
           </span>
         </button>
         {!collapsed && (
+          <>
+          <button
+            type="button"
+            aria-label={playing ? `Pause ${throughline.title} autoplay` : `Play ${throughline.title}`}
+            title={playing ? 'Pause' : 'Play through steps'}
+            onMouseEnter={() => setPlayHover(true)}
+            onMouseLeave={() => setPlayHover(false)}
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePlay();
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              width: 22,
+              height: 22,
+              padding: 0,
+              border: 'none',
+              borderRadius: 4,
+              background: playing || playHover ? theme.colors.border : 'transparent',
+              color: playing || playHover ? theme.colors.text : muted,
+              cursor: 'pointer',
+              transition: 'background 120ms ease, color 120ms ease',
+            }}
+          >
+            {playing ? <Pause size={12} strokeWidth={2} /> : <Play size={12} strokeWidth={2} />}
+          </button>
           <button
             type="button"
             aria-label={`Close ${throughline.title}`}
@@ -1501,6 +1611,7 @@ function ThroughlineFlow({
           >
             <X size={12} strokeWidth={2} />
           </button>
+          </>
         )}
       </div>
       {!collapsed && (
@@ -1517,15 +1628,21 @@ function ThroughlineFlow({
                   stepButtonRefs.current[i] = el;
                 }}
                 type="button"
-                onMouseEnter={() => setHoveredStep(i)}
-                onMouseLeave={() => setHoveredStep(null)}
+                onMouseEnter={() => {
+                  setHoveredStep(i);
+                  onHoverStep(throughline, i);
+                }}
+                onMouseLeave={() => {
+                  setHoveredStep(null);
+                  onLeaveStep();
+                }}
                 onClick={() => onFocusStep(throughline, i)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
                   minWidth: 0,
-                  padding: '4px 8px 4px 12px',
+                  padding: '8px 8px 8px 12px',
                   textAlign: 'left',
                   borderRadius: 6,
                   border: 'none',
@@ -1554,9 +1671,9 @@ function ThroughlineFlow({
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
-                      fontSize: theme.fontSizes[0],
+                      fontSize: theme.fontSizes[1],
                       fontFamily: theme.fonts.monospace,
-                      color: stepActive ? theme.colors.text : muted,
+                      color: theme.colors.text,
                     }}
                   >
                     {step.symbol}
@@ -1586,7 +1703,7 @@ function ThroughlineFlow({
                         whiteSpace: 'nowrap',
                         fontSize: theme.fontSizes[0],
                         fontFamily: theme.fonts.monospace,
-                        color: stepActive ? theme.colors.text : muted,
+                        color: theme.colors.text,
                       }}
                     >
                       {step.file.split('/').pop()}
