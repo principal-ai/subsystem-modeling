@@ -1,0 +1,767 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://principal-ai.dev/schemas/subsystem-model.schema.json",
+  "title": "Subsystem Model",
+  "description": "Portable subsystem model — the shareable standard. Construct-tagged components (nodes) plus typed edges describing one subsystem of a codebase. Ontology: construct = what a node is, framework + stereotype = which framework pattern it plays, role = where it sits, process = where it runs. Symbol is the code identity; name is the display label (often derived from symbol). Host-only fields (local path binding, provenance, store ids, verification) are NOT part of this document; they belong on a hydrated envelope around it.",
+  "type": "object",
+  "required": [
+    "title",
+    "components",
+    "edges"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Pointer to this schema for editor autocomplete and validation."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable graph title."
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional one-liner about the subsystem."
+    },
+    "components": {
+      "type": "array",
+      "description": "Graph nodes — named units anchored to a real exported symbol (or external targets). Prefer 4–15 components per graph; split sprawling subsystems. Each component's `purl` identifies its repo/package; there is no document-level repo field.",
+      "items": {
+        "$ref": "#/$defs/component"
+      }
+    },
+    "edges": {
+      "type": "array",
+      "description": "Typed interactions between components. `from` / `to` reference component `id`s.",
+      "items": {
+        "$ref": "#/$defs/edge"
+      }
+    },
+    "throughlines": {
+      "type": "array",
+      "description": "Ordered execution stories over existing edges (one throughline per flow). Each step names an edge id, the concrete file:line where that seam fires, and an optional frame symbol.",
+      "items": {
+        "$ref": "#/$defs/throughline"
+      }
+    }
+  },
+  "$defs": {
+    "construct": {
+      "type": "string",
+      "description": "What the node IS as a declaration — drives node anatomy, color, badge, and verification. A module is its own subsystem: do not use a module construct; anchor to a concrete export (`symbol` + `file`) or publish the module as a separate graph. Runtime occurrences (variables, instances) are not constructs.",
+      "enum": [
+        "class",
+        "function",
+        "method",
+        "interface",
+        "type_alias",
+        "enum",
+        "store",
+        "external"
+      ]
+    },
+    "role": {
+      "type": "string",
+      "description": "Where the node sits in the topology, orthogonal to construct. Boundary-crossing edges should terminate at an entry or a service. Retained state is `construct: store`, not a role.",
+      "enum": [
+        "entry",
+        "service"
+      ]
+    },
+    "framework": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Framework that owns the stereotype vocabulary (open string). Examples: react, vue, nestjs, django, spring. Empty when the node is language-only. Pair with stereotype when the unit plays a framework pattern (e.g. framework: react + stereotype: component on construct: function)."
+    },
+    "stereotype": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Framework-level pattern stamped on a language construct (open string). Examples: component, hook, middleware, controller, guard. Prefer this over inventing framework-specific constructs. Pair with framework when set."
+    },
+    "capture": {
+      "type": "string",
+      "description": "How the authoring session occupied this component.",
+      "enum": [
+        "edited",
+        "analyzed",
+        "referenced"
+      ]
+    },
+    "declarationProvenance": {
+      "type": "string",
+      "description": "Where `declaration` came from. `verified` is reserved for tool-extracted data; hand-authored declarations must be `authored` (also the default when declaration is present without provenance).",
+      "enum": [
+        "verified",
+        "authored"
+      ]
+    },
+    "mechanism": {
+      "type": "string",
+      "description": "How `from` relates to `to`. Pick the closest label; put specifics in `refs`. `uses` = general dependency; `feeds` = data-flow into a processor; `produces` = emits an output; `references` = type/symbol reference that is not a call; `writes`/`reads`/`watches` = retained-state interactions.",
+      "enum": [
+        "imports",
+        "imports_from",
+        "re_exports",
+        "defines",
+        "calls",
+        "extends",
+        "inherits",
+        "implements",
+        "mixes_in",
+        "uses",
+        "method",
+        "references",
+        "contains",
+        "feeds",
+        "produces",
+        "writes",
+        "reads",
+        "watches",
+        "registers-into"
+      ]
+    },
+    "component": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "construct",
+        "file",
+        "purl"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable unique id. Referenced by edge `from` / `to`; never rename on update."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Display label on the node. Prefer deriving from `symbol` (renderers often do). Required on the wire; when `symbol` is set, name may simply match it."
+        },
+        "construct": {
+          "$ref": "#/$defs/construct"
+        },
+        "file": {
+          "type": "string",
+          "description": "Repo-root-relative path of the source location this component lives in. Joins onto `repoRoot` / `repoRoots` for reads. Empty string allowed for pure externals."
+        },
+        "purl": {
+          "type": "string",
+          "minLength": 1,
+          "description": "PURL identifying the repo or package (for subgraph grouping), e.g. `pkg:github/owner/name#path/to/file.ts`."
+        },
+        "symbol": {
+          "type": "string",
+          "description": "Code identity — a real declaration in `file` (function/class/const/interface/type/enum). Verified on create/update; mentions, imports, and call sites do not count. For standalone methods use `ClassName.methodName`. Source of truth for display when present."
+        },
+        "purpose": {
+          "type": "string",
+          "description": "One plain-text sentence shown on the node / as a doc comment under the declaration. Verb-first; no markdown."
+        },
+        "role": {
+          "$ref": "#/$defs/role"
+        },
+        "framework": {
+          "$ref": "#/$defs/framework"
+        },
+        "stereotype": {
+          "$ref": "#/$defs/stereotype"
+        },
+        "process": {
+          "type": "string",
+          "description": "Runtime process / deployment unit membership (e.g. `principal-studio/host`). Nodes sharing a process are drawn in one boundary region; nodes without one sit outside every boundary."
+        },
+        "layer": {
+          "type": "integer",
+          "description": "Semantic layout layer/phase (lower = closer to entry). When set, layout places the component in this layer for a left-to-right pipeline."
+        },
+        "capture": {
+          "$ref": "#/$defs/capture"
+        },
+        "declaration": {
+          "$ref": "#/$defs/constructDeclaration",
+          "description": "Structured declaration shape of the construct for the click panel (parameters, members, etc.). Hand-author when highlighting specific inputs/outputs; set `declarationProvenance` accordingly."
+        },
+        "declarationProvenance": {
+          "$ref": "#/$defs/declarationProvenance"
+        },
+        "tokens": {
+          "type": "array",
+          "description": "Pre-tokenized source text for the declaration panel. When present, the renderer skips client-side tokenization.",
+          "items": {
+            "$ref": "#/$defs/declToken"
+          }
+        },
+        "declarationRef": {
+          "$ref": "#/$defs/declarationRef",
+          "description": "Anchored declaration location (start line + line hash). Usually populated by verify tooling, not hand-authored. Distinct from `declaration`, which is the structured shape."
+        }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "required": [
+        "id",
+        "from",
+        "to",
+        "mechanism"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable unique edge id. Referenced by throughline steps."
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Source component `id`."
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Target component `id` (or external target label)."
+        },
+        "mechanism": {
+          "$ref": "#/$defs/mechanism"
+        },
+        "refs": {
+          "type": "array",
+          "description": "Concrete file/symbol evidence backing the edge (often purl refs).",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "throughlineStep": {
+      "type": "object",
+      "required": [
+        "edgeId",
+        "file",
+        "line"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "edgeId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Id of an existing edge this hop traverses."
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repo-root-relative path where the edge fires for this flow."
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "1-based line of the site within `file`."
+        },
+        "symbol": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Frame name for this hop (function/method/symbol). Optional; when omitted the viewer falls back to mechanism + filename."
+        },
+        "annotation": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Free-text note anchored to this hop's site line. Optional, informative only, never verified against source; viewers surface it in the codeview's annotation column."
+        }
+      }
+    },
+    "throughline": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "steps"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable unique throughline id."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Flow name (e.g. save flow, load flow)."
+        },
+        "steps": {
+          "type": "array",
+          "description": "Ordered hops; array order is execution order.",
+          "items": {
+            "$ref": "#/$defs/throughlineStep"
+          }
+        }
+      }
+    },
+    "declToken": {
+      "type": "object",
+      "required": [
+        "text",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "keyword",
+            "name",
+            "member",
+            "type",
+            "punctuation",
+            "string",
+            "newline"
+          ]
+        },
+        "color": {
+          "type": "string",
+          "description": "Optional foreground color when pre-tokenized for a theme."
+        }
+      }
+    },
+    "declarationRef": {
+      "type": "object",
+      "required": [
+        "file",
+        "startLine",
+        "lineHash",
+        "capturedAt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "description": "Repo-root-relative path (matches component.file)."
+        },
+        "startLine": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "1-based declaration start line."
+        },
+        "lineHash": {
+          "type": "string",
+          "description": "Hash of the normalized declaration line at capture time (drift detection)."
+        },
+        "graphifyNodeId": {
+          "type": "string",
+          "description": "Graphify node id when captured from an exact anchor."
+        },
+        "capturedAt": {
+          "type": "string",
+          "description": "ISO timestamp when this ref was recorded."
+        },
+        "revision": {
+          "type": "object",
+          "required": [
+            "headSha"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "headSha": {
+              "type": "string"
+            },
+            "dirtyHash": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "paramInfo": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "ref": {
+          "$ref": "#/$defs/referenceInfo"
+        }
+      }
+    },
+    "propertyInfo": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "typeRef": {
+          "$ref": "#/$defs/referenceInfo"
+        },
+        "nodeId": {
+          "type": "string"
+        }
+      }
+    },
+    "methodInfo": {
+      "type": "object",
+      "required": [
+        "nodeId",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "nodeId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/paramInfo"
+          }
+        },
+        "returnType": {
+          "type": "string"
+        },
+        "returnTypeRef": {
+          "$ref": "#/$defs/referenceInfo"
+        }
+      }
+    },
+    "callInfo": {
+      "type": "object",
+      "required": [
+        "nodeId",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "nodeId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "source_location": {
+          "type": "string"
+        }
+      }
+    },
+    "referenceInfo": {
+      "type": "object",
+      "required": [
+        "nodeId",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "nodeId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "context": {
+          "type": "string"
+        },
+        "source_location": {
+          "type": "string"
+        }
+      }
+    },
+    "importInfo": {
+      "type": "object",
+      "required": [
+        "nodeId",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "nodeId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "relation": {
+          "type": "string"
+        },
+        "source_location": {
+          "type": "string"
+        }
+      }
+    },
+    "constructDeclaration": {
+      "description": "Discriminated structured declaration of a construct (`kind`). Hand-authored declarations should set component.declarationProvenance to authored.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/classDeclaration"
+        },
+        {
+          "$ref": "#/$defs/functionDeclaration"
+        },
+        {
+          "$ref": "#/$defs/methodDeclaration"
+        },
+        {
+          "$ref": "#/$defs/typeDeclaration"
+        },
+        {
+          "$ref": "#/$defs/moduleDeclaration"
+        },
+        {
+          "$ref": "#/$defs/externalDeclaration"
+        },
+        {
+          "$ref": "#/$defs/storeDeclaration"
+        }
+      ]
+    },
+    "classDeclaration": {
+      "type": "object",
+      "required": [
+        "kind",
+        "methods",
+        "properties",
+        "extends",
+        "implements",
+        "instantiations",
+        "references"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "class"
+        },
+        "methods": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/methodInfo"
+          }
+        },
+        "properties": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/propertyInfo"
+          }
+        },
+        "extends": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "implements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "instantiations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/callInfo"
+          }
+        },
+        "references": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/referenceInfo"
+          }
+        }
+      }
+    },
+    "functionDeclaration": {
+      "type": "object",
+      "required": [
+        "kind",
+        "parameters",
+        "callers",
+        "callees"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "function"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/paramInfo"
+          }
+        },
+        "returnType": {
+          "type": "string"
+        },
+        "returnTypeRef": {
+          "$ref": "#/$defs/referenceInfo"
+        },
+        "callers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/callInfo"
+          }
+        },
+        "callees": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/callInfo"
+          }
+        }
+      }
+    },
+    "methodDeclaration": {
+      "type": "object",
+      "required": [
+        "kind",
+        "hostClass"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "method"
+        },
+        "hostClass": {
+          "type": "string",
+          "description": "Owning class name. Required for standalone method components."
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/paramInfo"
+          }
+        },
+        "returnType": {
+          "type": "string"
+        }
+      }
+    },
+    "typeDeclaration": {
+      "type": "object",
+      "required": [
+        "kind",
+        "properties",
+        "usedBy",
+        "implementors"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "type"
+        },
+        "properties": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/propertyInfo"
+          }
+        },
+        "usedBy": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/referenceInfo"
+          }
+        },
+        "implementors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "moduleDeclaration": {
+      "type": "object",
+      "required": [
+        "kind",
+        "exports",
+        "imports",
+        "symbols"
+      ],
+      "additionalProperties": false,
+      "description": "Declaration shape for module-like drill-down. Prefer not authoring module *components*; this payload may still appear from tooling.",
+      "properties": {
+        "kind": {
+          "const": "module"
+        },
+        "exports": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "imports": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/importInfo"
+          }
+        },
+        "symbols": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "externalDeclaration": {
+      "type": "object",
+      "required": [
+        "kind",
+        "label"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "external"
+        },
+        "label": {
+          "type": "string",
+          "description": "Facet-only label; no backing source declaration."
+        }
+      }
+    },
+    "storeDeclaration": {
+      "type": "object",
+      "required": [
+        "kind",
+        "properties"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "store"
+        },
+        "properties": {
+          "type": "array",
+          "description": "Retained state members (module-level consts or fields).",
+          "items": {
+            "$ref": "#/$defs/propertyInfo"
+          }
+        }
+      }
+    }
+  }
+}

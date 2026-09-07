@@ -1,0 +1,269 @@
+{
+  "workflows": [
+    {
+      "id": "cache-hit-flow",
+      "name": "Cache Hit - Fast Path",
+      "description": "Optimal path where cached image already exists",
+      "events": [
+        {
+          "id": "1",
+          "name": "renderer.action_called",
+          "label": "Action Called",
+          "participant": "renderer"
+        },
+        {
+          "id": "2",
+          "name": "main.image_requested",
+          "label": "Request Image (IPC)",
+          "participant": "main",
+          "moveEvent": true,
+          "edgeType": "calls"
+        },
+        {
+          "id": "3",
+          "name": "main.cache_checked",
+          "label": "Check Cache",
+          "participant": "main"
+        },
+        {
+          "id": "4",
+          "name": "renderer.cache_hit",
+          "label": "Cache Hit (IPC)",
+          "participant": "renderer",
+          "moveEvent": true,
+          "edgeType": "data-flow"
+        },
+        {
+          "id": "5",
+          "name": "renderer.url_received",
+          "label": "URL Received",
+          "participant": "renderer"
+        },
+        {
+          "id": "6",
+          "name": "renderer.state_updated",
+          "label": "Update State",
+          "participant": "renderer"
+        },
+        {
+          "id": "7",
+          "name": "renderer.card_rendered",
+          "label": "Render Card",
+          "participant": "renderer"
+        }
+      ],
+      "edges": [
+        { "id": "e1", "fromEvent": "1", "toEvent": "2" },
+        { "id": "e2", "fromEvent": "2", "toEvent": "3" },
+        { "id": "e3", "fromEvent": "3", "toEvent": "4" },
+        { "id": "e4", "fromEvent": "4", "toEvent": "5" },
+        { "id": "e5", "fromEvent": "5", "toEvent": "6" },
+        { "id": "e6", "fromEvent": "6", "toEvent": "7" }
+      ]
+    },
+    {
+      "id": "generate-new-flow",
+      "name": "Generate New Image - Full Path",
+      "description": "Complete flow when no cached image exists",
+      "events": [
+        {
+          "id": "1",
+          "name": "renderer.action_called",
+          "label": "Action Called",
+          "participant": "renderer"
+        },
+        {
+          "id": "2",
+          "name": "main.image_requested",
+          "label": "Request Image (IPC)",
+          "participant": "main",
+          "moveEvent": true,
+          "edgeType": "calls"
+        },
+        {
+          "id": "3",
+          "name": "main.cache_checked",
+          "label": "Check Cache (miss)",
+          "participant": "main"
+        },
+        {
+          "id": "4",
+          "name": "main.filetree_fetched",
+          "label": "Fetch FileTree",
+          "participant": "main"
+        },
+        {
+          "id": "5",
+          "name": "main.generation_started",
+          "label": "Start Generation",
+          "participant": "main"
+        },
+        {
+          "id": "6",
+          "name": "renderer.generation_complete",
+          "label": "Generation Complete (IPC)",
+          "participant": "renderer",
+          "moveEvent": true,
+          "edgeType": "data-flow"
+        },
+        {
+          "id": "7",
+          "name": "renderer.url_received",
+          "label": "URL Received",
+          "participant": "renderer"
+        },
+        {
+          "id": "8",
+          "name": "renderer.state_updated",
+          "label": "Update State",
+          "participant": "renderer"
+        },
+        {
+          "id": "9",
+          "name": "renderer.card_rendered",
+          "label": "Render Card",
+          "participant": "renderer"
+        }
+      ],
+      "edges": [
+        { "id": "e1", "fromEvent": "1", "toEvent": "2" },
+        { "id": "e2", "fromEvent": "2", "toEvent": "3" },
+        { "id": "e3", "fromEvent": "3", "toEvent": "4" },
+        { "id": "e4", "fromEvent": "4", "toEvent": "5" },
+        { "id": "e5", "fromEvent": "5", "toEvent": "6" },
+        { "id": "e6", "fromEvent": "6", "toEvent": "7" },
+        { "id": "e7", "fromEvent": "7", "toEvent": "8" },
+        { "id": "e8", "fromEvent": "8", "toEvent": "9" }
+      ]
+    },
+    {
+      "id": "no-filetree-flow",
+      "name": "No FileTree - Skip Path",
+      "description": "Error path when file tree is not available",
+      "events": [
+        {
+          "id": "1",
+          "name": "renderer.action_called",
+          "label": "Action Called",
+          "participant": "renderer"
+        },
+        {
+          "id": "2",
+          "name": "main.image_requested",
+          "label": "Request Image (IPC)",
+          "participant": "main",
+          "moveEvent": true,
+          "edgeType": "calls"
+        },
+        {
+          "id": "3",
+          "name": "main.cache_checked",
+          "label": "Check Cache (miss)",
+          "participant": "main"
+        },
+        {
+          "id": "4",
+          "name": "main.filetree_fetched",
+          "label": "Fetch FileTree (none)",
+          "participant": "main"
+        },
+        {
+          "id": "5",
+          "name": "renderer.generation_skipped",
+          "label": "Skip Generation (IPC)",
+          "participant": "renderer",
+          "moveEvent": true,
+          "edgeType": "data-flow"
+        },
+        {
+          "id": "6",
+          "name": "renderer.url_received",
+          "label": "URL Received (null)",
+          "participant": "renderer"
+        },
+        {
+          "id": "7",
+          "name": "renderer.card_rendered",
+          "label": "Render Card (fallback)",
+          "participant": "renderer"
+        }
+      ],
+      "edges": [
+        { "id": "e1", "fromEvent": "1", "toEvent": "2" },
+        { "id": "e2", "fromEvent": "2", "toEvent": "3" },
+        { "id": "e3", "fromEvent": "3", "toEvent": "4" },
+        { "id": "e4", "fromEvent": "4", "toEvent": "5" },
+        { "id": "e5", "fromEvent": "5", "toEvent": "6" },
+        { "id": "e6", "fromEvent": "6", "toEvent": "7" }
+      ]
+    },
+    {
+      "id": "error-flow",
+      "name": "Error During Generation",
+      "description": "Error path when image generation fails",
+      "events": [
+        {
+          "id": "1",
+          "name": "renderer.action_called",
+          "label": "Action Called",
+          "participant": "renderer"
+        },
+        {
+          "id": "2",
+          "name": "main.image_requested",
+          "label": "Request Image (IPC)",
+          "participant": "main",
+          "moveEvent": true,
+          "edgeType": "calls"
+        },
+        {
+          "id": "3",
+          "name": "main.cache_checked",
+          "label": "Check Cache (miss)",
+          "participant": "main"
+        },
+        {
+          "id": "4",
+          "name": "main.filetree_fetched",
+          "label": "Fetch FileTree",
+          "participant": "main"
+        },
+        {
+          "id": "5",
+          "name": "main.generation_started",
+          "label": "Start Generation",
+          "participant": "main"
+        },
+        {
+          "id": "6",
+          "name": "renderer.generation_error",
+          "label": "Generation Error (IPC)",
+          "participant": "renderer",
+          "moveEvent": true,
+          "edgeType": "data-flow"
+        },
+        {
+          "id": "7",
+          "name": "renderer.url_received",
+          "label": "URL Received (null)",
+          "participant": "renderer"
+        },
+        {
+          "id": "8",
+          "name": "renderer.card_rendered",
+          "label": "Render Card (fallback)",
+          "participant": "renderer"
+        }
+      ],
+      "edges": [
+        { "id": "e1", "fromEvent": "1", "toEvent": "2" },
+        { "id": "e2", "fromEvent": "2", "toEvent": "3" },
+        { "id": "e3", "fromEvent": "3", "toEvent": "4" },
+        { "id": "e4", "fromEvent": "4", "toEvent": "5" },
+        { "id": "e5", "fromEvent": "5", "toEvent": "6" },
+        { "id": "e6", "fromEvent": "6", "toEvent": "7" },
+        { "id": "e7", "fromEvent": "7", "toEvent": "8" }
+      ]
+    }
+  ]
+}

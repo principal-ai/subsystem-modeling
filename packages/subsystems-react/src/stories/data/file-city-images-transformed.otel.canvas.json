@@ -1,0 +1,295 @@
+{
+  "nodes": [
+    {
+      "id": "title",
+      "type": "text",
+      "x": 250,
+      "y": -50,
+      "width": 500,
+      "height": 80,
+      "color": "#64748B",
+      "text": "# File City Image Generation (Participant Model)\n**Sequence-first architecture: Participants, Move Events, and Transform Events**"
+    },
+    {
+      "id": "main-process",
+      "type": "otel-participant",
+      "x": 100,
+      "y": 100,
+      "width": 350,
+      "height": 500,
+      "label": "Main Process",
+      "shape": "rectangle",
+      "participant": {
+        "name": "FileCityImageService",
+        "description": "Main process service handling File City image generation",
+        "scope": "principal-ade-main"
+      },
+      "transformEvents": [
+        {
+          "name": "file_city.image.requested",
+          "description": "Image generation request received via IPC",
+          "attributes": {
+            "repo_path": {
+              "type": "string",
+              "description": "Absolute path to the repository",
+              "required": true
+            }
+          }
+        },
+        {
+          "name": "file_city.cache.checked",
+          "description": "Checked disk cache for existing image",
+          "attributes": {
+            "cache_key": {
+              "type": "string",
+              "description": "SHA256 hash used as cache key"
+            },
+            "cache_hit": {
+              "type": "boolean",
+              "description": "Whether cached image was found"
+            }
+          }
+        },
+        {
+          "name": "file_city.filetree.fetched",
+          "description": "FileTree fetched from repository-monitoring cache",
+          "attributes": {
+            "file_count": {
+              "type": "integer",
+              "description": "Number of files in tree"
+            },
+            "has_tree": {
+              "type": "boolean",
+              "description": "Whether file tree was available"
+            }
+          }
+        },
+        {
+          "name": "file_city.image.generation_started",
+          "description": "Started generating File City image",
+          "attributes": {
+            "file_count": {
+              "type": "integer",
+              "description": "Number of files to visualize"
+            },
+            "image_width": {
+              "type": "integer",
+              "description": "Output image width in pixels"
+            },
+            "image_height": {
+              "type": "integer",
+              "description": "Output image height in pixels"
+            }
+          }
+        },
+        {
+          "name": "file_city.image.generation_complete",
+          "description": "Image generated and saved to cache",
+          "attributes": {
+            "cache_path": {
+              "type": "string",
+              "description": "Path where image was saved"
+            },
+            "duration_ms": {
+              "type": "integer",
+              "description": "Time taken to generate image"
+            },
+            "file_size_bytes": {
+              "type": "integer",
+              "description": "Size of generated PNG"
+            }
+          }
+        },
+        {
+          "name": "file_city.image.cache_hit",
+          "description": "Cached image found and returned",
+          "attributes": {
+            "cache_path": {
+              "type": "string",
+              "description": "Path to cached PNG file"
+            }
+          }
+        },
+        {
+          "name": "file_city.image.error",
+          "description": "Error occurred during image generation",
+          "attributes": {
+            "error_type": {
+              "type": "string",
+              "description": "Type of error"
+            },
+            "error_message": {
+              "type": "string",
+              "description": "Error message"
+            },
+            "phase": {
+              "type": "string",
+              "description": "Phase where error occurred"
+            }
+          }
+        },
+        {
+          "name": "file_city.image.skipped",
+          "description": "Image generation skipped - no file tree available",
+          "attributes": {
+            "reason": {
+              "type": "string",
+              "description": "Why generation was skipped"
+            }
+          }
+        }
+      ],
+      "otel": {
+        "status": "implemented",
+        "scope": "principal-ade-main",
+        "files": [
+          "src/main/stores/FileCityImageService.ts"
+        ]
+      }
+    },
+    {
+      "id": "renderer-process",
+      "type": "otel-participant",
+      "x": 550,
+      "y": 100,
+      "width": 350,
+      "height": 500,
+      "label": "Renderer Process",
+      "shape": "rectangle",
+      "participant": {
+        "name": "ProjectInfoPanel",
+        "description": "Renderer process component displaying File City images",
+        "scope": "principal-ade-principal-window"
+      },
+      "transformEvents": [
+        {
+          "name": "file_city.renderer.action_called",
+          "description": "Renderer action called to fetch File City image",
+          "attributes": {
+            "repo_path": {
+              "type": "string",
+              "description": "Repository path requested"
+            }
+          }
+        },
+        {
+          "name": "file_city.renderer.url_received",
+          "description": "URL received from main process via IPC",
+          "attributes": {
+            "url": {
+              "type": "string",
+              "description": "file:// URL or null"
+            },
+            "has_url": {
+              "type": "boolean",
+              "description": "Whether a URL was returned"
+            }
+          }
+        },
+        {
+          "name": "file_city.renderer.state_updated",
+          "description": "React state updated with image URL",
+          "attributes": {
+            "url": {
+              "type": "string",
+              "description": "URL set in state"
+            }
+          }
+        },
+        {
+          "name": "file_city.renderer.card_rendered",
+          "description": "LocalProjectCard rendered with image URL",
+          "attributes": {
+            "has_custom_image": {
+              "type": "boolean",
+              "description": "Whether customImageUrl prop was provided"
+            },
+            "image_url": {
+              "type": "string",
+              "description": "The customImageUrl prop value"
+            }
+          }
+        }
+      ],
+      "otel": {
+        "status": "implemented",
+        "scope": "principal-ade-principal-window",
+        "files": [
+          "src/renderer/panels/ProjectInfoPanel.tsx"
+        ]
+      }
+    },
+    {
+      "id": "legend",
+      "type": "text",
+      "x": 100,
+      "y": 650,
+      "width": 800,
+      "height": 120,
+      "color": "#64748B",
+      "text": "## Participant Model Explained\n\n**Nodes** = Participants (the processes/services that interact)  \n**Edges** = Move Events (data crossing participant boundaries via IPC)  \n**Transform Events** = Internal processing within each participant (annotations on nodes)"
+    }
+  ],
+  "edges": [
+    {
+      "id": "ipc-request",
+      "fromNode": "renderer-process",
+      "fromSide": "left",
+      "toNode": "main-process",
+      "toSide": "right",
+      "label": "IPC: Request Image",
+      "edgeType": "calls",
+      "moveEvent": {
+        "name": "file_city.image.requested",
+        "description": "IPC call from renderer to main process requesting image generation",
+        "type": "calls"
+      }
+    },
+    {
+      "id": "ipc-response-cache",
+      "fromNode": "main-process",
+      "fromSide": "right",
+      "toNode": "renderer-process",
+      "toSide": "left",
+      "label": "IPC: Return Cached URL",
+      "edgeType": "data-flow",
+      "moveEvent": {
+        "name": "file_city.image.cache_hit",
+        "description": "IPC response returning cached image URL",
+        "type": "data-flow"
+      }
+    },
+    {
+      "id": "ipc-response-generated",
+      "fromNode": "main-process",
+      "fromSide": "right",
+      "toNode": "renderer-process",
+      "toSide": "left",
+      "label": "IPC: Return Generated URL",
+      "edgeType": "data-flow",
+      "moveEvent": {
+        "name": "file_city.image.generation_complete",
+        "description": "IPC response returning newly generated image URL",
+        "type": "data-flow"
+      }
+    }
+  ],
+  "name": "File City Images (Participant Model)",
+  "description": "Participant-based canvas following graph-to-sequence concepts: participants as nodes, move events as edges, transform events as annotations",
+  "nodeTypes": {
+    "participant": {
+      "label": "Participant",
+      "color": "#3B82F6"
+    }
+  },
+  "edgeTypes": {
+    "calls": {
+      "label": "Synchronous Call",
+      "color": "#10B981"
+    },
+    "data-flow": {
+      "label": "Data Flow",
+      "color": "#8B5CF6"
+    }
+  }
+}

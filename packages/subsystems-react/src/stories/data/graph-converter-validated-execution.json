@@ -1,0 +1,58 @@
+[
+  {
+    "id": "span-1",
+    "name": "graph conversion with validation",
+    "startTime": 1772390254917,
+    "attributes": {
+      "span.kind": "test.case",
+      "test.name": "graph conversion with validation",
+      "test.framework": "bun",
+      "test.file": "event-validation.test.ts",
+      "test.suite": "Event Schema Validation"
+    },
+    "events": [
+      {
+        "time": 1772390254917,
+        "name": "conversion.started",
+        "attributes": {
+          "code.filepath": "GraphConverter.ts",
+          "code.lineno": 15,
+          "config.nodeTypes": 2,
+          "config.edgeTypes": 1
+        }
+      },
+      {
+        "time": 1772390254917,
+        "name": "conversion.processingNodes",
+        "attributes": {
+          "code.filepath": "GraphConverter.ts",
+          "code.lineno": 28,
+          "nodes.count": 2
+        }
+      },
+      {
+        "time": 1772390254917,
+        "name": "conversion.processingEdges",
+        "attributes": {
+          "code.filepath": "GraphConverter.ts",
+          "code.lineno": 45,
+          "edges.count": 1
+        }
+      },
+      {
+        "time": 1772390254917,
+        "name": "conversion.complete",
+        "attributes": {
+          "code.filepath": "GraphConverter.ts",
+          "code.lineno": 60,
+          "result.nodes.count": 2,
+          "result.edges.count": 1,
+          "duration.ms": 5
+        }
+      }
+    ],
+    "status": "OK",
+    "endTime": 1772390254917,
+    "duration": 0
+  }
+]

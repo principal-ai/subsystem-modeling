@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://principal-ai.dev/schemas/auxiliary.manifest.schema.json",
+  "title": "Auxiliary Manifest",
+  "description": "Catalogs project regions outside the OTEL telemetry surface (docs, .github, etc.). Lives at .principal-views/auxiliary.manifest.json.",
+  "type": "object",
+  "required": [
+    "areas"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Pointer to this schema for editor autocomplete."
+    },
+    "areas": {
+      "type": "array",
+      "description": "Project areas — folders or files that support the project but don't emit OTEL telemetry.",
+      "items": {
+        "$ref": "#/$defs/projectArea"
+      }
+    }
+  },
+  "$defs": {
+    "projectArea": {
+      "type": "object",
+      "required": [
+        "name",
+        "paths",
+        "description"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Display name. Must be unique across all areas in the manifest."
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Repo-relative paths owned by this area. Folder or file. Must not overlap other areas or any scope path.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Free-text purpose — a sentence about why this folder exists."
+        }
+      }
+    }
+  }
+}

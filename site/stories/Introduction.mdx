@@ -1,0 +1,20 @@
+import { Meta } from '@storybook/blocks';
+
+<Meta name="Introduction" />
+
+# Subsystem Model examples
+
+Real-world subsystems described with the Subsystem Model schema and rendered by
+`SubsystemComponentGraph` from the published `@principal-ai/subsystems-react` package.
+One case per repo type and language, so you can see how the same definition shape
+describes very different codebases.
+
+Each example is a plain JSON document — components anchored to real source files,
+typed edges between them, and the flows the subsystem must support. Every node you
+see here opens its source file; every claim is verifiable against the code.
+
+## Cases
+
+- **TypeScript / Orders API** — a typical Express service: router boundary, service
+  class, repository, external stores — with the `POST /orders` request path as a
+  throughline.

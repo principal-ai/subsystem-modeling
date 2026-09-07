@@ -1,0 +1,68 @@
+{
+  "name": "@principal-ai/principal-studio-cli",
+  "version": "0.35.3",
+  "description": "Principal View CLI - Validate and manage .canvas configuration files",
+  "main": "dist/index.cjs",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "principal-ai": "dist/index.cjs"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "bun run clean && bun run build:lib && bun run build:cli",
+    "build:lib": "tsc -p tsconfig.build.json",
+    "build:cli": "bun build/build-cli.ts",
+    "clean": "rm -rf dist",
+    "dev": "tsx src/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "prepack": "bun run build"
+  },
+  "keywords": [
+    "principal-view",
+    "cli",
+    "canvas",
+    "graph",
+    "validation",
+    "principal-ai"
+  ],
+  "author": "Principal AI Team",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@principal-ai/agent-monitoring": "0.3.43",
+    "@principal-ai/alexandria-core-library": "^0.4.0",
+    "@principal-ai/codebase-composition": "^0.2.57",
+    "@principal-ai/file-city-builder": "^0.5.0",
+    "@principal-ai/subsystems-core": "^0.29.0",
+    "@principal-ai/repository-abstraction": "^0.5.7",
+    "better-sqlite3": "^13.0.0",
+    "chalk": "5.6.2",
+    "commander": "14.0.2",
+    "glob": "^13.0.0",
+    "globby": "16.0.0",
+    "js-yaml": "4.1.1"
+  },
+  "optionalDependencies": {
+    "@principal-ai/subsystems-studio": "^0.6.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/js-yaml": "4.0.9",
+    "@types/node": "22.10.1",
+    "esbuild": "0.24.0",
+    "tsx": "4.19.2",
+    "typescript": "5.7.2"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

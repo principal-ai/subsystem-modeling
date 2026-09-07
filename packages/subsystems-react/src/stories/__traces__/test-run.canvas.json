@@ -1,0 +1,241 @@
+{
+  "name": "Trace: principal-view-core-tests",
+  "description": "Exported at 2025-12-26T01:11:11.110Z",
+  "nodeTypes": {
+    "span": {
+      "description": "OpenTelemetry span from trace",
+      "shape": "rectangle"
+    },
+    "service": {
+      "description": "Service grouping",
+      "icon": "server",
+      "shape": "rectangle"
+    }
+  },
+  "edgeTypes": {
+    "span-child": {
+      "label": "Child span",
+      "directed": true
+    }
+  },
+  "display": {
+    "layout": "manual",
+    "animations": {
+      "enabled": true,
+      "speed": 1
+    }
+  },
+  "nodes": [
+    {
+      "id": "service-principal-view-core-tests",
+      "type": "group",
+      "x": -20,
+      "y": -50,
+      "width": 1490,
+      "height": 130,
+      "label": "principal-view-core-tests",
+      "pv": {
+        "nodeType": "service",
+        "name": "principal-view-core-tests",
+        "icon": "server"
+      }
+    },
+    {
+      "id": "ac239f825108da25",
+      "type": "text",
+      "x": 0,
+      "y": 0,
+      "width": 200,
+      "height": 60,
+      "text": "test:basic-traced",
+      "pv": {
+        "nodeType": "span",
+        "name": "test:basic-traced",
+        "description": "11.75ms",
+        "shape": "circle",
+        "fill": "#6b7280",
+        "states": {
+          "OK": {
+            "color": "#22c55e",
+            "label": "OK"
+          }
+        },
+        "otel": {
+          "kind": "instance",
+          "category": "span"
+        },
+        "dataSchema": {
+          "test.type": {
+            "type": "string",
+            "required": false
+          }
+        }
+      }
+    },
+    {
+      "id": "a2ec37169e76db0a",
+      "type": "text",
+      "x": 250,
+      "y": 0,
+      "width": 200,
+      "height": 60,
+      "text": "operation:validate",
+      "pv": {
+        "nodeType": "span",
+        "name": "operation:validate",
+        "description": "5.63ms",
+        "shape": "circle",
+        "fill": "#6b7280",
+        "states": {
+          "OK": {
+            "color": "#22c55e",
+            "label": "OK"
+          }
+        },
+        "otel": {
+          "kind": "instance",
+          "category": "span"
+        },
+        "dataSchema": {
+          "operation.type": {
+            "type": "string",
+            "required": false
+          }
+        }
+      }
+    },
+    {
+      "id": "4cc98464bf2a78b6",
+      "type": "text",
+      "x": 500,
+      "y": 0,
+      "width": 200,
+      "height": 60,
+      "text": "operation:process",
+      "pv": {
+        "nodeType": "span",
+        "name": "operation:process",
+        "description": "5.78ms",
+        "shape": "circle",
+        "fill": "#6b7280",
+        "states": {
+          "OK": {
+            "color": "#22c55e",
+            "label": "OK"
+          }
+        },
+        "otel": {
+          "kind": "instance",
+          "category": "span"
+        },
+        "dataSchema": {
+          "operation.type": {
+            "type": "string",
+            "required": false
+          },
+          "input": {
+            "type": "string",
+            "required": false
+          }
+        }
+      }
+    },
+    {
+      "id": "c6354fc184a8d56a",
+      "type": "text",
+      "x": 750,
+      "y": 0,
+      "width": 200,
+      "height": 60,
+      "text": "test:nested-spans",
+      "pv": {
+        "nodeType": "span",
+        "name": "test:nested-spans",
+        "description": "11.60ms",
+        "shape": "circle",
+        "fill": "#6b7280",
+        "states": {
+          "OK": {
+            "color": "#22c55e",
+            "label": "OK"
+          }
+        },
+        "otel": {
+          "kind": "instance",
+          "category": "span"
+        },
+        "dataSchema": {
+          "test.type": {
+            "type": "string",
+            "required": false
+          }
+        }
+      }
+    },
+    {
+      "id": "3884b9ed9e60a5c9",
+      "type": "text",
+      "x": 1000,
+      "y": 0,
+      "width": 200,
+      "height": 60,
+      "text": "child:computation",
+      "pv": {
+        "nodeType": "span",
+        "name": "child:computation",
+        "description": "5.55ms",
+        "shape": "circle",
+        "fill": "#6b7280",
+        "states": {
+          "UNSET": {
+            "color": "#6b7280",
+            "label": "UNSET"
+          }
+        },
+        "otel": {
+          "kind": "instance",
+          "category": "span"
+        },
+        "dataSchema": {
+          "computation.type": {
+            "type": "string",
+            "required": false
+          }
+        }
+      }
+    },
+    {
+      "id": "ffede854df0d18bc",
+      "type": "text",
+      "x": 1250,
+      "y": 0,
+      "width": 200,
+      "height": 60,
+      "text": "test:manual-span",
+      "pv": {
+        "nodeType": "span",
+        "name": "test:manual-span",
+        "description": "5.64ms",
+        "shape": "circle",
+        "fill": "#6b7280",
+        "states": {
+          "UNSET": {
+            "color": "#6b7280",
+            "label": "UNSET"
+          }
+        },
+        "otel": {
+          "kind": "instance",
+          "category": "span"
+        },
+        "dataSchema": {
+          "manual": {
+            "type": "boolean",
+            "required": false
+          }
+        }
+      }
+    }
+  ],
+  "edges": []
+}

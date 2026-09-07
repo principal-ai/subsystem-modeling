@@ -1,0 +1,27 @@
+{
+  "name": "subsystem-modeling",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Subsystem modeling — schema, React UI, Studio, and CLI for verifiable subsystem models.",
+  "scripts": {
+    "build": "bun run build:core && bun run build:react && bun run build:cli",
+    "build:core": "cd packages/subsystems-core && bun run build",
+    "build:react": "cd packages/subsystems-react && bun run build",
+    "build:cli": "cd packages/principal-studio-cli && bun run build",
+    "build:studio": "cd packages/subsystems-studio && bun run build:bundle",
+    "test": "bun run test:core",
+    "test:core": "cd packages/subsystems-core && bun test",
+    "test:react": "cd packages/subsystems-react && bun test",
+    "test:all": "bun run test:core && bun run test:react",
+    "typecheck": "tsc --noEmit",
+    "dev:core": "cd packages/subsystems-core && bun run dev",
+    "dev:react": "cd packages/subsystems-react && bun run dev",
+    "dev:cli": "cd packages/principal-studio-cli && bun run dev",
+    "dev:studio": "cd packages/subsystems-studio && bun run dev",
+    "storybook": "cd packages/subsystems-react && bun run storybook",
+    "site": "cd site && bun run dev"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

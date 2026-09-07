@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "composite": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noEmit": false,
+    "jsx": "preserve"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["**/*.test.ts", "**/*.stories.tsx"]
+}

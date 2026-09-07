@@ -1,0 +1,65 @@
+{
+  "name": "@principal-ai/subsystems-studio",
+  "version": "0.6.3",
+  "description": "Subsystems Studio — desktop host for subsystem models, throughlines, trails, and agent sessions. Pairs with the principal-ai CLI.",
+  "type": "module",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "bin": {
+    "subsystems-studio": "bin/subsystems-studio.cjs"
+  },
+  "files": [
+    "bin",
+    "bundles"
+  ],
+  "scripts": {
+    "start": "electrobun dev",
+    "dev": "electrobun dev --watch",
+    "build:canary": "electrobun build --env=canary",
+    "build:stable": "electrobun build --env=stable",
+    "build:bundle": "bun run build:stable && bun scripts/stage-bundle.ts",
+    "prepack": "bun run build:bundle",
+    "graphify:smoke": "bun scripts/graphify-smoke.ts",
+    "graphify:ensure": "bun scripts/graphify-ensure-smoke.ts"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "devDependencies": {
+    "@excalidraw/excalidraw": "^0.18.0",
+    "@industry-theme/file-city-panel": "^0.9.104",
+    "@pierre/diffs": "^1.3.0",
+    "@principal-ade/dynamic-file-tree": "^0.2.45",
+    "@principal-ade/industry-theme": "^0.1.24",
+    "@principal-ade/panel-framework-core": "^0.5.1",
+    "@principal-ade/panel-layouts": "^0.4.8",
+    "@principal-ade/utcp-panel-event": "^0.1.0",
+    "@principal-ai/alexandria-core-library": "^0.7.1",
+    "@principal-ai/file-city-builder": "^0.5.4",
+    "@principal-ai/file-city-react": "^0.5.91",
+    "@principal-ai/logo-component": "^0.1.23",
+    "@principal-ai/subsystems-core": "^0.29.0",
+    "@principal-ai/subsystems-react": "0.17.0",
+    "@principal-ai/repository-abstraction": "^0.5.7",
+    "@types/bun": "latest",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "electrobun": "1.18.1",
+    "lucide-react": "^1.21.0",
+    "mermaid": "^11.9.0",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "themed-markdown": "^0.1.124",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "@principal-ai/agent-monitoring": "^0.3.43",
+    "@xyflow/react": "^12.11.3",
+    "better-sqlite3": "^13.0.2"
+  }
+}

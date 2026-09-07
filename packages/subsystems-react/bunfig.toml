@@ -1,0 +1,6 @@
+[test]
+# Use bun's built-in test runner with React Testing Library
+coverage = true
+# Use happy-dom for DOM environment in tests
+# This provides a lightweight DOM implementation for React component tests
+environment = "happy-dom"
