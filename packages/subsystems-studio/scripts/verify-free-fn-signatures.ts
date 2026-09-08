@@ -50,20 +50,6 @@ const cases: DemoCase[] = [
 		claimed: { parameters: [{ name: 'scene', type: 'ExcalidrawLikeScene' }], returnType: 'RebuiltSubsystemModel' },
 	},
 	{
-		label: 'buildCanvasFileManifest',
-		file: 'packages/subsystems-core/src/discovery/CanvasFileManifest.ts',
-		symbol: 'buildCanvasFileManifest',
-		claimed: {
-			parameters: [
-				{ name: 'canvas', type: 'ExtendedCanvas' },
-				{ name: 'canvasId', type: 'string' },
-				{ name: 'canvasPath', type: 'string' },
-				{ name: 'canvasType', type: 'CanvasType' },
-			],
-			returnType: 'CanvasFileManifest',
-		},
-	},
-	{
 		label: 'analyzeBeats',
 		file: 'packages/subsystems-studio/src/bun/beat-analysis.ts',
 		symbol: 'analyzeBeats',

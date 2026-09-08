@@ -1,6 +1,3 @@
 [test]
 # Use bun's built-in test runner (compatible with Jest API)
 coverage = true
-
-# OpenTelemetry setup - runs before each test file
-preload = ["./test/setup.ts"]

@@ -13,5 +13,4 @@ tooling around it:
 | `packages/principal-studio-cli` | `@principal-ai/principal-studio-cli` | CLI (`principal-ai` bin) |
 | `site` | — | Marketing / docs site |
 
-Migrated from [`principal-view-core-library`](https://github.com/principal-ai/principal-view-core-library).
-Strip of legacy Principal View surface is in progress.
+
