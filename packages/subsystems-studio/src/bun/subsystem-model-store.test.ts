@@ -277,6 +277,7 @@ describe("detail provenance", () => {
 			{ id: "c", detail: { kind: "class", methods: [] } },
 			{ id: "t", detail: { kind: "type" } },
 			{ id: "m", detail: { kind: "module" } },
+			{ id: "e", detail: { kind: "custom_entity" } },
 		];
 		normalizeDetailProvenance(components);
 		const d = (id: string) =>
@@ -287,6 +288,7 @@ describe("detail provenance", () => {
 		expect(d("c")["references"]).toEqual([]);
 		expect(d("t")["usedBy"]).toEqual([]);
 		expect(d("m")["imports"]).toEqual([]);
+		expect(d("e")["attributes"]).toEqual([]);
 		// existing arrays are never overwritten
 		expect(d("f")["parameters"]).toEqual([{ name: "id", type: "string" }]);
 	});
@@ -376,6 +378,7 @@ describe("findComponentConstructProblems", () => {
 			"enum",
 			"store",
 			"external",
+			"custom_entity",
 		]);
 	});
 

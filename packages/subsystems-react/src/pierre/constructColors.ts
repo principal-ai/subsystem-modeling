@@ -19,6 +19,20 @@ import type { PierreSyntaxThemeName } from './pierreSyntaxTheme';
 import pierreDark from '@pierre/theme/pierre-dark';
 import pierreLight from '@pierre/theme/pierre-light';
 
+/**
+ * Resolve a component's accent color: an authored `color` override wins;
+ * otherwise the construct color derived from the active Pierre syntax theme.
+ * Single source of truth so the node border/badges and the declaration panel
+ * agree on what a custom entity (or any component) renders as.
+ */
+export function componentColor(
+  component: { color?: string; construct: SubsystemComponentConstruct },
+  themeName: PierreSyntaxThemeName,
+): string {
+  if (component.color) return component.color;
+  return constructColorsFromPierreTheme(themeName)[component.construct];
+}
+
 interface PierreThemeInput {
   type: 'dark' | 'light';
   colors: Record<string, string>;
@@ -93,6 +107,10 @@ export function constructColorsFromPierreTheme(
     module: towardBackground(moduleColor, 0.18),
     store: pick('variable.other.constant'),
     external: pick('comment'),
+    // custom entities are actors, not code — the heading/emphasis coral reads
+    // as a highlight against the code-construct hues. Distinct from entry role
+    // orange (#ff6b35) which stays a badge, not a border.
+    custom_entity: pick('markup.heading'),
   };
 }
 

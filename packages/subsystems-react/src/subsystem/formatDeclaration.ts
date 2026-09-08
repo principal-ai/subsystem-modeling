@@ -45,6 +45,19 @@ export function generateDeclarationString(component: SubsystemComponent): string
     case 'external':
       // Not valid TypeScript — caller should handle formatting.
       return `external '${detail?.kind === 'external' ? detail.label : name}'`;
+    case 'custom_entity':
+      // An actor, not code — no declaration to generate. Renders as a
+      // non-TypeScript block: `entity 'Name' — kind` followed by the authored
+      // attributes (key: value) indented beneath. Not valid TS — callers
+      // bypass Prettier.
+    {
+      const kindLabel = component.entityKind ? ` — ${component.entityKind}` : '';
+      const attrs = detail?.kind === 'custom_entity' ? detail.attributes : [];
+      const attrLines = attrs.map((a) => `  ${a.key}: ${a.value}`).join('\n');
+      return attrLines
+        ? `entity '${name}'${kindLabel}\n${attrLines}`
+        : `entity '${name}'${kindLabel}`;
+    }
     default:
       return `${construct} ${name}`;
   }

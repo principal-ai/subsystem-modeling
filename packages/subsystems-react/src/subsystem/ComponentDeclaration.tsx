@@ -18,7 +18,7 @@ import {
 import type { SubsystemOpenFileOptions } from './declarationRef';
 import { parseSourceLocation } from './declarationRef';
 import { tokenizeComponent } from './tokenizeComponent';
-import { constructColorsFromPierreTheme } from '../pierre/constructColors';
+import { componentColor } from '../pierre/constructColors';
 
 /** Live / result state for the declaration-panel Verify control. */
 export type ComponentVerificationPhase =
@@ -263,7 +263,7 @@ export function ComponentDeclaration({
   const [showFile, setShowFile] = useState(false);
   const [showPurpose, setShowPurpose] = useState(false);
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
-  const color = constructColorsFromPierreTheme(pierreSyntaxTheme)[component.construct];
+  const color = componentColor(component, pierreSyntaxTheme);
   const okColor = '#3d9a5f';
   const warnColor = theme.colors.textSecondary;
 

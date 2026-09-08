@@ -58,7 +58,8 @@
         "type_alias",
         "enum",
         "store",
-        "external"
+        "external",
+        "custom_entity"
       ]
     },
     "role": {
@@ -157,6 +158,14 @@
         "symbol": {
           "type": "string",
           "description": "Code identity — a real declaration in `file` (function/class/const/interface/type/enum). Verified on create/update; mentions, imports, and call sites do not count. For standalone methods use `ClassName.methodName`. Source of truth for display when present."
+        },
+        "entityKind": {
+          "type": "string",
+          "description": "Actor kind for `construct: custom_entity` (e.g. Person, agent, queue), rendered as the node badge. Ignored on code constructs."
+        },
+        "color": {
+          "type": "string",
+          "description": "Node + declaration accent override (hex). Wins over the construct-derived color. Typically themes a custom entity (agent, queue)."
         },
         "purpose": {
           "type": "string",
@@ -537,6 +546,9 @@
         },
         {
           "$ref": "#/$defs/storeDeclaration"
+        },
+        {
+          "$ref": "#/$defs/customEntityDeclaration"
         }
       ]
     },
@@ -759,6 +771,45 @@
           "description": "Retained state members (module-level consts or fields).",
           "items": {
             "$ref": "#/$defs/propertyInfo"
+          }
+        }
+      }
+    },
+    "customEntityAttribute": {
+      "type": "object",
+      "required": [
+        "key",
+        "value"
+      ],
+      "additionalProperties": false,
+      "description": "A single authored attribute on a custom entity — free-form key/value.",
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "customEntityDeclaration": {
+      "type": "object",
+      "required": [
+        "kind",
+        "attributes"
+      ],
+      "additionalProperties": false,
+      "description": "Declaration for `construct: custom_entity` (an actor — Person/agent/queue). Authored, never extracted: there is no backing source declaration. Rendered as `entity 'Name' — kind` plus the key/value attribute lines.",
+      "properties": {
+        "kind": {
+          "const": "custom_entity"
+        },
+        "attributes": {
+          "type": "array",
+          "description": "Authored key/value pairs (e.g. slack, permission, level).",
+          "items": {
+            "$ref": "#/$defs/customEntityAttribute"
           }
         }
       }

@@ -58,7 +58,8 @@ function asConstruct(construct: string): SubsystemComponentConstruct {
 		construct === "type" ||
 		construct === "module" ||
 		construct === "store" ||
-		construct === "external"
+		construct === "external" ||
+		construct === "custom_entity"
 	) {
 		return construct;
 	}

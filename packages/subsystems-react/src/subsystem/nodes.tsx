@@ -30,7 +30,7 @@ import {
   type SubsystemGroupNodeData,
   type SubsystemGraphEdge,
 } from './model';
-import { constructColorsFromPierreTheme } from '../pierre/constructColors';
+import { componentColor } from '../pierre/constructColors';
 import { resolvePierreSyntaxThemeName } from '../pierre/pierreSyntaxTheme';
 
 export const CONSTRUCT_LABEL: Record<string, string> = {
@@ -43,6 +43,7 @@ export const CONSTRUCT_LABEL: Record<string, string> = {
   module: 'module',
   store: 'store',
   external: 'external',
+  custom_entity: 'entity',
 };
 
 /** Insert zero-width spaces at identifier word boundaries so long names wrap
@@ -83,8 +84,8 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
   // Construct owns node color, derived from the active Pierre syntax theme —
   // the same palette the declaration panel and file drawer render with. Role
   // shows as the hover badge, not as color — for now; a role glyph/accent may
-  // come later.
-  const color = constructColorsFromPierreTheme(resolvePierreSyntaxThemeName(mode))[c.construct];
+  // come later. A component-authored `color` override wins over the construct.
+  const color = componentColor(c, resolvePierreSyntaxThemeName(mode));
   const [hover, setHover] = useState(false);
   const configuredMax = SUBSYSTEM_CALLBACKS.maxNodeWidth;
   const maxWidth = configuredMax ?? 300;

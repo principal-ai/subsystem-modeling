@@ -31,6 +31,8 @@ export type {
   GraphifyTypeDetail,
   GraphifyModuleDetail,
   GraphifyExternalDetail,
+  GraphifyCustomEntityDetail,
+  GraphifyCustomEntityAttribute,
   GraphifyStoreDetail,
   GraphifyComponentDetail,
   GraphifyEdgeRef,

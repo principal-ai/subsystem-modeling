@@ -192,10 +192,20 @@ store validators. Off-list edge `mechanism`s are rejected; off-list
 **Component `construct`** (code shape — one of):
 
 - `class`, `function`, `method`, `interface`, `type_alias`, `enum`, `store`, `external`
+- `custom_entity` — an **authored actor** (Person / agent / queue), not code
 
 `module` is **rejected**: a module is its own subsystem — anchor to
 a concrete export inside it (`symbol` + `file`), or publish the module as a
 separate model and reference it from `purpose`/`description`.
+
+`custom_entity` is for actors that participate in the flow but have no source
+declaration — a Person, an agent, a queue (e.g. `NudgeQueue`). There is no
+`symbol` and no `file` (leave `file` empty, `purl` may be `external` or a real
+repo purl). Tag the actor kind with `entityKind` (badge text, e.g. `Person`,
+`agent`, `queue`); optionally override the node color with `color` (hex) and
+hand-author `declaration` (`kind: "custom_entity"` + `attributes` as ordered
+`{ key, value }` pairs — e.g. `level: L1`, `approvalLimit: $500`). Entities
+group by `process`/`layer` and flow through edges exactly like code nodes.
 
 `store` is for retained state registries (e.g. a `Set`/`Map` module-scope
 subscriber bag), not conceptual "services". Pair with `writes` / `reads` /
@@ -229,7 +239,8 @@ data).
 **Declarations** (`component.declaration`) render params, return type, and
 members in the click panel — hand-author them when you want to highlight
 specific inputs/outputs. Discriminated by `declaration.kind` (`function`,
-`class`, `method`, `type`, `store`, `external`, …). Don't bother filling
+`class`, `method`, `type`, `store`, `external`, `custom_entity`, …). Don't
+bother filling
 `callers`/`callees`: relationship comments are intentionally not rendered
 (the model's edges carry interactions). Every hand-written `declaration`
 must carry provenance:

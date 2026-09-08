@@ -42,4 +42,23 @@ describe('findCreateProblems', () => {
       findEdgeMechanismProblems([{ id: 'e1', from: 'a', to: 'b', mechanism: 'teleports' }]),
     ).toHaveLength(1);
   });
+
+  test('accepts a custom_entity actor', () => {
+    expect(
+      findComponentConstructProblems([
+        {
+          id: 'tech',
+          name: 'FacilitiesTechnician',
+          construct: 'custom_entity',
+          entityKind: 'Person',
+          file: '',
+          purl: 'pkg:github/novatech/facilities-ops',
+          detail: {
+            kind: 'custom_entity',
+            attributes: [{ key: 'level', value: 'L1' }],
+          },
+        },
+      ]),
+    ).toEqual([]);
+  });
 });

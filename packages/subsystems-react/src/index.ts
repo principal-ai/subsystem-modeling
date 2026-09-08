@@ -43,6 +43,8 @@ export type {
   GraphifyTypeDetail,
   GraphifyModuleDetail,
   GraphifyExternalDetail,
+  GraphifyCustomEntityDetail,
+  GraphifyCustomEntityAttribute,
   GraphifyComponentDetail,
   GraphifyEdgeRef,
 } from './graphify';
@@ -92,7 +94,7 @@ export type {
 } from './subsystem/ComponentDeclaration';
 export { ComponentDeclaration } from './subsystem/ComponentDeclaration';
 export { MECHANISM_COLOR, MECHANISM_STYLE } from './subsystem/model';
-export { CONSTRUCT_COLOR, constructColorsFromPierreTheme } from './pierre/constructColors';
+export { CONSTRUCT_COLOR, componentColor, constructColorsFromPierreTheme } from './pierre/constructColors';
 export {
   purlRepoKey,
   purlOwnerName,

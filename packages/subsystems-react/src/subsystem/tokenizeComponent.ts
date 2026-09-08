@@ -57,6 +57,11 @@ export async function tokenizeComponent(
     return tokenizeFormatted(`external '${escaped}'`, themeName);
   }
 
+  // Custom entity — an actor (Person/agent/queue), not code; bypass Prettier.
+  if (kind === 'custom_entity') {
+    return tokenizeFormatted(generateDeclarationString(component), themeName);
+  }
+
   // Generate → format → tokenize
   const raw = generateDeclarationString(component);
   const { prettier, plugins } = await getPrettier();

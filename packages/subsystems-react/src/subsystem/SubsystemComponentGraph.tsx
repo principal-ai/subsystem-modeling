@@ -248,6 +248,50 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   const [descToggleHover, setDescToggleHover] = useState(false);
   // `true` only when a description exists AND the user opened it.
   const showDesc = !!description && descriptionVisible;
+  // Sidebar width (px). Draggable via the resize handle between the sidebar
+  // and the graph canvas; clamps to sensible bounds while dragging.
+  const [sidebarWidth, setSidebarWidth] = useState(340);
+  const [sidebarDrag, setSidebarDrag] = useState(false);
+  const sidebarDragStartX = useRef(0);
+  const sidebarDragStartWidth = useRef(340);
+  const sidebarMinWidth = 240;
+  const sidebarMaxWidth = useMemo(
+    () => Math.max(Math.min((_measured?.w ?? 680) * 0.5, 600), sidebarMinWidth),
+    [_measured?.w],
+  );
+  // Resize drag: capture the drag state so document-level move/up listeners
+  // stay attached for the duration of the gesture, then release on mouseup.
+  const onSidebarResizeStart = useCallback(
+    (e: ReactMouseEvent) => {
+      e.preventDefault();
+      sidebarDragStartX.current = e.clientX;
+      sidebarDragStartWidth.current = sidebarWidth;
+      setSidebarDrag(true);
+    },
+    [sidebarWidth],
+  );
+  useEffect(() => {
+    if (!sidebarDrag) return;
+    const onMove = (e: globalThis.MouseEvent) => {
+      const delta = e.clientX - sidebarDragStartX.current;
+      const next = Math.min(
+        Math.max(sidebarDragStartWidth.current + delta, sidebarMinWidth),
+        sidebarMaxWidth,
+      );
+      setSidebarWidth(next);
+    };
+    const onUp = () => {
+      setSidebarDrag(false);
+      // Re-fit the canvas so the graph re-centers in the new available space.
+      requestAnimationFrame(() => fitView());
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, [sidebarDrag, sidebarMaxWidth, fitView]);
   // Ref mirror of `selected` so the SUBSYSTEM_CALLBACKS click handler (a
   // closure over the effect deps) can toggle without a stale value.
   const selectedRef = useRef<SubsystemComponent | null>(null);
@@ -555,7 +599,8 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   // React Flow's own selection state from updating.
   const dispNodes = useMemo(() => {
     // While a step is hovered, only the hovered step's endpoints stay bright;
-    // everything else is dimmed (never hidden) so the step's context survives.
+    // everything else among the currently-visible (opened-throughline) nodes
+    // is dimmed. Nodes outside the opened-throughline set stay hidden.
     return xyflowNodesBase.map((n) => {
       // Boundary frames follow their members: hidden when no member is
       // visible, dimmed when members are dimmed. Never selectable.
@@ -568,9 +613,9 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
           anySelected: brightNodeIds != null,
         });
         const dimmed = hoverNodeIds
-          ? !memberIds.some((id) => hoverNodeIds.has(id))
+          ? vis.hidden || !memberIds.some((id) => hoverNodeIds.has(id))
           : vis.dimmed;
-        const hidden = hoverNodeIds ? false : vis.hidden;
+        const hidden = vis.hidden;
         return {
           ...n,
           hidden,
@@ -590,8 +635,8 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
         anyOpened: openedNodeIds != null,
         anySelected: brightNodeIds != null,
       });
-      const dimmed = hoverNodeIds ? !hoverNodeIds.has(n.id) : vis.dimmed;
-      const hidden = hoverNodeIds ? false : vis.hidden;
+        const dimmed = hoverNodeIds ? (vis.hidden || !hoverNodeIds.has(n.id)) : vis.dimmed;
+        const hidden = vis.hidden;
       if (fileMatch === undefined && !isSelected && !dimmed) {
         const { fileMatch: _f, isSelected: _s, dimmed: _d, ...rest } = n.data as Record<string, unknown>;
         return { ...n, hidden, data: rest };
@@ -636,8 +681,8 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
           anyOpened: openedEdgeIds != null,
           anySelected: focusEdgeIds != null,
         });
-        const dimmed = hoverEdgeIds ? !hoverEdgeIds.has(e.id) : vis.dimmed;
-        const hidden = hoverEdgeIds ? false : vis.hidden;
+        const dimmed = hoverEdgeIds ? vis.hidden || !hoverEdgeIds.has(e.id) : vis.dimmed;
+        const hidden = vis.hidden;
         return { ...paint(e, dimmed), hidden };
       });
     }
@@ -1048,15 +1093,15 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   );
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'row' }}>
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'row', userSelect: sidebarDrag ? 'none' : undefined }}>
       {/* Sidebar: scrollable title/description on top, files or flows pinned below.
           The description hides by default so files/flows get the room; the
           title-row toggle reveals it, and the lower panel yields back to 50%. */}
       {!hideSidebar && (title || description || sidebarExtra || sidebarAfterDescription || treeFilePaths.length > 0 || hasThroughlines) && (
         <div
           style={{
-            width: 340,
-            minWidth: 340,
+            width: sidebarWidth,
+            minWidth: sidebarWidth,
             borderRight: `1px solid ${theme.colors.border}`,
             background: theme.colors.backgroundSecondary ?? theme.colors.background,
             display: 'flex',
@@ -1268,6 +1313,23 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
         </div>
       )}
       
+      {/* Drag handle between sidebar and canvas — resize the left panel. */}
+      {!hideSidebar && (title || description || sidebarExtra || sidebarAfterDescription || treeFilePaths.length > 0 || hasThroughlines) && (
+        <div
+          onMouseDown={onSidebarResizeStart}
+          aria-label="Resize sidebar"
+          title="Drag to resize"
+          style={{
+            width: 3,
+            flexShrink: 0,
+            cursor: 'col-resize',
+            background: theme.colors.border,
+            transition: 'background 120ms ease',
+            zIndex: 1,
+          }}
+        />
+      )}
+
       {/* Graph area */}
       <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {/* Canvas box — the edge-label overlay and legend anchor here, so

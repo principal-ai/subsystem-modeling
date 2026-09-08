@@ -93,6 +93,8 @@ describe('subsystem graph model', () => {
     // falls back to existing name when no symbol (class stays bare).
     expect(deriveNameFromSymbol(undefined, 'class', 'SessionReader')).toBe('SessionReader');
     expect(deriveNameFromSymbol('', 'external', 'principal-studio-host')).toBe('principal-studio-host');
+    // custom entities render bare — no decoration, name is the identity
+    expect(deriveNameFromSymbol(undefined, 'custom_entity', 'FacilitiesTechnician')).toBe('FacilitiesTechnician');
   });
 
   test('executable constructs wear () on the node', () => {
@@ -127,6 +129,13 @@ describe('subsystem graph model', () => {
     expect(constructBadgeLabel({ construct: 'function', stereotype: 'hook' })).toBe('hook');
     expect(constructBadgeLabel({ construct: 'function' })).toBe('function');
     expect(constructBadgeLabel({ construct: 'type_alias' })).toBe('type alias');
+    // custom entities wear their entityKind as the badge
+    expect(
+      constructBadgeLabel({ construct: 'custom_entity', entityKind: 'Person' }),
+    ).toBe('Person');
+    expect(
+      constructBadgeLabel({ construct: 'custom_entity' }),
+    ).toBe('custom_entity');
   });
 
   test('nodeMinWidthForBadges widens for long construct badges and role pairs', () => {

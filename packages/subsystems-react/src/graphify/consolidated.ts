@@ -190,6 +190,23 @@ export interface GraphifyExternalDetail {
   label: string;
 }
 
+/** A single authored attribute on a custom entity — free-form key/value. */
+export interface GraphifyCustomEntityAttribute {
+  key: string;
+  value: string;
+}
+
+/**
+ * A custom-entity (actor — Person/agent/queue) declaration. Authored, never
+ * extracted: there is no graphify node for a Person. `attributes` are
+ * free-form key/value pairs surfaced in the declaration panel; the base
+ * component fields carry the node identity (`entityKind`, `color`, `purpose`).
+ */
+export interface GraphifyCustomEntityDetail {
+  kind: 'custom_entity';
+  attributes: GraphifyCustomEntityAttribute[];
+}
+
 /**
  * A retained-state node (`kind: 'store'`): state and its contract, no
  * behavior. `kind` is the node's verifiable anchor — a store anchors to a
@@ -232,6 +249,7 @@ export type GraphifyComponentDetail =
   | GraphifyTypeDetail
   | GraphifyModuleDetail
   | GraphifyExternalDetail
+  | GraphifyCustomEntityDetail
   | GraphifyStoreDetail;
 
 /** A raw graphify edge backing a facet claim (verification + provenance). */

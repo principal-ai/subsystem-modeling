@@ -400,6 +400,7 @@ export const SUBSYSTEM_COMPONENT_CONSTRUCTS = [
 	"enum",
 	"store",
 	"external",
+	"custom_entity",
 ] as const;
 
 export type ComponentConstruct = (typeof SUBSYSTEM_COMPONENT_CONSTRUCTS)[number];
@@ -490,6 +491,7 @@ export function normalizeDetailProvenance(components: unknown): void {
 			class: ["methods", "properties", "extends", "implements", "instantiations", "references"],
 			type: ["properties", "usedBy", "implementors"],
 			module: ["imports", "exports", "symbols"],
+			custom_entity: ["attributes"],
 		};
 		for (const key of arrays[String(kind)] ?? []) {
 			if (!Array.isArray(detail[key])) detail[key] = [];

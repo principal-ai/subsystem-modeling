@@ -17,7 +17,8 @@
  */
 
 /** What the node IS as a declaration. `module` is not an authored construct —
- *  a module is its own subsystem. */
+ *  a module is its own subsystem. `custom_entity` is an authored actor
+ *  (Person / agent / queue), not code. */
 export type SubsystemConstruct =
   | 'class'
   | 'function'
@@ -26,10 +27,18 @@ export type SubsystemConstruct =
   | 'type_alias'
   | 'enum'
   | 'store'
-  | 'external';
+  | 'external'
+  | 'custom_entity';
 
 /** Where the node sits in the topology, orthogonal to construct. */
 export type SubsystemComponentRole = 'entry' | 'service';
+
+/**
+ * Actor kind for `construct: custom_entity` (open string).
+ * Examples: `Person`, `agent`, `queue`, `slack-channel`.
+ * Only meaningful on custom entities.
+ */
+export type SubsystemEntityKind = string;
 
 /**
  * Framework that owns a stereotype vocabulary (open string).
@@ -191,6 +200,22 @@ export interface SubsystemStoreDeclaration {
   properties: SubsystemPropertyInfo[];
 }
 
+/** A single authored attribute on a custom entity — free-form key/value. */
+export interface SubsystemCustomEntityAttribute {
+  key: string;
+  value: string;
+}
+
+/**
+ * Declaration for `construct: custom_entity` (an actor — Person/agent/queue).
+ * Authored, never extracted: there is no backing source declaration.
+ * `attributes` is authored key/value (e.g. `slack`, `permission`, `level`).
+ */
+export interface SubsystemCustomEntityDeclaration {
+  kind: 'custom_entity';
+  attributes: SubsystemCustomEntityAttribute[];
+}
+
 /** Structured declaration shape of a construct. */
 export type SubsystemConstructDeclaration =
   | SubsystemClassDeclaration
@@ -199,7 +224,8 @@ export type SubsystemConstructDeclaration =
   | SubsystemTypeDeclaration
   | SubsystemModuleDeclaration
   | SubsystemExternalDeclaration
-  | SubsystemStoreDeclaration;
+  | SubsystemStoreDeclaration
+  | SubsystemCustomEntityDeclaration;
 
 /** A component node — the named unit, construct-tagged. */
 export interface SubsystemComponent {
@@ -226,6 +252,16 @@ export interface SubsystemComponent {
   process?: string;
   /** Code identity — real declaration in `file` when set. */
   symbol?: string;
+  /**
+   * Actor kind for `construct: custom_entity` (e.g. `Person`, `agent`,
+   * `queue`), rendered as the node badge. Ignored on code constructs.
+   */
+  entityKind?: SubsystemEntityKind;
+  /**
+   * Node + declaration accent override (hex). Wins over the construct-derived
+   * color. Typically used to theme a custom entity (agent, queue).
+   */
+  color?: string;
   layer?: number;
   capture?: SubsystemCapture;
   /** Structured declaration shape of the construct (params, members, …). */

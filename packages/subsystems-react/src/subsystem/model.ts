@@ -30,7 +30,8 @@ export type SubsystemComponentConstruct =
   | 'enum'
   | 'module'
   | 'store'
-  | 'external';
+  | 'external'
+  | 'custom_entity';
 
 /**
  * Semantic role — where the node sits in the topology, orthogonal to
@@ -145,6 +146,22 @@ export interface SubsystemComponent {
    * a React UI unit reads as "component" rather than "function".
    */
   stereotype?: SubsystemStereotype;
+  /**
+   * Open-string entity kind for `construct: 'custom_entity'` nodes — what the
+   * actor/entity is (e.g. `Person`, `agent`, `queue`). Not code; there is no
+   * graphify anchor. Contrast with `construct` (what the declaration is) and
+   * `role` (where it sits topologically). Empty/unset for code constructs.
+   */
+  entityKind?: string;
+  /**
+   * Authored color override for the node border + badges, when the themed
+   * construct color isn't wanted. Primarily for `construct: 'custom_entity'`
+   * (an author picks a fitting hue for a Person/agent/queue) — but usable on
+   * any construct. Any `#rrggbb` string; when set it wins over the
+   * construct-derived color, mirrors in the declaration panel. Leave unset to
+   * inherit the Pierre construct palette.
+   */
+  color?: string;
   /**
    * Runtime process membership — which deployment unit this node is a
    * member of (e.g. `principal-studio/host`, `principal-studio/renderer`). Nodes
@@ -512,13 +529,18 @@ export const ROLE_LABEL: Record<SubsystemComponentRole, string> = {
  * Primary badge text for a node: prefer framework stereotype over the
  * language construct so a React UI unit reads as "component" / "hook"
  * rather than "function". When both framework and stereotype are set,
- * show `framework · stereotype` (e.g. `react · component`).
+ * show `framework · stereotype` (e.g. `react · component`). A custom
+ * entity wears its `entityKind` (Person/agent/queue) as the badge.
  */
 export function constructBadgeLabel(component: {
   construct: SubsystemComponentConstruct;
   framework?: string;
   stereotype?: string;
+  entityKind?: string;
 }): string {
+  if (component.construct === 'custom_entity' && component.entityKind) {
+    return component.entityKind;
+  }
   const constructLabel =
     component.construct === 'type_alias' ? 'type alias' : component.construct;
   if (component.stereotype && component.framework) {
@@ -554,6 +576,7 @@ export function nodeMinWidthForBadges(component: {
   framework?: string;
   stereotype?: string;
   role?: SubsystemComponentRole;
+  entityKind?: string;
 }): number {
   const left = estimateBadgeLabelWidth(constructBadgeLabel(component));
   if (component.role == null) {
