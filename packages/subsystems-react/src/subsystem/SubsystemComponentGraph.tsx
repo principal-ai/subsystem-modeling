@@ -102,11 +102,36 @@ export interface SubsystemComponentGraphProps {
    */
   hideSidebar?: boolean;
   /**
+   * How throughline step highlighting behaves on the canvas.
+   * - `focus` (default): zoom to the step, hide non-participants, open drawer
+   * - `dim`: keep the full graph, dim non-participants (same as hovering a step)
+   */
+  throughlineStepMode?: 'focus' | 'dim';
+  /**
+   * When true, cycles throughline steps automatically using `dim` highlighting
+   * (no zoom, no drawer). Loops across all throughlines that have steps.
+   * Useful for graph-only embeds (`hideSidebar`).
+   */
+  autoPlayThroughlines?: boolean;
+  /** Pause between autoplay steps in ms. @default 2500 */
+  throughlineAutoPlayIntervalMs?: number;
+  /**
+   * When false, focusing a throughline/step does not call `fitView`.
+   * @default true
+   */
+  zoomOnThroughlineFocus?: boolean;
+  /**
    * Subsystem title rendered as a non-interactive overlay chip on the graph
    * canvas (top-center). Does not trigger the sidebar — for graph-only
    * embeds that still need to name what they show.
    */
   graphTitle?: string;
+  /**
+   * When true, shows the active throughline's title as a non-interactive
+   * overlay chip on the canvas (under `graphTitle` when both are set).
+   * Uses the focused or hover-highlighted throughline.
+   */
+  showThroughlineTitle?: boolean;
   /** Markdown description rendered in the sidebar. */
   description?: string;
   /** Rendered over the graph canvas only (not the title/legend sidebar). */
@@ -185,7 +210,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, title, hideSidebar, graphTitle, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, renderFileView, renderFileViewer, renderThroughlineViewer, onFileSelect, onVerifyComponent, componentVerification }: InnerProps) {
+function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, title, hideSidebar, throughlineStepMode = 'focus', autoPlayThroughlines = false, throughlineAutoPlayIntervalMs = THROUGHLINE_PLAY_PAUSE_MS, zoomOnThroughlineFocus = true, graphTitle, showThroughlineTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, renderFileView, renderFileViewer, renderThroughlineViewer, onFileSelect, onVerifyComponent, componentVerification }: InnerProps) {
   const { theme } = useTheme();
   const { fitView } = useReactFlow();
   const viewport = useViewport();
@@ -240,6 +265,46 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
     if (drawerTarget?.kind !== 'throughline' || !throughlines) return null;
     return throughlines.find((t) => t.id === drawerTarget.throughlineId) ?? null;
   }, [drawerTarget, throughlines]);
+
+  // Throughline shown on the canvas title chip (focus or hover/autoplay highlight).
+  const overlayThroughlineTitle = useMemo(() => {
+    if (!showThroughlineTitle || !throughlines?.length) return null;
+    const id = focusedThroughlineId ?? hoveredThroughlineStep?.throughlineId;
+    if (!id) return null;
+    return throughlines.find((t) => t.id === id)?.title ?? null;
+  }, [
+    showThroughlineTitle,
+    throughlines,
+    focusedThroughlineId,
+    hoveredThroughlineStep,
+  ]);
+
+  // Active step for the bottom-of-title progress + annotation chip.
+  const overlayThroughlineStep = useMemo(() => {
+    if (!showThroughlineTitle || !throughlines?.length) return null;
+    const tlId = focusedThroughlineId ?? hoveredThroughlineStep?.throughlineId ?? null;
+    let stepIndex: number | null = null;
+    if (focusedThroughlineId != null) {
+      stepIndex = focusedStepIndex;
+    } else if (hoveredThroughlineStep != null) {
+      stepIndex = hoveredThroughlineStep.stepIndex;
+    }
+    if (tlId == null || stepIndex == null) return null;
+    const tl = throughlines.find((t) => t.id === tlId);
+    const step = tl?.steps[stepIndex];
+    if (!step || !tl) return null;
+    return {
+      index: stepIndex + 1,
+      total: tl.steps.length,
+      annotation: step.annotation,
+    };
+  }, [
+    showThroughlineTitle,
+    throughlines,
+    focusedThroughlineId,
+    focusedStepIndex,
+    hoveredThroughlineStep,
+  ]);
 
   const drawerTitle = useMemo(() => {
     if (!drawerTarget) return null;
@@ -406,11 +471,12 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
     return new Set(tl.steps.map((s) => s.edgeId));
   }, [throughlines, focusedThroughlineId, focusedStepIndex]);
 
-  // 1-based step numbers per edge of the selected flow (an edge can appear
-  // in more than one step).
+  // 1-based step numbers per edge of the active flow (focused or
+  // hover/autoplay-highlighted). An edge can appear in more than one step.
   const selectedFlowStepNos = useMemo(() => {
-    if (focusedThroughlineId == null || !throughlines) return null;
-    const tl = throughlines.find((t) => t.id === focusedThroughlineId);
+    const activeId = focusedThroughlineId ?? hoveredThroughlineStep?.throughlineId;
+    if (activeId == null || !throughlines) return null;
+    const tl = throughlines.find((t) => t.id === activeId);
     if (!tl) return null;
     const map = new Map<string, number[]>();
     tl.steps.forEach((s, i) => {
@@ -419,7 +485,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
       map.set(s.edgeId, list);
     });
     return map;
-  }, [throughlines, focusedThroughlineId]);
+  }, [throughlines, focusedThroughlineId, hoveredThroughlineStep]);
 
   // Union of every expanded (opened) throughline's edges — the visible set.
   const openedEdgeIds = useMemo(() => {
@@ -703,6 +769,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   // components the edge attaches to (and therefore the edge line between them).
   const fitFocusBounds = useCallback(
     (ids: ReadonlySet<string>) => {
+      if (!zoomOnThroughlineFocus) return;
       const nodeIds = new Set<string>();
       for (const e of baseEdges) {
         if (!ids.has(e.id)) continue;
@@ -716,7 +783,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
         duration: 300,
       });
     },
-    [baseEdges, fitView],
+    [baseEdges, fitView, zoomOnThroughlineFocus],
   );
 
   // Focus an entire flow: hide everything but the flow's nodes and edges, and
@@ -724,34 +791,54 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   // reads as the narrative. No drawer: the code view only opens on a step
   // click. A stale throughline drawer (from a previously focused flow's step)
   // closes; an explicitly opened file drawer stays.
+  // In `dim` mode: clear step highlight and leave the full graph visible
+  // (no zoom / hide) — matching "step away from a hovered step".
   const focusThroughlineEdges = useCallback(
     (tl: SubsystemThroughline) => {
       setSelected(null);
       setSelectedEdgeId(null);
+      setHoveredThroughlineStep(null);
+      if (throughlineStepMode === 'dim') {
+        setFocusedStepIndex(null);
+        setFocusedThroughlineId(null);
+        setDrawerTarget((prev) => (prev?.kind === 'throughline' ? null : prev));
+        return;
+      }
       setFocusedStepIndex(null);
       setFocusedThroughlineId(tl.id);
       fitFocusBounds(new Set(tl.steps.map((s) => s.edgeId)));
       setDrawerTarget((prev) => (prev?.kind === 'throughline' ? null : prev));
     },
-    [fitFocusBounds],
+    [fitFocusBounds, throughlineStepMode],
   );
 
   const clearThroughlineFocus = useCallback(() => {
     setFocusedThroughlineId(null);
     setFocusedStepIndex(null);
+    setHoveredThroughlineStep(null);
     setDrawerTarget((prev) => (prev?.kind === 'throughline' ? null : prev));
   }, []);
 
   // Focus a single step's edge on the canvas and open/scroll the throughline
   // drawer to that step's snippet.
+  // In `dim` mode: only dim non-participants (same as hovering a step) —
+  // no camera move, no drawer, no hide.
   const focusThroughlineStep = useCallback(
     (tl: SubsystemThroughline, stepIndex: number) => {
       const step = tl.steps[stepIndex];
       if (!step) return;
       setSelected(null);
       setSelectedEdgeId(null);
+      if (throughlineStepMode === 'dim') {
+        setFocusedStepIndex(null);
+        setFocusedThroughlineId(null);
+        setHoveredThroughlineStep({ throughlineId: tl.id, stepIndex });
+        setDrawerTarget((prev) => (prev?.kind === 'throughline' ? null : prev));
+        return;
+      }
       setFocusedStepIndex(stepIndex);
       setFocusedThroughlineId(tl.id);
+      setHoveredThroughlineStep(null);
       fitFocusBounds(new Set([step.edgeId]));
       if (renderThroughlineViewer) {
         setDrawerTarget({
@@ -767,8 +854,44 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
         });
       }
     },
-    [fitFocusBounds, renderThroughlineViewer],
+    [fitFocusBounds, renderThroughlineViewer, throughlineStepMode],
   );
+
+  // Graph-only embeds: cycle throughline steps with hover-style dimming.
+  useEffect(() => {
+    if (!autoPlayThroughlines || !throughlines?.length || !layoutReady) return;
+    const playable = throughlines.filter((tl) => tl.steps.length > 0);
+    if (playable.length === 0) return;
+
+    let cancelled = false;
+    let tlIdx = 0;
+    let stepIdx = 0;
+    let timer: number | null = null;
+    const interval = Math.max(400, throughlineAutoPlayIntervalMs);
+
+    const tick = () => {
+      if (cancelled) return;
+      const tl = playable[tlIdx]!;
+      setSelected(null);
+      setSelectedEdgeId(null);
+      setFocusedThroughlineId(null);
+      setFocusedStepIndex(null);
+      setHoveredThroughlineStep({ throughlineId: tl.id, stepIndex: stepIdx });
+      stepIdx += 1;
+      if (stepIdx >= tl.steps.length) {
+        stepIdx = 0;
+        tlIdx = (tlIdx + 1) % playable.length;
+      }
+      timer = window.setTimeout(tick, interval);
+    };
+
+    tick();
+    return () => {
+      cancelled = true;
+      if (timer != null) window.clearTimeout(timer);
+      setHoveredThroughlineStep(null);
+    };
+  }, [autoPlayThroughlines, throughlines, throughlineAutoPlayIntervalMs, layoutReady]);
 
   // Arrow keys step through the focused throughline once a step is active
   // (sidebar click or drawer open). Ignores typing targets and chords.
@@ -1085,7 +1208,13 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
                       throughline={tl}
                       edges={edges}
                       collapsed={!expandedThroughlines.has(tl.id)}
-                      active={focusedThroughlineId === tl.id ? { stepIndex: focusedStepIndex } : null}
+                      active={
+                        focusedThroughlineId === tl.id
+                          ? { stepIndex: focusedStepIndex }
+                          : hoveredThroughlineStep?.throughlineId === tl.id
+                            ? { stepIndex: hoveredThroughlineStep.stepIndex }
+                            : null
+                      }
                       onToggleCollapsed={toggleThroughlineCollapsed}
                       onFocusFlow={focusThroughlineEdges}
                       onClearFocus={clearThroughlineFocus}
@@ -1248,10 +1377,9 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
         <Controls showZoom showFitView showInteractive />
       </ReactFlow>
-      {/* Graph title — non-interactive chip centered at the top of the canvas
-          (clear of the top-right declaration card). Lets graph-only embeds
-          name the subsystem they show. */}
-      {graphTitle && (
+      {/* Graph / throughline / step titles — non-interactive chips at the top
+          of the canvas. Graph-only embeds use these without opening the sidebar. */}
+      {(graphTitle || overlayThroughlineTitle || overlayThroughlineStep) && (
         <div
           style={{
             position: 'absolute',
@@ -1259,23 +1387,124 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
             left: '50%',
             transform: 'translateX(-50%)',
             zIndex: 6,
-            maxWidth: '60%',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            padding: '6px 18px',
-            fontSize: theme.fontSizes[3],
-            fontWeight: 600,
-            fontFamily: theme.fonts.monospace,
-            color: theme.colors.text,
-            background: theme.colors.backgroundSecondary ?? theme.colors.background,
-            border: `1px solid ${theme.colors.border}`,
-            borderRadius: 6,
-            boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 6,
+            maxWidth: '70%',
             pointerEvents: 'none',
           }}
         >
-          {graphTitle}
+          {graphTitle && (
+            <div
+              style={{
+                maxWidth: '100%',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                padding: '6px 18px',
+                fontSize: theme.fontSizes[3],
+                fontWeight: 600,
+                fontFamily: theme.fonts.monospace,
+                color: theme.colors.text,
+                background: theme.colors.backgroundSecondary ?? theme.colors.background,
+                border: `1px solid ${theme.colors.border}`,
+                borderRadius: 6,
+                boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+              }}
+            >
+              {graphTitle}
+            </div>
+          )}
+          {overlayThroughlineTitle && (
+            <div
+              style={{
+                maxWidth: '100%',
+                minWidth: overlayThroughlineStep ? 160 : undefined,
+                display: 'flex',
+                flexDirection: 'column',
+                background: theme.colors.backgroundSecondary ?? theme.colors.background,
+                border: `1px solid ${theme.colors.border}`,
+                borderRadius: 6,
+                boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+                overflow: 'hidden',
+                opacity: 0.95,
+              }}
+              aria-label={
+                overlayThroughlineStep
+                  ? `${overlayThroughlineTitle}, step ${overlayThroughlineStep.index} of ${overlayThroughlineStep.total}`
+                  : overlayThroughlineTitle
+              }
+            >
+              <div
+                style={{
+                  padding: '5px 14px',
+                  fontSize: theme.fontSizes[2] ?? theme.fontSizes[1],
+                  fontWeight: 600,
+                  fontFamily: theme.fonts.monospace,
+                  color: theme.colors.text,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  textAlign: 'center',
+                }}
+              >
+                {overlayThroughlineTitle}
+              </div>
+              {overlayThroughlineStep && overlayThroughlineStep.total > 0 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 3,
+                    padding: '0 6px 5px',
+                  }}
+                  aria-hidden="true"
+                >
+                  {Array.from({ length: overlayThroughlineStep.total }, (_, i) => {
+                    const n = i + 1;
+                    const active = n === overlayThroughlineStep.index;
+                    const done = n < overlayThroughlineStep.index;
+                    return (
+                      <span
+                        key={n}
+                        style={{
+                          flex: 1,
+                          height: 2,
+                          borderRadius: 1,
+                          background: active
+                            ? (theme.colors.accent ?? theme.colors.primary ?? theme.colors.text)
+                            : done
+                              ? (theme.colors.textSecondary ?? theme.colors.text)
+                              : (theme.colors.border ?? 'rgba(127,127,127,0.45)'),
+                          opacity: active ? 1 : done ? 0.75 : 0.4,
+                          transition: 'opacity 120ms ease, background 120ms ease',
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          {overlayThroughlineStep?.annotation && (
+            <div
+              style={{
+                maxWidth: '100%',
+                padding: '6px 14px',
+                background: theme.colors.backgroundSecondary ?? theme.colors.background,
+                border: `1px solid ${theme.colors.border}`,
+                borderRadius: 6,
+                boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+                textAlign: 'center',
+                fontSize: theme.fontSizes[0],
+                fontFamily: theme.fonts.body,
+                color: theme.colors.textMuted ?? theme.colors.textSecondary,
+                lineHeight: 1.35,
+              }}
+            >
+              {overlayThroughlineStep.annotation}
+            </div>
+          )}
         </div>
       )}
         {/* Selected-component declaration — floating card over the canvas

@@ -1,0 +1,4 @@
+# Project stub — dbt run / dbt test are the throughlines.
+name: analytics
+profile: analytics
+model-paths: ["models"]

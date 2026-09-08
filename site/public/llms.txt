@@ -17,7 +17,7 @@ Example prompt after installing the skill:
 ## Docs
 
 - [Try it yourself](https://principal-ai.github.io/subsystem-modeling/start): Install steps and example prompt
-- [Examples](https://principal-ai.github.io/subsystem-modeling/examples/): Gallery of Subsystem Models
+- [Gallery](https://principal-ai.github.io/subsystem-modeling/gallery/): Storybook gallery of Subsystem Models
 - [Schema](https://principal-ai.github.io/subsystem-modeling/schema): Subsystem Model JSON schema
 - [About](https://principal-ai.github.io/subsystem-modeling/about): Mission and design goals
 - [GitHub repo](https://github.com/principal-ai/subsystem-modeling): Source, packages, and skill definition

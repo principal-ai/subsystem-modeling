@@ -286,6 +286,57 @@ section h2 {
   padding-bottom: 4rem;
 }
 
+.hero--with-gallery {
+  justify-content: flex-start;
+  align-items: stretch;
+  border-bottom: none;
+  padding-top: 1.25rem;
+  padding-bottom: 2rem;
+  gap: 1rem;
+}
+
+.hero--with-gallery .hero-copy {
+  flex-shrink: 0;
+}
+
+.hero--with-gallery .hero-actions {
+  flex-shrink: 0;
+  padding-top: 1.25rem;
+  padding-bottom: 1.25rem;
+}
+
+.hero--with-gallery h1 {
+  font-size: clamp(1.55rem, 3.2vw, 2.35rem);
+  max-width: none;
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.hero-gallery {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.hero-gallery > * {
+  flex: 1;
+  min-height: 0;
+}
+
+.hero-gallery-fallback {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  font-size: 0.95rem;
+}
+
 .hero-copy {
   text-align: center;
   display: flex;

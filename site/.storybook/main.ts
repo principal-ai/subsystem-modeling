@@ -6,7 +6,7 @@ import type { StorybookConfig } from '@storybook/react-vite';
  * Depends on the *published* @principal-ai packages (not workspace source), so
  * the gallery always demonstrates what consumers actually get from npm.
  *
- * Deployed to GitHub Pages at /<repo>/examples/ via .github/workflows/pages.yml.
+ * Deployed to GitHub Pages at /<repo>/gallery/ via .github/workflows/pages.yml.
  * STORYBOOK_BASE_PATH is set in CI; unset it locally for `storybook dev`.
  */
 const config: StorybookConfig = {

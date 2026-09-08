@@ -41,7 +41,7 @@ export function Start() {
 
       <p className="start-next">
         Not sure what a good model looks like?{' '}
-        <a href={`${import.meta.env.BASE_URL}examples/`}>See examples</a>
+        <a href={`${import.meta.env.BASE_URL}gallery/`}>Browse the gallery</a>
         {' · '}
         <Link to="/schema">Read the schema</Link>
         {' · '}

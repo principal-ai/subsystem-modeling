@@ -14,19 +14,30 @@ const HeroGraphic = lazy(() =>
   import('./components/HeroGraphic').then((m) => ({ default: m.HeroGraphic })),
 )
 
+const HomeCarousel = lazy(() =>
+  import('./components/HomeCarousel').then((m) => ({ default: m.HomeCarousel })),
+)
+
+const GALLERY_HREF = `${import.meta.env.BASE_URL}gallery/`
+
 function Home() {
   return (
-    <section className="hero hero--direct">
+    <section className="hero hero--with-gallery">
       <div className="hero-copy">
-        <h1>Refine the mental model. Verify it against the code.</h1>
-        <div className="hero-actions">
-          <Link to="/start" className="button primary">
-            Try it yourself
-          </Link>
-          <a href={`${import.meta.env.BASE_URL}examples/`} className="button ghost">
-            See examples
-          </a>
-        </div>
+        <h1>Your Mental Model — Visualized</h1>
+      </div>
+      <div className="hero-gallery">
+        <Suspense fallback={<div className="hero-gallery-fallback">Loading examples…</div>}>
+          <HomeCarousel />
+        </Suspense>
+      </div>
+      <div className="hero-actions">
+        <Link to="/start" className="button primary">
+          Try it yourself
+        </Link>
+        <a href={GALLERY_HREF} className="button ghost">
+          Browse gallery
+        </a>
       </div>
     </section>
   )
@@ -201,7 +212,7 @@ function App() {
           <Link to="/start">Try it</Link>
           <Link to="/about">Mission</Link>
           <Link to="/schema">Schema</Link>
-          <a href={`${import.meta.env.BASE_URL}examples/`}>Examples</a>
+          <a href={GALLERY_HREF}>Gallery</a>
           <a
             href="https://github.com/principal-ai/subsystem-modeling"
             target="_blank"

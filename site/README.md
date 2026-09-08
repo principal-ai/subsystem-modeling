@@ -28,9 +28,9 @@ This typechecks, bundles to `dist/`, and copies `dist/index.html` to
 `dist/404.html` so client-side routes survive refreshes and deep links
 on GitHub Pages.
 
-## Showcase (Storybook)
+## Gallery (Storybook)
 
-The Examples gallery is a Storybook that lives in this same package
+The gallery is a Storybook that lives in this same package
 (`.storybook/`, `stories/`) and renders Subsystem Models with the
 **published** `@principal-ai/subsystems-react` package — never
 workspace source — so it shows what npm consumers actually get.
@@ -40,9 +40,9 @@ bun run showcase        # dev server on :6007
 bun run build:showcase  # static build to storybook-static/
 ```
 
-Deploys to `/examples/` next to the landing page: the workflow runs
-`build:showcase` with `STORYBOOK_BASE_PATH=/subsystem-modeling/examples/`
-and copies the output into `dist/examples/`. Storybook routes via query
+Deploys to `/gallery/` next to the landing page: the workflow runs
+`build:showcase` with `STORYBOOK_BASE_PATH=/subsystem-modeling/gallery/`
+and copies the output into `dist/gallery/`. Storybook routes via query
 params (`?path=/story/...`), so deep links work on Pages without the
 404 fallback.
 

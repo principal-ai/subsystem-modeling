@@ -34,12 +34,12 @@ jobs:
         run: bun run build
       - name: Build showcase storybook
         env:
-          STORYBOOK_BASE_PATH: /subsystem-modeling/examples/
+          STORYBOOK_BASE_PATH: /subsystem-modeling/gallery/
         run: bun run build:showcase
       - name: Stage showcase into site
         run: |
-          mkdir -p dist/examples
-          cp -r storybook-static/. dist/examples/
+          mkdir -p dist/gallery
+          cp -r storybook-static/. dist/gallery/
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

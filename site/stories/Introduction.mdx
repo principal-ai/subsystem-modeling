@@ -15,6 +15,28 @@ see here opens its source file; every claim is verifiable against the code.
 
 ## Cases
 
+- **TypeScript / Daily page digest** — a beginner-friendly cron script: fetch a
+  public page, parse headlines, append to a local file — with one scheduled run
+  as a throughline.
+- **TypeScript / Booking page** — Calendly-style Next.js scheduler with a
+  client→server-action→DB split and PostHog on pick / book / cancel.
+- **TypeScript / Multiplayer whiteboard** — Excalidraw-style board on Convex:
+  draw, remote sync, and presence throughlines.
+- **Python / Traced HTTP API** — FastAPI orders service with OpenTelemetry on
+  the request path: spans + events into a TracerProvider, OTLP export, and
+  downstream context propagation.
+- **Java / Android notes screen** — Activity → ViewModel → Repository → Room/API,
+  with open / save / refresh flows.
+- **Rust / Tokio job worker** — dequeue → handle → ack/nack against Redis.
+- **C++ / Sensor → actuator** — embedded control loop with hardware externals.
+- **Swift / SwiftUI notes screen** — View → ViewModel → Repository (iOS twin to Android).
+- **Elixir / GenServer cache** — OTP Application → Supervisor → GenServer call/cast.
+- **SQL / dbt orders models** — raw → staging → mart with schema tests.
+- **Terraform / Static site** — root module → S3 website module → AWS.
+- **WASM / Host ↔ guest pipeline** — browser/host orchestrates; wasm/guest
+  normalize + checksum with guest→host `host_trace` callbacks.
+- **C / Lua embed** — host embeds Lua; guest calls back into native code.
+- **CUDA / Vector add** — HtoD → device kernel → DtoH.
 - **TypeScript / Orders API** — a typical Express service: router boundary, service
   class, repository, external stores — with the `POST /orders` request path as a
   throughline.
