@@ -50,7 +50,7 @@ import { SubsystemFileTree } from './SubsystemFileTree';
 import { GraphLayoutCover } from './GraphLayoutCover';
 import { ComponentDeclaration } from './ComponentDeclaration';
 import type { ComponentVerificationState } from './ComponentDeclaration';
-import { FileDrawer } from './FileDrawer';
+import { FileDrawer, FILE_DRAWER_HEIGHT_MS } from './FileDrawer';
 import { buildRepoGroups, repoAvatarUrl, type RepoGroup } from './paths';
 
 /** Cap screen-space edge labels to this fraction of the edge's on-screen length. */
@@ -222,6 +222,12 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   const [selected, setSelected] = useState<SubsystemComponent | null>(null);
   /** Bottom drawer: single file or throughline multi-snippet mode. */
   const [drawerTarget, setDrawerTarget] = useState<DrawerTarget | null>(null);
+  // Mirror so step-focus can decide whether to wait for the drawer open
+  // transition before fitView (avoids framing against full-height canvas).
+  const drawerOpenRef = useRef(false);
+  drawerOpenRef.current = drawerTarget != null;
+  // Pending deferred fit after opening the drawer; cancelled on re-entry / unmount.
+  const pendingFocusFitRef = useRef<number | null>(null);
   // Component the pointer is over (null on leave) → transient tree highlight.
   const [hoveredComponentId, setHoveredComponentId] = useState<string | null>(null);
   // Throughline focus — selected flow (or step) is full strength; other
@@ -884,7 +890,9 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
       setFocusedStepIndex(stepIndex);
       setFocusedThroughlineId(tl.id);
       setHoveredThroughlineStep(null);
-      fitFocusBounds(new Set([step.edgeId]));
+      // Open the drawer before fitting. If it was closed, wait for its height
+      // transition so fitView uses the reduced canvas — not full height.
+      const drawerWasOpen = drawerOpenRef.current;
       if (renderThroughlineViewer) {
         setDrawerTarget({
           kind: 'throughline',
@@ -898,9 +906,30 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
           startLine: step.line,
         });
       }
+      const edgeIds = new Set([step.edgeId]);
+      if (pendingFocusFitRef.current != null) {
+        window.clearTimeout(pendingFocusFitRef.current);
+        pendingFocusFitRef.current = null;
+      }
+      if (drawerWasOpen) {
+        fitFocusBounds(edgeIds);
+      } else {
+        pendingFocusFitRef.current = window.setTimeout(() => {
+          pendingFocusFitRef.current = null;
+          requestAnimationFrame(() => fitFocusBounds(edgeIds));
+        }, FILE_DRAWER_HEIGHT_MS + 20);
+      }
     },
     [fitFocusBounds, renderThroughlineViewer, throughlineStepMode],
   );
+
+  useEffect(() => {
+    return () => {
+      if (pendingFocusFitRef.current != null) {
+        window.clearTimeout(pendingFocusFitRef.current);
+      }
+    };
+  }, []);
 
   // Graph-only embeds: cycle throughline steps with hover-style dimming.
   useEffect(() => {
@@ -1177,6 +1206,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
                 isVisible={true}
                 theme={theme}
                 disableScroll={true}
+                disableBasePadding
                 fontSizeScale={0.9}
                 enableKeyboardScrolling={false}
                 autoFocusOnVisible={false}

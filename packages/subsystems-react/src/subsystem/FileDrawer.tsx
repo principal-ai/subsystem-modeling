@@ -10,6 +10,10 @@ import type { ReactNode } from 'react';
 import { useTheme } from '@principal-ade/industry-theme';
 import { X } from 'lucide-react';
 
+/** Matches `transition: height …` below — callers that fitView after open
+ *  should wait at least this long so the canvas has its reduced height. */
+export const FILE_DRAWER_HEIGHT_MS = 200;
+
 /** Bottom panel that slides up from the bottom of the graph area.
  *  Sits in normal flow (canvas shrinks while open, nothing covered)
  *  and animates via height; stays mounted so open/close animates. */
@@ -51,7 +55,7 @@ export function FileDrawer({
         flexDirection: 'column',
         background: theme.colors.background,
         borderTop: open ? `1px solid ${theme.colors.border}` : 'none',
-        transition: 'height 200ms ease',
+        transition: `height ${FILE_DRAWER_HEIGHT_MS}ms ease`,
       }}
     >
       <div

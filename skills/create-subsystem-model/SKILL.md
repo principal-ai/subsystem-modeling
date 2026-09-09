@@ -109,7 +109,8 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
           "edgeId": "sessions-to-warmup",          // must match an edge.id
           "file": "packages/subsystems-studio/src/bun/server-sessions.ts",
           "line": 42,                              // 1-based site where the edge fires
-          "symbol": "probeOpencodeServer"          // optional frame label in Flows UI
+          "symbol": "probeOpencodeServer",         // optional frame label in Flows UI
+          "annotation": "Probe the server before listing sessions."  // optional codeview note
         }
       ]
     }
@@ -164,6 +165,7 @@ map; throughlines are the routes across it.
 | `file` | yes | Repo-root-relative path of the seam site |
 | `line` | yes | 1-based line in `file` where that relationship fires |
 | `symbol` | no | Frame name shown in the Flows list (function/method at the site) |
+| `annotation` | no | Free-text note for this hop. Viewers show it in the codeview annotation column next to the highlighted line. Informative only — never verified against source. Prefer one short verb-first sentence (same voice as `purpose`). |
 
 Do **not** invent edges just for a flow — add the edge first, then reference it.
 Do **not** point `file:line` at a random nearby line: verification checks that
@@ -177,7 +179,9 @@ persist, but fix before considering the model done).
 1. Lay components + edges for the topology.
 2. Name the flows the user cares about (titles humans will click).
 3. For each hop, open the real glue file, pick the call/emit/register line,
-   and record `{ edgeId, file, line, symbol }`.
+   and record `{ edgeId, file, line, symbol, annotation? }`. Default **on** for
+   `annotation` when the hop needs a human-readable “what happens here” — the
+   site line alone is often opaque without it.
 4. Create via CLI; if `throughlinesFailed` is non-empty, correct the site lines
    and update (Studio HTTP PUT while Studio is running, or recreate).
 

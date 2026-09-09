@@ -17,13 +17,15 @@
 /* Goal + Schema: pin wash to the viewport so only page content scrolls */
 .shell--about,
 .shell--schema,
-.shell--start {
+.shell--start,
+.shell--gist {
   background: transparent;
 }
 
 .shell--about::before,
 .shell--schema::before,
-.shell--start::before {
+.shell--start::before,
+.shell--gist::before {
   content: '';
   position: fixed;
   inset: 0;
@@ -132,9 +134,16 @@
     linear-gradient(180deg, #0d0b14 0%, #16171d 100%);
 }
 
+.shell--gist::before {
+  background:
+    linear-gradient(180deg, rgba(var(--brand-rgb), 0.22) 0%, rgba(var(--brand-rgb), 0.08) 40%, transparent 70%),
+    linear-gradient(180deg, #0d0b14 0%, #16171d 100%);
+}
+
 .shell--about > main,
 .shell--schema > main,
-.shell--start > main {
+.shell--start > main,
+.shell--gist > main {
   position: relative;
   z-index: 1;
 }
@@ -155,9 +164,15 @@ nav {
 /* Goal + Schema + Start: pin nav to the viewport above scrolling content */
 .shell--about nav,
 .shell--schema nav,
-.shell--start nav {
+.shell--start nav,
+.shell--gist nav {
   position: fixed;
   z-index: 20;
+}
+
+/* Gist viewer is full-bleed — keep nav edge-to-edge with the graph. */
+.shell--gist nav {
+  padding-inline: 1.25rem;
 }
 
 nav .brand {
@@ -211,28 +226,32 @@ nav .nav-icon-link + .nav-icon-link {
 .shell--home nav .brand,
 .shell--about nav .brand,
 .shell--schema nav .brand,
-.shell--start nav .brand {
+.shell--start nav .brand,
+.shell--gist nav .brand {
   color: #f3f4f6;
 }
 
 .shell--home nav .brand-mark,
 .shell--about nav .brand-mark,
 .shell--schema nav .brand-mark,
-.shell--start nav .brand-mark {
+.shell--start nav .brand-mark,
+.shell--gist nav .brand-mark {
   color: var(--brand-bright);
 }
 
 .shell--home nav a,
 .shell--about nav a,
 .shell--schema nav a,
-.shell--start nav a {
+.shell--start nav a,
+.shell--gist nav a {
   color: #9ca3af;
 }
 
 .shell--home nav a:hover,
 .shell--about nav a:hover,
 .shell--schema nav a:hover,
-.shell--start nav a:hover {
+.shell--start nav a:hover,
+.shell--gist nav a:hover {
   color: #f3f4f6;
 }
 
@@ -1230,4 +1249,182 @@ code {
   code {
     background: var(--code-bg);
   }
+}
+
+/* ---------- gist viewer ---------- */
+
+.shell--gist > main {
+  padding-top: 3.5rem;
+  min-height: 0;
+}
+
+.gist-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.gist-chrome {
+  flex-shrink: 0;
+  padding: 0.75rem max(1.25rem, calc((100vw - 1200px) / 2));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gist-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.gist-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #9ca3af;
+}
+
+.gist-input {
+  flex: 1;
+  min-width: 14rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.35);
+  color: #f3f4f6;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.85rem;
+}
+
+.gist-input:focus {
+  outline: 1px solid var(--brand-bright);
+  border-color: var(--brand-bright);
+}
+
+.gist-load {
+  flex-shrink: 0;
+}
+
+.gist-stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.gist-empty {
+  margin: auto;
+  padding: 2rem 1.5rem;
+  max-width: 40rem;
+  text-align: center;
+  color: #9ca3af;
+}
+
+.gist-empty h1 {
+  margin: 0 0 1rem;
+  font-size: clamp(1.35rem, 2.8vw, 1.85rem);
+  color: #f3f4f6;
+  letter-spacing: -0.3px;
+}
+
+.gist-empty p {
+  margin: 0 0 0.85rem;
+  line-height: 1.6;
+}
+
+.gist-empty code {
+  font-size: 0.82em;
+}
+
+.gist-empty a {
+  color: var(--brand-bright);
+}
+
+.gist-empty-hint {
+  font-size: 0.9rem;
+  margin-top: 1.25rem !important;
+}
+
+.gist-empty--error {
+  color: #fca5a5;
+}
+
+.gist-empty--error .gist-examples {
+  margin-top: 1.25rem;
+}
+
+.gist-examples {
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+  text-align: left;
+}
+
+.gist-example {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.85rem;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.9rem 1rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.28);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.gist-example:hover,
+.gist-example:focus-visible {
+  border-color: rgba(var(--brand-bright-rgb), 0.55);
+  background: rgba(var(--brand-rgb), 0.18);
+  outline: none;
+}
+
+.gist-example-avatar {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 4px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.gist-example-body {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.gist-example-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #f3f4f6;
+}
+
+.gist-example-repo {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  color: var(--brand-bright);
+}
+
+.gist-graph {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  /* #root centers marketing copy; code drawers must stay left-aligned. */
+  text-align: left;
 }

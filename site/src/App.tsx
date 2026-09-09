@@ -10,6 +10,10 @@ const Start = lazy(() =>
   import('./pages/Start').then((m) => ({ default: m.Start })),
 )
 
+const Gist = lazy(() =>
+  import('./pages/Gist').then((m) => ({ default: m.Gist })),
+)
+
 const HeroGraphic = lazy(() =>
   import('./components/HeroGraphic').then((m) => ({ default: m.HeroGraphic })),
 )
@@ -148,7 +152,9 @@ function App() {
           ? 'shell shell--schema'
           : pathname === '/start'
             ? 'shell shell--start'
-            : 'shell'
+            : pathname === '/gist'
+              ? 'shell shell--gist'
+              : 'shell'
 
   return (
     <div className={shellClass}>
@@ -210,6 +216,7 @@ function App() {
         </Link>
         <div className="nav-links">
           <Link to="/start">Try it</Link>
+          <Link to="/gist">Gist</Link>
           <Link to="/about">Mission</Link>
           <Link to="/schema">Schema</Link>
           <a href={GALLERY_HREF}>Gallery</a>
@@ -255,6 +262,14 @@ function App() {
             element={
               <Suspense fallback={<section className="schema-page">Loading schema…</section>}>
                 <Schema />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/gist"
+            element={
+              <Suspense fallback={<section className="gist-page">Loading…</section>}>
+                <Gist />
               </Suspense>
             }
           />
