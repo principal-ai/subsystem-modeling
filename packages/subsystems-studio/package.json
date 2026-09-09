@@ -45,7 +45,7 @@
     "@principal-ai/logo-component": "^0.1.23",
     "@principal-ai/repository-abstraction": "^0.5.7",
     "@principal-ai/subsystems-core": "0.31.3",
-    "@principal-ai/subsystems-react": "0.20.3",
+    "@principal-ai/subsystems-react": "0.20.5",
     "@types/bun": "latest",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
