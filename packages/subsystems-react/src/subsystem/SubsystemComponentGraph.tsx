@@ -235,11 +235,14 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   const [focusedThroughlineId, setFocusedThroughlineId] = useState<string | null>(null);
   // `null` = whole flow focused; a number = that single step's edge focused.
   const [focusedStepIndex, setFocusedStepIndex] = useState<number | null>(null);
-  // Hovered step in the flows panel: dims every canvas node/edge not involved
-  // with that step (transient — no camera move, no drawer, no focus change).
+  // Hovered throughline in the flows panel: dims every canvas node/edge not
+  // involved in the hover preview (or selected ∪ hovered when a step is
+  // focused). `stepIndex: null` = whole flow (collapsed title hover);
+  // a number = that step. Transient — no drawer. Camera only reframes when
+  // a step is already selected.
   const [hoveredThroughlineStep, setHoveredThroughlineStep] = useState<{
     throughlineId: string;
-    stepIndex: number;
+    stepIndex: number | null;
   } | null>(null);
   // Sidebar bottom half: which panel is shown when throughlines exist.
   const [sidebarView, setSidebarView] = useState<'files' | 'flows'>(() =>
@@ -604,18 +607,31 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
     }
     return ids.size > 0 ? ids : null;
   };
-  // Edge/nodes involved in the hovered step — dim everything else.
+  // Edge/nodes involved in the hovered step or whole flow.
   const hoverEdgeIds = useMemo(() => {
     if (!hoveredThroughlineStep || !throughlines) return null;
     const tl = throughlines.find((t) => t.id === hoveredThroughlineStep.throughlineId);
     if (!tl) return null;
+    if (hoveredThroughlineStep.stepIndex == null) {
+      return new Set(tl.steps.map((s) => s.edgeId));
+    }
     const step = tl.steps[hoveredThroughlineStep.stepIndex];
     return step ? new Set([step.edgeId]) : null;
   }, [throughlines, hoveredThroughlineStep]);
-  const hoverNodeIds = useMemo(
-    () => endpointsOf(hoverEdgeIds),
+  // While hovering with a *step* already selected, brighten the union of
+  // selected + hovered participants. Whole-flow focus (or no focus) keeps
+  // the old hover-replace preview so a step hover still dims the rest.
+  const previewEdgeIds = useMemo(() => {
+    if (!hoverEdgeIds) return null;
+    if (focusedStepIndex == null || !focusEdgeIds) return hoverEdgeIds;
+    const ids = new Set(hoverEdgeIds);
+    for (const id of focusEdgeIds) ids.add(id);
+    return ids;
+  }, [hoverEdgeIds, focusEdgeIds, focusedStepIndex]);
+  const previewNodeIds = useMemo(
+    () => endpointsOf(previewEdgeIds),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [baseEdges, hoverEdgeIds],
+    [baseEdges, previewEdgeIds],
   );
   const openedNodeIds = useMemo(
     () => endpointsOf(openedEdgeIds),
@@ -650,9 +666,9 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   // `isSelected` rides in data because the node's stopPropagation() keeps
   // React Flow's own selection state from updating.
   const dispNodes = useMemo(() => {
-    // While a step is hovered, only the hovered step's endpoints stay bright;
-    // everything else among the currently-visible (opened-throughline) nodes
-    // is dimmed. Nodes outside the opened-throughline set stay hidden.
+    // While a step/flow is hovered, selected + hovered participants stay
+    // bright; everything else among the currently-visible (opened-throughline)
+    // nodes is dimmed. Nodes outside the opened-throughline set stay hidden.
     return xyflowNodesBase.map((n) => {
       // Boundary frames follow their members: hidden when no member is
       // visible, dimmed when members are dimmed. Never selectable.
@@ -664,8 +680,8 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
           anyOpened: openedNodeIds != null,
           anySelected: brightNodeIds != null,
         });
-        const dimmed = hoverNodeIds
-          ? vis.hidden || !memberIds.some((id) => hoverNodeIds.has(id))
+        const dimmed = previewNodeIds
+          ? vis.hidden || !memberIds.some((id) => previewNodeIds.has(id))
           : vis.dimmed;
         const hidden = vis.hidden;
         return {
@@ -687,8 +703,8 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
         anyOpened: openedNodeIds != null,
         anySelected: brightNodeIds != null,
       });
-        const dimmed = hoverNodeIds ? (vis.hidden || !hoverNodeIds.has(n.id)) : vis.dimmed;
-        const hidden = vis.hidden;
+      const dimmed = previewNodeIds ? (vis.hidden || !previewNodeIds.has(n.id)) : vis.dimmed;
+      const hidden = vis.hidden;
       if (fileMatch === undefined && !isSelected && !dimmed) {
         const { fileMatch: _f, isSelected: _s, dimmed: _d, ...rest } = n.data as Record<string, unknown>;
         return { ...n, hidden, data: rest };
@@ -704,7 +720,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
         },
       };
     });
-  }, [xyflowNodesBase, openFile, selected, focusNodeIds, openedNodeIds, brightNodeIds, hoverNodeIds]);
+  }, [xyflowNodesBase, openFile, selected, focusNodeIds, openedNodeIds, brightNodeIds, previewNodeIds]);
 
   const baseNodesKey = useMemo(() => nodes.map((n) => n.id).sort().join(','), [nodes]);
   const baseEdgesKey = useMemo(
@@ -725,7 +741,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
         markerEnd: nextMarker,
       };
     };
-    if (openedEdgeIds || focusEdgeIds || hoverEdgeIds) {
+    if (openedEdgeIds || focusEdgeIds || previewEdgeIds) {
       return baseEdges.map((e) => {
         const vis = flowElementVisibility({
           inOpened: openedEdgeIds?.has(e.id) === true,
@@ -733,14 +749,14 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
           anyOpened: openedEdgeIds != null,
           anySelected: focusEdgeIds != null,
         });
-        const dimmed = hoverEdgeIds ? vis.hidden || !hoverEdgeIds.has(e.id) : vis.dimmed;
+        const dimmed = previewEdgeIds ? vis.hidden || !previewEdgeIds.has(e.id) : vis.dimmed;
         const hidden = vis.hidden;
         return { ...paint(e, dimmed), hidden };
       });
     }
     if (!selectedEdgeId) return baseEdges;
     return baseEdges.map((e) => paint(e, e.id !== selectedEdgeId));
-  }, [baseEdges, selectedEdgeId, openedEdgeIds, focusEdgeIds, hoverEdgeIds]);
+  }, [baseEdges, selectedEdgeId, openedEdgeIds, focusEdgeIds, previewEdgeIds]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -883,6 +899,19 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
     [baseEdges, fitView, zoomOnThroughlineFocus],
   );
 
+  // Zoom back out to the full diagram after the last expanded throughline
+  // closes (visibility restores non-flow nodes that were hidden).
+  const fitOverview = useCallback(() => {
+    if (!zoomOnThroughlineFocus) return;
+    fitView({
+      padding: 0.1,
+      includeHiddenNodes: false,
+      minZoom: 0.05,
+      maxZoom: 2,
+      duration: 300,
+    });
+  }, [fitView, zoomOnThroughlineFocus]);
+
   // Focus an entire flow: hide everything but the flow's nodes and edges, and
   // frame the flow on the canvas. Selection state is cleared — the graph now
   // reads as the narrative. No drawer: the code view only opens on a step
@@ -977,6 +1006,37 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
     };
   }, []);
 
+  // While a *step* is selected, hovering another step/flow reframes the
+  // camera to the selected ∪ hovered participants. Leaving hover snaps back
+  // to the selection alone. No step selected → hover only dims; camera stays
+  // at the high-level view. Click-to-focus still owns its own fit (including
+  // the drawer-open delay) — this only reacts to previewEdgeIds transitions.
+  const prevPreviewEdgeIdsRef = useRef<ReadonlySet<string> | null>(null);
+  useEffect(() => {
+    const prev = prevPreviewEdgeIdsRef.current;
+    prevPreviewEdgeIdsRef.current = previewEdgeIds;
+
+    if (!zoomOnThroughlineFocus || throughlineStepMode === 'dim') return;
+    // Camera follows hover only when a specific step is already focused.
+    if (focusedThroughlineId == null || focusedStepIndex == null) return;
+
+    if (previewEdgeIds) {
+      fitFocusBounds(previewEdgeIds);
+      return;
+    }
+    if (prev != null && focusEdgeIds) {
+      fitFocusBounds(focusEdgeIds);
+    }
+  }, [
+    previewEdgeIds,
+    focusEdgeIds,
+    focusedThroughlineId,
+    focusedStepIndex,
+    fitFocusBounds,
+    zoomOnThroughlineFocus,
+    throughlineStepMode,
+  ]);
+
   // Graph-only embeds: cycle throughline steps with hover-style dimming.
   useEffect(() => {
     if (!autoPlayThroughlines || !throughlines?.length || !layoutReady) return;
@@ -1057,14 +1117,40 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
     focusThroughlineStep,
   ]);
 
-  const toggleThroughlineCollapsed = useCallback((tlId: string) => {
-    setExpandedThroughlines((prev) => {
-      const next = new Set(prev);
-      if (next.has(tlId)) next.delete(tlId);
-      else next.add(tlId);
-      return next;
-    });
-  }, []);
+  const toggleThroughlineCollapsed = useCallback(
+    (tlId: string) => {
+      const collapsingLast =
+        expandedThroughlines.has(tlId) && expandedThroughlines.size === 1;
+
+      setExpandedThroughlines((prev) => {
+        const next = new Set(prev);
+        if (next.has(tlId)) next.delete(tlId);
+        else next.add(tlId);
+        return next;
+      });
+
+      if (!collapsingLast || !zoomOnThroughlineFocus) return;
+
+      // Cancel any pending focus fit so it doesn't fight the overview zoom.
+      if (pendingFocusFitRef.current != null) {
+        window.clearTimeout(pendingFocusFitRef.current);
+        pendingFocusFitRef.current = null;
+      }
+
+      // Wait for React to commit the collapse (and any clearFocus that follows
+      // in the same click handler). If a drawer was open it may be closing —
+      // delay so fitView measures the restored canvas height.
+      const drawerWasOpen = drawerOpenRef.current;
+      pendingFocusFitRef.current = window.setTimeout(
+        () => {
+          pendingFocusFitRef.current = null;
+          requestAnimationFrame(() => fitOverview());
+        },
+        drawerWasOpen ? FILE_DRAWER_HEIGHT_MS + 20 : 20,
+      );
+    },
+    [expandedThroughlines, fitOverview, zoomOnThroughlineFocus],
+  );
 
   // Filename-badge clicks on nodes open the drawer through the same path as
   // the declaration panel's file link (toggle + tree sync, no start line).
@@ -1342,6 +1428,9 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
                       onFocusStep={focusThroughlineStep}
                       onHoverStep={(tl, i) =>
                         setHoveredThroughlineStep({ throughlineId: tl.id, stepIndex: i })
+                      }
+                      onHoverFlow={(tl) =>
+                        setHoveredThroughlineStep({ throughlineId: tl.id, stepIndex: null })
                       }
                       onLeaveStep={() => setHoveredThroughlineStep(null)}
                     />
@@ -1791,6 +1880,7 @@ function ThroughlineFlow({
   onClearFocus,
   onFocusStep,
   onHoverStep,
+  onHoverFlow,
   onLeaveStep,
 }: {
   throughline: SubsystemThroughline;
@@ -1803,6 +1893,8 @@ function ThroughlineFlow({
   onClearFocus: () => void;
   onFocusStep: (tl: SubsystemThroughline, stepIndex: number) => void;
   onHoverStep: (tl: SubsystemThroughline, stepIndex: number) => void;
+  /** Preview the whole flow on the canvas (used while the row is collapsed). */
+  onHoverFlow: (tl: SubsystemThroughline) => void;
   onLeaveStep: () => void;
 }) {
   const { theme } = useTheme();
@@ -1870,12 +1962,19 @@ function ThroughlineFlow({
   return (
     <div>
       <div
-        onMouseEnter={() => setHeaderHover(true)}
-        onMouseLeave={() => setHeaderHover(false)}
+        onMouseEnter={() => {
+          setHeaderHover(true);
+          if (collapsed) onHoverFlow(throughline);
+        }}
+        onMouseLeave={() => {
+          setHeaderHover(false);
+          if (collapsed) onLeaveStep();
+        }}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 4,
+          padding: '0 16px',
           background: wholeFlowActive || headerHover ? hoverBg : 'transparent',
           transition: 'background 120ms ease',
         }}
@@ -1898,7 +1997,7 @@ function ThroughlineFlow({
             display: 'flex',
             alignItems: 'center',
             minWidth: 0,
-            padding: '10px 8px',
+            padding: '10px 0',
             border: 'none',
             background: 'transparent',
             textAlign: 'left',
@@ -1966,7 +2065,6 @@ function ThroughlineFlow({
               flexShrink: 0,
               width: 22,
               height: 22,
-              marginRight: 4,
               padding: 0,
               border: 'none',
               borderRadius: 4,
@@ -1982,7 +2080,13 @@ function ThroughlineFlow({
         )}
       </div>
       {!collapsed && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <div
+          style={{ display: 'flex', flexDirection: 'column' }}
+          onMouseLeave={() => {
+            setHoveredStep(null);
+            onLeaveStep();
+          }}
+        >
           {throughline.steps.map((step, i) => {
             const edge = edgeById.get(step.edgeId);
             const mech = edge?.mechanism;
@@ -1998,10 +2102,6 @@ function ThroughlineFlow({
                 onMouseEnter={() => {
                   setHoveredStep(i);
                   onHoverStep(throughline, i);
-                }}
-                onMouseLeave={() => {
-                  setHoveredStep(null);
-                  onLeaveStep();
                 }}
                 onClick={() => onFocusStep(throughline, i)}
                 style={{
