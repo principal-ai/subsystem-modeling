@@ -11,6 +11,7 @@ import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
 	AlertTriangle,
+	Download,
 	ExternalLink,
 	GitBranch,
 	Info,
@@ -26,9 +27,15 @@ import type {
 	AnalysisSummary,
 	ConceptAnalysis,
 	OpencodeServerStatus,
+	StudioVersionStatus,
 	UserIdentity,
 } from "../../shared/contract";
-import { electrobun, refreshLibrary, reloadSubscribers } from "../rpc";
+import {
+	electrobun,
+	refreshLibrary,
+	reloadSubscribers,
+	studioVersionChangeSubscribers,
+} from "../rpc";
 import { FailuresModal } from "./FailuresModal";
 import { PendingAnalysesModal } from "./PendingAnalysesModal";
 import { ServerSessionsModal } from "./ServerSessionsModal";
@@ -92,6 +99,58 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 
 	// Header Settings gear — toggles which permanent tabs show by default.
 	const [showSettings, setShowSettings] = useState(false);
+
+	// Studio self-update — npm latest vs installed; button only when a newer
+	// published build is available (hidden for source checkouts).
+	const [studioVersion, setStudioVersion] = useState<StudioVersionStatus | null>(
+		null,
+	);
+	const [studioUpdateBusy, setStudioUpdateBusy] = useState(false);
+	const [studioUpdateError, setStudioUpdateError] = useState<string | null>(null);
+	useEffect(() => {
+		let alive = true;
+		void electrobun.rpc!.request
+			.getStudioVersionStatus({ detailed: true })
+			.then((s) => {
+				if (alive) setStudioVersion(s);
+			})
+			.catch(() => {
+				/* best-effort */
+			});
+		const onPush = (payload: { status: StudioVersionStatus; error?: string }) => {
+			setStudioVersion(payload.status);
+			if (payload.error) setStudioUpdateError(payload.error);
+		};
+		studioVersionChangeSubscribers.add(onPush);
+		return () => {
+			alive = false;
+			studioVersionChangeSubscribers.delete(onPush);
+		};
+	}, []);
+
+	const showStudioUpdate =
+		studioVersion?.updateAvailable === true &&
+		studioVersion.channel !== "source" &&
+		!studioUpdateBusy;
+
+	const onUpdateStudio = useCallback(async () => {
+		setStudioUpdateBusy(true);
+		setStudioUpdateError(null);
+		try {
+			const res = await electrobun.rpc!.request.updateStudio({});
+			if (!res.ok) {
+				setStudioUpdateError(res.error ?? "Update failed");
+				setStudioUpdateBusy(false);
+				if (res.status) setStudioVersion(res.status);
+				return;
+			}
+			if (res.status) setStudioVersion(res.status);
+			// Host exits + relaunches; keep busy until the window closes.
+		} catch (err) {
+			setStudioUpdateError(err instanceof Error ? err.message : String(err));
+			setStudioUpdateBusy(false);
+		}
+	}, []);
 
 	// In-flight background work (concept analysis extraction). The host
 	// broadcasts tabsChanged when an extraction starts, completes, or fails, so
@@ -478,6 +537,55 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 						}}
 					>
 						{user.login ? `@${user.login}` : user.name}
+					</span>
+				</button>
+			)}
+			{(showStudioUpdate || studioUpdateBusy) && (
+				<button
+					type="button"
+					onClick={() => void onUpdateStudio()}
+					disabled={studioUpdateBusy}
+					title={
+						studioUpdateError
+							? studioUpdateError
+							: studioVersion?.latestVersion
+								? `Update Subsystems Studio to ${studioVersion.latestVersion} (currently ${studioVersion.installedVersion ?? "unknown"})`
+								: "Update Subsystems Studio"
+					}
+					aria-label={
+						studioVersion?.latestVersion
+							? `Update to version ${studioVersion.latestVersion}`
+							: "Update Subsystems Studio"
+					}
+					style={{
+						display: "flex",
+						alignItems: "center",
+						gap: 6,
+						padding: "0 12px",
+						height: 32,
+						borderRadius: 6,
+						fontSize: theme.fontSizes[1],
+						fontWeight: 500,
+						fontFamily: theme.fonts.body,
+						background: theme.colors.primary,
+						color: theme.colors.background,
+						border: `1px solid ${theme.colors.primary}`,
+						cursor: studioUpdateBusy ? "wait" : "pointer",
+						flexShrink: 0,
+						opacity: studioUpdateBusy ? 0.85 : 1,
+					}}
+				>
+					{studioUpdateBusy ? (
+						<Loader2 size={16} className="principal-studio-spin" />
+					) : (
+						<Download size={16} />
+					)}
+					<span>
+						{studioUpdateBusy
+							? "Updating…"
+							: studioVersion?.latestVersion
+								? `Update to ${studioVersion.latestVersion}`
+								: "Update"}
 					</span>
 				</button>
 			)}

@@ -40,7 +40,8 @@ import { parseTourOrThrow } from "@principal-ai/file-city-builder";
 import { readFileRemote as fetchRemoteSlice } from "./remote-files";
 import { handoffToRunning, startIpcServer, type LoadTrailMessage } from "./ipc";
 import { startHttpServer } from "./http-server";
-import { deleteSubsystemModel, getSubsystemModel, listSubsystemModels, resolveRepoRootForComponent, setSubsystemModelChangeListener, startSubsystemModelDirWatcher, subsystemModelFilePath, touchSubsystemModelOpened } from "./subsystem-model-store";
+import { deleteSubsystemModel, getSubsystemModel, listSubsystemModels, resolveRepoRootForComponent, setSubsystemModelChangeListener, startSubsystemModelDirWatcher, subsystemModelFilePath, touchSubsystemModelOpened, updateSubsystemModel } from "./subsystem-model-store";
+import { publishSubsystemModelGist } from "./gist-publish";
 import { verifySubsystemComponent } from "./verify-subsystem-component";
 import {
 	getGraphifyStatus,
@@ -51,6 +52,11 @@ import {
 	uninstallGraphify,
 	updateGraphify,
 } from "./graphify-runner";
+import {
+	getStudioVersionStatus,
+	getStudioVersionStatusDetailed,
+	startStudioUpdate,
+} from "./studio-version";
 import { ensureGraphifyGraph, listGraphifyGraphs, listGraphifyRepos, assessSubsystemGraphifyReadiness } from "./graphify-store";
 import {
 	walkLibrary,
@@ -74,6 +80,7 @@ import type {
 	TabSummary,
 	StudioMessages,
 	StudioRequests,
+	StudioVersionStatus,
 	ViewerMode,
 	ViewerSettings,
 } from "../shared/contract";
@@ -1690,6 +1697,7 @@ const requests: RequestHandlers = {
 							source: e.source,
 							repo: e.repo,
 							path: subsystemModelFilePath(e.id),
+							gist: e.gist ?? full?.gist,
 							graphify,
 						};
 					}),
@@ -1703,6 +1711,32 @@ const requests: RequestHandlers = {
 				return { ok: true, tabId };
 			},
 			deleteSubsystemModel: async ({ graphId }) => deleteGraphAndCloseTabs(graphId),
+			shareSubsystemModelAsGist: async ({ graphId }) => {
+				const graph = await getSubsystemModel(graphId);
+				if (!graph) return { ok: false, error: `unknown graph: ${graphId}` };
+				const result = await publishSubsystemModelGist({
+					document: graph,
+					existing: graph.gist ?? null,
+				});
+				if (!result.ok) return { ok: false, error: result.error };
+				const updated = await updateSubsystemModel(graphId, {
+					gist: { id: result.gistId, fileName: result.fileName },
+				});
+				if (!updated) {
+					return {
+						ok: false,
+						error: `Gist published (${result.gistId}) but failed to stamp the local record.`,
+					};
+				}
+				return {
+					ok: true,
+					gistId: result.gistId,
+					gistUrl: result.gistUrl,
+					viewUrl: result.viewUrl,
+					fileName: result.fileName,
+					created: result.created,
+				};
+			},
 			verifySubsystemComponent: async ({ graphId, componentId }) =>
 				verifySubsystemComponent(graphId, componentId),
 			getGraphifyStatus: async ({ detailed }) => {
@@ -1714,6 +1748,14 @@ const requests: RequestHandlers = {
 				}
 				return base;
 			},
+			getStudioVersionStatus: async ({ detailed }) => {
+				const base = cachedDetailedStudioVersion ?? getStudioVersionStatus();
+				if (detailed) {
+					refreshStudioVersionDetailed();
+				}
+				return base;
+			},
+			updateStudio: async () => startStudioUpdate(),
 			listGraphifyGraphs: async () => {
 				const entries = await listGraphifyGraphs();
 				return {
@@ -1932,6 +1974,8 @@ const graphifyBuildingPurls = new Set<string>();
 let graphifyCliBusy: "install" | "update" | "uninstall" | null = null;
 let cachedDetailedGraphifyStatus: GraphifyCliStatus | null = null;
 let detailedRefreshInflight: Promise<void> | null = null;
+let cachedDetailedStudioVersion: StudioVersionStatus | null = null;
+let studioVersionRefreshInflight: Promise<void> | null = null;
 
 function sleepMs(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
@@ -1967,6 +2011,38 @@ function broadcastSubsystemModelChanged(
 			`[principal-studio] could not notify renderer (subsystemModelChanged): ${(err as Error).message}`,
 		);
 	}
+}
+
+function broadcastStudioVersionChanged(
+	payload: StudioMessages["studioVersionChanged"],
+): void {
+	try {
+		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
+			"studioVersionChanged"
+		](payload);
+	} catch (err) {
+		console.warn(
+			`[principal-studio] could not notify renderer (studioVersionChanged): ${(err as Error).message}`,
+		);
+	}
+}
+
+function refreshStudioVersionDetailed(): void {
+	if (studioVersionRefreshInflight) return;
+	studioVersionRefreshInflight = (async () => {
+		try {
+			const status = await getStudioVersionStatusDetailed();
+			cachedDetailedStudioVersion = status;
+			broadcastStudioVersionChanged({ status });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			console.warn(`[principal-studio] Studio npm version check failed: ${message}`);
+			const status = getStudioVersionStatus();
+			broadcastStudioVersionChanged({ status, error: message });
+		} finally {
+			studioVersionRefreshInflight = null;
+		}
+	})();
 }
 
 function refreshGraphifyStatusDetailed(): void {

@@ -17,6 +17,11 @@ export const GIST_EXAMPLES: GistExample[] = [
     title: 'OpenCode session drain',
     repo: 'anomalyco/opencode',
   },
+  {
+    id: '59ff3eb2ce030d8b6468892529e1dc31',
+    title: 'Ghostty key input → PTY write',
+    repo: 'ghostty-org/ghostty',
+  },
 ]
 
 export function gistExampleOwner(repo: string): string {

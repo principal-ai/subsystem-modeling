@@ -388,15 +388,33 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   componentsRef.current = components;
   edgesRef.current = edges;
 
+  // Track measured dimensions from React Flow's dimension changes.
+  // These arrive as { type: 'dimensions', id, dimensions } in onNodesChange.
+  // Retained across same-id layoutKey updates so Pass 2 can run without a remount.
+  const measuredDimsRef = useRef(new Map<string, { width: number; height: number }>());
+  const pendingMeasuredRef = useRef(false);
+  const prevMeasuredSigRef = useRef('');
+  const pass2DoneRef = useRef(false);
+  const pass2GenRef = useRef(0);
+
   useEffect(() => {
     let alive = true;
     pass2DoneRef.current = false;
-    measuredDimsRef.current = new Map();
     prevMeasuredSigRef.current = '';
+    // Bump generation so any in-flight Pass 2 from the prior layoutKey is ignored.
+    pass2GenRef.current += 1;
     const doc = { components: componentsRef.current, edges: edgesRef.current };
     void buildSubsystemGraph(doc, { maxNodeWidth, showEdgeLabels })
       .then(({ nodes, edges: e }) => {
         if (!alive) return;
+        // Prune dims for removed leaves; keep measurements for stable ids so a
+        // live update can finish Pass 2 without waiting on new `dimensions` events.
+        const leafIds = new Set(
+          nodes.filter((n) => n.type !== 'subsystem-group').map((n) => n.id),
+        );
+        for (const id of measuredDimsRef.current.keys()) {
+          if (!leafIds.has(id)) measuredDimsRef.current.delete(id);
+        }
         setBuilt({ nodes, edges: e as Edge[] });
         setLayoutReady(false);
       })
@@ -410,20 +428,18 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
     return () => { alive = false; };
   }, [layoutKey, maxNodeWidth, showEdgeLabels]);
 
-  // Track measured dimensions from React Flow's dimension changes.
-  // These arrive as { type: 'dimensions', id, dimensions } in onNodesChange.
-  const measuredDimsRef = useRef(new Map<string, { width: number; height: number }>());
-  const pendingMeasuredRef = useRef(false);
-
   // Pass 2: once every leaf node has a measured dimension, re-run ELK.
   // Group parents are sized by ELK, not measured — exclude them or pass 2
   // would wait forever for dimensions that never arrive.
-  const prevMeasuredSigRef = useRef('');
-  const pass2DoneRef = useRef(false);
   const triggerPass2 = useCallback(() => {
     if (pass2DoneRef.current) return;
     const dims = measuredDimsRef.current;
     const leafNodes = built.nodes.filter((n) => n.type !== 'subsystem-group');
+    if (leafNodes.length === 0) {
+      pass2DoneRef.current = true;
+      setLayoutReady(true);
+      return;
+    }
     if (dims.size < leafNodes.length) return;
     const sig = leafNodes.map((n) => `${n.id}:${dims.get(n.id)?.width ?? '?'}`).join(',');
     if (sig.includes('?:')) return;
@@ -434,17 +450,47 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
 
     const measuredWidths = new Map(leafNodes.map((n) => [n.id, dims.get(n.id)!.width]));
     const measuredHeights = new Map(leafNodes.map((n) => [n.id, dims.get(n.id)!.height]));
-    let alive = true;
+    const gen = ++pass2GenRef.current;
     void buildSubsystemGraph(
       { components, edges },
       { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights },
-    ).then(({ nodes, edges: e }) => {
-      if (!alive) return;
-      setBuilt({ nodes, edges: e as Edge[] });
-      setLayoutReady(true);
-    });
-    return () => { alive = false; };
+    )
+      .then(({ nodes, edges: e }) => {
+        if (gen !== pass2GenRef.current) return;
+        setBuilt({ nodes, edges: e as Edge[] });
+        setLayoutReady(true);
+      })
+      .catch((err) => {
+        console.warn('[subsystem-graph] measured layout failed:', err);
+        if (gen !== pass2GenRef.current) return;
+        // Reveal Pass 1 layout rather than leaving the cover up forever.
+        setLayoutReady(true);
+      });
   }, [built.nodes, components, edges, maxNodeWidth, showEdgeLabels]);
+
+  // After Pass 1 commits, try Pass 2 immediately with retained measurements.
+  // Same-id live updates often get no new React Flow `dimensions` events, so
+  // waiting only on onNodesChange leaves the cover stuck.
+  useEffect(() => {
+    if (layoutReady) return;
+    if (built.nodes.length === 0) return;
+    queueMicrotask(() => triggerPass2());
+  }, [built, layoutReady, triggerPass2]);
+
+  // Safety net: never leave the cover up if measurements never arrive (e.g. new
+  // leaf ids before remount) and Pass 2 cannot run.
+  useEffect(() => {
+    if (layoutReady) return;
+    if (built.nodes.length === 0) return;
+    const t = setTimeout(() => {
+      setLayoutReady((ready) => {
+        if (ready) return ready;
+        console.warn('[subsystem-graph] Pass 2 timed out; revealing Pass 1 layout');
+        return true;
+      });
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [built, layoutReady]);
 
   // Node components call SUBSYSTEM_CALLBACKS.onSelect on click (their inner
   // onClick stops React Flow propagation), so wire selection + width through it.

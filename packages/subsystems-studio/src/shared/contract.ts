@@ -272,6 +272,11 @@ export interface StoredSubsystemModel {
 	 * (`pkg:github/owner/name`, fragment stripped).
 	 */
 	repoRoots?: Record<string, string>;
+	/**
+	 * Host-only GitHub gist link. Not portable — used so Share as gist can
+	 * PATCH an existing gist instead of minting a duplicate.
+	 */
+	gist?: { id: string; fileName?: string };
 }
 
 /**
@@ -317,6 +322,8 @@ export interface SubsystemModelSummary {
 	repo?: { owner: string; name: string };
 	/** Absolute path to the persisted JSON (`~/.principal/subsystem-models/<id>.json`). */
 	path: string;
+	/** Host-only gist link when this model has been shared. */
+	gist?: { id: string; fileName?: string };
 	/** Graphify cache readiness for this graph's component purls. */
 	graphify?: SubsystemGraphifyReadiness;
 }
@@ -416,6 +423,16 @@ export interface GraphifyCliStatus {
 	updateAvailable: boolean | null;
 	/** Host is running install/update/uninstall in the background. */
 	cliBusy?: "install" | "update" | "uninstall" | null;
+}
+
+/** Installed Subsystems Studio vs latest on npm (for the header Update button). */
+export interface StudioVersionStatus {
+	installedVersion: string | null;
+	latestVersion: string | null;
+	updateAvailable: boolean | null;
+	/** `npm` = published install; `source` = repo checkout (in-app update disabled). */
+	channel: "npm" | "source" | "unknown";
+	busy?: boolean;
 }
 
 /** Alexandria repo crossed with graphify cache status for the Graphify tab. */
@@ -778,6 +795,24 @@ export type StudioRequests = {
 		response: { ok: boolean; error?: string };
 	};
 	/**
+	 * Publish the portable document for a stored model as a public GitHub
+	 * gist. Creates on first share; PATCHes the linked gist when `gist` is
+	 * already stamped on the record. Requires a local GitHub token
+	 * (`gh auth token`, git credential helper, or `TRAIL_GH_TOKEN`).
+	 */
+	shareSubsystemModelAsGist: {
+		params: { graphId: string };
+		response: {
+			ok: boolean;
+			error?: string;
+			gistId?: string;
+			gistUrl?: string;
+			viewUrl?: string;
+			fileName?: string;
+			created?: boolean;
+		};
+	};
+	/**
 	 * Verify one subsystem component against filesystem + graphify cache
 	 * (anchor resolve). Does not run extract — cache must already be ready.
 	 */
@@ -788,6 +823,28 @@ export type StudioRequests = {
 	getGraphifyStatus: {
 		params: { detailed?: boolean };
 		response: GraphifyCliStatus;
+	};
+	/**
+	 * Current Studio package version vs npm latest. When `detailed` is true the
+	 * host also hits the registry (may return cached local status first while a
+	 * background refresh is in flight — see `studioVersionChanged`).
+	 */
+	getStudioVersionStatus: {
+		params: { detailed?: boolean };
+		response: StudioVersionStatus;
+	};
+	/**
+	 * Quit and relaunch via `npx @principal-ai/subsystems-studio@latest`.
+	 * `started: true` means this process is about to exit.
+	 */
+	updateStudio: {
+		params: Record<string, never>;
+		response: {
+			ok: boolean;
+			error?: string;
+			started?: boolean;
+			status?: StudioVersionStatus;
+		};
 	};
 	listGraphifyGraphs: {
 		params: Record<string, never>;
@@ -1002,6 +1059,11 @@ export type StudioMessages = {
 	subsystemModelChanged: {
 		graphId: string;
 		reason: "created" | "updated" | "deleted" | "external";
+	};
+	/** npm latest check finished (or failed). Header Update button should refresh. */
+	studioVersionChanged: {
+		status: StudioVersionStatus;
+		error?: string;
 	};
 }
 

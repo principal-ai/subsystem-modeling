@@ -183,6 +183,12 @@ export interface StoredSubsystemModel extends SubsystemModelDocument {
 	 */
 	repoRoots?: Record<string, string>;
 	/**
+	 * Host-only GitHub gist link for this record. Not part of the portable
+	 * document — stamped after a successful Share as gist so re-share PATCHes
+	 * the same gist instead of creating another.
+	 */
+	gist?: { id: string; fileName?: string };
+	/**
 	 * Result of the last file-existence verification pass (run on create and
 	 * on component/root updates). Repos without a known local root are
 	 * `unresolved`, not missing — absence of a machine is not an error.
@@ -252,6 +258,8 @@ export interface SubsystemModelIndexEntry {
 	fileName: string;
 	source?: string;
 	repo?: { owner: string; name: string };
+	/** Host-only gist link mirrored from the record for list/share UI. */
+	gist?: { id: string; fileName?: string };
 }
 
 interface IndexFile {
@@ -859,6 +867,7 @@ function indexEntryFor(record: StoredSubsystemModel): SubsystemModelIndexEntry {
 		fileName: `${record.id}.json`,
 		source: record.source,
 		repo: record.repo,
+		gist: record.gist,
 	};
 }
 
@@ -968,6 +977,7 @@ export async function updateSubsystemModel(
 			| "repo"
 			| "repoRoot"
 			| "repoRoots"
+			| "gist"
 		>
 	>,
 ): Promise<StoredSubsystemModel | null> {

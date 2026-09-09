@@ -386,3 +386,22 @@ export function isSubsystemModelDocument(value: unknown): value is SubsystemMode
     Array.isArray(v.edges)
   );
 }
+
+/**
+ * Keep only portable fields — drop host bindings / store metadata if a
+ * hydrated record is passed in. Use before writing a gist or any other
+ * share surface that must stay schema-clean.
+ */
+export function toPortableDocument(
+  doc: SubsystemModelDocument,
+): SubsystemModelDocument {
+  const out: SubsystemModelDocument = {
+    title: doc.title,
+    components: doc.components,
+    edges: doc.edges,
+  };
+  if (doc.$schema) out.$schema = doc.$schema;
+  if (doc.description) out.description = doc.description;
+  if (doc.throughlines) out.throughlines = doc.throughlines;
+  return out;
+}

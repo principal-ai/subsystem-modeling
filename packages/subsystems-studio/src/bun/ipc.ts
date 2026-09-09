@@ -16,10 +16,13 @@
 import { mkdirSync, unlinkSync, existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { createServer, createConnection, type Socket } from "node:net";
+import { createServer, createConnection, type Server, type Socket } from "node:net";
 import { stopHttpServer } from "./http-server";
 
 export const SOCKET_PATH = join(homedir(), ".principal", "principal-studio.sock");
+
+/** Active IPC listener — closed by `releaseIpcForRelaunch` before self-update. */
+let ipcServer: Server | null = null;
 
 export interface LoadTrailMessage {
 	kind: "LOAD_TRAIL";
@@ -118,7 +121,7 @@ export function startIpcServer(
 		}
 	}
 
-	const server = createServer((socket: Socket) => {
+	ipcServer = createServer((socket: Socket) => {
 		let buffer = "";
 		socket.on("data", async (chunk) => {
 			buffer += chunk.toString("utf8");
@@ -138,22 +141,16 @@ export function startIpcServer(
 		socket.on("error", () => socket.destroy());
 	});
 
-	server.on("error", (err) => {
+	ipcServer.on("error", (err) => {
 		console.error(`[principal-studio] IPC server error: ${err.message}`);
 	});
 
-	server.listen(SOCKET_PATH, () => {
+	ipcServer.listen(SOCKET_PATH, () => {
 		console.log(`[principal-studio] IPC listening at ${SOCKET_PATH}`);
 	});
 
 	const cleanup = () => {
-		try {
-			stopHttpServer();
-			server.close();
-			if (existsSync(SOCKET_PATH)) unlinkSync(SOCKET_PATH);
-		} catch {
-			// ignore
-		}
+		releaseIpcForRelaunch();
 		process.exit(0);
 	};
 	process.on("SIGINT", cleanup);
@@ -165,4 +162,27 @@ export function startIpcServer(
 			// ignore
 		}
 	});
+}
+
+/**
+ * Stop accepting IPC handoffs and remove the socket file so a freshly spawned
+ * Studio can bind instead of focusing this process. Used by in-app update.
+ */
+export function releaseIpcForRelaunch(): void {
+	try {
+		stopHttpServer();
+	} catch {
+		// ignore
+	}
+	try {
+		ipcServer?.close();
+		ipcServer = null;
+	} catch {
+		// ignore
+	}
+	try {
+		if (existsSync(SOCKET_PATH)) unlinkSync(SOCKET_PATH);
+	} catch {
+		// ignore
+	}
 }

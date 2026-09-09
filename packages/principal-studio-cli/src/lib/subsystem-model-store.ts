@@ -63,6 +63,8 @@ export interface SubsystemModelIndexEntry {
   fileName: string;
   source?: string;
   repo?: { owner: string; name: string };
+  /** Host-only gist link mirrored from the record. */
+  gist?: { id: string; fileName?: string };
 }
 
 interface IndexFile {
@@ -84,6 +86,8 @@ export interface StoredSubsystemModel {
   repo?: { owner: string; name: string };
   repoRoot?: string;
   repoRoots?: Record<string, string>;
+  /** Host-only GitHub gist link (not portable). */
+  gist?: { id: string; fileName?: string };
   verification?: unknown;
 }
 
@@ -289,6 +293,7 @@ function indexEntryFor(record: StoredSubsystemModel): SubsystemModelIndexEntry {
     fileName: `${record.id}.json`,
     source: record.source,
     repo: record.repo,
+    gist: record.gist,
   };
 }
 
@@ -369,4 +374,36 @@ export async function createSubsystemModel(
   await fs.writeFile(graphPath(record.id), JSON.stringify(record, null, 2), 'utf8');
   await upsertIndexEntry(indexEntryFor(record));
   return record;
+}
+
+/** Patch an existing record (e.g. stamp a host gist ref after share). */
+export async function updateSubsystemModel(
+  id: string,
+  patch: Partial<
+    Pick<
+      StoredSubsystemModel,
+      | 'title'
+      | 'description'
+      | 'components'
+      | 'edges'
+      | 'throughlines'
+      | 'source'
+      | 'repo'
+      | 'repoRoot'
+      | 'repoRoots'
+      | 'gist'
+    >
+  >,
+): Promise<StoredSubsystemModel | null> {
+  const existing = await getSubsystemModel(id);
+  if (!existing) return null;
+  if (patch.components !== undefined) normalizeDetailProvenance(patch.components);
+  const updated: StoredSubsystemModel = {
+    ...existing,
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  };
+  await fs.writeFile(graphPath(id), JSON.stringify(updated, null, 2), 'utf8');
+  await upsertIndexEntry(indexEntryFor(updated));
+  return updated;
 }

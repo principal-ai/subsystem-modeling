@@ -57,6 +57,11 @@ export const graphifyChangeSubscribers = new Set<
 	(payload: StudioMessages["graphifyChanged"]) => void
 >();
 
+/** Studio npm version check push (`studioVersionChanged`). */
+export const studioVersionChangeSubscribers = new Set<
+	(payload: StudioMessages["studioVersionChanged"]) => void
+>();
+
 /** Subsystem graph store writes + disk watch push `subsystemModelChanged`. */
 export const subsystemModelChangeSubscribers = new Set<
 	(payload: StudioMessages["subsystemModelChanged"]) => void
@@ -82,6 +87,9 @@ const rpc = Electroview.defineRPC<StudioRPC>({
 			},
 			graphifyChanged: (payload) => {
 				for (const fn of graphifyChangeSubscribers) fn(payload);
+			},
+			studioVersionChanged: (payload) => {
+				for (const fn of studioVersionChangeSubscribers) fn(payload);
 			},
 			subsystemModelChanged: (payload) => {
 				for (const fn of subsystemModelChangeSubscribers) fn(payload);

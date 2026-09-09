@@ -18,7 +18,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Share2 } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import type {
 	GraphifyRepoEntry,
@@ -665,6 +665,7 @@ export function SubsystemModelsView() {
 	const [busyGraphId, setBusyGraphId] = useState<string | null>(null);
 	const [busyPurl, setBusyPurl] = useState<string | null>(null);
 	const [copiedId, setCopiedId] = useState<string | null>(null);
+	const [sharingId, setSharingId] = useState<string | null>(null);
 	const [repoFilter, setRepoFilter] = useState<ReadonlySet<string>>(
 		() => new Set(),
 	);
@@ -796,6 +797,43 @@ export function SubsystemModelsView() {
 			}
 		},
 		[],
+	);
+
+	const onShareGist = useCallback(
+		async (e: React.MouseEvent, graph: SubsystemModelSummary) => {
+			e.stopPropagation();
+			setSharingId(graph.id);
+			setMessage(null);
+			setError(null);
+			try {
+				const result = await electrobun.rpc!.request.shareSubsystemModelAsGist({
+					graphId: graph.id,
+				});
+				if (!result.ok) {
+					setError(result.error ?? "Failed to share as gist");
+					return;
+				}
+				const url = result.viewUrl ?? result.gistUrl;
+				if (url) {
+					try {
+						await navigator.clipboard.writeText(url);
+					} catch {
+						// clipboard may be denied
+					}
+				}
+				setMessage(
+					result.created
+						? `Shared as gist — link copied${url ? `: ${url}` : ""}`
+						: `Gist updated — link copied${url ? `: ${url}` : ""}`,
+				);
+				await refresh();
+			} catch (err) {
+				setError(err instanceof Error ? err.message : "Failed to share as gist");
+			} finally {
+				setSharingId(null);
+			}
+		},
+		[refresh],
 	);
 
 	const onToggleRepoFilter = useCallback((key: string) => {
@@ -1138,6 +1176,43 @@ export function SubsystemModelsView() {
 							>
 								{copiedId === graph.id ? <Check size={12} /> : <Copy size={12} />}
 								{copiedId === graph.id ? "Copied" : "Copy path"}
+							</button>
+							<button
+								type="button"
+								onClick={(e) => void onShareGist(e, graph)}
+								disabled={sharingId === graph.id}
+								title={
+									graph.gist
+										? `Update gist ${graph.gist.id}`
+										: "Share as a public GitHub gist"
+								}
+								aria-label={
+									graph.gist
+										? `Update gist for ${graph.title}`
+										: `Share ${graph.title} as gist`
+								}
+								style={{
+									flexShrink: 0,
+									display: "inline-flex",
+									alignItems: "center",
+									gap: 4,
+									padding: "4px 8px",
+									borderRadius: 4,
+									border: `1px solid ${theme.colors.border ?? "#333"}`,
+									background: "transparent",
+									color: muted,
+									cursor: sharingId === graph.id ? "default" : "pointer",
+									fontSize: theme.fontSizes[0],
+									fontFamily: theme.fonts.body,
+									opacity: sharingId === graph.id ? 0.7 : 1,
+								}}
+							>
+								<Share2 size={12} />
+								{sharingId === graph.id
+									? "Sharing…"
+									: graph.gist
+										? "Update gist"
+										: "Gist"}
 							</button>
 							<button
 								type="button"
