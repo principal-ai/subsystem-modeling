@@ -1,8 +1,8 @@
 import type {
   SubsystemComponent,
-  SubsystemComponentEdge,
+  SubsystemRelation,
+  SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
-import type { SubsystemThroughline } from '@principal-ai/subsystems-react/dist/subsystem/model.js';
 
 const PURL = 'pkg:github/you/job-worker';
 
@@ -74,102 +74,114 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const edges: SubsystemComponentEdge[] = [
-  { id: 'e0', from: 'main', to: 'redis-queue', mechanism: 'calls' },
-  { id: 'e1', from: 'main', to: 'run-worker', mechanism: 'calls' },
-  { id: 'e2', from: 'run-worker', to: 'redis-queue', mechanism: 'calls' },
-  { id: 'e3', from: 'run-worker', to: 'handle-job', mechanism: 'calls' },
-  { id: 'e4', from: 'redis-queue', to: 'Redis', mechanism: 'reads' },
-  { id: 'e5', from: 'redis-queue', to: 'Redis', mechanism: 'writes' },
-  { id: 'e6', from: 'handle-job', to: 'Email', mechanism: 'calls' },
-];
+export const relations = [] as SubsystemRelation[];
 
-export const throughlines: SubsystemThroughline[] = [
+export const walkthroughs = [
   {
-    id: 'tl-success',
-    title: 'Process job (ack)',
-    steps: [
+    "id": "tl-success",
+    "title": "Process job (ack)",
+    "steps": [
       {
-        edgeId: 'e1',
-        file: 'src/main.rs',
-        line: 17,
-        symbol: 'run_worker',
-        annotation: 'Tokio main hands off to the consumer loop.',
+        "from": "main",
+        "to": "run-worker",
+        "mechanism": "calls",
+        "file": "src/main.rs",
+        "line": 17,
+        "symbol": "run_worker",
+        "annotation": "Tokio main hands off to the consumer loop."
       },
       {
-        edgeId: 'e2',
-        file: 'src/consumer.rs',
-        line: 10,
-        symbol: 'dequeue',
-        annotation: 'Pull the next job (or idle-sleep).',
+        "from": "run-worker",
+        "to": "redis-queue",
+        "mechanism": "calls",
+        "file": "src/consumer.rs",
+        "line": 10,
+        "symbol": "dequeue",
+        "annotation": "Pull the next job (or idle-sleep)."
       },
       {
-        edgeId: 'e4',
-        file: 'src/queue.rs',
-        line: 32,
-        symbol: 'dequeue',
-        annotation: 'Redis BRPOP — queue is the external.',
+        "from": "redis-queue",
+        "to": "Redis",
+        "mechanism": "reads",
+        "file": "src/queue.rs",
+        "line": 32,
+        "symbol": "dequeue",
+        "annotation": "Redis BRPOP — queue is the external."
       },
       {
-        edgeId: 'e3',
-        file: 'src/consumer.rs',
-        line: 13,
-        symbol: 'handle_job',
-        annotation: 'Dispatch into the handler.',
+        "from": "run-worker",
+        "to": "handle-job",
+        "mechanism": "calls",
+        "file": "src/consumer.rs",
+        "line": 13,
+        "symbol": "handle_job",
+        "annotation": "Dispatch into the handler."
       },
       {
-        edgeId: 'e6',
-        file: 'src/handler.rs',
-        line: 9,
-        symbol: 'send_email',
-        annotation: 'Kind-specific side effect (email path).',
+        "from": "handle-job",
+        "to": "Email",
+        "mechanism": "calls",
+        "file": "src/handler.rs",
+        "line": 9,
+        "symbol": "send_email",
+        "annotation": "Kind-specific side effect (email path)."
       },
       {
-        edgeId: 'e2',
-        file: 'src/consumer.rs',
-        line: 14,
-        symbol: 'ack',
-        annotation: 'Success — remove the job from the queue.',
-      },
-    ],
+        "from": "run-worker",
+        "to": "redis-queue",
+        "mechanism": "calls",
+        "file": "src/consumer.rs",
+        "line": 14,
+        "symbol": "ack",
+        "annotation": "Success — remove the job from the queue."
+      }
+    ]
   },
   {
-    id: 'tl-fail',
-    title: 'Handler fails (nack)',
-    steps: [
+    "id": "tl-fail",
+    "title": "Handler fails (nack)",
+    "steps": [
       {
-        edgeId: 'e2',
-        file: 'src/consumer.rs',
-        line: 10,
-        symbol: 'dequeue',
-        annotation: 'Same dequeue path as success.',
+        "from": "run-worker",
+        "to": "redis-queue",
+        "mechanism": "calls",
+        "file": "src/consumer.rs",
+        "line": 10,
+        "symbol": "dequeue",
+        "annotation": "Same dequeue path as success."
       },
       {
-        edgeId: 'e3',
-        file: 'src/consumer.rs',
-        line: 13,
-        symbol: 'handle_job',
-        annotation: 'Handler returns Err.',
+        "from": "run-worker",
+        "to": "handle-job",
+        "mechanism": "calls",
+        "file": "src/consumer.rs",
+        "line": 13,
+        "symbol": "handle_job",
+        "annotation": "Handler returns Err."
       },
       {
-        edgeId: 'e2',
-        file: 'src/consumer.rs',
-        line: 17,
-        symbol: 'nack',
-        annotation: 'Failure — requeue for retry (LPUSH).',
+        "from": "run-worker",
+        "to": "redis-queue",
+        "mechanism": "calls",
+        "file": "src/consumer.rs",
+        "line": 17,
+        "symbol": "nack",
+        "annotation": "Failure — requeue for retry (LPUSH)."
       },
       {
-        edgeId: 'e5',
-        file: 'src/queue.rs',
-        line: 41,
-        symbol: 'nack',
-        annotation: 'Redis write puts the job back.',
-      },
-    ],
-  },
-];
+        "from": "redis-queue",
+        "to": "Redis",
+        "mechanism": "writes",
+        "file": "src/queue.rs",
+        "line": 41,
+        "symbol": "nack",
+        "annotation": "Redis write puts the job back."
+      }
+    ]
+  }
+] as SubsystemWalkthrough[];
 
 export const title = 'Tokio job worker';
 
 export const description =
-  'Rust **Tokio** background worker: connect a Redis queue, dequeue forever, dispatch handlers, **ack** on success and **nack** on failure. Open **Flows** for the happy path and the retry path.';
+  'Rust **Tokio** background worker: connect a Redis queue, dequeue forever, dispatch handlers, **ack** on success and **nack** on failure. Open **Walkthroughs** for the happy path and the retry path.';

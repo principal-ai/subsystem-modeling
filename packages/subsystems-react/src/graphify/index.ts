@@ -60,8 +60,11 @@ export {
   resolveComponentAnchor,
   symbolLabelVariants,
 } from './anchor';
-export type { InferredGraphifyKind, InferGraphifyKindResult } from './kind';
-export { inferGraphifyKind, kindsMatch } from './kind';
+export type {
+	InferredGraphifyConstruct,
+	InferConstructFromGraphifyResult,
+} from './construct';
+export { inferConstructFromGraphify, constructsMatch } from './construct';
 export type {
   GraphifyInferredSignature,
   ClaimedSignature,

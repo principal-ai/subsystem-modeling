@@ -1,8 +1,8 @@
 import type {
   SubsystemComponent,
-  SubsystemComponentEdge,
+  SubsystemRelation,
+  SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
-import type { SubsystemThroughline } from '@principal-ai/subsystems-react/dist/subsystem/model.js';
 
 const PURL = 'pkg:github/you/daily-digest';
 
@@ -74,59 +74,63 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const edges: SubsystemComponentEdge[] = [
-  { id: 'e0', from: 'daily-digest-main', to: 'fetch-page', mechanism: 'calls' },
-  { id: 'e1', from: 'daily-digest-main', to: 'parse-headlines', mechanism: 'calls' },
-  { id: 'e2', from: 'daily-digest-main', to: 'write-digest', mechanism: 'calls' },
-  { id: 'e3', from: 'fetch-page', to: 'Website', mechanism: 'reads' },
-  { id: 'e4', from: 'write-digest', to: 'Filesystem', mechanism: 'writes' },
-];
+export const relations = [] as SubsystemRelation[];
 
-export const throughlines: SubsystemThroughline[] = [
+export const walkthroughs = [
   {
-    id: 'tl-cron-run',
-    title: 'Cron runs daily digest',
-    steps: [
+    "id": "tl-cron-run",
+    "title": "Cron runs daily digest",
+    "steps": [
       {
-        edgeId: 'e0',
-        file: 'scripts/dailyDigest.ts',
-        line: 17,
-        symbol: 'fetchPage',
-        annotation: 'Cron invoked main — first hop is the network fetch.',
+        "from": "daily-digest-main",
+        "to": "fetch-page",
+        "mechanism": "calls",
+        "file": "scripts/dailyDigest.ts",
+        "line": 17,
+        "symbol": "fetchPage",
+        "annotation": "Cron invoked main — first hop is the network fetch."
       },
       {
-        edgeId: 'e3',
-        file: 'src/fetchPage.ts',
-        line: 5,
-        symbol: 'fetch',
-        annotation: 'One HTTP GET to the public page; no browser required.',
+        "from": "fetch-page",
+        "to": "Website",
+        "mechanism": "reads",
+        "file": "src/fetchPage.ts",
+        "line": 5,
+        "symbol": "fetch",
+        "annotation": "One HTTP GET to the public page; no browser required."
       },
       {
-        edgeId: 'e1',
-        file: 'scripts/dailyDigest.ts',
-        line: 18,
-        symbol: 'parseHeadlines',
-        annotation: 'Turn raw HTML into a short list of strings.',
+        "from": "daily-digest-main",
+        "to": "parse-headlines",
+        "mechanism": "calls",
+        "file": "scripts/dailyDigest.ts",
+        "line": 18,
+        "symbol": "parseHeadlines",
+        "annotation": "Turn raw HTML into a short list of strings."
       },
       {
-        edgeId: 'e2',
-        file: 'scripts/dailyDigest.ts',
-        line: 19,
-        symbol: 'writeDigest',
-        annotation: 'Persist today’s headlines as the run’s side effect.',
+        "from": "daily-digest-main",
+        "to": "write-digest",
+        "mechanism": "calls",
+        "file": "scripts/dailyDigest.ts",
+        "line": 19,
+        "symbol": "writeDigest",
+        "annotation": "Persist today’s headlines as the run’s side effect."
       },
       {
-        edgeId: 'e4',
-        file: 'src/writeDigest.ts',
-        line: 13,
-        symbol: 'appendFile',
-        annotation: 'Append a dated block to digest.txt — safe to re-run tomorrow.',
-      },
-    ],
-  },
-];
+        "from": "write-digest",
+        "to": "Filesystem",
+        "mechanism": "writes",
+        "file": "src/writeDigest.ts",
+        "line": 13,
+        "symbol": "appendFile",
+        "annotation": "Append a dated block to digest.txt — safe to re-run tomorrow."
+      }
+    ]
+  }
+] as SubsystemWalkthrough[];
 
 export const title = 'Daily page digest';
 
 export const description =
-  'A beginner-friendly cron script: schedule fires, the entry fetches a public webpage, parses out headlines, and appends them to a local file. Open the **Flows** tab to walk one scheduled run.';
+  'A beginner-friendly cron script: schedule fires, the entry fetches a public webpage, parses out headlines, and appends them to a local file. Open the **Walkthroughs** tab to walk one scheduled run.';

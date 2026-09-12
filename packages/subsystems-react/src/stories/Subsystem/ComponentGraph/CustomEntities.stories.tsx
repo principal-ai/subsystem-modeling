@@ -5,6 +5,7 @@ import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import type { SubsystemComponent, SubsystemComponentEdge } from '../../../subsystem/model';
 import type { GraphifyCustomEntityDetail } from '../../../graphify';
+import { graphSpecFromEdges } from './fixtures';
 
 /** Authored attributes surfaced in the declaration panel. */
 function entityDetail(attributes: Array<[string, string]>): GraphifyCustomEntityDetail {
@@ -32,7 +33,7 @@ const components: SubsystemComponent[] = [
     purl: 'external',
     purpose: 'submits a facilities work request',
     role: 'entry',
-    detail: entityDetail([
+    declaration: entityDetail([
       ['vertical', 'buildings'],
       ['escalationPath', 'FacilitiesTechnician → ShiftSupervisor'],
     ]),
@@ -47,7 +48,7 @@ const components: SubsystemComponent[] = [
     purpose: 'performs repairs, resolves L1 requests',
     process: 'novatech/core-ops',
     layer: 1,
-    detail: entityDetail([
+    declaration: entityDetail([
       ['level', 'L1'],
       ['projects', 'HVAC, plumbing'],
     ]),
@@ -62,7 +63,7 @@ const components: SubsystemComponent[] = [
     purpose: 'assigns technicians, approves out-of-scope work',
     process: 'novatech/core-ops',
     layer: 2,
-    detail: entityDetail([
+    declaration: entityDetail([
       ['level', 'L2'],
       ['approvalLimit', '$500'],
     ]),
@@ -77,7 +78,7 @@ const components: SubsystemComponent[] = [
     purpose: 'owns the queue, escalates campus-wide issues',
     process: 'novatech/core-ops',
     layer: 3,
-    detail: entityDetail([
+    declaration: entityDetail([
       ['level', 'L3'],
       ['approvalLimit', '$5,000'],
     ]),
@@ -92,7 +93,7 @@ const components: SubsystemComponent[] = [
     purpose: 'funds large projects, signs off L4 requests',
     process: 'novatech/core-ops',
     layer: 4,
-    detail: entityDetail([
+    declaration: entityDetail([
       ['level', 'L4'],
       ['approvalLimit', 'unlimited'],
     ]),
@@ -108,7 +109,7 @@ const components: SubsystemComponent[] = [
     purpose: 'proposes nudges from open-request patterns; never owns the queue',
     process: 'novatech/core-ops',
     layer: 2,
-    detail: entityDetail([
+    declaration: entityDetail([
       ['slack', 'novatech/facilities-ops'],
       ['permission', 'propose-only'],
     ]),
@@ -124,7 +125,7 @@ const components: SubsystemComponent[] = [
     purpose: 'holds proposed nudges until a supervisor confirms them',
     process: 'novatech/core-ops',
     layer: 3,
-    detail: entityDetail([
+    declaration: entityDetail([
       ['durable', 'postgres + outbox'],
       ['owner', 'CampusOpsManager'],
     ]),
@@ -142,7 +143,7 @@ const components: SubsystemComponent[] = [
   },
 ];
 
-const edges: SubsystemComponentEdge[] = [
+const entityGraph = graphSpecFromEdges([
   ['wr', 'store', 'feeds'],
   ['store', 'tech', 'feeds'],
   ['tech', 'sup', 'watches'],
@@ -151,7 +152,7 @@ const edges: SubsystemComponentEdge[] = [
   ['agent', 'queue', 'feeds'],
   ['queue', 'mgr', 'feeds'],
   ['mgr', 'vp', 'watches'],
-].map(([from, to, mechanism], i) => ({ id: `e${i}`, from, to, mechanism }));
+]);
 
 const meta = {
   title: 'Subsystem/ComponentGraph/CustomEntities',
@@ -177,7 +178,7 @@ export const NovaTechWorkRequests: Story = {
         title="Custom entities — NovaTech work-request chain"
         description="Persons, an agent, and a queue as `custom_entity` nodes (badge = entityKind). Actors keep the themed coral; the agent and queue wear authored `color` overrides. Click a node for its declaration — `entity 'Name' — kind` plus authored `attributes` (key: value)."
         components={components}
-        edges={edges}
+        relations={entityGraph.relations} walkthroughs={entityGraph.walkthroughs}
       />
     </div>
   ),

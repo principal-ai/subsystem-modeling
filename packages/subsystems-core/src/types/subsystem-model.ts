@@ -12,7 +12,8 @@
  *    Used by viewers and stores; not part of the portable standard.
  *
  * Ontology: construct = what a node is, framework + stereotype = which
- * framework pattern it plays, role = where it sits, process = where it runs.
+ * framework pattern it plays, role = where it sits, process = where it runs,
+ * proposed = not yet in source (design / migration placeholder).
  * `symbol` is the code identity; `name` is the display label.
  */
 
@@ -54,21 +55,27 @@ export type SubsystemFramework = string;
  */
 export type SubsystemStereotype = string;
 
-/** How `from` relates to `to` on an edge. */
-export type SubsystemEdgeMechanism =
+/**
+ * Topology relation type — structural / module / type claims between
+ * components. Belongs on `relations[]`, not on walkthrough hops.
+ */
+export type SubsystemRelationType =
   | 'imports'
-  | 'imports_from'
-  | 're_exports'
-  | 'defines'
-  | 'calls'
   | 'extends'
   | 'inherits'
   | 'implements'
   | 'mixes_in'
-  | 'uses'
   | 'method'
   | 'references'
-  | 'contains'
+  | 'contains';
+
+/**
+ * Walkthrough hop mechanism — runtime seams with a `file:line` site.
+ * Belongs on walkthrough steps; graph edges for these are derived.
+ */
+export type SubsystemWalkthroughMechanism =
+  | 'calls'
+  | 'uses'
   | 'feeds'
   | 'produces'
   | 'writes'
@@ -76,7 +83,13 @@ export type SubsystemEdgeMechanism =
   | 'watches'
   | 'registers-into';
 
-export type SubsystemCapture = 'edited' | 'analyzed' | 'referenced';
+/**
+ * Union used by derived graph edges / styling (topology relationType or
+ * walkthrough hop mechanism).
+ */
+export type SubsystemEdgeMechanism =
+  | SubsystemRelationType
+  | SubsystemWalkthroughMechanism;
 
 export type SubsystemDeclarationProvenance = 'verified' | 'authored';
 
@@ -176,11 +189,49 @@ export interface SubsystemMethodDeclaration {
   returnType?: string;
 }
 
+/** One generic type parameter, e.g. `T` or `K extends keyof StudioMessages`. */
+export interface SubsystemTypeParamInfo {
+  name: string;
+  /** Constraint written after `extends` (or language equivalent). */
+  constraint?: string;
+}
+
+/** A callable/function type: `(params) => returnType`. */
+export interface SubsystemCallableTypeInfo {
+  parameters?: SubsystemParamInfo[];
+  returnType?: string;
+}
+
+/** One enum member, with its optional literal value. */
+export interface SubsystemEnumMemberInfo {
+  name: string;
+  value?: string;
+}
+
+/**
+ * Type-family declaration (interface / type alias / enum). Structured buckets
+ * cover common shapes; `rhs` is the verbatim escape hatch when none fit.
+ */
 export interface SubsystemTypeDeclaration {
   kind: 'type';
   properties: SubsystemPropertyInfo[];
   usedBy: SubsystemReferenceInfo[];
   implementors: string[];
+  /** Generic type parameters, e.g. `<K extends keyof StudioMessages>`. */
+  generics?: SubsystemTypeParamInfo[];
+  /** Callable type — `(params) => returnType`. */
+  signature?: SubsystemCallableTypeInfo;
+  /** Enum members (name, optional literal value). */
+  enumMembers?: SubsystemEnumMemberInfo[];
+  /** Alias whose RHS is a plain reference, e.g. `ServerSessionRow[]`. */
+  aliasOf?: string;
+  /** Simple union of alternatives, e.g. `'started' | 'stopped'`. */
+  unionOf?: string[];
+  /**
+   * Verbatim RHS — escape hatch for shapes the structured fields can't
+   * express. Wins over every shape above when set.
+   */
+  rhs?: string;
 }
 
 export interface SubsystemModuleDeclaration {
@@ -197,6 +248,11 @@ export interface SubsystemExternalDeclaration {
 
 export interface SubsystemStoreDeclaration {
   kind: 'store';
+  /** Where retained state lives / who mediates access. Authored, never
+   *  extracted: `memory` (process-lifetime RAM), `disk` (this process
+   *  reads/writes files), or `external` (another system — db/service; carries
+   *  no `process`). */
+  storage?: 'memory' | 'disk' | 'external';
   properties: SubsystemPropertyInfo[];
 }
 
@@ -240,6 +296,13 @@ export interface SubsystemComponent {
   purpose?: string;
   role?: SubsystemComponentRole;
   /**
+   * Design / migration placeholder — participates in edges and flows but is
+   * not a live source declaration yet. Verification skips source checks until
+   * promoted (`proposed` cleared, `file` + `symbol` filled). Orthogonal to
+   * `construct` (intended shape) and `role` (topology).
+   */
+  proposed?: boolean;
+  /**
    * Framework that owns the stereotype (e.g. `react`, `nestjs`).
    * Orthogonal to `construct` — a React component is still `construct: function`.
    */
@@ -263,7 +326,6 @@ export interface SubsystemComponent {
    */
   color?: string;
   layer?: number;
-  capture?: SubsystemCapture;
   /** Structured declaration shape of the construct (params, members, …). */
   declaration?: SubsystemConstructDeclaration;
   declarationProvenance?: SubsystemDeclarationProvenance;
@@ -272,20 +334,37 @@ export interface SubsystemComponent {
   declarationRef?: SubsystemDeclarationRef;
 }
 
-/** A cross-component edge. */
-export interface SubsystemComponentEdge {
+/** A topology relation between components (structural / module / type). */
+export interface SubsystemRelation {
   id: string;
   /** Source component id. */
   from: string;
   /** Target component id (or external label). */
   to: string;
-  mechanism: SubsystemEdgeMechanism;
+  relationType: SubsystemRelationType;
   /** Concrete file/symbol evidence (often purls). */
   refs?: string[];
 }
 
-export interface SubsystemThroughlineStep {
-  edgeId: string;
+/**
+ * Derived / display graph edge used by renderers. Built from `relations`
+ * and/or walkthrough hops — not authored as its own document field.
+ */
+export interface SubsystemComponentEdge {
+  id: string;
+  from: string;
+  to: string;
+  mechanism: SubsystemEdgeMechanism;
+  refs?: string[];
+}
+
+export interface SubsystemWalkthroughStep {
+  /** Source component id. */
+  from: string;
+  /** Target component id. */
+  to: string;
+  /** Runtime seam label (Set B). */
+  mechanism: SubsystemWalkthroughMechanism;
   file: string;
   /** 1-based line within `file`. */
   line: number;
@@ -299,11 +378,11 @@ export interface SubsystemThroughlineStep {
   annotation?: string;
 }
 
-/** Ordered execution story over existing edges (one per flow). */
-export interface SubsystemThroughline {
+/** Ordered runtime walkthrough (one named behavior story). */
+export interface SubsystemWalkthrough {
   id: string;
   title: string;
-  steps: SubsystemThroughlineStep[];
+  steps: SubsystemWalkthroughStep[];
 }
 
 export interface SubsystemRepoRef {
@@ -326,8 +405,10 @@ export interface SubsystemModelDocument {
   title: string;
   description?: string;
   components: SubsystemComponent[];
-  edges: SubsystemComponentEdge[];
-  throughlines?: SubsystemThroughline[];
+  /** Topology relations (structural / module / type). May be empty. */
+  relations: SubsystemRelation[];
+  /** Runtime walkthroughs (ordered hops with sites). */
+  walkthroughs?: SubsystemWalkthrough[];
 }
 
 /**
@@ -378,12 +459,12 @@ export function isSubsystemModelDocument(value: unknown): value is SubsystemMode
   const v = value as {
     title?: unknown;
     components?: unknown;
-    edges?: unknown;
+    relations?: unknown;
   };
   return (
     typeof v.title === 'string' &&
     Array.isArray(v.components) &&
-    Array.isArray(v.edges)
+    Array.isArray(v.relations)
   );
 }
 
@@ -398,10 +479,56 @@ export function toPortableDocument(
   const out: SubsystemModelDocument = {
     title: doc.title,
     components: doc.components,
-    edges: doc.edges,
+    relations: doc.relations,
   };
   if (doc.$schema) out.$schema = doc.$schema;
   if (doc.description) out.description = doc.description;
-  if (doc.throughlines) out.throughlines = doc.throughlines;
+  if (doc.walkthroughs) out.walkthroughs = doc.walkthroughs;
   return out;
+}
+
+/** Stable id for a derived graph edge from a relation or walkthrough hop. */
+export function derivedGraphEdgeId(
+  from: string,
+  to: string,
+  mechanism: SubsystemEdgeMechanism,
+): string {
+  return `${from}--${mechanism}-->${to}`;
+}
+
+/**
+ * Build display edges for the graph canvas from topology relations and
+ * walkthrough hops (deduped by from/to/mechanism).
+ */
+export function deriveGraphEdges(doc: {
+  relations?: SubsystemRelation[];
+  walkthroughs?: SubsystemWalkthrough[];
+}): SubsystemComponentEdge[] {
+  const byId = new Map<string, SubsystemComponentEdge>();
+  for (const r of doc.relations ?? []) {
+    const id = r.id || derivedGraphEdgeId(r.from, r.to, r.relationType);
+    if (!byId.has(id)) {
+      byId.set(id, {
+        id,
+        from: r.from,
+        to: r.to,
+        mechanism: r.relationType,
+        refs: r.refs,
+      });
+    }
+  }
+  for (const w of doc.walkthroughs ?? []) {
+    for (const step of w.steps) {
+      const id = derivedGraphEdgeId(step.from, step.to, step.mechanism);
+      if (!byId.has(id)) {
+        byId.set(id, {
+          id,
+          from: step.from,
+          to: step.to,
+          mechanism: step.mechanism,
+        });
+      }
+    }
+  }
+  return [...byId.values()];
 }

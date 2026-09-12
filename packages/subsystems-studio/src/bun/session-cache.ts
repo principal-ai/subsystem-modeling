@@ -51,7 +51,7 @@ const CACHE_ROOT = join(homedir(), ".principal", "session-events");
  * pipeline changes so previously processed sessions are re-processed instead
  * of served stale.
  */
-export const PROCESSING_VERSION = 1;
+export const PROCESSING_VERSION = 2;
 
 /** Day directories older than this are pruned on each write. */
 const KEEP_DAYS = 14;

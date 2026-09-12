@@ -1,16 +1,21 @@
 import type {
   SubsystemComponent,
   SubsystemComponentEdge,
+  SubsystemRelation,
+  SubsystemRelationType,
+  SubsystemWalkthrough,
+  SubsystemWalkthroughMechanism,
 } from '../../../subsystem/model';
+import { derivedGraphEdgeId } from '../../../subsystem/model';
 import type { GraphifyComponentDetail } from '../../../graphify';
 
 // ---------------------------------------------------------------------------
 // Build a subsystem graph from a compact spec - helpers
 // ---------------------------------------------------------------------------
 export function components(
-  spec: Array<[id: string, name: string, construct: SubsystemComponent['construct'], file: string, purl: string, purpose?: string, symbol?: string, detail?: GraphifyComponentDetail]>,
+  spec: Array<[id: string, name: string, construct: SubsystemComponent['construct'], file: string, purl: string, purpose?: string, symbol?: string, declaration?: GraphifyComponentDetail]>,
 ): SubsystemComponent[] {
-  return spec.map(([id, name, construct, file, purl, purpose, symbol, detail]) => ({
+  return spec.map(([id, name, construct, file, purl, purpose, symbol, declaration]) => ({
     id,
     name,
     construct,
@@ -18,10 +23,53 @@ export function components(
     purl,
     purpose,
     symbol,
-    detail,
+    declaration,
   }));
 }
 
+const RELATION_TYPES = new Set<string>([
+  'imports',
+  'extends',
+  'inherits',
+  'implements',
+  'mixes_in',
+  'method',
+  'references',
+  'contains',
+]);
+
+export function relations(
+  spec: Array<[from: string, to: string, relationType: SubsystemRelationType, refs?: string[]]>,
+): SubsystemRelation[] {
+  return spec.map(([from, to, relationType, refs], i) => ({
+    id: `r${i}`,
+    from,
+    to,
+    relationType,
+    refs,
+  }));
+}
+
+/** Story helper: one walkthrough whose hops derive Set B display edges. */
+export function walkthroughFromHops(
+  id: string,
+  title: string,
+  hops: Array<[from: string, to: string, mechanism: SubsystemWalkthroughMechanism, file: string, line: number]>,
+): SubsystemWalkthrough {
+  return {
+    id,
+    title,
+    steps: hops.map(([from, to, mechanism, file, line]) => ({
+      from,
+      to,
+      mechanism,
+      file,
+      line,
+    })),
+  };
+}
+
+/** @deprecated story helper — prefer `relations` + `walkthroughFromHops`. */
 export function edges(
   spec: Array<[from: string, to: string, mechanism: SubsystemComponentEdge['mechanism'], refs?: string[]]>,
 ): SubsystemComponentEdge[] {
@@ -32,6 +80,40 @@ export function edges(
     mechanism,
     refs,
   }));
+}
+
+/** Split mixed mechanism lists into relations + optional walkthrough for stories. */
+export function graphSpecFromEdges(
+  spec: Array<[from: string, to: string, mechanism: SubsystemComponentEdge['mechanism'], refs?: string[]]>,
+): { relations: SubsystemRelation[]; walkthroughs?: SubsystemWalkthrough[] } {
+  const rels: SubsystemRelation[] = [];
+  const hops: SubsystemWalkthrough['steps'] = [];
+  for (const [from, to, mechanism, refs] of spec) {
+    if (RELATION_TYPES.has(mechanism)) {
+      rels.push({
+        id: derivedGraphEdgeId(from, to, mechanism as SubsystemRelationType),
+        from,
+        to,
+        relationType: mechanism as SubsystemRelationType,
+        refs,
+      });
+    } else {
+      hops.push({
+        from,
+        to,
+        mechanism: mechanism as SubsystemWalkthroughMechanism,
+        file: 'story-placeholder.ts',
+        line: 1,
+      });
+    }
+  }
+  return {
+    relations: rels,
+    walkthroughs:
+      hops.length > 0
+        ? [{ id: 'story-hops', title: 'Story hops', steps: hops }]
+        : undefined,
+  };
 }
 
 export const readerDetail: GraphifyComponentDetail = {
@@ -79,39 +161,28 @@ export const investigateOnlyComponents: SubsystemComponent[] = [
     purl: 'pkg:github/principal-ai/agent-monitoring',
     purpose: 'the subsystem\u2019s input type — a repo-normalized universal event the readers produce and the accumulator consumes',
     symbol: 'RepoNormalizedUniversalAgentSessionEvent',
-    detail: {
-      kind: 'type',
-      properties: [
-        { name: 'eventType', type: 'NormalizedEventType' },
-        { name: 'sessionId', type: 'string' },
-        { name: 'timestamp', type: 'number' },
-      ],
-      usedBy: [{ nodeId: 'acc', name: 'accumulateToAgentSessionEvents', context: 'parameter_type' }],
-      implementors: [],
-    } satisfies GraphifyComponentDetail,
   },
   {
     id: 'acc',
     name: 'accumulateToAgentSessionEvents',
     construct: 'function',
-    file: 'src/event-processing/accumulator.ts',
+    file: 'src/accumulateToAgentSessionEvents.ts',
     purl: 'pkg:github/principal-ai/agent-monitoring',
-    purpose: 'accumulates normalized events into agent session events',
+    purpose: 'folds normalized events into agent session events',
     symbol: 'accumulateToAgentSessionEvents',
   },
   {
     id: 'out',
     name: 'AgentSessionEvent',
     construct: 'interface',
-    file: 'src/event-processing/accumulator.ts',
+    file: 'types/AgentSessionEvent.ts',
     purl: 'pkg:github/principal-ai/agent-monitoring',
-    purpose: 'the subsystem\u2019s output type — an accumulated agent-session event',
+    purpose: 'output event shape',
     symbol: 'AgentSessionEvent',
-    detail: {
+    declaration: {
       kind: 'type',
       properties: [
-        { name: 'sessionName', type: 'string' },
-        { name: 'operation', type: 'AgentSessionEventOperation' },
+        { name: 'sessionId', type: 'string' },
         { name: 'description', type: 'string' },
       ],
       usedBy: [{ nodeId: 'acc', name: 'accumulateToAgentSessionEvents', context: 'return_type' }],
@@ -120,8 +191,18 @@ export const investigateOnlyComponents: SubsystemComponent[] = [
   },
 ];
 
+const investigateSpec = graphSpecFromEdges([
+  ['v1', 'input', 'produces'],
+  ['v2', 'input', 'produces'],
+  ['input', 'acc', 'feeds'],
+  ['acc', 'out', 'produces'],
+]);
+
+export const investigateOnlyRelations = investigateSpec.relations;
+export const investigateOnlyWalkthroughs = investigateSpec.walkthroughs;
+
+/** @deprecated use investigateOnlyRelations + investigateOnlyWalkthroughs */
 export const investigateOnlyEdges: SubsystemComponentEdge[] = edges([
-  // Concept-level data flow — the LLM's semantic intent.
   ['v1', 'input', 'produces'],
   ['v2', 'input', 'produces'],
   ['input', 'acc', 'feeds'],

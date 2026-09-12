@@ -11,7 +11,7 @@ export function showcaseCasesToCarouselItems(
     stack: c.meta.stack,
     complexity: c.meta.complexity,
     components: c.model.components,
-    edges: c.model.edges,
-    throughlines: c.model.throughlines,
+    relations: c.model.relations,
+    walkthroughs: c.model.walkthroughs,
   }));
 }

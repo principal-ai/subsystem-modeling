@@ -31,7 +31,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 // ---------------------------------------------------------------------------
-// One node per GraphifyComponentDetail kind — what each looks like + drills down
+// One node per declaration kind — what each looks like + drills down
 // ---------------------------------------------------------------------------
 const detailKindComponents: SubsystemComponent[] = [
   {
@@ -42,7 +42,7 @@ const detailKindComponents: SubsystemComponent[] = [
     purl: 'pkg:github/principal-ai/agent-monitoring',
     purpose: 'class-like: owns outgoing method edges',
     symbol: '',
-    detail: readerDetail,
+    declaration: readerDetail,
   },
   {
     id: 'detail-method',
@@ -52,7 +52,7 @@ const detailKindComponents: SubsystemComponent[] = [
     purl: 'pkg:github/principal-ai/agent-monitoring',
     purpose: 'a class method — the specific thing this session focused on',
     symbol: 'SessionReader.normalize',
-    detail: {
+    declaration: {
       kind: 'function',
       parameters: [{ name: 'session', type: 'SessionRecord' }],
       returnType: 'SessionEvent[]',
@@ -68,7 +68,7 @@ const detailKindComponents: SubsystemComponent[] = [
     purl: 'pkg:github/principal-ai/agent-monitoring',
     purpose: 'function-like: label ends () with no method edges',
     symbol: 'normalizeSession',
-    detail: {
+    declaration: {
       kind: 'function',
       parameters: [
         { name: 'session', type: 'SessionRecord' },
@@ -87,7 +87,7 @@ const detailKindComponents: SubsystemComponent[] = [
     purl: 'pkg:github/principal-ai/agent-monitoring',
     purpose: 'multi-param signature — named, positional (graphify captures types only), union types, generic return',
     symbol: 'mergeSessions',
-    detail: {
+    declaration: {
       kind: 'function',
       parameters: [
         { name: 'sessions', type: 'SessionRecord[]' },
@@ -111,7 +111,7 @@ const detailKindComponents: SubsystemComponent[] = [
     purl: 'pkg:github/principal-ai/agent-monitoring',
     purpose: 'no parameters, no return type — the barest function signature',
     symbol: 'flush',
-    detail: {
+    declaration: {
       kind: 'function',
       parameters: [],
       callers: [{ nodeId: 'c4', name: 'EventProcessor.dispose', source_location: 'L142' }],
@@ -126,7 +126,7 @@ const detailKindComponents: SubsystemComponent[] = [
     purl: 'pkg:github/principal-ai/agent-monitoring',
     purpose: 'class with fully-typed members — method params + returns, field types, extends + implements',
     symbol: 'EventProcessor',
-    detail: {
+    declaration: {
       kind: 'class',
       methods: [
         { nodeId: 'rm1', name: 'process', parameters: [{ type: 'RawEvent' }, { type: 'ProcessingOptions' }], returnType: 'ProcessedEvent' },
@@ -156,7 +156,7 @@ const detailKindComponents: SubsystemComponent[] = [
     purl: 'pkg:github/principal-ai/agent-monitoring',
     purpose: 'type-like: revealed by incoming implements edges',
     symbol: 'SessionRecord',
-    detail: {
+    declaration: {
       kind: 'type',
       properties: [
         { name: 'id', type: 'string' },
@@ -174,7 +174,7 @@ const detailKindComponents: SubsystemComponent[] = [
     purl: 'pkg:github/principal-ai/agent-monitoring',
     purpose: 'a type symbol that lives in the transcript module; the node is the symbol, the file is its location',
     symbol: 'CodexRolloutRecord',
-    detail: {
+    declaration: {
       kind: 'type',
       properties: [
         { name: 'type', type: 'string' },
@@ -193,14 +193,13 @@ const detailKindComponents: SubsystemComponent[] = [
     purl: 'pkg:npm/@principal-ai/subsystems-studio',
     purpose: 'an npm package consumer — the whole package as a node',
     symbol: '',
-    detail: {
+    declaration: {
       kind: 'external',
       label: 'pkg:npm/@principal-ai/subsystems-studio',
     } satisfies GraphifyComponentDetail,
   },
 ];
 
-const detailKindEdges: SubsystemComponentEdge[] = [];
 
 function DetailKindsDemo() {
   const [selected, setSelected] = useState<string | null>(null);
@@ -208,11 +207,11 @@ function DetailKindsDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={detailKindComponents}
-        edges={detailKindEdges}
+        relations={[]}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
-        {selected ? `selected: ${selected}` : 'click a component to see its GraphifyComponentDetail'}
+        {selected ? `selected: ${selected}` : 'click a component to see its declaration'}
       </div>
     </div>
   );
@@ -303,7 +302,7 @@ function DeclarationLineOpenDemo() {
         title="Declaration line open (Storybook)"
         description="Uses bundled ?raw fixtures + PierreSnippetView from this package. Select ComponentDeclaration, toggle file, click the path or L251."
         components={declarationOpenComponents}
-        edges={[]}
+        relations={[]}
         renderFileViewer={renderFileViewer}
       />
     </div>

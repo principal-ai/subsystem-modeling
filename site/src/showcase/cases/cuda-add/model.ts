@@ -1,8 +1,8 @@
 import type {
   SubsystemComponent,
-  SubsystemComponentEdge,
+  SubsystemRelation,
+  SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
-import type { SubsystemThroughline } from '@principal-ai/subsystems-react/dist/subsystem/model.js';
 
 const PURL = 'pkg:github/you/cuda-add';
 
@@ -45,27 +45,21 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const edges: SubsystemComponentEdge[] = [
-  { id: 'e0', from: 'main', to: 'GPU', mechanism: 'writes' },
-  { id: 'e1', from: 'main', to: 'add-kernel', mechanism: 'calls' },
-  { id: 'e2', from: 'add-kernel', to: 'GPU', mechanism: 'reads' },
-  { id: 'e3', from: 'add-kernel', to: 'GPU', mechanism: 'writes' },
-  { id: 'e4', from: 'main', to: 'GPU', mechanism: 'reads' },
-];
+export const relations: SubsystemRelation[] = [];
 
-export const throughlines: SubsystemThroughline[] = [
+export const walkthroughs: SubsystemWalkthrough[] = [
   {
     id: 'tl-launch',
     title: 'Host → kernel → host',
     steps: [
-      { edgeId: 'e0', file: 'src/main.cu', line: 26, symbol: 'cudaMemcpy(HtoD)', annotation: 'Upload inputs to device memory.' },
-      { edgeId: 'e1', file: 'src/main.cu', line: 29, symbol: 'add_kernel<<<>>>', annotation: 'Launch the device grid.' },
-      { edgeId: 'e2', file: 'src/add_kernel.cu', line: 5, symbol: 'out[i] = a[i] + b[i]', annotation: 'Each thread reads device memory and writes the sum.' },
-      { edgeId: 'e4', file: 'src/main.cu', line: 32, symbol: 'cudaMemcpy(DtoH)', annotation: 'Copy results back to the host.' },
+      { from: 'main', to: 'GPU', mechanism: 'writes', file: 'src/main.cu', line: 26, symbol: 'cudaMemcpy(HtoD)', annotation: 'Upload inputs to device memory.' },
+      { from: 'main', to: 'add-kernel', mechanism: 'calls', file: 'src/main.cu', line: 29, symbol: 'add_kernel<<<>>>', annotation: 'Launch the device grid.' },
+      { from: 'add-kernel', to: 'GPU', mechanism: 'reads', file: 'src/add_kernel.cu', line: 5, symbol: 'out[i] = a[i] + b[i]', annotation: 'Each thread reads device memory and writes the sum.' },
+      { from: 'main', to: 'GPU', mechanism: 'reads', file: 'src/main.cu', line: 32, symbol: 'cudaMemcpy(DtoH)', annotation: 'Copy results back to the host.' },
     ],
   },
 ];
 
 export const title = 'CUDA vector add';
 export const description =
-  'GPU compute path: **host** copies buffers to the **device**, launches `add_kernel`, then copies results back. Open **Flows** for the HtoD → launch → DtoH throughline.';
+  'GPU compute path: **host** copies buffers to the **device**, launches `add_kernel`, then copies results back. Open **Walkthroughs** for the HtoD → launch → DtoH walkthrough.';

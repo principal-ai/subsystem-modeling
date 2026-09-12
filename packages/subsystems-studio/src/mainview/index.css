@@ -27,6 +27,51 @@ body {
 	animation: principal-studio-spin 1s linear infinite;
 }
 
+@keyframes principal-studio-audit-border {
+	0% {
+		background-position: 0% 50%;
+	}
+	100% {
+		background-position: 200% 50%;
+	}
+}
+
+/* Animated gradient edge for a repo card with an active graphify highlight. */
+.principal-studio-audit-active {
+	position: relative;
+	border-color: transparent !important;
+}
+
+.principal-studio-audit-active::before {
+	content: "";
+	position: absolute;
+	inset: -2px;
+	border-radius: 8px;
+	padding: 2px;
+	background: linear-gradient(
+		90deg,
+		#2da44e,
+		#58a6ff,
+		#d4a017,
+		#58a6ff,
+		#2da44e
+	);
+	background-size: 200% 100%;
+	animation: principal-studio-audit-border 1.4s linear infinite;
+	pointer-events: none;
+	z-index: 0;
+	-webkit-mask:
+		linear-gradient(#fff 0 0) content-box,
+		linear-gradient(#fff 0 0);
+	-webkit-mask-composite: xor;
+	mask-composite: exclude;
+}
+
+.principal-studio-audit-active > * {
+	position: relative;
+	z-index: 1;
+}
+
 @keyframes trail-blip {
 	50% { opacity: 0.2; }
 }

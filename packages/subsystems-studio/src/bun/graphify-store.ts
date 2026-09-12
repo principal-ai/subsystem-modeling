@@ -16,17 +16,18 @@
  * Dirty hash fingerprints `git status` + `git diff HEAD` + untracked file
  * contents so local edits can trigger a fresh extract when requested.
  *
- * Subsystem Verify readiness (v1): **any** cached slot for the purl is usable
- * — exact HEAD/dirty match is not required. The Graphify repos tab still
- * reports exact current-tree match separately.
+ * Subsystem audit ensures the current HEAD(+dirty) slot before verifying
+ * (see {@link ensureCurrentGraphifyCachesForModel}). Readiness and audit
+ * fingerprints also require that exact slot.
+ * The Graphify repos tab reports exact current-tree match separately.
  */
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { parsePurl } from "@principal-ai/alexandria-core-library";
 import { loadAlexandriaRepos, resolveRepoRootFromAlexandria } from "./alexandria";
 import {
@@ -296,17 +297,6 @@ async function readIndex(storeRoot: string): Promise<IndexFile> {
 	}
 }
 
-function readIndexSync(storeRoot: string): IndexFile {
-	try {
-		const raw = readFileSync(join(storeRoot, "_index.json"), "utf8");
-		const data = JSON.parse(raw) as IndexFile;
-		if (!data || !Array.isArray(data.entries)) return { version: 1, entries: [] };
-		return { version: data.version ?? 1, entries: data.entries };
-	} catch {
-		return { version: 1, entries: [] };
-	}
-}
-
 async function writeIndex(storeRoot: string, index: IndexFile): Promise<void> {
 	await fs.mkdir(storeRoot, { recursive: true });
 	const tmp = join(storeRoot, `._index.${process.pid}.tmp`);
@@ -389,79 +379,49 @@ export async function listGraphifyGraphs(
 	return index.entries;
 }
 
-function readMetaAtGraphPath(graphJsonPath: string): GraphifyGraphMeta | null {
-	if (!existsSync(graphJsonPath)) return null;
-	const metaPath = join(dirname(graphJsonPath), "meta.json");
-	if (!existsSync(metaPath)) return null;
-	try {
-		return JSON.parse(readFileSync(metaPath, "utf8")) as GraphifyGraphMeta;
-	} catch {
-		return null;
-	}
-}
-
 /**
- * Newest cached graph.json for a purl — any HEAD/dirty slot.
- * Subsystem Verify v1 treats any slot as usable.
+ * Live checkout identity + exact HEAD(+dirty) cache slot for a purl.
+ * Returns null when there is no resolvable local git root / HEAD.
  */
-export function findAnyCachedGraphifyGraph(
+export type CurrentGraphifySlot = {
+	purlKey: string;
+	repoRoot: string;
+	headSha: string;
+	dirtyHash: string | null;
+	slotKey: string;
+	/** Exact-slot artifact when present; null means current checkout has no cache yet. */
+	cached: { path: string; meta: GraphifyGraphMeta } | null;
+};
+
+export function resolveCurrentGraphifySlot(
 	purl: string,
-	storeRoot?: string,
-): { path: string; meta: GraphifyGraphMeta } | null {
+	opts?: { repoRoot?: string; storeRoot?: string },
+): CurrentGraphifySlot | null {
 	const key = purlRepoKey(purl);
 	if (!key) return null;
-	const root = graphifyStoreRoot(storeRoot);
-	const want = key.toLowerCase();
-	const index = readIndexSync(root);
-
-	type Cand = { path: string; meta: GraphifyGraphMeta; builtAt: string };
-	const cands: Cand[] = [];
-
-	for (const entry of index.entries) {
-		const entryKey = (entry.purlKey || entry.purl || "").toLowerCase();
-		if (entryKey !== want) continue;
-		const meta = readMetaAtGraphPath(entry.graphJsonPath);
-		if (!meta) continue;
-		cands.push({
-			path: entry.graphJsonPath,
-			meta,
-			builtAt: meta.builtAt || entry.builtAt || "",
-		});
-	}
-
-	// Disk fallback when index is empty/stale.
-	if (cands.length === 0) {
-		const purlDir = join(root, sanitizePurlDirName(key));
-		if (existsSync(purlDir)) {
-			try {
-				for (const name of readdirSync(purlDir)) {
-					const graphPath = join(purlDir, name, "graph.json");
-					const meta = readMetaAtGraphPath(graphPath);
-					if (!meta) continue;
-					cands.push({
-						path: graphPath,
-						meta,
-						builtAt: meta.builtAt || "",
-					});
-				}
-			} catch {
-				/* ignore */
-			}
+	const root = graphifyStoreRoot(opts?.storeRoot);
+	const repoRoot = opts?.repoRoot?.trim() || resolveRepoRootForPurl(key);
+	if (!repoRoot || !existsSync(repoRoot)) return null;
+	const headSha = gitHeadSha(repoRoot);
+	if (!headSha) return null;
+	const dirtyHash = dirtyFingerprint(repoRoot);
+	const slotKey = cacheSlotKey(headSha, dirtyHash);
+	const path = cachedGraphJsonPath(key, headSha, dirtyHash, root);
+	const metaPath = cachedMetaPath(key, headSha, dirtyHash, root);
+	let cached: CurrentGraphifySlot["cached"] = null;
+	if (existsSync(path) && existsSync(metaPath)) {
+		try {
+			const meta = JSON.parse(readFileSync(metaPath, "utf8")) as GraphifyGraphMeta;
+			cached = { path, meta };
+		} catch {
+			/* treat as missing */
 		}
 	}
-
-	if (cands.length === 0) return null;
-	cands.sort((a, b) => b.builtAt.localeCompare(a.builtAt));
-	const best = cands[0]!;
-	return { path: best.path, meta: best.meta };
+	return { purlKey: key, repoRoot, headSha, dirtyHash, slotKey, cached };
 }
 
 /**
- * Resolve a cached graph for a purl.
- *
- * Prefers the exact HEAD(+dirty) slot when it exists. When `anySlot` is true
- * (default), falls back to {@link findAnyCachedGraphifyGraph} so subsystem
- * Verify can run against any prior extract.
+ * Resolve the exact HEAD(+dirty) cached graph for a purl, or null.
  */
 export async function getCachedGraphifyGraph(
 	purl: string,
@@ -470,47 +430,39 @@ export async function getCachedGraphifyGraph(
 		dirtyHash?: string | null;
 		repoRoot?: string;
 		storeRoot?: string;
-		/** When false, only the exact HEAD(+dirty) slot is returned. Default true. */
-		anySlot?: boolean;
 	},
 ): Promise<{ path: string; meta: GraphifyGraphMeta } | null> {
 	const key = purlRepoKey(purl);
 	if (!key) return null;
 	const root = graphifyStoreRoot(opts?.storeRoot);
-	const allowAny = opts?.anySlot !== false;
 	const repoRoot = opts?.repoRoot ?? resolveRepoRootForPurl(purl);
 
 	let headSha = opts?.headSha;
 	if (!headSha && repoRoot) {
 		headSha = gitHeadSha(repoRoot) ?? undefined;
 	}
+	if (!headSha) return null;
 
-	if (headSha) {
-		let dirtyHash: string | null;
-		if (opts && "dirtyHash" in opts) {
-			dirtyHash = opts.dirtyHash ?? null;
-		} else if (repoRoot) {
-			dirtyHash = dirtyFingerprint(repoRoot);
-		} else {
-			dirtyHash = null;
-		}
-
-		const path = cachedGraphJsonPath(key, headSha, dirtyHash, root);
-		const metaPath = cachedMetaPath(key, headSha, dirtyHash, root);
-		if (existsSync(path) && existsSync(metaPath)) {
-			try {
-				const meta = JSON.parse(
-					await fs.readFile(metaPath, "utf8"),
-				) as GraphifyGraphMeta;
-				return { path, meta };
-			} catch {
-				/* fall through */
-			}
-		}
+	let dirtyHash: string | null;
+	if (opts && "dirtyHash" in opts) {
+		dirtyHash = opts.dirtyHash ?? null;
+	} else if (repoRoot) {
+		dirtyHash = dirtyFingerprint(repoRoot);
+	} else {
+		dirtyHash = null;
 	}
 
-	if (!allowAny) return null;
-	return findAnyCachedGraphifyGraph(key, opts?.storeRoot);
+	const path = cachedGraphJsonPath(key, headSha, dirtyHash, root);
+	const metaPath = cachedMetaPath(key, headSha, dirtyHash, root);
+	if (!existsSync(path) || !existsSync(metaPath)) return null;
+	try {
+		const meta = JSON.parse(
+			await fs.readFile(metaPath, "utf8"),
+		) as GraphifyGraphMeta;
+		return { path, meta };
+	} catch {
+		return null;
+	}
 }
 
 /**
@@ -875,10 +827,77 @@ export async function listGraphifyRepos(
 }
 
 /**
- * Cache readiness for a subsystem's distinct component purls — whether
- * graphify verification *could* run (any cached graph.json per purl), not
- * whether components/edges have been verified and not whether the slot
- * matches the current dirty tree.
+ * Ensure each distinct component purl has a graphify cache for the **current**
+ * HEAD (+ dirty fingerprint). Soft-fails per purl so audit can still run
+ * source checks / fall back to an older slot when extract is unavailable.
+ */
+export async function ensureCurrentGraphifyCachesForModel(
+	graph: {
+		components: Array<{
+			purl?: string;
+			proposed?: boolean;
+			construct?: string;
+		}>;
+		repoRoot?: string;
+		repoRoots?: Record<string, string>;
+	},
+	opts?: { storeRoot?: string; bin?: string },
+): Promise<{
+	ensured: string[];
+	failed: Array<{ purl: string; error: string }>;
+}> {
+	const byPurl = new Map<string, { purl: string; repoRoot?: string }>();
+	for (const c of graph.components) {
+		if (
+			c.proposed ||
+			c.construct === "external" ||
+			c.construct === "custom_entity"
+		) {
+			continue;
+		}
+		const key = purlRepoKey(c.purl);
+		if (!key || key === "external" || byPurl.has(key)) continue;
+		const fromGraph = resolveRepoRootForComponent(graph, key);
+		const repoRoot =
+			(fromGraph && existsSync(fromGraph) ? fromGraph : null) ||
+			resolveRepoRootForPurl(key) ||
+			undefined;
+		byPurl.set(key, { purl: key, repoRoot });
+	}
+
+	const ensured: string[] = [];
+	const failed: Array<{ purl: string; error: string }> = [];
+
+	for (const t of byPurl.values()) {
+		if (!t.repoRoot) {
+			failed.push({
+				purl: t.purl,
+				error: `no local repoRoot for ${t.purl}`,
+			});
+			continue;
+		}
+		const result = await ensureGraphifyGraph({
+			purl: t.purl,
+			repoRoot: t.repoRoot,
+			storeRoot: opts?.storeRoot,
+			bin: opts?.bin,
+		});
+		if (result.ok) ensured.push(t.purl);
+		else {
+			failed.push({
+				purl: t.purl,
+				error: result.error,
+			});
+		}
+	}
+
+	return { ensured, failed };
+}
+
+/**
+ * Cache readiness for a subsystem's distinct component purls — whether the
+ * **current** HEAD(+dirty) graphify slot exists for each purl (same bar as
+ * Alexandria "Up to date"). Not whether components have been verified.
  */
 export function assessSubsystemGraphifyReadiness(
 	graph: {
@@ -910,25 +929,27 @@ export function assessSubsystemGraphifyReadiness(
 			continue;
 		}
 
-		const any = findAnyCachedGraphifyGraph(key, root);
-		if (any) {
+		const current = resolveCurrentGraphifySlot(key, {
+			repoRoot: repoRoot ?? undefined,
+			storeRoot: root,
+		});
+		if (!current) {
+			byPurl.set(key, { purl: key, status: "unavailable" });
+			continue;
+		}
+		if (current.cached) {
 			byPurl.set(key, {
 				purl: key,
 				status: "ready",
-				repoRoot: repoRoot ?? undefined,
+				repoRoot: current.repoRoot,
 			});
-			continue;
-		}
-
-		if (!repoRoot) {
-			byPurl.set(key, { purl: key, status: "unavailable" });
 			continue;
 		}
 
 		byPurl.set(key, {
 			purl: key,
 			status: "missing",
-			repoRoot,
+			repoRoot: current.repoRoot,
 		});
 	}
 

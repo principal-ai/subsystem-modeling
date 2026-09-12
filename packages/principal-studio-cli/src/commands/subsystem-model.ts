@@ -187,8 +187,8 @@ async function createAction(options: {
       title: body['title'] as string,
       description: typeof body['description'] === 'string' ? body['description'] : undefined,
       components: body['components'] as unknown[],
-      edges: body['edges'] as unknown[],
-      throughlines: Array.isArray(body['throughlines']) ? body['throughlines'] : undefined,
+      relations: body['relations'] as unknown[],
+      walkthroughs: Array.isArray(body['walkthroughs']) ? body['walkthroughs'] : undefined,
       source: typeof body['source'] === 'string' ? body['source'] : undefined,
       repo: body['repo'] as { owner: string; name: string } | undefined,
       repoRoot: typeof body['repoRoot'] === 'string' ? body['repoRoot'] : undefined,
@@ -277,9 +277,114 @@ async function getAction(id: string | undefined): Promise<void> {
   process.stdout.write(JSON.stringify({ ok: true, graph }, null, 2) + '\n');
 }
 
+async function studioFetch(
+  path: string,
+  init?: RequestInit,
+): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
+  if (!(await studioHttpUp())) {
+    process.stderr.write(
+      'Principal Studio HTTP is not running (need audit / propose apply via Studio on :3045).\n',
+    );
+    process.exit(2);
+  }
+  try {
+    const res = await fetch(`${studioHttpBase()}${path}`, {
+      ...init,
+      signal: AbortSignal.timeout(120_000),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+    });
+    const json = (await res.json()) as Record<string, unknown>;
+    return { ok: res.ok && json.ok !== false, status: res.status, json };
+  } catch (err) {
+    process.stderr.write(`Studio request failed: ${(err as Error).message}\n`);
+    process.exit(2);
+  }
+}
+
+async function auditAction(id: string | undefined): Promise<void> {
+  if (!id) {
+    process.stderr.write('Pass a model id.\n');
+    process.exit(2);
+  }
+  const { ok, json } = await studioFetch(`/api/subsystem-model/${encodeURIComponent(id)}/audit`);
+  process.stdout.write(JSON.stringify(json, null, 2) + '\n');
+  if (!ok) process.exit(2);
+}
+
+async function proposalsListAction(
+  id: string | undefined,
+  opts: { includeResolved?: boolean },
+): Promise<void> {
+  if (!id) {
+    process.stderr.write('Pass a model id.\n');
+    process.exit(2);
+  }
+  const q = opts.includeResolved ? '?includeResolved=1' : '';
+  const { ok, json } = await studioFetch(
+    `/api/subsystem-model/${encodeURIComponent(id)}/proposals${q}`,
+  );
+  process.stdout.write(JSON.stringify(json, null, 2) + '\n');
+  if (!ok) process.exit(2);
+}
+
+async function proposeAction(
+  id: string | undefined,
+  opts: { file?: string; author?: string },
+): Promise<void> {
+  if (!id) {
+    process.stderr.write('Pass a model id.\n');
+    process.exit(2);
+  }
+  const payload = (await readPayload(opts.file)) as Record<string, unknown>;
+  if (opts.author && typeof payload['author'] !== 'string') {
+    payload['author'] = opts.author;
+  }
+  const { ok, json } = await studioFetch(
+    `/api/subsystem-model/${encodeURIComponent(id)}/proposals`,
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+  process.stdout.write(JSON.stringify(json, null, 2) + '\n');
+  if (!ok) process.exit(2);
+}
+
+async function acceptAction(
+  id: string | undefined,
+  proposalId: string | undefined,
+): Promise<void> {
+  if (!id || !proposalId) {
+    process.stderr.write('Pass a model id and proposal id.\n');
+    process.exit(2);
+  }
+  const { ok, json } = await studioFetch(
+    `/api/subsystem-model/${encodeURIComponent(id)}/proposals/${encodeURIComponent(proposalId)}/accept`,
+    { method: 'POST', body: '{}' },
+  );
+  process.stdout.write(JSON.stringify(json, null, 2) + '\n');
+  if (!ok) process.exit(2);
+}
+
+async function rejectAction(
+  id: string | undefined,
+  proposalId: string | undefined,
+): Promise<void> {
+  if (!id || !proposalId) {
+    process.stderr.write('Pass a model id and proposal id.\n');
+    process.exit(2);
+  }
+  const { ok, json } = await studioFetch(
+    `/api/subsystem-model/${encodeURIComponent(id)}/proposals/${encodeURIComponent(proposalId)}/reject`,
+    { method: 'POST', body: '{}' },
+  );
+  process.stdout.write(JSON.stringify(json, null, 2) + '\n');
+  if (!ok) process.exit(2);
+}
+
 export function createSubsystemModelCommand(): Command {
   const cmd = new Command('subsystem-model').description(
-    'Create, open, and list subsystem models (works without Studio already running)',
+    'Create, open, audit, and propose corrections for subsystem models',
   );
 
   cmd
@@ -315,6 +420,52 @@ export function createSubsystemModelCommand(): Command {
     .description('Print a stored subsystem model as JSON')
     .argument('[id]', 'Model id (sg-…)')
     .action(getAction);
+
+  cmd
+    .command('audit')
+    .description(
+      'Run the deterministic dry-run audit (requires Principal Studio HTTP)',
+    )
+    .argument('<id>', 'Model id (sg-…)')
+    .action(auditAction);
+
+  cmd
+    .command('proposals')
+    .description('List correction proposals for a model (requires Studio HTTP)')
+    .argument('<id>', 'Model id (sg-…)')
+    .option('--include-resolved', 'Include accepted/rejected proposals')
+    .action((id: string, opts: { includeResolved?: boolean }) =>
+      proposalsListAction(id, opts),
+    );
+
+  cmd
+    .command('propose')
+    .description(
+      'Submit a correction proposal with rationale (does not apply unless auto-accept is on)',
+    )
+    .argument('<id>', 'Model id (sg-…)')
+    .option(
+      '-f, --file <path>',
+      'Proposal JSON: { rationale, changes[], finding?, author? } (default: stdin)',
+    )
+    .option('--author <name>', 'Author tag (e.g. agent name)')
+    .action((id: string, opts: { file?: string; author?: string }) =>
+      proposeAction(id, opts),
+    );
+
+  cmd
+    .command('accept')
+    .description('Accept a pending proposal and apply it to the model')
+    .argument('<id>', 'Model id (sg-…)')
+    .argument('<proposalId>', 'Proposal id (sp-…)')
+    .action(acceptAction);
+
+  cmd
+    .command('reject')
+    .description('Reject a pending proposal without changing the model')
+    .argument('<id>', 'Model id (sg-…)')
+    .argument('<proposalId>', 'Proposal id (sp-…)')
+    .action(rejectAction);
 
   return cmd;
 }

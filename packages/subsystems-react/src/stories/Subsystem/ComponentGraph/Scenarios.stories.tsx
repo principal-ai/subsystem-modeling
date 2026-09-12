@@ -9,7 +9,7 @@ import type {
   SubsystemModelDocument,
 } from '../../../subsystem/model';
 import type { GraphifyComponentDetail } from '../../../graphify';
-import { components, edges } from './fixtures';
+import { components, graphSpecFromEdges, relations } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Scenarios',
@@ -92,7 +92,7 @@ const mermaidComponents: SubsystemComponent[] = [
   },
 ];
 
-const mermaidEdges = edges([
+const mermaidEdges = graphSpecFromEdges([
   ['input', 'slide', 'feeds'],
   ['slide', 'chunk', 'produces'],
   ['chunk', 'lazy', 'feeds'],
@@ -106,7 +106,7 @@ function MermaidDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={mermaidComponents}
-        edges={mermaidEdges}
+        relations={mermaidEdges.relations} walkthroughs={mermaidEdges.walkthroughs}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -137,7 +137,7 @@ const multiRepoComponents = components([
   ['rewire', 'extract.py', 'module', 'graphify/extract.py', graphifyPurl, 'corpus pass folding unique-label stubs onto definitions', '_rewire_unique_stub_nodes'],
 ]);
 
-const multiRepoEdges = edges([
+const multiRepoEdges = graphSpecFromEdges([
   ['detail', 'reftypes', 'imports'],
   ['resolver', 'reftypes', 'imports'],
   ['resolver', 'engine', 'references'],
@@ -151,7 +151,7 @@ function MultiRepoDemo() {
         title="Type-ref resolution across repos"
         description="Two repos → two file trees. Each tree is scoped to its repo's files and headed by the owner avatar + repo name. Cross-repo edges land on external stubs."
         components={multiRepoComponents}
-        edges={multiRepoEdges}
+        relations={multiRepoEdges.relations} walkthroughs={multiRepoEdges.walkthroughs}
       />
     </div>
   );
@@ -260,7 +260,7 @@ const accessSurfaceComponents: SubsystemComponent[] = [
     process: 'principal-studio/host',
     purpose: 'retained state: <id>.json files + _index.json + in-memory bookkeeping.\nState-only: the access mechanism lives in the accessor nodes.',
     layer: 3,
-    detail: {
+    declaration: {
       kind: 'store',
       properties: [
         { name: 'ROOT', type: 'string' },
@@ -354,7 +354,7 @@ const accessSurfaceComponents: SubsystemComponent[] = [
   },
 ];
 
-const accessSurfaceEdges = edges([
+const accessSurfaceEdges = graphSpecFromEdges([
   ['agents', 'http-entry', 'calls'],
   ['http-entry', 'create', 'calls'],
   ['http-entry', 'update', 'calls'],
@@ -384,7 +384,7 @@ function AccessSurfacesDemo() {
         title="Access surfaces, roles, and process boundaries"
         description="Two process regions (host, renderer) + boundary entries; agents and the external service float outside every boundary. Hover for the role badge; click the store to drill into its state-only detail."
         components={accessSurfaceComponents}
-        edges={accessSurfaceEdges}
+        relations={accessSurfaceEdges.relations} walkthroughs={accessSurfaceEdges.walkthroughs}
         onSelect={(id) => setSelected(id)}
         onEdgeSelect={(e) => setSelectedEdge(e)}
       />
@@ -453,7 +453,7 @@ const storeFlavorComponents: SubsystemComponent[] = [
     process: 'principal-studio/host',
     purpose: 'module-level state: ROOT, INDEX_PATH, listener + watch bookkeeping',
     layer: 2,
-    detail: {
+    declaration: {
       kind: 'store',
       properties: [
         { name: 'ROOT', type: 'string' },
@@ -474,7 +474,7 @@ const storeFlavorComponents: SubsystemComponent[] = [
     symbol: 'SessionCache',
     purpose: 'manages access to cached sessions — the verifiable access mechanism',
     layer: 3,
-    detail: {
+    declaration: {
       kind: 'class',
       methods: [
         { nodeId: 'cm1', name: 'put', parameters: [{ type: 'SessionRecord' }] },
@@ -496,7 +496,7 @@ const storeFlavorComponents: SubsystemComponent[] = [
     purl: storeFlavorPurl,
     purpose: 'retained state visualized alongside its manager class',
     layer: 4,
-    detail: {
+    declaration: {
       kind: 'store',
       properties: [
         { name: 'sessions', type: 'Map<string, SessionRecord>' },
@@ -524,7 +524,7 @@ const storeFlavorComponents: SubsystemComponent[] = [
     purl: 'pkg:generic/local--Users-me-.principal-app-state.db',
     purpose: 'sqlite on disk — retained state outside any repo or process',
     layer: 6,
-    detail: {
+    declaration: {
       kind: 'store',
       properties: [
         { name: 'settings', type: 'AppSettingsRow[]' },
@@ -534,7 +534,7 @@ const storeFlavorComponents: SubsystemComponent[] = [
   },
 ];
 
-const storeFlavorEdges = edges([
+const storeFlavorEdges = graphSpecFromEdges([
   ['f1-create', 'f1-store', 'writes'],
   ['f1-get', 'f1-store', 'reads'],
   ['f2-cache', 'f2-store', 'writes'],
@@ -549,7 +549,7 @@ function StoreFlavorsDemo() {
         title="Store flavors"
         description="construct:= the node's verifiable anchor. Class-managed stores are TWO nodes: the manager class (declaration, methods) + the state (store block). Click any node to see its anchor-honest drill-down."
         components={storeFlavorComponents}
-        edges={storeFlavorEdges}
+        relations={storeFlavorEdges.relations} walkthroughs={storeFlavorEdges.walkthroughs}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -627,7 +627,7 @@ const sharedStoreComponents: SubsystemComponent[] = [
     purl: 'pkg:generic/local--Users-me-.principal-subsystem-models',
     purpose: 'file-per-graph + _index.json — shared state owned by no single process',
     layer: 2,
-    detail: {
+    declaration: {
       kind: 'store',
       properties: [
         { name: 'graphs', type: 'Map<graphId, StoredSubsystemModel>' },
@@ -637,7 +637,7 @@ const sharedStoreComponents: SubsystemComponent[] = [
   },
 ];
 
-const sharedStoreEdges = edges([
+const sharedStoreEdges = graphSpecFromEdges([
   ['ss-load', 'ss-store', 'reads'],
   ['ss-save', 'ss-store', 'writes'],
   ['ss-watch', 'ss-store', 'watches'],
@@ -652,7 +652,7 @@ function SharedStoreDemo() {
         title="Shared store across processes"
         description="A store with no process sits outside every boundary; accessors from both processes reach across to it."
         components={sharedStoreComponents}
-        edges={sharedStoreEdges}
+        relations={sharedStoreEdges.relations} walkthroughs={sharedStoreEdges.walkthroughs}
         onEdgeSelect={(e) => setSelectedEdge(e)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -666,6 +666,483 @@ function SharedStoreDemo() {
 
 export const SharedStoreAcrossProcesses: Story = {
   render: () => <SharedStoreDemo />,
+};
+
+// ---------------------------------------------------------------------------
+// SCENARIO: State → Store spectrum — every holder modeled as `construct:
+// 'store'` (state-block anatomy) so the differences show up ONLY in name,
+// purpose, and retained `properties`. Ordered strongest → weakest store-ness:
+//
+//   1. app-state.db           — persistent, on disk, outside any process/repo
+//   2. Graph Store            — module consts backed by files (survives restarts)
+//   3. Session Cache State    — class-managed retained data (two-node pattern)
+//   4. Audit Metrics Buffer   — module in-memory data collection, no interface
+//   5. Studio Config          — module singleton values, stable + named
+//   6. Selected Graph Id      — one scalar module binding
+//   7. Proposals Subscribers  — behavior payload (callbacks), transient
+//
+// REVIEW: all seven claim `store`. Which would you stop calling a store, and
+// where is the cut? Does one construct flatten over the persistence / contract
+// / data-vs-behavior distinctions we actually care about?
+// ---------------------------------------------------------------------------
+const spectrumPurl = 'pkg:github/principal-ai/principal-view-core-library';
+
+const storeSpectrumComponents: SubsystemComponent[] = [
+  // --- 1. persistent store — strongest store-ness
+  {
+    id: 'db',
+    name: 'app-state.db',
+    construct: 'store',
+    file: '',
+    purl: 'pkg:generic/local-sqlite-app-state',
+    purpose:
+      'persistent — on disk, outside any process or repo; survives restarts',
+    layer: 0,
+    declaration: {
+      kind: 'store',
+      storage: 'external',
+      properties: [
+        { name: 'settings', type: 'AppSettingsRow[]' },
+        { name: 'schemaVersion', type: 'number' },
+      ],
+    } satisfies GraphifyComponentDetail,
+  },
+  {
+    id: 'load',
+    name: 'loadAppState',
+    construct: 'function',
+    file: 'packages/subsystems-studio/src/bun/app-state.ts',
+    purl: spectrumPurl,
+    symbol: 'loadAppState',
+    purpose: 'reads retained state into the process',
+    layer: 1,
+  },
+  // --- 2. file-backed module store
+  {
+    id: 'graph-store',
+    name: 'Graph Store',
+    construct: 'store',
+    file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
+    purl: spectrumPurl,
+    purpose:
+      'module consts backed by files — persists across restarts; bookkeeping itself is Maps/Sets',
+    layer: 2,
+    declaration: {
+      kind: 'store',
+      storage: 'disk',
+      properties: [
+        { name: 'ROOT', type: 'string' },
+        { name: 'INDEX_PATH', type: 'string' },
+        { name: 'recentSelfWrites', type: 'Map<string, number>' },
+        { name: 'pendingWatchIds', type: 'Set<string>' },
+      ],
+    } satisfies GraphifyComponentDetail,
+  },
+  {
+    id: 'create',
+    name: 'createSubsystemModel',
+    construct: 'function',
+    file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
+    purl: spectrumPurl,
+    symbol: 'createSubsystemModel',
+    purpose: 'writes one graph file + index entry',
+    layer: 1,
+  },
+  // --- 3. class-managed retained data — manager class + separate store node
+  {
+    id: 'cache',
+    name: 'SessionCache',
+    construct: 'class',
+    file: 'src/session/SessionCache.ts',
+    purl: 'pkg:github/principal-ai/agent-monitoring',
+    symbol: 'SessionCache',
+    purpose: 'manager — access mechanism; the state it owns is a SEPARATE node',
+    layer: 3,
+    declaration: {
+      kind: 'class',
+      methods: [
+        { nodeId: 'cm1', name: 'put', parameters: [{ type: 'SessionRecord' }] },
+        {
+          nodeId: 'cm2',
+          name: 'get',
+          parameters: [{ type: 'string' }],
+          returnType: 'SessionRecord | null',
+        },
+        { nodeId: 'cm3', name: 'evict', parameters: [{ type: 'string' }] },
+      ],
+      properties: [],
+      extends: [],
+      implements: [],
+      instantiations: [],
+      references: [],
+    } satisfies GraphifyComponentDetail,
+  },
+  {
+    id: 'cache-state',
+    name: 'Session Cache State',
+    construct: 'store',
+    file: 'src/session/SessionCache.ts',
+    purl: 'pkg:github/principal-ai/agent-monitoring',
+    purpose:
+      'class-managed, in-memory retained data — has a contract, dies with the process',
+    layer: 4,
+    declaration: {
+      kind: 'store',
+      storage: 'memory',
+      properties: [
+        { name: 'sessions', type: 'Map<string, SessionRecord>' },
+        { name: 'ttlSeconds', type: 'number' },
+      ],
+    } satisfies GraphifyComponentDetail,
+  },
+  // --- 4. module in-memory data collection — no interface, no persistence
+  {
+    id: 'metrics',
+    name: 'Audit Metrics Buffer',
+    construct: 'store',
+    file: 'packages/subsystems-studio/src/bun/audit-metrics.ts',
+    purl: spectrumPurl,
+    purpose:
+      'module Map — in-memory data, app-lifetime, no access interface, lost on restart',
+    layer: 6,
+    declaration: {
+      kind: 'store',
+      storage: 'memory',
+      properties: [
+        { name: 'byRepo', type: 'Map<string, number[]>' },
+        { name: 'lastFlushAt', type: 'number | null' },
+      ],
+    } satisfies GraphifyComponentDetail,
+  },
+  {
+    id: 'record',
+    name: 'recordAuditResult',
+    construct: 'function',
+    file: 'packages/subsystems-studio/src/bun/audit-metrics.ts',
+    purl: spectrumPurl,
+    symbol: 'recordAuditResult',
+    purpose: 'appends a timed audit result to the buffer',
+    layer: 5,
+  },
+  // --- 5. module singleton values
+  {
+    id: 'config',
+    name: 'Studio Config',
+    construct: 'store',
+    file: 'packages/subsystems-studio/src/bun/config.ts',
+    purl: spectrumPurl,
+    purpose: 'module singleton — named settings, stable for the app, not persisted',
+    layer: 8,
+    declaration: {
+      kind: 'store',
+      storage: 'memory',
+      properties: [
+        { name: 'openaiBaseUrl', type: 'string' },
+        { name: 'showTrailIdsInList', type: 'boolean' },
+      ],
+    } satisfies GraphifyComponentDetail,
+  },
+  {
+    id: 'conf',
+    name: 'readStudioConfig',
+    construct: 'function',
+    file: 'packages/subsystems-studio/src/bun/config.ts',
+    purl: spectrumPurl,
+    symbol: 'readStudioConfig',
+    purpose: 'reads the live singleton',
+    layer: 7,
+  },
+  // --- 6. lone scalar module binding
+  {
+    id: 'selected',
+    name: 'Selected Graph Id',
+    construct: 'store',
+    file: 'packages/subsystems-studio/src/mainview/rpc.ts',
+    purl: spectrumPurl,
+    purpose: 'one scalar binding — a variable that holds state; nothing to enumerate',
+    layer: 10,
+    declaration: {
+      kind: 'store',
+      storage: 'memory',
+      properties: [{ name: 'selectedId', type: 'string | null' }],
+    } satisfies GraphifyComponentDetail,
+  },
+  {
+    id: 'sel',
+    name: 'chooseGraph',
+    construct: 'function',
+    file: 'packages/subsystems-studio/src/mainview/rpc.ts',
+    purl: spectrumPurl,
+    symbol: 'chooseGraph',
+    purpose: 'writes the active graph id',
+    layer: 9,
+  },
+  // --- 7. behavior bag — least store-like (the disputed rpc.ts case)
+  {
+    id: 'subs',
+    name: 'Proposals Subscribers',
+    construct: 'store',
+    file: 'packages/subsystems-studio/src/mainview/rpc.ts',
+    purl: spectrumPurl,
+    symbol: 'subsystemModelProposalsChangeSubscribers',
+    purpose:
+      'module Set of callbacks — TRANSIENT behavior, emptied by unmount; its only “members” are its own add/delete',
+    layer: 12,
+    declaration: {
+      kind: 'store',
+      storage: 'memory',
+      properties: [
+        { name: 'add', type: '(fn) => void' },
+        { name: 'delete', type: '(fn) => void' },
+      ],
+    } satisfies GraphifyComponentDetail,
+  },
+  {
+    id: 'dispatch',
+    name: 'subsystemModelProposalsChanged',
+    construct: 'function',
+    file: 'packages/subsystems-studio/src/mainview/rpc.ts',
+    purl: spectrumPurl,
+    symbol: 'subsystemModelProposalsChanged',
+    purpose: 'fans a host message out to every registered callback',
+    layer: 11,
+  },
+  {
+    id: 'view',
+    name: 'SubsystemModelsView',
+    construct: 'function',
+    file: 'packages/subsystems-studio/src/mainview/views/SubsystemModelsView.tsx',
+    purl: spectrumPurl,
+    symbol: 'SubsystemModelsView',
+    purpose: 'registers a callback on mount, unregisters on unmount',
+    layer: 13,
+  },
+];
+
+const storeSpectrumEdges = graphSpecFromEdges([
+  ['load', 'db', 'reads'],
+  ['create', 'graph-store', 'writes'],
+  ['cache', 'cache-state', 'writes'],
+  ['record', 'metrics', 'writes'],
+  ['conf', 'config', 'reads'],
+  ['sel', 'selected', 'writes'],
+  ['dispatch', 'subs', 'feeds'],
+  ['subs', 'view', 'feeds'],
+]);
+
+function StoreStateSpectrumDemo() {
+  const [selected, setSelected] = useState<string | null>(null);
+  return (
+    <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <SubsystemComponentGraph
+        title="State → Store spectrum, all modeled as store"
+        description="Every holder here claims construct: 'store' (state-block anatomy). They differ only in what they hold and how long it lives. Which ones do you call a store? Where is the cut?"
+        components={storeSpectrumComponents}
+        relations={storeSpectrumEdges.relations} walkthroughs={storeSpectrumEdges.walkthroughs}
+        onSelect={(id) => setSelected(id)}
+      />
+      <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
+        top → bottom: persistent db · file-backed module store · class-managed cache · in-memory
+        data buffer · singleton config · scalar binding · transient behavior bag
+        {selected ? ` · selected: ${selected}` : ''}
+      </div>
+    </div>
+  );
+}
+
+export const StateStoreSpectrum: Story = {
+  render: () => <StoreStateSpectrumDemo />,
+};
+
+// ---------------------------------------------------------------------------
+// SCENARIO: Type-family spectrum — what a type_alias/interface/enum can hold.
+// Structured buckets where available (callable signature, union, alias, enum
+// members); `rhs` is the verbatim escape hatch when the shape doesn't fit.
+// ---------------------------------------------------------------------------
+const typePurl = 'pkg:github/principal-ai/subsystem-modeling';
+
+const typeSpectrumComponents: SubsystemComponent[] = [
+  // --- 1. generic callable — the StudioMessageSubscriber refactor case
+  {
+    id: 'subscriber',
+    name: 'StudioMessageSubscriber',
+    construct: 'type_alias',
+    file: 'packages/subsystems-studio/src/mainview/rpc.ts',
+    purl: typePurl,
+    symbol: 'StudioMessageSubscriber',
+    purpose:
+      'generic callback contract — `(payload) => void` keyed by a StudioMessages entry',
+    layer: 2,
+    declaration: {
+      kind: 'type',
+      generics: [{ name: 'K', constraint: 'keyof StudioMessages' }],
+      signature: {
+        parameters: [{ name: 'payload', type: 'StudioMessages[K]' }],
+        returnType: 'void',
+      },
+    } satisfies GraphifyComponentDetail,
+  },
+  {
+    id: 'listener',
+    name: 'registerProposalListener',
+    construct: 'function',
+    file: 'packages/subsystems-studio/src/mainview/rpc.ts',
+    purl: typePurl,
+    symbol: 'registerProposalListener',
+    purpose: 'the consumer the alias types — adds to the fan-out bag',
+    layer: 1,
+  },
+  // --- 2. interface — object shape, the path that worked before
+  {
+    id: 'messages',
+    name: 'StudioMessages',
+    construct: 'interface',
+    file: 'packages/subsystems-studio/src/shared/contract.ts',
+    purl: typePurl,
+    symbol: 'StudioMessages',
+    purpose: 'the message contract — every entry is a listener target',
+    layer: 3,
+    declaration: {
+      kind: 'type',
+      properties: [
+        {
+          name: 'subsystemModelProposalsChanged',
+          type: '{ status: "run" | "done"; proposals: unknown[] }',
+        },
+        { name: 'graphifyChanged', type: '{ repo: string; graph: unknown }' },
+      ],
+    } satisfies GraphifyComponentDetail,
+  },
+  // --- 3. enum — named members
+  {
+    id: 'kind',
+    name: 'MaintainRunKind',
+    construct: 'enum',
+    file: 'packages/subsystems-studio/src/mainview/rpc.ts',
+    purl: typePurl,
+    symbol: 'MaintainRunKind',
+    purpose: 'enum — named states with literal values',
+    layer: 5,
+    declaration: {
+      kind: 'type',
+      enumMembers: [
+        { name: 'Running', value: "'running'" },
+        { name: 'Done', value: "'done'" },
+        { name: 'Error', value: "'error'" },
+      ],
+    } satisfies GraphifyComponentDetail,
+  },
+  // --- 4. union — alternatives
+  {
+    id: 'state',
+    name: 'UIState',
+    construct: 'type_alias',
+    file: 'packages/subsystems-studio/src/mainview/rpc.ts',
+    purl: typePurl,
+    symbol: 'UIState',
+    purpose: 'simple union — one of these literals',
+    layer: 7,
+    declaration: {
+      kind: 'type',
+      unionOf: ["'idle'", "'busy'", "'running'", "'error'"],
+    } satisfies GraphifyComponentDetail,
+  },
+  // --- 5. plain reference alias
+  {
+    id: 'rows',
+    name: 'SessionRows',
+    construct: 'type_alias',
+    file: 'packages/subsystems-studio/src/bun/server-sessions.ts',
+    purl: typePurl,
+    symbol: 'SessionRows',
+    purpose: 'transparent alias — RHS is just another type name',
+    layer: 9,
+    declaration: {
+      kind: 'type',
+      aliasOf: 'ServerSessionRow[]',
+    } satisfies GraphifyComponentDetail,
+  },
+  // --- 6. does-not-fit → raw rhs escape hatch
+  {
+    id: 'deep',
+    name: 'DeepPartial',
+    construct: 'type_alias',
+    file: 'packages/subsystems-studio/src/mainview/types.ts',
+    purl: typePurl,
+    symbol: 'DeepPartial',
+    purpose:
+      'mapped + conditional + recursive — a type computation, not a shape; shown verbatim via rhs',
+    layer: 6,
+    declaration: {
+      kind: 'type',
+      generics: [{ name: 'T' }],
+      rhs: '{ [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] }',
+    } satisfies GraphifyComponentDetail,
+  },
+  {
+    id: 'api',
+    name: 'ApiRoute',
+    construct: 'type_alias',
+    file: 'packages/subsystems-studio/src/bun/http-server.ts',
+    purl: typePurl,
+    symbol: 'ApiRoute',
+    purpose: 'template-literal type — no structured bucket; raw rhs shown as-is',
+    layer: 11,
+    declaration: {
+      kind: 'type',
+      rhs: "'/api/${string}'",
+    } satisfies GraphifyComponentDetail,
+  },
+  // --- 7. the reference target the aliasOf/raw types point at
+  {
+    id: 'record',
+    name: 'ServerSessionRow',
+    construct: 'interface',
+    file: 'packages/subsystems-studio/src/shared/contract.ts',
+    purl: typePurl,
+    symbol: 'ServerSessionRow',
+    purpose: 'row shape the SessionRows alias references',
+    layer: 10,
+    declaration: {
+      kind: 'type',
+      properties: [
+        { name: 'id', type: 'string' },
+        { name: 'model', type: 'string' },
+        { name: 'sessionId', type: 'string | null' },
+      ],
+    } satisfies GraphifyComponentDetail,
+  },
+];
+
+const typeSpectrumEdges = graphSpecFromEdges([
+  ['listener', 'subscriber', 'uses'],
+  ['subscriber', 'messages', 'references'],
+  ['state', 'listener', 'feeds'],
+  ['deep', 'record', 'references'],
+  ['rows', 'record', 'references'],
+]);
+
+function TypeFamilySpectrumDemo() {
+  const [selected, setSelected] = useState<string | null>(null);
+  return (
+    <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <SubsystemComponentGraph
+        title="Type-family — what a type can hold"
+        description="Structured buckets: callable signature (generics + params), interface properties, enum members, union, plain alias reference. `rhs` = verbatim escape hatch for shapes that don't fit (mapped/conditional/template-literal). Click each to see the declaration."
+        components={typeSpectrumComponents}
+        relations={typeSpectrumEdges.relations} walkthroughs={typeSpectrumEdges.walkthroughs}
+        onSelect={(id) => setSelected(id)}
+      />
+      <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
+        callable · interface · enum · union · reference · rhs (DeepPartial) · rhs (template-literal)
+        {selected ? ` · selected: ${selected}` : ''}
+      </div>
+    </div>
+  );
+}
+
+export const TypeFamilySpectrum: Story = {
+  render: () => <TypeFamilySpectrumDemo />,
 };
 
 // ---------------------------------------------------------------------------
@@ -696,7 +1173,7 @@ const queueComponents: SubsystemComponent[] = [
     process: 'principal-studio/host',
     purpose: 'ordered retained state — pending jobs, depth, head pointer',
     layer: 2,
-    detail: {
+    declaration: {
       kind: 'store',
       properties: [
         { name: 'pendingJobs', type: 'AnalysisJob[]' },
@@ -725,14 +1202,14 @@ const queueComponents: SubsystemComponent[] = [
     process: 'principal-studio/host',
     purpose: 'retained results — keyed by repo purl + sha',
     layer: 4,
-    detail: {
+    declaration: {
       kind: 'store',
       properties: [{ name: 'results', type: 'Map<purl, AnalysisResult>' }],
     } satisfies GraphifyComponentDetail,
   },
 ];
 
-const queueEdges = edges([
+const queueEdges = graphSpecFromEdges([
   ['q-producer', 'q-queue', 'writes'],
   ['q-worker', 'q-queue', 'reads'],
   ['q-worker', 'q-results', 'writes'],
@@ -746,7 +1223,7 @@ function QueueAsStoreDemo() {
         title="Queue as store"
         description="Ordered retained state. Stores as pipeline stages: producer writes the queue, the worker reads it and writes results."
         components={queueComponents}
-        edges={queueEdges}
+        relations={queueEdges.relations} walkthroughs={queueEdges.walkthroughs}
         onEdgeSelect={(e) => setSelectedEdge(e)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -812,7 +1289,7 @@ const dataVizDoc: SubsystemModelDocument = {
       process: 'principal-studio/host',
       purpose: 'state-block anatomy — anchored to a state location, not a declaration',
       layer: 3,
-      detail: {
+      declaration: {
         kind: 'store',
         properties: [
           { name: 'ROOT', type: 'string' },
@@ -860,19 +1337,26 @@ const dataVizDoc: SubsystemModelDocument = {
       purl: 'pkg:github/principal-ai/agent-monitoring',
       purpose: 'its retained state — the db/state visualization',
       layer: 6,
-      detail: {
+      declaration: {
         kind: 'store',
         properties: [{ name: 'sessions', type: 'Map<string, SessionRecord>' }],
       },
     },
   ],
-  edges: [
-    { id: 'e0', from: 'agents', to: 'http-entry', mechanism: 'calls' },
-    { id: 'e1', from: 'http-entry', to: 'create', mechanism: 'calls' },
-    { id: 'e2', from: 'create', to: 'store', mechanism: 'writes' },
-    { id: 'e3', from: 'get', to: 'store', mechanism: 'reads' },
-    { id: 'e4', from: 'store', to: 'broadcast', mechanism: 'produces' },
-    { id: 'e5', from: 'cache', to: 'cache-state', mechanism: 'writes' },
+  relations: [],
+  walkthroughs: [
+    {
+      id: 'data-viz-hops',
+      title: 'Runtime hops',
+      steps: [
+        { from: 'agents', to: 'http-entry', mechanism: 'calls', file: 'src/http.ts', line: 1 },
+        { from: 'http-entry', to: 'create', mechanism: 'calls', file: 'src/http.ts', line: 2 },
+        { from: 'create', to: 'store', mechanism: 'writes', file: 'src/create.ts', line: 1 },
+        { from: 'get', to: 'store', mechanism: 'reads', file: 'src/get.ts', line: 1 },
+        { from: 'store', to: 'broadcast', mechanism: 'produces', file: 'src/store.ts', line: 1 },
+        { from: 'cache', to: 'cache-state', mechanism: 'writes', file: 'src/cache.ts', line: 1 },
+      ],
+    },
   ],
 };
 
@@ -885,8 +1369,8 @@ function DataVsVisualizationDemo() {
     setText(next);
     try {
       const parsed = JSON.parse(next) as SubsystemModelDocument;
-      if (!Array.isArray(parsed.components) || !Array.isArray(parsed.edges)) {
-        throw new Error('document needs `components` and `edges` arrays');
+      if (!Array.isArray(parsed.components) || !Array.isArray(parsed.relations)) {
+        throw new Error('document needs `components` and `relations` arrays');
       }
       setDoc(parsed);
       setError(null);
@@ -947,7 +1431,8 @@ function DataVsVisualizationDemo() {
           title="the visualization"
           description="Same document, rendered: construct:→ node anatomy, role → topology glyph, process → boundary region, mechanism → edge color/style."
           components={doc.components}
-          edges={doc.edges}
+          relations={doc.relations}
+          walkthroughs={doc.walkthroughs}
         />
       </div>
     </div>

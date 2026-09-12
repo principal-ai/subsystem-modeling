@@ -43,7 +43,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
       file: 'src/event-processing/sink.ts',
       purl: 'pkg:github/principal-ai/agent-monitoring',
       symbol: 'flush',
-      detail: {
+      declaration: {
         kind: 'function',
         parameters: [],
       } satisfies GraphifyComponentDetail,
@@ -58,7 +58,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
       file: 'src/session/SessionReader.ts',
       purl: 'pkg:github/principal-ai/agent-monitoring',
       symbol: 'SessionReader.normalize',
-      detail: {
+      declaration: {
         kind: 'function',
         parameters: [{ name: 'session', type: 'SessionRecord' }],
         returnType: 'SessionEvent[]',
@@ -74,7 +74,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
       file: 'src/event-processing/normalize.ts',
       purl: 'pkg:github/principal-ai/agent-monitoring',
       symbol: 'normalizeSession',
-      detail: {
+      declaration: {
         kind: 'function',
         parameters: [
           { name: 'session', type: 'SessionRecord' },
@@ -93,7 +93,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
       file: 'src/session/merge.ts',
       purl: 'pkg:github/principal-ai/agent-monitoring',
       symbol: 'mergeSessions',
-      detail: {
+      declaration: {
         kind: 'function',
         parameters: [
           { name: 'sessions', type: 'SessionRecord[]' },
@@ -114,7 +114,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
       file: 'src/empty.ts',
       purl: 'pkg:github/principal-ai/agent-monitoring',
       symbol: 'EmptyClass',
-      detail: {
+      declaration: {
         kind: 'class',
       } satisfies GraphifyComponentDetail,
     },
@@ -128,7 +128,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
       file: 'src/config.ts',
       purl: 'pkg:github/principal-ai/agent-monitoring',
       symbol: 'Config',
-      detail: {
+      declaration: {
         kind: 'class',
         properties: [
           { name: 'host', type: 'string' },
@@ -147,7 +147,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
       file: 'src/event-processing/EventProcessor.ts',
       purl: 'pkg:github/principal-ai/agent-monitoring',
       symbol: 'EventProcessor',
-      detail: {
+      declaration: {
         kind: 'class',
         methods: [
           { name: 'process', parameters: [{ type: 'RawEvent' }, { type: 'ProcessingOptions' }], returnType: 'ProcessedEvent' },
@@ -174,7 +174,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
       file: 'src/session/transcript.ts',
       purl: 'pkg:github/principal-ai/agent-monitoring',
       symbol: 'SessionRecord',
-      detail: {
+      declaration: {
         kind: 'type',
         properties: [
           { name: 'id', type: 'string' },
@@ -192,7 +192,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
       file: 'src/types.ts',
       purl: 'pkg:github/principal-ai/agent-monitoring',
       symbol: 'BrandedId',
-      detail: {
+      declaration: {
         kind: 'type',
       } satisfies GraphifyComponentDetail,
     },
@@ -206,7 +206,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
       file: 'src/index.ts',
       purl: 'pkg:github/principal-ai/agent-monitoring',
       symbol: 'index',
-      detail: {
+      declaration: {
         kind: 'module',
         imports: [
           { name: './session/SessionReader' },
@@ -237,7 +237,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
       file: '',
       purl: 'pkg:npm/@principal-ai/subsystems-studio',
       symbol: '',
-      detail: {
+      declaration: {
         kind: 'external',
         label: 'pkg:npm/@principal-ai/subsystems-studio',
       } satisfies GraphifyComponentDetail,
@@ -251,7 +251,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
       construct: 'function',
       file: 'src/helpers.ts',
       purl: 'pkg:github/principal-ai/agent-monitoring',
-      detail: {
+      declaration: {
         kind: 'function',
         parameters: [{ name: 'input', type: 'string' }],
         returnType: 'void',
@@ -267,7 +267,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
       file: 'src/session/SessionReader.ts',
       purl: 'pkg:github/principal-ai/agent-monitoring',
       symbol: 'SessionReader.normalize',
-      detail: {
+      declaration: {
         kind: 'method',
         hostClass: 'SessionReader',
         parameters: [{ name: 'session', type: 'SessionRecord' }],
@@ -284,7 +284,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
       file: 'src/event-processing/EventProcessor.ts',
       purl: 'pkg:github/principal-ai/agent-monitoring',
       symbol: 'EventProcessor.dispose',
-      detail: {
+      declaration: {
         kind: 'method',
         hostClass: 'EventProcessor',
       } satisfies GraphifyComponentDetail,

@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import {
   PierreFileView,
-  PierreThroughlineCodeView,
-  type ThroughlineViewerContext,
+  PierreWalkthroughCodeView,
+  type WalkthroughViewerContext,
 } from '@principal-ai/subsystems-react';
 
 /**
@@ -41,13 +41,13 @@ export function makeShowcaseReadFile(caseDir: string) {
 
 export interface ShowcaseRenderers {
   renderFileViewer: (file: string) => ReactNode;
-  renderThroughlineViewer: (ctx: ThroughlineViewerContext) => ReactNode;
+  renderWalkthroughViewer: (ctx: WalkthroughViewerContext) => ReactNode;
 }
 
 /**
  * Host renderers for `SubsystemComponentGraph` backed by the fixture files of
  * one showcase case — real syntax-highlighted source opens in the drawer when
- * a component, tree entry, or throughline step is clicked.
+ * a component, tree entry, or walkthrough step is clicked.
  */
 export function makeShowcaseRenderers(caseDir: string): ShowcaseRenderers {
   const readFile = makeShowcaseReadFile(caseDir);
@@ -59,9 +59,9 @@ export function makeShowcaseRenderers(caseDir: string): ShowcaseRenderers {
         readFile={readFile}
       />
     ),
-    renderThroughlineViewer: (ctx) => (
-      <PierreThroughlineCodeView
-        throughline={ctx.throughline}
+    renderWalkthroughViewer: (ctx) => (
+      <PierreWalkthroughCodeView
+        walkthrough={ctx.walkthrough}
         stepIndex={ctx.stepIndex}
         readFile={readFile}
       />

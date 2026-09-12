@@ -13,12 +13,12 @@ function SensorControllerDemo() {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={model.components}
-        edges={model.edges}
-        throughlines={model.throughlines}
+        relations={model.relations}
+        walkthroughs={model.walkthroughs}
         title={model.title}
         description={model.description}
         renderFileViewer={showcase.renderFileViewer}
-        renderThroughlineViewer={showcase.renderThroughlineViewer}
+        renderWalkthroughViewer={showcase.renderWalkthroughViewer}
       />
     </div>
   );

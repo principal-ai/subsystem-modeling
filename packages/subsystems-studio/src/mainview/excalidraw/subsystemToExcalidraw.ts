@@ -16,6 +16,7 @@ import type {
 	SubsystemComponent,
 	SubsystemComponentEdge,
 	SubsystemComponentConstruct,
+	SubsystemComponentRole,
 	SubsystemEdgeMechanism,
 } from "@principal-ai/subsystems-react";
 import type { Edge, Node } from "@xyflow/react";
@@ -124,7 +125,8 @@ export type PrincipalComponentMeta = {
 	purl: string;
 	symbol?: string;
 	purpose?: string;
-	capture?: SubsystemComponent["capture"];
+	role?: SubsystemComponentRole;
+	proposed?: boolean;
 	layer?: number;
 };
 
@@ -157,7 +159,8 @@ export function principalMetaForComponent(c: SubsystemComponent): PrincipalCompo
 		purl: c.purl,
 		symbol: c.symbol,
 		purpose: c.purpose,
-		capture: c.capture,
+		role: c.role,
+		proposed: c.proposed === true ? true : undefined,
 		layer: c.layer,
 	});
 }

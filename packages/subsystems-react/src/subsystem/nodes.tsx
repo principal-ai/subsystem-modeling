@@ -19,9 +19,12 @@ import { useTheme } from '@principal-ade/industry-theme';
 import {
   MECHANISM_COLOR,
   MECHANISM_STYLE,
-  ROLE_COLOR,
-  ROLE_LABEL,
+  PROPOSED_COLOR,
   constructBadgeLabel,
+  rightBadgeLabel,
+  rightBadgeColor,
+  storageBadgeLabel,
+  storageBadgeColor,
   deriveNameFromSymbol,
   BADGE_EDGE_INSET,
   nodeMinWidthForBadges,
@@ -92,11 +95,23 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
   // `symbol` is the source of truth; `name` is derived from it consistently.
   const displayName = deriveNameFromSymbol(c.symbol, c.construct, c.name, c.file, c.stereotype);
   // Top badges are absolutely positioned — widen the node so they nowrap
-  // instead of wrapping, including when construct + role badges share the top.
+  // instead of wrapping, including when construct + role/proposed share the top.
   const badgeMinWidth = nodeMinWidthForBadges(c);
+  const topRightLabel = rightBadgeLabel(c);
+  const topRightColor = rightBadgeColor(c);
+  // Store retention backing badge — memory/disk/db, beside role (orthogonal).
+  const storageLabel = storageBadgeLabel(c);
+  const storageColor = storageBadgeColor(c);
   // Set while a file is open in the drawer: true → spotlight, false → dim,
   // absent (no file open) → neutral.
   const fileMatch = data.fileMatch as boolean | undefined;
+  // Border: proposed uses the goldenrod accent (dashed); construct color stays
+  // on the left badge. File-open spotlight still wins with primary.
+  const borderColor = fileMatch
+    ? theme.colors.primary
+    : c.proposed
+      ? PROPOSED_COLOR
+      : color;
   // Selection is stamped into data by the graph component — React Flow's own
   // `selected` never updates because the node stops click propagation.
   const isSelected = selected || (data.isSelected as boolean | undefined) === true;
@@ -129,10 +144,9 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
         padding: '6px 10px',
         borderRadius: 8,
         background: theme.colors.backgroundSecondary ?? theme.colors.background,
-        // Selected / file-matched nodes get a thicker border; kind colors are
-        // kept for selection (thickness only). The file-open spotlight keeps
-        // its primary tint.
-        border: `${isSelected || fileMatch ? 4 : 2}px solid ${fileMatch ? theme.colors.primary : color}`,
+        // Selected / file-matched nodes get a thicker border. Proposed nodes
+        // use a dashed goldenrod border; left construct badge keeps construct color.
+        border: `${isSelected || fileMatch ? 4 : 2}px ${c.proposed ? 'dashed' : 'solid'} ${borderColor}`,
         boxShadow: fileMatch
           ? `0 1px 4px rgba(0,0,0,0.25), 0 0 12px ${theme.colors.primary}55`
           : '0 1px 4px rgba(0,0,0,0.25)',
@@ -167,30 +181,57 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
         {constructBadgeLabel(c)}
       </div>
 
-      {/* Role badge — top-right, only when the node carries a topology role.
-          Role color (entry orange / service blue) on the badge; the node
-          border stays construct-colored. */}
-      {c.role != null && (
+      {/* Right badge cluster — proposed wins over role when both are set;
+          store storage (retention backing) sits beside, since it is
+          orthogonal to topology. Persistent; pointer-events pass through. */}
+      {(topRightLabel != null || storageLabel != null) && (
         <div
           style={{
             position: 'absolute',
             top: -9,
             right: BADGE_EDGE_INSET,
             zIndex: 1,
-            fontFamily: theme.fonts.monospace,
-            fontSize: theme.fontSizes[0] * 1.1,
-            letterSpacing: 0.5,
-            textTransform: 'uppercase',
-            lineHeight: '17px',
+            display: 'flex',
+            gap: 6,
             whiteSpace: 'nowrap',
-            color: ROLE_COLOR[c.role],
-            background: theme.colors.backgroundSecondary ?? theme.colors.background,
-            border: `1px solid ${ROLE_COLOR[c.role]}`,
-            borderRadius: 4,
-            padding: '0 5px',
           }}
         >
-          {ROLE_LABEL[c.role]}
+          {storageLabel != null && storageColor != null && (
+            <span
+              style={{
+                fontFamily: theme.fonts.monospace,
+                fontSize: theme.fontSizes[0] * 1.1,
+                letterSpacing: 0.5,
+                textTransform: 'uppercase',
+                lineHeight: '17px',
+                color: storageColor,
+                background: theme.colors.backgroundSecondary ?? theme.colors.background,
+                border: `1px solid ${storageColor}`,
+                borderRadius: 4,
+                padding: '0 5px',
+              }}
+            >
+              {storageLabel}
+            </span>
+          )}
+          {topRightLabel != null && topRightColor != null && (
+            <span
+              style={{
+                fontFamily: theme.fonts.monospace,
+                fontSize: theme.fontSizes[0] * 1.1,
+                letterSpacing: 0.5,
+                textTransform: 'uppercase',
+                lineHeight: '17px',
+                color: topRightColor,
+                background: theme.colors.backgroundSecondary ?? theme.colors.background,
+                border: `1px solid ${topRightColor}`,
+                borderRadius: 4,
+                padding: '0 5px',
+              }}
+            >
+              {topRightLabel}
+            </span>
+          )}
         </div>
       )}
 

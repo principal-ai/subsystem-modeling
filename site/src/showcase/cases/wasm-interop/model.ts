@@ -1,8 +1,8 @@
 import type {
   SubsystemComponent,
-  SubsystemComponentEdge,
+  SubsystemRelation,
+  SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
-import type { SubsystemThroughline } from '@principal-ai/subsystems-react/dist/subsystem/model.js';
 
 const PURL = 'pkg:github/you/wasm-interop';
 
@@ -104,116 +104,123 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const edges: SubsystemComponentEdge[] = [
-  // Host-internal
-  { id: 'e0', from: 'run-pipeline', to: 'load-guest', mechanism: 'calls' },
-  { id: 'e1', from: 'run-pipeline', to: 'write-bytes', mechanism: 'calls' },
-  { id: 'e2', from: 'run-pipeline', to: 'read-u32', mechanism: 'calls' },
-  { id: 'e3', from: 'load-guest', to: 'WasmRuntime', mechanism: 'calls' },
-  { id: 'e4', from: 'load-guest', to: 'host-trace', mechanism: 'registers-into' },
+export const relations = [] as SubsystemRelation[];
 
-  // Host → guest (process boundary)
-  { id: 'e5', from: 'run-pipeline', to: 'normalize', mechanism: 'calls' },
-  { id: 'e6', from: 'run-pipeline', to: 'checksum', mechanism: 'calls' },
-
-  // Guest → host (process boundary callback)
-  { id: 'e7', from: 'normalize', to: 'host-trace', mechanism: 'calls' },
-  { id: 'e8', from: 'checksum', to: 'host-trace', mechanism: 'calls' },
-];
-
-export const throughlines: SubsystemThroughline[] = [
+export const walkthroughs = [
   {
-    id: 'tl-pipeline',
-    title: 'Full pipeline (host ↔ guest ↔ host)',
-    steps: [
+    "id": "tl-pipeline",
+    "title": "Full pipeline (host ↔ guest ↔ host)",
+    "steps": [
       {
-        edgeId: 'e0',
-        file: 'host/runPipeline.ts',
-        line: 14,
-        symbol: 'loadGuest',
-        annotation: 'Stay in browser/host — load the guest module.',
+        "from": "run-pipeline",
+        "to": "load-guest",
+        "mechanism": "calls",
+        "file": "host/runPipeline.ts",
+        "line": 14,
+        "symbol": "loadGuest",
+        "annotation": "Stay in browser/host — load the guest module."
       },
       {
-        edgeId: 'e3',
-        file: 'host/loadGuest.ts',
-        line: 13,
-        symbol: 'instantiateStreaming',
-        annotation: 'Runtime brings up the wasm/guest process.',
+        "from": "load-guest",
+        "to": "WasmRuntime",
+        "mechanism": "calls",
+        "file": "host/loadGuest.ts",
+        "line": 13,
+        "symbol": "instantiateStreaming",
+        "annotation": "Runtime brings up the wasm/guest process."
       },
       {
-        edgeId: 'e4',
-        file: 'host/loadGuest.ts',
-        line: 16,
-        symbol: 'host_trace',
-        annotation: 'Register the guest→host callback before any guest code runs.',
+        "from": "load-guest",
+        "to": "host-trace",
+        "mechanism": "registers-into",
+        "file": "host/loadGuest.ts",
+        "line": 16,
+        "symbol": "host_trace",
+        "annotation": "Register the guest→host callback before any guest code runs."
       },
       {
-        edgeId: 'e1',
-        file: 'host/runPipeline.ts',
-        line: 17,
-        symbol: 'writeBytes',
-        annotation: 'Host writes input into shared memory (still browser/host).',
+        "from": "run-pipeline",
+        "to": "write-bytes",
+        "mechanism": "calls",
+        "file": "host/runPipeline.ts",
+        "line": 17,
+        "symbol": "writeBytes",
+        "annotation": "Host writes input into shared memory (still browser/host)."
       },
       {
-        edgeId: 'e5',
-        file: 'host/runPipeline.ts',
-        line: 20,
-        symbol: 'guest.normalize',
-        annotation: 'Cross into wasm/guest.',
+        "from": "run-pipeline",
+        "to": "normalize",
+        "mechanism": "calls",
+        "file": "host/runPipeline.ts",
+        "line": 20,
+        "symbol": "guest.normalize",
+        "annotation": "Cross into wasm/guest."
       },
       {
-        edgeId: 'e7',
-        file: 'guest/src/lib.rs',
-        line: 22,
-        symbol: 'host_trace',
-        annotation: 'Guest calls back into browser/host (trace normalize).',
+        "from": "normalize",
+        "to": "host-trace",
+        "mechanism": "calls",
+        "file": "guest/src/lib.rs",
+        "line": 22,
+        "symbol": "host_trace",
+        "annotation": "Guest calls back into browser/host (trace normalize)."
       },
       {
-        edgeId: 'e6',
-        file: 'host/runPipeline.ts',
-        line: 21,
-        symbol: 'guest.checksum',
-        annotation: 'Host calls the second guest entry (still crossing the boundary).',
+        "from": "run-pipeline",
+        "to": "checksum",
+        "mechanism": "calls",
+        "file": "host/runPipeline.ts",
+        "line": 21,
+        "symbol": "guest.checksum",
+        "annotation": "Host calls the second guest entry (still crossing the boundary)."
       },
       {
-        edgeId: 'e8',
-        file: 'guest/src/lib.rs',
-        line: 41,
-        symbol: 'host_trace',
-        annotation: 'Guest→host again for checksum progress.',
+        "from": "checksum",
+        "to": "host-trace",
+        "mechanism": "calls",
+        "file": "guest/src/lib.rs",
+        "line": 41,
+        "symbol": "host_trace",
+        "annotation": "Guest→host again for checksum progress."
       },
       {
-        edgeId: 'e2',
-        file: 'host/runPipeline.ts',
-        line: 24,
-        symbol: 'readU32',
-        annotation: 'Back in browser/host — read the value the guest stashed.',
-      },
-    ],
+        "from": "run-pipeline",
+        "to": "read-u32",
+        "mechanism": "calls",
+        "file": "host/runPipeline.ts",
+        "line": 24,
+        "symbol": "readU32",
+        "annotation": "Back in browser/host — read the value the guest stashed."
+      }
+    ]
   },
   {
-    id: 'tl-guest-only',
-    title: 'Inside wasm/guest: normalize → checksum',
-    steps: [
+    "id": "tl-guest-only",
+    "title": "Inside wasm/guest: normalize → checksum",
+    "steps": [
       {
-        edgeId: 'e7',
-        file: 'guest/src/lib.rs',
-        line: 20,
-        symbol: 'normalize',
-        annotation: 'Guest entry — mutate the shared buffer in place.',
+        "from": "normalize",
+        "to": "host-trace",
+        "mechanism": "calls",
+        "file": "guest/src/lib.rs",
+        "line": 20,
+        "symbol": "normalize",
+        "annotation": "Guest entry — mutate the shared buffer in place."
       },
       {
-        edgeId: 'e8',
-        file: 'guest/src/lib.rs',
-        line: 39,
-        symbol: 'checksum',
-        annotation: 'Second guest entry — hash the normalized slice.',
-      },
-    ],
-  },
-];
+        "from": "checksum",
+        "to": "host-trace",
+        "mechanism": "calls",
+        "file": "guest/src/lib.rs",
+        "line": 39,
+        "symbol": "checksum",
+        "annotation": "Second guest entry — hash the normalized slice."
+      }
+    ]
+  }
+] as SubsystemWalkthrough[];
 
 export const title = 'Host ↔ WASM pipeline';
 
 export const description =
-  'Two clear process regions: **browser/host** (load, memory I/O, orchestrate) and **wasm/guest** (`normalize` → `checksum`). The host calls into the guest; the guest calls back via `host_trace`. Open **Flows** for the full cross-boundary pipeline.';
+  'Two clear process regions: **browser/host** (load, memory I/O, orchestrate) and **wasm/guest** (`normalize` → `checksum`). The host calls into the guest; the guest calls back via `host_trace`. Open **Walkthroughs** for the full cross-boundary pipeline.';

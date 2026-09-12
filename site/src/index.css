@@ -15,6 +15,7 @@
   --wash-about-rgb: 218, 178, 64;   /* gold — mission */
   --wash-schema-rgb: 138, 108, 178; /* purple — schema */
   --wash-start-rgb: 72, 118, 104;   /* green — try it */
+  --wash-maintainer-rgb: 72, 128, 148; /* steel teal — model maintainer */
 
   --accent: var(--brand);
   --accent-bg: rgba(var(--brand-rgb), 0.1);

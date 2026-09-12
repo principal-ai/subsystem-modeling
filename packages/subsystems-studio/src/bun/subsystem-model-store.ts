@@ -13,13 +13,16 @@
 import { promises as fs, watch, type FSWatcher } from "node:fs";
 import { homedir } from "node:os";
 import { join, basename } from "node:path";
+import { deriveGraphEdges } from "@principal-ai/subsystems-core";
 import type {
 	SubsystemComponent,
 	SubsystemComponentEdge,
 	SubsystemEdgeMechanism,
 	SubsystemModelDocument,
-	SubsystemThroughline,
-	SubsystemThroughlineStep,
+	SubsystemRelationType,
+	SubsystemWalkthrough,
+	SubsystemWalkthroughMechanism,
+	SubsystemWalkthroughStep,
 	StudioMessages,
 } from "../shared/contract";
 
@@ -31,8 +34,8 @@ export type {
 	SubsystemComponent,
 	SubsystemComponentEdge,
 	SubsystemModelDocument,
-	SubsystemThroughline,
-	SubsystemThroughlineStep,
+	SubsystemWalkthrough,
+	SubsystemWalkthroughStep,
 };
 
 const ROOT = join(homedir(), ".principal", "subsystem-models");
@@ -154,8 +157,8 @@ export interface StoredSubsystemModel extends SubsystemModelDocument {
 	/** Ordered execution stories over the graph's edges (one per flow). Mirrors
 	 *  the wire `StoredSubsystemModel` in ../shared/contract; duplicated here
 	 *  until the react package (this type's `SubsystemModelDocument` origin)
-	 *  carries `throughlines`. */
-	throughlines?: SubsystemThroughline[];
+	 *  carries `walkthroughs`. */
+	walkthroughs?: SubsystemWalkthrough[];
 	createdAt: string;
 	updatedAt: string;
 	/**
@@ -198,11 +201,10 @@ export interface StoredSubsystemModel extends SubsystemModelDocument {
 
 /**
  * Result of verifying each component against its repo's local root (run on
- * create and on component/root updates). File existence is the base check; a
- * component that also declares `symbol` gets a declaration check — the symbol
- * must appear as a function/class/const/interface/type/enum declaration in
- * its file. Repos without a known local root are `unresolved`, not missing —
- * absence of a machine is not an error.
+ * create and on component/root updates). File existence is the base check.
+ * Symbol presence is **not** checked here — that belongs to graphify audit
+ * (exact anchor). Repos without a known local root are `unresolved`, not
+ * missing — absence of a machine is not an error.
  */
 export interface SubsystemModelVerification {
 	checkedAt: string;
@@ -214,30 +216,36 @@ export interface SubsystemModelVerification {
 	unresolvedCount: number;
 	/** The misses, for surfacing in UI/API responses. */
 	missing: Array<{ componentId: string; file: string }>;
-	/** Components whose `symbol` declaration was found in their file. */
-	symbolsVerified: number;
-	/** Components with a `symbol` not declared in their file (file may exist). */
-	symbolsMissing: Array<{ componentId: string; symbol: string; file: string }>;
-	/** Components carrying tool-extracted (`verified`) drill-down details. */
-	detailsVerified: number;
-	/** Components carrying hand-authored drill-down details. */
-	detailsAuthored: number;
 	/**
-	 * Throughline step sites that fully resolved (edge exists, file + line
+	 * @deprecated Always 0. Symbol checks moved to graphify audit (exact anchor).
+	 */
+	symbolsVerified: number;
+	/**
+	 * @deprecated Always empty. Symbol checks moved to graphify audit.
+	 */
+	symbolsMissing: Array<{ componentId: string; symbol: string; file: string }>;
+	/** Components carrying tool-extracted (`verified`) declarations. */
+	declarationsVerified: number;
+	/** Components carrying hand-authored declarations. */
+	declarationsAuthored: number;
+	/**
+	 * Walkthrough step sites that fully resolved (edge exists, file + line
 	 * resolve against a local root, and the line text has affinity with the
 	 * edge). Steps whose edge endpoints have no local root are skipped, not
 	 * failed — absence of a machine is not an error.
 	 */
-	throughlinesChecked: number;
+	walkthroughsChecked: number;
 	/**
-	 * Throughline steps that could not be taken as claimed: unknown edge,
+	 * Walkthrough steps that could not be taken as claimed: unknown hop,
 	 * missing file, line out of range, or a site line with no affinity to the
 	 * edge (a step can't point at a random line and claim it is the seam).
 	 */
-	throughlinesFailed: Array<{
-		throughlineId: string;
+	walkthroughsFailed: Array<{
+		walkthroughId: string;
 		step: number;
-		edgeId: string;
+		from: string;
+		to: string;
+		mechanism: string;
 		file: string;
 		line: number;
 		reason: string;
@@ -284,103 +292,112 @@ interface IndexFile {
  * a published member goes missing here. The store test additionally pins the
  * exact list as a runtime check.
  */
-export const SUBSYSTEM_EDGE_MECHANISMS = [
+export const SUBSYSTEM_RELATION_TYPES = [
 	"imports",
-	"imports_from",
-	"re_exports",
-	"defines",
-	"calls",
 	"extends",
 	"inherits",
 	"implements",
 	"mixes_in",
-	"uses",
 	"method",
 	"references",
 	"contains",
+] as const satisfies readonly SubsystemRelationType[];
+
+export const SUBSYSTEM_WALKTHROUGH_MECHANISMS = [
+	"calls",
+	"uses",
 	"feeds",
 	"produces",
 	"writes",
 	"reads",
 	"watches",
 	"registers-into",
+] as const satisfies readonly SubsystemWalkthroughMechanism[];
+
+export const SUBSYSTEM_EDGE_MECHANISMS = [
+	...SUBSYSTEM_RELATION_TYPES,
+	...SUBSYSTEM_WALKTHROUGH_MECHANISMS,
 ] as const satisfies readonly SubsystemEdgeMechanism[];
 
 export type EdgeMechanism = (typeof SUBSYSTEM_EDGE_MECHANISMS)[number];
 
-/** Published members missing from the runtime list above (`never` = in sync). */
 type SubsystemEdgeMechanismDrift = Exclude<SubsystemEdgeMechanism, EdgeMechanism>;
 
-/**
- * Compile-time drift guard: `true` when the runtime list covers every member
- * of the published `SubsystemEdgeMechanism` union; a type error (false ≠ true)
- * naming the drift otherwise. Exported so `noUnusedLocals` can't strip it.
- */
 export const SUBSYSTEM_EDGE_MECHANISMS_COVER_PUBLISHED_UNION: SubsystemEdgeMechanismDrift extends never
 	? true
 	: false = true;
 
-/**
- * Human-readable problems with edge mechanism labels (empty = valid).
- * Unknown labels would render unstyled in the graph view (color/style lookups
- * miss), so the API rejects them rather than persisting silently-broken edges.
- */
-export function findEdgeMechanismProblems(edges: unknown): string[] {
-	if (!Array.isArray(edges)) return [];
+export function findRelationTypeProblems(relations: unknown): string[] {
+	if (!Array.isArray(relations)) return ["relations must be an array"];
 	const problems: string[] = [];
-	for (const edge of edges) {
-		const e = edge as Partial<SubsystemComponentEdge> | null;
-		if (typeof e?.mechanism === "string" && (SUBSYSTEM_EDGE_MECHANISMS as readonly string[]).includes(e.mechanism)) {
-			continue;
+	for (const rel of relations) {
+		const r = rel as Partial<{ id: string; from: string; to: string; relationType: string }> | null;
+		if (typeof r?.id !== "string" || !r.id.trim()) {
+			problems.push(`relation ${JSON.stringify(r?.id ?? "<no id>")}: id is required`);
 		}
-		problems.push(
-			`edge ${JSON.stringify(e?.id ?? "<no id>")}: unknown mechanism ${JSON.stringify(e?.mechanism)} — allowed: ${SUBSYSTEM_EDGE_MECHANISMS.join(", ")}`,
-		);
+		if (typeof r?.from !== "string" || !r.from.trim()) {
+			problems.push(`relation ${JSON.stringify(r?.id ?? "<no id>")}: from is required`);
+		}
+		if (typeof r?.to !== "string" || !r.to.trim()) {
+			problems.push(`relation ${JSON.stringify(r?.id ?? "<no id>")}: to is required`);
+		}
+		if (
+			typeof r?.relationType !== "string" ||
+			!(SUBSYSTEM_RELATION_TYPES as readonly string[]).includes(r.relationType)
+		) {
+			problems.push(
+				`relation ${JSON.stringify(r?.id ?? "<no id>")}: unknown relationType ${JSON.stringify(r?.relationType)} — allowed: ${SUBSYSTEM_RELATION_TYPES.join(", ")}`,
+			);
+		}
 	}
 	return problems;
 }
 
 /**
- * Human-readable problems with a graph's throughlines (empty = valid).
- * A throughline is a promise to walk *existing* edges in an order, so a step
- * that names an edge not in the graph, or a site that can't be a code
- * location, would render as a broken story — reject before persist.
+ * Human-readable problems with a graph's walkthroughs (empty = valid).
+ * A walkthrough is an ordered runtime story: each hop names from/to/mechanism
+ * plus a file:line site (display edges are derived). Reject unknown mechanisms
+ * or sites that can't be a code location before persist.
  */
-export function findThroughlineProblems(edges: unknown, throughlines: unknown): string[] {
-	if (throughlines === undefined) return [];
-	if (!Array.isArray(throughlines)) return ["throughlines must be an array"];
-	const edgeIds = new Set(
-		(Array.isArray(edges) ? edges : [])
-			.map((e) => (e as Partial<SubsystemComponentEdge> | null)?.id)
-			.filter((id): id is string => typeof id === "string"),
-	);
+export function findWalkthroughProblems(walkthroughs: unknown): string[] {
+	if (walkthroughs === undefined) return [];
+	if (!Array.isArray(walkthroughs)) return ["walkthroughs must be an array"];
 	const problems: string[] = [];
-	for (const tl of throughlines) {
-		const t = tl as Partial<SubsystemThroughline> | null;
-		const label = JSON.stringify(t?.id ?? "<no id>");
-		if (typeof t?.id !== "string" || !t.id.trim()) {
-			problems.push(`throughline ${label}: id is required`);
+	for (const wt of walkthroughs) {
+		const w = wt as Partial<SubsystemWalkthrough> | null;
+		const label = JSON.stringify(w?.id ?? "<no id>");
+		if (typeof w?.id !== "string" || !w.id.trim()) {
+			problems.push(`walkthrough ${label}: id is required`);
 			continue;
 		}
-		if (typeof t?.title !== "string" || !t.title.trim()) {
-			problems.push(`throughline ${label}: title is required`);
+		if (typeof w?.title !== "string" || !w.title.trim()) {
+			problems.push(`walkthrough ${label}: title is required`);
 		}
-		if (!Array.isArray(t.steps)) {
-			problems.push(`throughline ${label}: steps array is required`);
+		if (!Array.isArray(w.steps)) {
+			problems.push(`walkthrough ${label}: steps array is required`);
 			continue;
 		}
-		t.steps.forEach((step, i) => {
-			const s = step as Partial<SubsystemThroughlineStep> | null;
-			if (typeof s?.edgeId !== "string" || !edgeIds.has(s.edgeId)) {
+		w.steps.forEach((step, i) => {
+			const s = step as Partial<SubsystemWalkthroughStep> | null;
+			if (typeof s?.from !== "string" || !s.from.trim()) {
+				problems.push(`walkthrough ${label}: step ${i} from is required`);
+			}
+			if (typeof s?.to !== "string" || !s.to.trim()) {
+				problems.push(`walkthrough ${label}: step ${i} to is required`);
+			}
+			if (
+				typeof s?.mechanism !== "string" ||
+				!(SUBSYSTEM_WALKTHROUGH_MECHANISMS as readonly string[]).includes(s.mechanism)
+			) {
 				problems.push(
-					`throughline ${label}: step ${i} edgeId ${JSON.stringify(s?.edgeId ?? "<missing>")} does not match any edge in the graph`,
+					`walkthrough ${label}: step ${i} unknown mechanism ${JSON.stringify(s?.mechanism)} — allowed: ${SUBSYSTEM_WALKTHROUGH_MECHANISMS.join(", ")}`,
 				);
 			}
 			if (typeof s?.file !== "string" || !s.file.trim()) {
-				problems.push(`throughline ${label}: step ${i} file is required (edgeId ${JSON.stringify(s?.edgeId ?? "<missing>")})`);
+				problems.push(`walkthrough ${label}: step ${i} file is required`);
 			} else if (typeof s?.line !== "number" || !Number.isInteger(s.line) || s.line < 1) {
 				problems.push(
-					`throughline ${label}: step ${i} line must be a positive 1-based integer (edgeId ${JSON.stringify(s?.edgeId ?? "<missing>")}, file ${JSON.stringify(s?.file)})`,
+					`walkthrough ${label}: step ${i} line must be a positive 1-based integer (file ${JSON.stringify(s?.file)})`,
 				);
 			}
 		});
@@ -437,62 +454,64 @@ export function findComponentConstructProblems(components: unknown): string[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Allowed provenance values for a component's drill-down `detail`.
+ * Allowed provenance values for a component's structured `declaration`.
  * `verified` is reserved for tool-extracted data (graphify AST, signature
  * extraction); anything an authoring agent wrote by hand must be `authored`
- * — which is also the default when `detail` is present without provenance.
+ * — which is also the default when `declaration` is present without provenance.
  */
-export const SUBSYSTEM_DETAIL_PROVENANCES = ["verified", "authored"] as const;
+export const SUBSYSTEM_DECLARATION_PROVENANCES = ["verified", "authored"] as const;
 
-export type DetailProvenance = (typeof SUBSYSTEM_DETAIL_PROVENANCES)[number];
+export type DeclarationProvenance = (typeof SUBSYSTEM_DECLARATION_PROVENANCES)[number];
 
 /**
- * Human-readable problems with explicit detail-provenance claims (empty =
- * valid). Only fires when `detail` carries a provenance value outside the
- * set — a hand-written detail claiming something unverifiable like
- * `"graphify"` would otherwise masquerade as tool-extracted.
+ * Human-readable problems with explicit declaration-provenance claims (empty =
+ * valid).
  */
-export function findDetailProvenanceProblems(components: unknown): string[] {
+export function findDeclarationProvenanceProblems(components: unknown): string[] {
 	if (!Array.isArray(components)) return [];
 	const problems: string[] = [];
 	for (const component of components) {
 		const c = component as Record<string, unknown> | null;
-		if (!c || typeof c !== "object" || !c["detail"]) continue;
-		const p = c["detailProvenance"];
+		if (!c || typeof c !== "object") continue;
+		if (!c["declaration"]) continue;
+		const p = c["declarationProvenance"];
 		if (p === undefined) continue;
-		if (typeof p === "string" && (SUBSYSTEM_DETAIL_PROVENANCES as readonly string[]).includes(p)) continue;
+		if (
+			typeof p === "string" &&
+			(SUBSYSTEM_DECLARATION_PROVENANCES as readonly string[]).includes(p)
+		) {
+			continue;
+		}
 		problems.push(
-			`component ${JSON.stringify(String(c["id"] ?? "<no id>"))}: invalid detailProvenance ${JSON.stringify(p)} — allowed: ${SUBSYSTEM_DETAIL_PROVENANCES.join(", ")}. Hand-authored details must be "authored"; "verified" is reserved for tool-extracted data.`,
+			`component ${JSON.stringify(String(c["id"] ?? "<no id>"))}: invalid declarationProvenance ${JSON.stringify(p)} — allowed: ${SUBSYSTEM_DECLARATION_PROVENANCES.join(", ")}. Hand-authored declarations must be "authored"; "verified" is reserved for tool-extracted data.`,
 		);
 	}
 	return problems;
 }
 
 /**
- * Fill in safe defaults in place, so stored details always satisfy the
- * published renderer's expectations:
- * - `detail` without provenance becomes `authored`; orphan claims are dropped.
- * - Per-kind arrays the published `Graphify*Detail` types require are
- *   backfilled as empty (`callers`/`callees` on functions, etc.) — the
-   * published ComponentDeclaration reads `.length` directly, and a missing
- *   array crashed the panel (undefined is not an object).
+ * Fill safe defaults so stored declarations always satisfy the published
+ * renderer's expectations:
+ * - `declaration` without provenance becomes `authored`; orphan claims are dropped.
+ * - Per-kind arrays are backfilled as empty so the panel can read `.length`.
  *
  * Mutates the passed array — callers own the payload (fresh-parsed request
  * bodies or records about to be persisted).
  */
-export function normalizeDetailProvenance(components: unknown): void {
+export function normalizeDeclarationProvenance(components: unknown): void {
 	if (!Array.isArray(components)) return;
 	for (const component of components) {
 		const c = component as Record<string, unknown> | null;
 		if (!c || typeof c !== "object") continue;
-		const detail = c["detail"] as Record<string, unknown> | undefined;
-		if (!detail || typeof detail !== "object") {
-			delete c["detailProvenance"];
+
+		const declaration = c["declaration"] as Record<string, unknown> | undefined;
+		if (!declaration || typeof declaration !== "object") {
+			delete c["declarationProvenance"];
 			continue;
 		}
-		const p = c["detailProvenance"];
-		if (p !== "verified" && p !== "authored") c["detailProvenance"] = "authored";
-		const kind = detail["kind"];
+		const p = c["declarationProvenance"];
+		if (p !== "verified" && p !== "authored") c["declarationProvenance"] = "authored";
+		const kind = declaration["kind"];
 		const arrays: Record<string, string[]> = {
 			function: ["parameters", "callers", "callees"],
 			method: ["parameters"],
@@ -500,9 +519,10 @@ export function normalizeDetailProvenance(components: unknown): void {
 			type: ["properties", "usedBy", "implementors"],
 			module: ["imports", "exports", "symbols"],
 			custom_entity: ["attributes"],
+			store: ["properties"],
 		};
 		for (const key of arrays[String(kind)] ?? []) {
-			if (!Array.isArray(detail[key])) detail[key] = [];
+			if (!Array.isArray(declaration[key])) declaration[key] = [];
 		}
 	}
 }
@@ -537,12 +557,8 @@ export function resolveRepoRootForComponent(
 }
 
 /**
- * True when the file content declares the symbol as a
- * function/class/const/let/var/interface/type/enum. Qualified symbols
- * (`owner.method`) match on their last segment. Deliberately loose about
- * modifiers (`export`, `async`, `abstract`, `declare`) so module-private
- * declarations verify too; a bare name mention (comment, import, call) does
- * NOT count.
+ * @deprecated Prefer graphify exact-anchor checks. Kept only for older tests /
+ * call sites; do not use for audit.
  */
 export function fileDeclaresSymbol(content: string, symbol: string): boolean {
 	const name = symbol.split(".").pop()?.trim() ?? "";
@@ -555,13 +571,13 @@ export function fileDeclaresSymbol(content: string, symbol: string): boolean {
 }
 
 /**
- * Candidate affinity tokens for a throughline step's site line: identifier
+ * Candidate affinity tokens for a walkthrough step's site line: identifier
  * words (>= 4 chars) drawn from the edge's endpoint symbols/names and every
  * entry in the edge's `refs`. A site line that mentions none of these is not
  * plausibly the seam the edge claims — "readFile" from a ref, "openDrawing"
  * from a symbol, "DRAWING_EVENTS" from an event ref, etc.
  */
-export function throughlineStepTokens(
+export function walkthroughStepTokens(
 	edge: SubsystemComponentEdge,
 	from: SubsystemComponent | undefined,
 	to: SubsystemComponent | undefined,
@@ -588,30 +604,27 @@ export function throughlineStepTokens(
  * it is the seam." Lenient by design: a match on one endpoint or one ref
  * token counts.
  */
-export function throughlineStepHasAffinity(
+export function walkthroughStepHasAffinity(
 	lineText: string,
 	edge: SubsystemComponentEdge,
 	from: SubsystemComponent | undefined,
 	to: SubsystemComponent | undefined,
 ): boolean {
 	const hay = lineText.toLowerCase();
-	return throughlineStepTokens(edge, from, to).some((t) => hay.includes(t));
+	return walkthroughStepTokens(edge, from, to).some((t) => hay.includes(t));
 }
 
 /**
- * Check every component's `file` against its repo's local root, and each
- * declared `symbol` against its file's contents. When the graph carries
- * `throughlines`, each step's site (`file:line` on an existing edge) is also
- * resolved: edge must exist, file must exist, line must be in range, and the
- * site line must have affinity with the edge. Purely informational — never
- * blocks create/update — but gives agents a self-correction signal and the UI
- * an honesty marker.
+ * Check every component's `file` against its repo's local root. When the graph
+ * carries `walkthroughs`, each step's site is also resolved. Symbol presence is
+ * intentionally not checked here (graphify audit owns that). Purely
+ * informational — never blocks create/update.
  */
 export async function verifyModelFiles(
 	doc: SubsystemModelDocument & {
 		repoRoot?: string;
 		repoRoots?: Record<string, string>;
-		throughlines?: SubsystemThroughline[];
+		walkthroughs?: SubsystemWalkthrough[];
 	},
 ): Promise<SubsystemModelVerification> {
 	const missing: Array<{ componentId: string; file: string }> = [];
@@ -619,16 +632,18 @@ export async function verifyModelFiles(
 	let verifiedCount = 0;
 	let unresolvedCount = 0;
 	let symbolsVerified = 0;
-	let detailsVerified = 0;
-	let detailsAuthored = 0;
+	let declarationsVerified = 0;
+	let declarationsAuthored = 0;
 	for (const c of doc.components) {
-		// Detail-provenance counts are payload-level stats — independent of
+		// Declaration-provenance counts are payload-level stats — independent of
 		// whether this machine has the repo checked out.
 		const raw = c as unknown as Record<string, unknown>;
-		if (raw["detail"]) {
-			if (raw["detailProvenance"] === "verified") detailsVerified++;
-			else detailsAuthored++;
+		if (raw["declaration"]) {
+			const provenance = raw["declarationProvenance"];
+			if (provenance === "verified") declarationsVerified++;
+			else declarationsAuthored++;
 		}
+		if (c.proposed) continue;
 		if (!c.file) continue;
 		const root = resolveRepoRootForComponent(doc, c.purl);
 		if (!root) {
@@ -643,49 +658,36 @@ export async function verifyModelFiles(
 			missing.push({ componentId: c.id, file: c.file });
 			continue;
 		}
-		if (typeof c.symbol === "string" && c.symbol.trim()) {
-			try {
-				const content = await fs.readFile(abs, "utf8");
-				if (fileDeclaresSymbol(content, c.symbol)) symbolsVerified++;
-				else symbolsMissing.push({ componentId: c.id, symbol: c.symbol, file: c.file });
-			} catch {
-				symbolsMissing.push({ componentId: c.id, symbol: c.symbol, file: c.file });
-			}
-		}
+		// Symbol presence is verified via graphify (audit), not a text regex here.
 	}
-	// Throughline step sites — alias-backed, so resolution reuses the same
+	// Walkthrough step sites — alias-backed, so resolution reuses the same
 	// repo-root logic as components.
-	let throughlinesChecked = 0;
-	const throughlinesFailed: SubsystemModelVerification["throughlinesFailed"] = [];
-	if (Array.isArray(doc.throughlines)) {
-		const edgeById = new Map<string, SubsystemComponentEdge>();
-		for (const e of doc.edges) edgeById.set(e.id, e);
+	let walkthroughsChecked = 0;
+	const walkthroughsFailed: SubsystemModelVerification["walkthroughsFailed"] = [];
+	if (Array.isArray(doc.walkthroughs)) {
 		const componentById = new Map<string, SubsystemComponent>();
 		for (const c of doc.components) componentById.set(c.id, c);
-		for (const tl of doc.throughlines) {
+		for (const tl of doc.walkthroughs) {
 			if (!Array.isArray(tl.steps)) continue;
 			for (let i = 0; i < tl.steps.length; i++) {
 				const step = tl.steps[i];
 				const fail = (reason: string) =>
-					throughlinesFailed.push({
-						throughlineId: tl.id,
+					walkthroughsFailed.push({
+						walkthroughId: tl.id,
 						step: i,
-						edgeId: step.edgeId,
+						from: step.from,
+						to: step.to,
+						mechanism: step.mechanism,
 						file: step.file,
 						line: step.line,
 						reason,
 					});
-				const edge = edgeById.get(step.edgeId);
-				if (!edge) {
-					fail(`edge ${JSON.stringify(step.edgeId)} is not in the graph`);
-					continue;
-				}
-				const from = componentById.get(edge.from);
-				const to = componentById.get(edge.to);
+				const from = componentById.get(step.from);
+				const to = componentById.get(step.to);
 				const root =
 					resolveRepoRootForComponent(doc, from?.purl) ??
 					resolveRepoRootForComponent(doc, to?.purl);
-				if (!root) continue; // unresolved — no local root for either endpoint (skip)
+				if (!root) continue;
 				const abs = join(root, step.file);
 				try {
 					const lines = (await fs.readFile(abs, "utf8")).split("\n");
@@ -698,13 +700,19 @@ export async function verifyModelFiles(
 						fail(`line ${step.line} in ${step.file} is blank`);
 						continue;
 					}
-					if (!throughlineStepHasAffinity(lineText, edge, from, to)) {
+					const hopEdge: SubsystemComponentEdge = {
+						id: `${step.from}--${step.mechanism}-->${step.to}`,
+						from: step.from,
+						to: step.to,
+						mechanism: step.mechanism,
+					};
+					if (!walkthroughStepHasAffinity(lineText, hopEdge, from, to)) {
 						fail(
-							`site line ${step.file}:${step.line} has no affinity with edge ${JSON.stringify(edge.id)} (expected one of: ${throughlineStepTokens(edge, from, to).join(" | ")})`,
+							`site line ${step.file}:${step.line} has no affinity with hop ${JSON.stringify(hopEdge.id)} (expected one of: ${walkthroughStepTokens(hopEdge, from, to).join(" | ")})`,
 						);
 						continue;
 					}
-					throughlinesChecked++;
+					walkthroughsChecked++;
 				} catch {
 					fail(`file ${JSON.stringify(step.file)} not found under ${root}`);
 				}
@@ -719,10 +727,10 @@ export async function verifyModelFiles(
 		missing,
 		symbolsVerified,
 		symbolsMissing,
-		detailsVerified,
-		detailsAuthored,
-		throughlinesChecked,
-		throughlinesFailed,
+		declarationsVerified,
+		declarationsAuthored,
+		walkthroughsChecked,
+		walkthroughsFailed,
 	};
 }
 
@@ -860,7 +868,7 @@ function indexEntryFor(record: StoredSubsystemModel): SubsystemModelIndexEntry {
 		title: record.title,
 		description: record.description,
 		componentCount: record.components.length,
-		edgeCount: record.edges.length,
+		edgeCount: deriveGraphEdges(record).length,
 		createdAt: record.createdAt,
 		updatedAt: record.updatedAt,
 		lastOpenedAt: record.lastOpenedAt,
@@ -928,7 +936,10 @@ export async function listSubsystemModels(): Promise<SubsystemModelIndexEntry[]>
 export async function getSubsystemModel(id: string): Promise<StoredSubsystemModel | null> {
 	try {
 		const raw = await fs.readFile(graphPath(id), "utf8");
-		return JSON.parse(raw) as StoredSubsystemModel;
+		const record = JSON.parse(raw) as StoredSubsystemModel;
+		// Normalize provenance defaults + backfill renderer-required arrays on read.
+		normalizeDeclarationProvenance(record.components);
+		return record;
 	} catch {
 		return null;
 	}
@@ -943,10 +954,11 @@ export async function createSubsystemModel(
 		repo?: { owner: string; name: string };
 		repoRoot?: string;
 		repoRoots?: Record<string, string>;
-		throughlines?: SubsystemThroughline[];
+		walkthroughs?: SubsystemWalkthrough[];
 	},
 ): Promise<StoredSubsystemModel> {
 	await ensureDir();
+	normalizeDeclarationProvenance(doc.components);
 	const now = new Date().toISOString();
 	const record: StoredSubsystemModel = {
 		...doc,
@@ -971,8 +983,8 @@ export async function updateSubsystemModel(
 			| "title"
 			| "description"
 			| "components"
-			| "edges"
-			| "throughlines"
+			| "relations"
+			| "walkthroughs"
 			| "source"
 			| "repo"
 			| "repoRoot"
@@ -983,6 +995,7 @@ export async function updateSubsystemModel(
 ): Promise<StoredSubsystemModel | null> {
 	const existing = await getSubsystemModel(id);
 	if (!existing) return null;
+	if (patch.components !== undefined) normalizeDeclarationProvenance(patch.components);
 	const updated: StoredSubsystemModel = {
 		...existing,
 		...patch,

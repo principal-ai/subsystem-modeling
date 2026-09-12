@@ -53,6 +53,8 @@ export function buildAgentSessionsView(opts: {
 	repoName: string | null;
 	repoRoot?: string;
 	models?: string[];
+	/** Explicit OpenCode V1/V2 identity from the session list (preferred). */
+	opencodeKind?: "v1" | "v2";
 }): AgentSessionsView | null {
 	const { sessionId, title, sessionMeta, dirSet, repoOwner, repoName } = opts;
 	if (!opts.events || opts.events.length === 0) return null;
@@ -60,7 +62,7 @@ export function buildAgentSessionsView(opts: {
 	const sessionName = sessionMeta?.slug || sessionMeta?.title?.slice(0, 30) || sessionId.slice(0, 12);
 	// Explicit agent (cline/opencode/pi/grok) wins; fall back to the slug heuristic
 	// (Cline/pi/grok durable transcripts carry no slug, opencode sessions do).
-	const agentLabel = sessionMeta?.agent ?? (!sessionMeta?.slug ? "cline" : "opencode");
+	// Maintain sub-agents are remapped for logo lookup in resolveAgentLogoFields.
 	const sessionColor = "#a855f7";
 	const editedFileSet = new Set<string>();
 	const readingFileSet = new Set<string>();
@@ -132,11 +134,22 @@ export function buildAgentSessionsView(opts: {
 
 	const task = sessionMeta?.title || title;
 
+	// Maintain runs use OpenCode sub-agents (`issue-fixer` / `gap-filler`). The
+	// panel logo map only knows product keys (opencode, cline, …) — keep the
+	// sub-agent as the display name, but stamp `agent: "opencode"` for the icon.
+	const rawAgent =
+		sessionMeta?.agent ?? (!sessionMeta?.slug ? "cline" : "opencode");
+	const { logoAgent, displayAgent } = resolveAgentLogoFields(rawAgent);
+	const isV2 = isOpencodeV2SessionMeta({
+		opencodeKind: opts.opencodeKind,
+		agent: sessionMeta?.agent,
+	});
+
 	const agentSession: AgentSessionView = {
 		id: sessionId,
-		name: sessionName,
-		agent: agentLabel,
-		owner: { name: agentLabel, login: agentLabel },
+		name: displayAgent !== logoAgent ? displayAgent : sessionName,
+		agent: logoAgent,
+		owner: { name: displayAgent, login: displayAgent },
 		state,
 		task,
 		message: task,
@@ -147,7 +160,7 @@ export function buildAgentSessionsView(opts: {
 		activeFiles: [],
 		startedAt: firstTimestamp ? new Date(firstTimestamp).toISOString() : undefined,
 		lastEventAt: lastTimestamp ? new Date(lastTimestamp).toISOString() : undefined,
-		models: opts.models,
+		models: modelsWithV2Badge(opts.models, isV2),
 		workingDirectory: opts.repoRoot,
 		stats,
 		timeline: agentSessionEvents,
@@ -164,12 +177,13 @@ export function buildAgentSessionsView(opts: {
 // Minimal view for a session whose events haven't loaded yet — the drawer row
 // renders it (title + state) and upgrades in place once the session loads.
 function placeholderAgentSession(s: SessionSummary): AgentSessionView {
-	const agentLabel = s.agent ?? "opencode";
+	const { logoAgent, displayAgent } = resolveAgentLogoFields(s.agent ?? "opencode");
+	const isV2 = isOpencodeV2SessionMeta(s);
 	return {
 		id: s.id,
-		name: agentLabel,
-		agent: agentLabel,
-		owner: { name: agentLabel, login: agentLabel },
+		name: displayAgent,
+		agent: logoAgent,
+		owner: { name: displayAgent, login: displayAgent },
 		state: s.isFinished ? "done" : "working",
 		task: s.title,
 		message: s.title,
@@ -180,10 +194,54 @@ function placeholderAgentSession(s: SessionSummary): AgentSessionView {
 		activeFiles: [],
 		startedAt: s.createdAt || undefined,
 		lastEventAt: s.lastEventAt || undefined,
-		models: s.models,
+		models: modelsWithV2Badge(s.models, isV2),
 		workingDirectory: s.repoRoot,
 		stats: { filesChanged: 0, additions: 0, deletions: 0 },
 	};
+}
+
+/**
+ * Panel logo map only knows product keys (`opencode`, `cline`, …). Maintain
+ * stamps OpenCode sub-agent ids (`issue-fixer` / `gap-filler`), and the V2
+ * timeline pipeline tags sessions `opencode-v2` — keep those as the display
+ * label when useful, but use `opencode` for the icon.
+ */
+function resolveAgentLogoFields(raw: string): {
+	logoAgent: string;
+	displayAgent: string;
+} {
+	const key = raw.trim().toLowerCase();
+	if (key === "issue-fixer" || key === "gap-filler" || key === "maintain") {
+		return { logoAgent: "opencode", displayAgent: key };
+	}
+	if (key === "opencode-v2" || key === "opencode2") {
+		return { logoAgent: "opencode", displayAgent: "opencode" };
+	}
+	return { logoAgent: key || "opencode", displayAgent: key || "opencode" };
+}
+
+/** True when the session is an OpenCode V2 durable transcript. */
+function isOpencodeV2SessionMeta(s: {
+	opencodeKind?: string;
+	agent?: string | null;
+} | null | undefined): boolean {
+	if (!s) return false;
+	if (s.opencodeKind === "v2") return true;
+	const agent = (s.agent ?? "").trim().toLowerCase();
+	return agent === "opencode-v2" || agent === "opencode2";
+}
+
+/**
+ * Panel drawer shows `models` as a monospace meta line — prepend a `v2` token
+ * so V2 OpenCode runs are visually distinct from V1 without a panel API change.
+ */
+function modelsWithV2Badge(
+	models: string[] | undefined,
+	isV2: boolean,
+): string[] | undefined {
+	if (!isV2) return models;
+	const rest = (models ?? []).filter((m) => m.trim().toLowerCase() !== "v2");
+	return ["v2", ...rest];
 }
 
 // Grid placement for N repo cities: a roughly-square grid (cols = ceil(sqrt N)),
@@ -221,8 +279,20 @@ function dayLabelOf(key: string): string {
 const INITIAL_DAY_WINDOW = 7;
 const LOAD_MORE_STEP = 7;
 
-export function AgentSessionsOverviewView({ active = true }: { active?: boolean }) {
+export type AgentSessionsScope = "agents" | "maintain";
+
+const MAINTAIN_LOADER_AGENTS = ["issue-fixer", "gap-filler"];
+
+export function AgentSessionsOverviewView({
+	active = true,
+	scope = "agents",
+}: {
+	active?: boolean;
+	/** `maintain` reuses this panel for historical Maintain runs only. */
+	scope?: AgentSessionsScope;
+}) {
 	const { theme } = useTheme();
+	const isMaintain = scope === "maintain";
 	const [summaries, setSummaries] = useState<SessionSummary[]>([]);
 	const [sessionsById, setSessionsById] = useState<Map<string, AgentSessionView>>(new Map());
 	const [eventsById, setEventsById] = useState<Map<string, AgentSessionEvent[]>>(new Map());
@@ -314,25 +384,39 @@ export function AgentSessionsOverviewView({ active = true }: { active?: boolean 
 		return groups;
 	}, [summaries, windowStart]);
 
-	// --- listSessions (window-aware) -----------------------------------------
+	// --- listSessions / listMaintainSessions (window-aware) ------------------
 	useEffect(() => {
 		let cancelled = false;
 		(async () => {
 			try {
-				const list = await electrobun.rpc!.request.listSessions({ days: daysWindow });
-				const tops: SessionSummary[] = [];
-				for (const g of list.groups) {
-					tops.push(g.parent);
+				let tops: SessionSummary[] = [];
+				let hasMore = false;
+				if (isMaintain) {
+					const list = await electrobun.rpc!.request.listMaintainSessions({
+						days: daysWindow,
+					});
+					tops = list.sessions;
+					hasMore = list.hasMore ?? false;
+				} else {
+					const list = await electrobun.rpc!.request.listSessions({
+						days: daysWindow,
+					});
+					for (const g of list.groups) {
+						tops.push(g.parent);
+					}
+					tops.push(...list.standalone);
+					hasMore = list.hasMore ?? false;
 				}
-				tops.push(...list.standalone);
 				tops.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 				if (cancelled) return;
 				setSummaries((prev) => {
 					const merged = new Map(prev.map((s) => [s.id, s]));
 					for (const s of tops) merged.set(s.id, s);
-					return [...merged.values()].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+					return [...merged.values()].sort((a, b) =>
+						a.createdAt < b.createdAt ? 1 : -1,
+					);
 				});
-				setHostHasMore(list.hasMore ?? false);
+				setHostHasMore(hasMore);
 				setLoaded(true);
 			} catch (err) {
 				if (cancelled) return;
@@ -343,7 +427,7 @@ export function AgentSessionsOverviewView({ active = true }: { active?: boolean 
 		return () => {
 			cancelled = true;
 		};
-	}, [daysWindow]);
+	}, [daysWindow, isMaintain]);
 
 	// --- Single-call overview seed ------------------------------------------
 	// The host keeps the recent window warm (resident store + disk cache), so
@@ -351,8 +435,8 @@ export function AgentSessionsOverviewView({ active = true }: { active?: boolean 
 	// panel mounts immediately (no per-session getSessionEvents round-trips);
 	// sessions the overview hasn't processed yet (warm-up still finishing) fall
 	// through to the day-paging loop below, which upgrades them in place. Runs
-	// once — Load more / refreshes keep using the incremental listSessions +
-	// day-paging path.
+	// once — Load more / refreshes keep using the incremental list + day-paging
+	// path.
 	const overviewSeeded = useRef(false);
 	useEffect(() => {
 		if (overviewSeeded.current) return;
@@ -361,6 +445,7 @@ export function AgentSessionsOverviewView({ active = true }: { active?: boolean 
 			try {
 				const res = await electrobun.rpc!.request.getAgentSessionsOverview({
 					days: daysWindow,
+					scope: isMaintain ? "maintain" : "agents",
 				});
 				if (cancelled || !res.ok || res.processed.length === 0) return;
 
@@ -396,6 +481,7 @@ export function AgentSessionsOverviewView({ active = true }: { active?: boolean 
 						repoName: p.repos[0]?.name ?? null,
 						repoRoot: p.repoRoot,
 						models: summary?.models,
+						opencodeKind: summary?.opencodeKind,
 					});
 					if (!slice) continue;
 					nextSessions.set(p.id, slice.sessions[0]);
@@ -443,7 +529,7 @@ export function AgentSessionsOverviewView({ active = true }: { active?: boolean 
 		return () => {
 			cancelled = true;
 		};
-	}, [daysWindow]);
+	}, [daysWindow, isMaintain]);
 
 	// --- Per-session load: fetch events, build the view, discover repos ------
 	const loadSession = useCallback(async (s: SessionSummary): Promise<void> => {
@@ -459,6 +545,7 @@ export function AgentSessionsOverviewView({ active = true }: { active?: boolean 
 			repoName: null,
 			repoRoot: res.repoRoot ?? res.repos?.[0]?.root,
 			models: s.models,
+			opencodeKind: s.opencodeKind,
 		});
 		if (!slice) return;
 		const session = slice.sessions[0];
@@ -522,6 +609,7 @@ export function AgentSessionsOverviewView({ active = true }: { active?: boolean 
 			repoName: null,
 			repoRoot: res.repoRoot ?? res.repos?.[0]?.root,
 			models: s.models,
+			opencodeKind: s.opencodeKind,
 		});
 		if (!slice) return false;
 		const existing = eventsByIdRef.current.get(s.id) ?? [];
@@ -568,10 +656,17 @@ export function AgentSessionsOverviewView({ active = true }: { active?: boolean 
 	// committed when something actually changed. ---
 	const refreshLive = useCallback(async () => {
 		try {
-			const list = await electrobun.rpc!.request.listSessions({ days: 2 });
-			const tops: SessionSummary[] = [];
-			for (const g of list.groups) tops.push(g.parent);
-			tops.push(...list.standalone);
+			let tops: SessionSummary[] = [];
+			if (isMaintain) {
+				const list = await electrobun.rpc!.request.listMaintainSessions({
+					days: 2,
+				});
+				tops = list.sessions;
+			} else {
+				const list = await electrobun.rpc!.request.listSessions({ days: 2 });
+				for (const g of list.groups) tops.push(g.parent);
+				tops.push(...list.standalone);
+			}
 
 			// Merge summaries — only commit when the id-set or a title/finished
 			// flag actually changed, so a quiet poll never re-renders the view.
@@ -631,7 +726,63 @@ export function AgentSessionsOverviewView({ active = true }: { active?: boolean 
 		} catch (err) {
 			console.error("[AgentSessionsOverview] live refresh failed:", err);
 		}
-	}, [windowStart, loadSessionLive]);
+	}, [windowStart, loadSessionLive, isMaintain]);
+
+	// Maintenance Sessions: re-list from opencode.db whenever this tab becomes
+	// active so a Maintain run finished while we were elsewhere shows up without
+	// waiting for the 30s poll.
+	const prevActiveRef = useRef(false);
+	useEffect(() => {
+		const becameActive = active && !prevActiveRef.current;
+		prevActiveRef.current = active;
+		if (!isMaintain || !becameActive || !loaded) return;
+		let cancelled = false;
+		void (async () => {
+			try {
+				const list = await electrobun.rpc!.request.listMaintainSessions({
+					days: daysWindow,
+				});
+				if (cancelled) return;
+				const tops = [...list.sessions].sort((a, b) =>
+					a.createdAt < b.createdAt ? 1 : -1,
+				);
+				setSummaries((prev) => {
+					const merged = new Map(prev.map((s) => [s.id, s]));
+					for (const s of tops) merged.set(s.id, s);
+					return [...merged.values()].sort((a, b) =>
+						a.createdAt < b.createdAt ? 1 : -1,
+					);
+				});
+				setHostHasMore(list.hasMore ?? false);
+				const known = sessionsByIdRef.current;
+				const hasNew = tops.some((s) => {
+					const t = s.createdAt ? new Date(s.createdAt).getTime() : 0;
+					if (t && t < windowStart) return false;
+					return !known.has(s.id);
+				});
+				if (hasNew) {
+					setAllDaysLoaded(false);
+					setDayIndex(0);
+				}
+				await refreshLive();
+			} catch (err) {
+				console.error(
+					"[MaintenanceSessions] activate refresh failed:",
+					err,
+				);
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		active,
+		isMaintain,
+		loaded,
+		daysWindow,
+		windowStart,
+		refreshLive,
+	]);
 
 	// Poll loop — starts once the initial load has listed sessions; cleared on
 	// unmount. No overlap guard needed: each tick awaits its own work. Runs one
@@ -876,15 +1027,18 @@ export function AgentSessionsOverviewView({ active = true }: { active?: boolean 
 				if (!res.ok || !res.events || res.events.length === 0) {
 					return { events: [], title: sessionId };
 				}
+				const summary = summaries.find((s) => s.id === sessionId);
 				const slice = buildAgentSessionsView({
 					sessionId,
-					title: res.session?.title ?? summaries.find((s) => s.id === sessionId)?.title ?? sessionId,
+					title: res.session?.title ?? summary?.title ?? sessionId,
 					events: res.events,
 					sessionMeta: res.session ?? null,
 					dirSet: new Set(),
 					repoOwner: null,
 					repoName: null,
 					repoRoot: res.repoRoot ?? res.repos?.[0]?.root,
+					models: summary?.models,
+					opencodeKind: summary?.opencodeKind,
 				});
 				if (!slice) return { events: [], title: sessionId };
 				setSessionsById((prev) => {
@@ -937,7 +1091,16 @@ export function AgentSessionsOverviewView({ active = true }: { active?: boolean 
 
 	// --- Render ---------------------------------------------------------------
 	if (error) {
-		return <CenteredMessage title="Could not load agent sessions" detail={error} />;
+		return (
+			<CenteredMessage
+				title={
+					isMaintain
+						? "Could not load maintenance sessions"
+						: "Could not load agent sessions"
+				}
+				detail={error}
+			/>
+		);
 	}
 	// Empty only once we've actually listed sessions (otherwise the loader below
 	// would read as "nothing found" during the initial fetch).
@@ -959,7 +1122,9 @@ export function AgentSessionsOverviewView({ active = true }: { active?: boolean 
 			>
 				<div style={{ textAlign: "center", maxWidth: 640, padding: 24 }}>
 					<div style={{ fontSize: theme.fontSizes[3], marginBottom: 8 }}>
-						No recent sessions found
+						{isMaintain
+							? "No recent maintenance sessions found"
+							: "No recent sessions found"}
 					</div>
 					{moreAvailable ? (
 						<div style={{ fontSize: theme.fontSizes[0], color: theme.colors.textMuted }}>
@@ -990,14 +1155,17 @@ export function AgentSessionsOverviewView({ active = true }: { active?: boolean 
 	}
 
 	// Loader until the newest day is processed — the first thing the user sees.
-	// Covers the initial `listSessions` fetch and day-0 processing (the repo
-	// cards are the loading UI), then auto-enters the city; older days page in
-	// behind the panel.
+	// Covers the initial list fetch and day-0 processing (the repo cards are the
+	// loading UI), then auto-enters the city; older days page in behind the panel.
 	if (!ready) {
 		return (
 			<AgentSessionLoader
 				repos={Array.from(discoveredRepos.values())}
 				agents={Array.from(seenAgents)}
+				title={
+					isMaintain ? "Pulling Maintenance Sessions" : "Pulling Agent Sessions"
+				}
+				knownAgents={isMaintain ? MAINTAIN_LOADER_AGENTS : undefined}
 			/>
 		);
 	}

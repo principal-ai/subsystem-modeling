@@ -2,7 +2,7 @@
 
 > An open-source project for verifiable system diagrams: Subsystem Models that agents and humans can check against real code, not disposable sketches.
 
-Subsystem Models describe one slice of a codebase as named components (anchored to real symbols), typed edges, and optional execution flows (throughlines). The goal is a mental model you can refine and verify against the code.
+Subsystem Models describe one slice of a codebase as named components (anchored to real symbols), typed relations, and optional execution flows (walkthroughs). The goal is a mental model you can refine and verify against the code.
 
 ## Get started
 

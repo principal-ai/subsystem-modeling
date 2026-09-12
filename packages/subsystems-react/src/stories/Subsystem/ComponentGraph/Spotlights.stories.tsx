@@ -155,7 +155,7 @@ const nodeSpotlights: Array<{ label: string; component: SubsystemComponent; note
       file: 'packages/subsystems-studio/src/bun/analysis.ts',
       purl: corePurl,
       symbol: 'AnalysisStatus',
-      detail: {
+      declaration: {
         kind: 'type',
         properties: [
           { name: 'state', type: "'idle' | 'running' | 'done'" },
@@ -189,7 +189,7 @@ const nodeSpotlights: Array<{ label: string; component: SubsystemComponent; note
       file: 'packages/subsystems-studio/src/bun/verify.ts',
       purl: corePurl,
       symbol: 'VerificationPhase',
-      detail: {
+      declaration: {
         kind: 'type',
         properties: [{ name: 'idle' }, { name: 'checking' }, { name: 'done' }],
         usedBy: [],
@@ -261,7 +261,7 @@ const nodeSpotlights: Array<{ label: string; component: SubsystemComponent; note
       file: 'src/session/SessionCache.ts',
       purl: 'pkg:github/principal-ai/agent-monitoring',
       symbol: 'SessionCache',
-      detail: {
+      declaration: {
         kind: 'class',
         methods: [{ nodeId: 'm1', name: 'put', parameters: [{ type: 'SessionRecord' }] }],
         properties: [],
@@ -282,7 +282,7 @@ const nodeSpotlights: Array<{ label: string; component: SubsystemComponent; note
       file: 'src/session/SessionCache.ts',
       purl: 'pkg:github/principal-ai/agent-monitoring',
       symbol: 'SessionCache.put',
-      detail: {
+      declaration: {
         kind: 'method',
         hostClass: 'SessionCache',
         parameters: [{ type: 'SessionRecord' }],
@@ -299,7 +299,7 @@ const nodeSpotlights: Array<{ label: string; component: SubsystemComponent; note
       file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
       purl: corePurl,
       purpose: 'retained state — anchored to a state location',
-      detail: { kind: 'store', properties: [{ name: 'ROOT', type: 'string' }, { name: 'INDEX_PATH', type: 'string' }] },
+      declaration: { kind: 'store', properties: [{ name: 'ROOT', type: 'string' }, { name: 'INDEX_PATH', type: 'string' }] },
     },
   },
   {
@@ -495,7 +495,7 @@ const anatomyComponents: Array<{ label: string; component: SubsystemComponent; n
       construct: 'store',
       file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
       purl: corePurl,
-      detail: {
+      declaration: {
         kind: 'store',
         properties: [
           { name: 'ROOT', type: 'string' },
@@ -516,7 +516,7 @@ const anatomyComponents: Array<{ label: string; component: SubsystemComponent; n
       file: 'src/session/SessionCache.ts',
       purl: 'pkg:github/principal-ai/agent-monitoring',
       symbol: 'SessionCache',
-      detail: {
+      declaration: {
         kind: 'class',
         methods: [
           { nodeId: 'cm1', name: 'put', parameters: [{ type: 'SessionRecord' }] },
@@ -540,7 +540,7 @@ const anatomyComponents: Array<{ label: string; component: SubsystemComponent; n
       file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
       purl: corePurl,
       symbol: 'getSubsystemModel',
-      detail: {
+      declaration: {
         kind: 'function',
         parameters: [{ name: 'graphId', type: 'string' }],
         returnType: 'Promise<StoredSubsystemModel | null>',
@@ -560,7 +560,7 @@ const anatomyComponents: Array<{ label: string; component: SubsystemComponent; n
       purl: corePurl,
       symbol: 'StudioMessages',
       role: 'entry',
-      detail: {
+      declaration: {
         kind: 'type',
         properties: [
           { name: 'subsystemModelChanged', type: 'push' },
@@ -581,7 +581,7 @@ const anatomyComponents: Array<{ label: string; component: SubsystemComponent; n
       file: 'src/session/SessionCache.ts',
       purl: 'pkg:github/principal-ai/agent-monitoring',
       symbol: 'SessionCache.put',
-      detail: {
+      declaration: {
         kind: 'method',
         hostClass: 'SessionCache',
         parameters: [{ name: 'record', type: 'SessionRecord' }],
@@ -599,7 +599,7 @@ const anatomyComponents: Array<{ label: string; component: SubsystemComponent; n
       file: 'packages/subsystems-studio/src/bun/analysis.ts',
       purl: corePurl,
       symbol: 'AnalysisStatus',
-      detail: {
+      declaration: {
         kind: 'type',
         properties: [{ name: 'state', type: "'idle' | 'running'" }],
         usedBy: [],
@@ -617,7 +617,7 @@ const anatomyComponents: Array<{ label: string; component: SubsystemComponent; n
       file: 'packages/subsystems-studio/src/bun/verify.ts',
       purl: corePurl,
       symbol: 'VerificationPhase',
-      detail: {
+      declaration: {
         kind: 'type',
         properties: [{ name: 'idle' }, { name: 'checking' }, { name: 'done' }],
         usedBy: [],
@@ -639,7 +639,7 @@ function AnatomySpotlightsDemo() {
             {label} — {note}
           </div>
           <Row>
-            <JsonCard label="the data — component.detail" value={component.detail} width={320} />
+            <JsonCard label="the data — component.declaration" value={component.declaration} width={320} />
             <RenderPane label="the rendering — ComponentDeclaration">
               <div style={{ width: 360 }}>
                 <ComponentDeclaration component={component} />

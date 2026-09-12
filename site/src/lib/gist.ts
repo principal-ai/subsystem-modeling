@@ -145,7 +145,7 @@ export async function loadSubsystemModelFromGist(
     return {
       ok: false,
       error:
-        'JSON is not a portable Subsystem Model (needs title, components[], edges[]).',
+        'JSON is not a portable Subsystem Model (needs title, components[], relations[]).',
     }
   }
 
@@ -162,10 +162,10 @@ function toPortableDocument(doc: SubsystemModelDocument): SubsystemModelDocument
   const out: SubsystemModelDocument = {
     title: doc.title,
     components: doc.components,
-    edges: doc.edges,
+    relations: doc.relations,
   }
   if (doc.$schema) out.$schema = doc.$schema
   if (doc.description) out.description = doc.description
-  if (doc.throughlines) out.throughlines = doc.throughlines
+  if (doc.walkthroughs) out.walkthroughs = doc.walkthroughs
   return out
 }

@@ -1,7 +1,7 @@
 /**
  * FileDrawer — bottom panel that slides up from the bottom of the graph area
- * to show file / throughline code. Opened by sidebar file-tree clicks,
- * declaration links, and throughline step focus; content is injected as
+ * to show file / walkthrough code. Opened by sidebar file-tree clicks,
+ * declaration links, and walkthrough step focus; content is injected as
  * children by the graph component.
  */
 

@@ -4,22 +4,20 @@
  *
  * Lets the CLI create/list models without Studio's HTTP bridge running.
  * Structural validation mirrors the Studio POST gate (construct / mechanism /
- * throughlines / detail provenance). File/symbol verification is Studio-only
+ * walkthroughs / detail provenance). File/symbol verification is Studio-only
  * for now and may be empty on CLI-created records until opened/updated there.
  */
 
 import { promises as fs } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { deriveGraphEdges } from '@principal-ai/subsystems-core';
 
 const ROOT = join(homedir(), '.principal', 'subsystem-models');
 const INDEX_PATH = join(ROOT, '_index.json');
 
 export const SUBSYSTEM_EDGE_MECHANISMS = [
   'imports',
-  'imports_from',
-  're_exports',
-  'defines',
   'calls',
   'extends',
   'inherits',
@@ -49,7 +47,7 @@ export const SUBSYSTEM_COMPONENT_CONSTRUCTS = [
   'custom_entity',
 ] as const;
 
-export const SUBSYSTEM_DETAIL_PROVENANCES = ['verified', 'authored'] as const;
+export const SUBSYSTEM_DECLARATION_PROVENANCES = ['verified', 'authored'] as const;
 
 export interface SubsystemModelIndexEntry {
   id: string;
@@ -77,8 +75,8 @@ export interface StoredSubsystemModel {
   title: string;
   description?: string;
   components: unknown[];
-  edges: unknown[];
-  throughlines?: unknown[];
+  relations: unknown[];
+  walkthroughs?: unknown[];
   createdAt: string;
   updatedAt: string;
   lastOpenedAt?: string;
@@ -95,8 +93,8 @@ export interface CreateSubsystemModelInput {
   title: string;
   description?: string;
   components: unknown[];
-  edges: unknown[];
-  throughlines?: unknown[];
+  relations: unknown[];
+  walkthroughs?: unknown[];
   source?: string;
   repo?: { owner: string; name: string };
   repoRoot?: string;
@@ -121,70 +119,83 @@ async function ensureDir(): Promise<void> {
   await fs.mkdir(ROOT, { recursive: true });
 }
 
-export function findEdgeMechanismProblems(edges: unknown): string[] {
-  if (!Array.isArray(edges)) return [];
+const SUBSYSTEM_RELATION_TYPES = [
+  'imports', 'extends', 'inherits',
+  'implements', 'mixes_in', 'method', 'references', 'contains',
+] as const;
+
+const SUBSYSTEM_WALKTHROUGH_MECHANISMS = [
+  'calls', 'uses', 'feeds', 'produces', 'writes', 'reads', 'watches', 'registers-into',
+] as const;
+
+export function findRelationTypeProblems(relations: unknown): string[] {
+  if (!Array.isArray(relations)) return ['relations must be an array'];
   const problems: string[] = [];
-  for (const edge of edges) {
-    const e = edge as { id?: unknown; mechanism?: unknown } | null;
-    if (
-      typeof e?.mechanism === 'string' &&
-      (SUBSYSTEM_EDGE_MECHANISMS as readonly string[]).includes(e.mechanism)
-    ) {
-      continue;
+  for (const rel of relations) {
+    const r = rel as { id?: unknown; from?: unknown; to?: unknown; relationType?: unknown } | null;
+    if (typeof r?.id !== 'string' || !r.id.trim()) {
+      problems.push(`relation ${JSON.stringify(r?.id ?? '<no id>')}: id is required`);
     }
-    problems.push(
-      `edge ${JSON.stringify(e?.id ?? '<no id>')}: unknown mechanism ${JSON.stringify(e?.mechanism)} — allowed: ${SUBSYSTEM_EDGE_MECHANISMS.join(', ')}`,
-    );
+    if (typeof r?.from !== 'string' || !r.from.trim()) {
+      problems.push(`relation ${JSON.stringify(r?.id ?? '<no id>')}: from is required`);
+    }
+    if (typeof r?.to !== 'string' || !r.to.trim()) {
+      problems.push(`relation ${JSON.stringify(r?.id ?? '<no id>')}: to is required`);
+    }
+    if (
+      typeof r?.relationType !== 'string' ||
+      !(SUBSYSTEM_RELATION_TYPES as readonly string[]).includes(r.relationType)
+    ) {
+      problems.push(
+        `relation ${JSON.stringify(r?.id ?? '<no id>')}: unknown relationType ${JSON.stringify(r?.relationType)}`,
+      );
+    }
   }
   return problems;
 }
 
-export function findThroughlineProblems(edges: unknown, throughlines: unknown): string[] {
-  if (throughlines === undefined) return [];
-  if (!Array.isArray(throughlines)) return ['throughlines must be an array'];
-  const edgeIds = new Set(
-    (Array.isArray(edges) ? edges : [])
-      .map((e) => (e as { id?: unknown } | null)?.id)
-      .filter((id): id is string => typeof id === 'string'),
-  );
+export function findWalkthroughProblems(walkthroughs: unknown): string[] {
+  if (walkthroughs === undefined) return [];
+  if (!Array.isArray(walkthroughs)) return ['walkthroughs must be an array'];
   const problems: string[] = [];
-  for (const tl of throughlines) {
-    const t = tl as {
-      id?: unknown;
-      title?: unknown;
-      steps?: unknown;
-    } | null;
-    const label = JSON.stringify(t?.id ?? '<no id>');
-    if (typeof t?.id !== 'string' || !t.id.trim()) {
-      problems.push(`throughline ${label}: id is required`);
+  for (const wt of walkthroughs) {
+    const w = wt as { id?: unknown; title?: unknown; steps?: unknown } | null;
+    const label = JSON.stringify(w?.id ?? '<no id>');
+    if (typeof w?.id !== 'string' || !w.id.trim()) {
+      problems.push(`walkthrough ${label}: id is required`);
       continue;
     }
-    if (typeof t?.title !== 'string' || !t.title.trim()) {
-      problems.push(`throughline ${label}: title is required`);
+    if (typeof w?.title !== 'string' || !w.title.trim()) {
+      problems.push(`walkthrough ${label}: title is required`);
     }
-    if (!Array.isArray(t.steps)) {
-      problems.push(`throughline ${label}: steps array is required`);
+    if (!Array.isArray(w.steps)) {
+      problems.push(`walkthrough ${label}: steps array is required`);
       continue;
     }
-    t.steps.forEach((step, i) => {
+    w.steps.forEach((step, i) => {
       const s = step as {
-        edgeId?: unknown;
+        from?: unknown;
+        to?: unknown;
+        mechanism?: unknown;
         file?: unknown;
         line?: unknown;
       } | null;
-      if (typeof s?.edgeId !== 'string' || !edgeIds.has(s.edgeId)) {
-        problems.push(
-          `throughline ${label}: step ${i} edgeId ${JSON.stringify(s?.edgeId ?? '<missing>')} does not match any edge in the graph`,
-        );
+      if (typeof s?.from !== 'string' || !s.from.trim()) {
+        problems.push(`walkthrough ${label}: step ${i} from is required`);
+      }
+      if (typeof s?.to !== 'string' || !s.to.trim()) {
+        problems.push(`walkthrough ${label}: step ${i} to is required`);
+      }
+      if (
+        typeof s?.mechanism !== 'string' ||
+        !(SUBSYSTEM_WALKTHROUGH_MECHANISMS as readonly string[]).includes(s.mechanism)
+      ) {
+        problems.push(`walkthrough ${label}: step ${i} unknown mechanism ${JSON.stringify(s?.mechanism)}`);
       }
       if (typeof s?.file !== 'string' || !s.file.trim()) {
-        problems.push(
-          `throughline ${label}: step ${i} file is required (edgeId ${JSON.stringify(s?.edgeId ?? '<missing>')})`,
-        );
+        problems.push(`walkthrough ${label}: step ${i} file is required`);
       } else if (typeof s?.line !== 'number' || !Number.isInteger(s.line) || s.line < 1) {
-        problems.push(
-          `throughline ${label}: step ${i} line must be a positive 1-based integer (edgeId ${JSON.stringify(s?.edgeId ?? '<missing>')}, file ${JSON.stringify(s?.file)})`,
-        );
+        problems.push(`walkthrough ${label}: step ${i} line must be a positive 1-based integer`);
       }
     });
   }
@@ -209,37 +220,42 @@ export function findComponentConstructProblems(components: unknown): string[] {
   return problems;
 }
 
-export function findDetailProvenanceProblems(components: unknown): string[] {
+export function findDeclarationProvenanceProblems(components: unknown): string[] {
   if (!Array.isArray(components)) return [];
   const problems: string[] = [];
   for (const component of components) {
     const c = component as Record<string, unknown> | null;
-    if (!c || typeof c !== 'object' || !c['detail']) continue;
-    const p = c['detailProvenance'];
+    if (!c || typeof c !== 'object') continue;
+    if (!c['declaration']) continue;
+    const p = c['declarationProvenance'];
     if (p === undefined) continue;
-    if (typeof p === 'string' && (SUBSYSTEM_DETAIL_PROVENANCES as readonly string[]).includes(p)) {
+    if (
+      typeof p === 'string' &&
+      (SUBSYSTEM_DECLARATION_PROVENANCES as readonly string[]).includes(p)
+    ) {
       continue;
     }
     problems.push(
-      `component ${JSON.stringify(String(c['id'] ?? '<no id>'))}: invalid detailProvenance ${JSON.stringify(p)} — allowed: ${SUBSYSTEM_DETAIL_PROVENANCES.join(', ')}. Hand-authored details must be "authored"; "verified" is reserved for tool-extracted data.`,
+      `component ${JSON.stringify(String(c['id'] ?? '<no id>'))}: invalid declarationProvenance ${JSON.stringify(p)} — allowed: ${SUBSYSTEM_DECLARATION_PROVENANCES.join(', ')}. Hand-authored declarations must be "authored"; "verified" is reserved for tool-extracted data.`,
     );
   }
   return problems;
 }
 
-export function normalizeDetailProvenance(components: unknown): void {
+export function normalizeDeclarationProvenance(components: unknown): void {
   if (!Array.isArray(components)) return;
   for (const component of components) {
     const c = component as Record<string, unknown> | null;
     if (!c || typeof c !== 'object') continue;
-    const detail = c['detail'] as Record<string, unknown> | undefined;
-    if (!detail || typeof detail !== 'object') {
-      delete c['detailProvenance'];
+
+    const declaration = c['declaration'] as Record<string, unknown> | undefined;
+    if (!declaration || typeof declaration !== 'object') {
+      delete c['declarationProvenance'];
       continue;
     }
-    const p = c['detailProvenance'];
-    if (p !== 'verified' && p !== 'authored') c['detailProvenance'] = 'authored';
-    const kind = detail['kind'];
+    const p = c['declarationProvenance'];
+    if (p !== 'verified' && p !== 'authored') c['declarationProvenance'] = 'authored';
+    const kind = declaration['kind'];
     const arrays: Record<string, string[]> = {
       function: ['parameters', 'callers', 'callees'],
       method: ['parameters'],
@@ -247,9 +263,10 @@ export function normalizeDetailProvenance(components: unknown): void {
       type: ['properties', 'usedBy', 'implementors'],
       module: ['imports', 'exports', 'symbols'],
       custom_entity: ['attributes'],
+      store: ['properties'],
     };
     for (const key of arrays[String(kind)] ?? []) {
-      if (!Array.isArray(detail[key])) detail[key] = [];
+      if (!Array.isArray(declaration[key])) declaration[key] = [];
     }
   }
 }
@@ -268,15 +285,15 @@ export function findCreateProblems(body: Record<string, unknown>): string[] {
   if (!Array.isArray(body['components'])) {
     problems.push('components array is required');
   }
-  if (!Array.isArray(body['edges'])) {
-    problems.push('edges array is required');
+  if (!Array.isArray(body['relations'])) {
+    problems.push('relations array is required');
   }
   if (problems.length > 0) return problems;
   return [
     ...findComponentConstructProblems(body['components']),
-    ...findDetailProvenanceProblems(body['components']),
-    ...findEdgeMechanismProblems(body['edges']),
-    ...findThroughlineProblems(body['edges'], body['throughlines']),
+    ...findDeclarationProvenanceProblems(body['components']),
+    ...findRelationTypeProblems(body['relations']),
+    ...findWalkthroughProblems(body['walkthroughs']),
   ];
 }
 
@@ -286,7 +303,10 @@ function indexEntryFor(record: StoredSubsystemModel): SubsystemModelIndexEntry {
     title: record.title,
     description: record.description,
     componentCount: record.components.length,
-    edgeCount: record.edges.length,
+    edgeCount: deriveGraphEdges({
+      relations: record.relations as Parameters<typeof deriveGraphEdges>[0]['relations'],
+      walkthroughs: record.walkthroughs as Parameters<typeof deriveGraphEdges>[0]['walkthroughs'],
+    }).length,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     lastOpenedAt: record.lastOpenedAt,
@@ -363,7 +383,7 @@ export async function createSubsystemModel(
   doc: CreateSubsystemModelInput,
 ): Promise<StoredSubsystemModel> {
   await ensureDir();
-  normalizeDetailProvenance(doc.components);
+  normalizeDeclarationProvenance(doc.components);
   const now = new Date().toISOString();
   const record: StoredSubsystemModel = {
     ...doc,
@@ -385,8 +405,8 @@ export async function updateSubsystemModel(
       | 'title'
       | 'description'
       | 'components'
-      | 'edges'
-      | 'throughlines'
+      | 'relations'
+      | 'walkthroughs'
       | 'source'
       | 'repo'
       | 'repoRoot'
@@ -397,7 +417,7 @@ export async function updateSubsystemModel(
 ): Promise<StoredSubsystemModel | null> {
   const existing = await getSubsystemModel(id);
   if (!existing) return null;
-  if (patch.components !== undefined) normalizeDetailProvenance(patch.components);
+  if (patch.components !== undefined) normalizeDeclarationProvenance(patch.components);
   const updated: StoredSubsystemModel = {
     ...existing,
     ...patch,

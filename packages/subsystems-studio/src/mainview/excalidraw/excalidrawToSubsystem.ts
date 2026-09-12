@@ -42,8 +42,9 @@ function asString(v: unknown, fallback = ""): string {
 }
 
 function componentFromMeta(meta: Record<string, unknown>): SubsystemComponent {
-	const capture = meta["capture"];
 	const layer = meta["layer"];
+	const role = meta["role"];
+	const proposed = meta["proposed"];
 	return {
 		id: asString(meta["id"]),
 		name: asString(meta["name"], asString(meta["id"])),
@@ -52,10 +53,8 @@ function componentFromMeta(meta: Record<string, unknown>): SubsystemComponent {
 		purl: asString(meta["purl"]),
 		symbol: typeof meta["symbol"] === "string" ? meta["symbol"] : undefined,
 		purpose: typeof meta["purpose"] === "string" ? meta["purpose"] : undefined,
-		capture:
-			capture === "edited" || capture === "analyzed" || capture === "referenced"
-				? capture
-				: undefined,
+		role: role === "entry" || role === "service" ? role : undefined,
+		proposed: proposed === true ? true : undefined,
 		layer: typeof layer === "number" ? layer : undefined,
 	};
 }

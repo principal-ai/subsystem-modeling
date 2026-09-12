@@ -10,18 +10,18 @@ One case per repo type and language, so you can see how the same definition shap
 describes very different codebases.
 
 Each example is a plain JSON document — components anchored to real source files,
-typed edges between them, and the flows the subsystem must support. Every node you
+typed relations between them, and the walkthrough flows the subsystem must support. Every node you
 see here opens its source file; every claim is verifiable against the code.
 
 ## Cases
 
 - **TypeScript / Daily page digest** — a beginner-friendly cron script: fetch a
   public page, parse headlines, append to a local file — with one scheduled run
-  as a throughline.
+  as a walkthrough.
 - **TypeScript / Booking page** — Calendly-style Next.js scheduler with a
   client→server-action→DB split and PostHog on pick / book / cancel.
 - **TypeScript / Multiplayer whiteboard** — Excalidraw-style board on Convex:
-  draw, remote sync, and presence throughlines.
+  draw, remote sync, and presence walkthroughs.
 - **Python / Traced HTTP API** — FastAPI orders service with OpenTelemetry on
   the request path: spans + events into a TracerProvider, OTLP export, and
   downstream context propagation.
@@ -39,4 +39,4 @@ see here opens its source file; every claim is verifiable against the code.
 - **CUDA / Vector add** — HtoD → device kernel → DtoH.
 - **TypeScript / Orders API** — a typical Express service: router boundary, service
   class, repository, external stores — with the `POST /orders` request path as a
-  throughline.
+  walkthrough.

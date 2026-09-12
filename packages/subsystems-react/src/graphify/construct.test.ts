@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { GraphifyEdge, GraphifyNode } from './types';
-import { inferGraphifyKind, kindsMatch } from './kind';
+import { inferConstructFromGraphify, constructsMatch } from './construct';
 
 function node(
 	id: string,
@@ -32,38 +32,38 @@ function edge(
 	};
 }
 
-describe('inferGraphifyKind', () => {
+describe('inferConstructFromGraphify', () => {
 	test('outgoing method edges → class', () => {
 		const n = node('cls', 'SessionReader');
 		const edges = [edge('cls', 'cls_get', 'method')];
-		const r = inferGraphifyKind(n, edges);
-		expect(r.kind).toBe('class');
+		const r = inferConstructFromGraphify(n, edges);
+		expect(r.construct).toBe('class');
 		expect(r.evidence[0]).toContain('outgoing method');
 	});
 
 	test('call-style label + no methods → function', () => {
 		const n = node('fn', 'SubsystemModelView()');
-		const r = inferGraphifyKind(n, []);
-		expect(r.kind).toBe('function');
+		const r = inferConstructFromGraphify(n, []);
+		expect(r.construct).toBe('function');
 	});
 
 	test('method-style label + incoming method → method', () => {
 		const n = node('m', '.validate()');
 		const edges = [edge('cls', 'm', 'method')];
-		const r = inferGraphifyKind(n, edges);
-		expect(r.kind).toBe('method');
+		const r = inferConstructFromGraphify(n, edges);
+		expect(r.construct).toBe('method');
 	});
 
 	test('method takes priority over call-style function', () => {
 		const n = node('m', '.generate()');
 		const edges = [edge('CodeGenerator', 'm', 'method')];
-		expect(inferGraphifyKind(n, edges).kind).toBe('method');
+		expect(inferConstructFromGraphify(n, edges).construct).toBe('method');
 	});
 
 	test('incoming implements → type', () => {
 		const n = node('iface', 'StoryboardRegistryInterface');
 		const edges = [edge('MockRegistry', 'iface', 'implements')];
-		expect(inferGraphifyKind(n, edges).kind).toBe('type');
+		expect(inferConstructFromGraphify(n, edges).construct).toBe('type');
 	});
 
 	test('filename label → module', () => {
@@ -72,12 +72,12 @@ describe('inferGraphifyKind', () => {
 			'SubsystemModelView.tsx',
 			'packages/subsystems-studio/src/mainview/views/SubsystemModelView.tsx',
 		);
-		expect(inferGraphifyKind(n, []).kind).toBe('module');
+		expect(inferConstructFromGraphify(n, []).construct).toBe('module');
 	});
 
 	test('bare symbol with no edges → unknown', () => {
 		const n = node('x', 'INSPECTOR_KEYS');
-		expect(inferGraphifyKind(n, []).kind).toBe('unknown');
+		expect(inferConstructFromGraphify(n, []).construct).toBe('unknown');
 	});
 
 	test('class wins over implements on same node', () => {
@@ -86,23 +86,23 @@ describe('inferGraphifyKind', () => {
 			edge('cls', 'cls_gen', 'method'),
 			edge('Other', 'cls', 'implements'),
 		];
-		expect(inferGraphifyKind(n, edges).kind).toBe('class');
+		expect(inferConstructFromGraphify(n, edges).construct).toBe('class');
 	});
 });
 
-describe('kindsMatch', () => {
+describe('constructsMatch', () => {
 	test('exact string equality', () => {
-		expect(kindsMatch('function', 'function')).toBe(true);
-		expect(kindsMatch('class', 'function')).toBe(false);
+		expect(constructsMatch('function', 'function')).toBe(true);
+		expect(constructsMatch('class', 'function')).toBe(false);
 	});
 
 	test('external / missing claimed skips', () => {
-		expect(kindsMatch('external', 'function')).toBe(true);
-		expect(kindsMatch(undefined, 'unknown')).toBe(true);
+		expect(constructsMatch('external', 'function')).toBe(true);
+		expect(constructsMatch(undefined, 'unknown')).toBe(true);
 	});
 
 	test('no class≈function alias', () => {
-		expect(kindsMatch('class', 'function')).toBe(false);
-		expect(kindsMatch('function', 'class')).toBe(false);
+		expect(constructsMatch('class', 'function')).toBe(false);
+		expect(constructsMatch('function', 'class')).toBe(false);
 	});
 });

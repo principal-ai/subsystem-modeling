@@ -1,7 +1,7 @@
 /**
- * PierreThroughlineCodeView — multi-file step snippets via `@pierre/diffs` CodeView.
+ * PierreWalkthroughCodeView — multi-file step snippets via `@pierre/diffs` CodeView.
  *
- * Renders one sliced window per throughline step in a single virtualized
+ * Renders one sliced window per walkthrough step in a single virtualized
  * scroll; when `stepIndex` changes, scrolls that step's site line into view
  * and highlights it via CodeView `selectedLines` (same mechanism as
  * `PierreSnippetView`).
@@ -22,10 +22,10 @@ type CodeViewLineSelection = {
   id: string;
   range: { start: number; end: number };
 };
-/** Metadata carried on a throughline step's line annotation. */
-type ThroughlineStepAnnotation = { text: string };
+/** Metadata carried on a walkthrough step's line annotation. */
+type WalkthroughStepAnnotation = { text: string };
 import { useTheme } from '@principal-ade/industry-theme';
-import type { SubsystemThroughline } from '../subsystem/model';
+import type { SubsystemWalkthrough } from '../subsystem/model';
 import { buildPierreOptions, PIERRE_FILE_STYLE } from './pierreBackground';
 import {
   pierreCodeViewFileName,
@@ -34,8 +34,8 @@ import {
 import { resolvePierreSyntaxThemeName } from './pierreSyntaxTheme';
 import { sliceSnippetWindow, type SnippetSlice } from './sliceSnippet';
 
-export interface PierreThroughlineCodeViewProps {
-  throughline: SubsystemThroughline;
+export interface PierreWalkthroughCodeViewProps {
+  walkthrough: SubsystemWalkthrough;
   /** Focused step; `null` shows all snippets without scrolling to a step. */
   stepIndex: number | null;
   readFile: (path: string) => Promise<string>;
@@ -50,31 +50,31 @@ type FileLoadState =
   | { status: 'error'; message: string }
   | { status: 'ready'; byPath: Map<string, string> };
 
-function stepItemId(throughlineId: string, index: number): string {
-  return `${throughlineId}:${index}`;
+function stepItemId(walkthroughId: string, index: number): string {
+  return `${walkthroughId}:${index}`;
 }
 
-export function PierreThroughlineCodeView({
-  throughline,
+export function PierreWalkthroughCodeView({
+  walkthrough,
   stepIndex,
   readFile,
   contextLines = 8,
   background,
-}: PierreThroughlineCodeViewProps) {
+}: PierreWalkthroughCodeViewProps) {
   const { theme, mode } = useTheme();
   const viewRef = useRef<CodeViewHandle<undefined>>(null);
   const [load, setLoad] = useState<FileLoadState>({ status: 'loading' });
 
   const pathsKey = useMemo(() => {
-    const paths = [...new Set(throughline.steps.map((s) => s.file))];
+    const paths = [...new Set(walkthrough.steps.map((s) => s.file))];
     paths.sort();
     return paths.join('\0');
-  }, [throughline.steps]);
+  }, [walkthrough.steps]);
 
   useEffect(() => {
     let cancelled = false;
     setLoad({ status: 'loading' });
-    const paths = [...new Set(throughline.steps.map((s) => s.file))];
+    const paths = [...new Set(walkthrough.steps.map((s) => s.file))];
     void Promise.all(
       paths.map(async (path) => {
         const contents = await readFile(path);
@@ -95,11 +95,11 @@ export function PierreThroughlineCodeView({
     return () => {
       cancelled = true;
     };
-  }, [throughline.id, pathsKey, readFile]);
+  }, [walkthrough.id, pathsKey, readFile]);
 
   const slices = useMemo((): SnippetSlice[] => {
     if (load.status !== 'ready') return [];
-    return throughline.steps.map((step) => {
+    return walkthrough.steps.map((step) => {
       const contents = load.byPath.get(step.file) ?? '';
       return sliceSnippetWindow(
         contents,
@@ -109,15 +109,15 @@ export function PierreThroughlineCodeView({
         step.line,
       );
     });
-  }, [load, throughline.steps, contextLines]);
+  }, [load, walkthrough.steps, contextLines]);
 
-const items = useMemo((): CodeViewItem<ThroughlineStepAnnotation>[] => {
+const items = useMemo((): CodeViewItem<WalkthroughStepAnnotation>[] => {
     if (load.status !== 'ready' || slices.length === 0) return [];
-    return throughline.steps.map((step, index) => {
+    return walkthrough.steps.map((step, index) => {
       const slice = slices[index]!;
       const focus = slice.focusOffset;
       const annotations:
-        | LineAnnotation<ThroughlineStepAnnotation>[]
+        | LineAnnotation<WalkthroughStepAnnotation>[]
         | undefined =
         step.annotation != null && step.annotation.length > 0 && focus != null
           ? [
@@ -128,26 +128,20 @@ const items = useMemo((): CodeViewItem<ThroughlineStepAnnotation>[] => {
             ]
           : undefined;
       return {
-        id: stepItemId(throughline.id, index),
+        id: stepItemId(walkthrough.id, index),
         type: 'file' as const,
         version: 1,
         annotations,
         file: {
-          // Unique per-step name: many throughline steps share one path
-          // (e.g. seven sites in main.cpp), and identical `name`s have
-          // correlated with WebKit renderer traps in CodeView.
           name: pierreCodeViewFileName(step.file, index),
           contents: slice.contents,
-          // C-family → plain text: cpp Shiki still traps WebKit even with
-          // unique names (reproduced on 0.16.67).
           lang: pierreLangForPath(step.file),
-          cacheKey: `${throughline.id}:${index}:${step.file}:${step.line}:${slice.sliceStart}-${slice.sliceEnd}`,
+          cacheKey: `${walkthrough.id}:${index}:${step.file}:${step.line}:${slice.sliceStart}-${slice.sliceEnd}`,
         },
       };
     });
-  }, [load, slices, throughline.id, throughline.steps]);
+  }, [load, slices, walkthrough.id, walkthrough.steps]);
 
-  /** Highlight the focused step's site line (1-based within its sliced window). */
   const selectedLines = useMemo((): CodeViewLineSelection | null => {
     if (stepIndex == null || stepIndex < 0 || stepIndex >= slices.length) {
       return null;
@@ -155,15 +149,15 @@ const items = useMemo((): CodeViewItem<ThroughlineStepAnnotation>[] => {
     const focus = slices[stepIndex]?.focusOffset;
     if (focus == null) return null;
     return {
-      id: stepItemId(throughline.id, stepIndex),
+      id: stepItemId(walkthrough.id, stepIndex),
       range: { start: focus, end: focus },
     };
-  }, [stepIndex, slices, throughline.id]);
+  }, [stepIndex, slices, walkthrough.id]);
 
   const renderHeaderPrefix = useMemo(() => {
     return (item: CodeViewItem) => {
       const index = Number.parseInt(item.id.split(':').pop() ?? '', 10);
-      const step = throughline.steps[index];
+      const step = walkthrough.steps[index];
       if (!step) return null;
       const label =
         step.symbol != null && step.symbol.length > 0
@@ -182,12 +176,12 @@ const items = useMemo((): CodeViewItem<ThroughlineStepAnnotation>[] => {
         </span>
       );
     };
-  }, [throughline.steps, theme]);
+  }, [walkthrough.steps, theme]);
 
   const renderHeaderMetadata = useMemo(() => {
     return (item: CodeViewItem) => {
       const index = Number.parseInt(item.id.split(':').pop() ?? '', 10);
-      const step = throughline.steps[index];
+      const step = walkthrough.steps[index];
       if (!step) return null;
       return (
         <span
@@ -202,17 +196,17 @@ const items = useMemo((): CodeViewItem<ThroughlineStepAnnotation>[] => {
         </span>
       );
     };
-  }, [throughline.steps, theme]);
+  }, [walkthrough.steps, theme]);
 
   const renderAnnotation = useMemo(() => {
     return (
       annotation:
-        | LineAnnotation<ThroughlineStepAnnotation>
-        | DiffLineAnnotation<ThroughlineStepAnnotation>,
-      item: CodeViewItem<ThroughlineStepAnnotation>,
+        | LineAnnotation<WalkthroughStepAnnotation>
+        | DiffLineAnnotation<WalkthroughStepAnnotation>,
+      item: CodeViewItem<WalkthroughStepAnnotation>,
     ) => {
       const index = Number.parseInt(item.id.split(':').pop() ?? '', 10);
-      const step = throughline.steps[index];
+      const step = walkthrough.steps[index];
       const text = annotation.metadata?.text;
       if (!text || !step) return null;
       return (
@@ -230,7 +224,7 @@ const items = useMemo((): CodeViewItem<ThroughlineStepAnnotation>[] => {
         </span>
       );
     };
-  }, [throughline.steps, theme]);
+  }, [walkthrough.steps, theme]);
 
   const options = useMemo((): CodeViewReactOptions => {
     return {
@@ -248,11 +242,10 @@ const items = useMemo((): CodeViewItem<ThroughlineStepAnnotation>[] => {
 
   useEffect(() => {
     if (load.status !== 'ready' || stepIndex == null) return;
-    if (stepIndex < 0 || stepIndex >= throughline.steps.length) return;
+    if (stepIndex < 0 || stepIndex >= walkthrough.steps.length) return;
     const focus = slices[stepIndex]?.focusOffset;
     if (focus == null) return;
-    // Defer until CodeView has laid out items.
-    const id = stepItemId(throughline.id, stepIndex);
+    const id = stepItemId(walkthrough.id, stepIndex);
     const t = window.setTimeout(() => {
       viewRef.current?.scrollTo({
         type: 'line',
@@ -265,8 +258,8 @@ const items = useMemo((): CodeViewItem<ThroughlineStepAnnotation>[] => {
   }, [
     load.status,
     stepIndex,
-    throughline.id,
-    throughline.steps.length,
+    walkthrough.id,
+    walkthrough.steps.length,
     slices,
     items.length,
   ]);
@@ -286,7 +279,6 @@ const items = useMemo((): CodeViewItem<ThroughlineStepAnnotation>[] => {
     );
   }
 
-  // Pierre's CodeView prop / item unions blow past TS's complexity limit.
   const CodeViewLoose = CodeView as unknown as (props: Record<string, unknown>) => ReactElement;
 
   return (

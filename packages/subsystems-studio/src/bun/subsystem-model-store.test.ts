@@ -5,19 +5,20 @@ import { join } from "node:path";
 import {
 	fileDeclaresSymbol,
 	findComponentConstructProblems,
-	findDetailProvenanceProblems,
-	findEdgeMechanismProblems,
-	findThroughlineProblems,
+	findDeclarationProvenanceProblems,
+	findRelationTypeProblems,
+	findWalkthroughProblems,
 	graphIdFromWatchFilename,
 	migrateLegacySubsystemGraphsDir,
-	normalizeDetailProvenance,
+	normalizeDeclarationProvenance,
 	purlRepoKey,
 	resolveRepoRootForComponent,
 	shouldRestampOpened,
 	SUBSYSTEM_COMPONENT_CONSTRUCTS,
-	SUBSYSTEM_DETAIL_PROVENANCES,
+	SUBSYSTEM_DECLARATION_PROVENANCES,
 	SUBSYSTEM_EDGE_MECHANISMS,
 	SUBSYSTEM_EDGE_MECHANISMS_COVER_PUBLISHED_UNION,
+	SUBSYSTEM_RELATION_TYPES,
 	subsystemModelFilePath,
 	verifyModelFiles,
 	type SubsystemComponent,
@@ -149,16 +150,15 @@ describe("resolveRepoRootForComponent", () => {
 	});
 });
 
-describe("findEdgeMechanismProblems", () => {
-	test("accepts known mechanisms and flags unknown ones", () => {
-		expect(SUBSYSTEM_EDGE_MECHANISMS.length).toBeGreaterThan(0);
-		expect(findEdgeMechanismProblems([{ id: "e1", from: "a", to: "b", mechanism: "imports" }])).toEqual([]);
-		const problems = findEdgeMechanismProblems([
-			{ id: "ok", from: "a", to: "b", mechanism: "calls" },
-			{ id: "bad", from: "a", to: "b", mechanism: "teleports" },
+describe("findRelationTypeProblems", () => {
+	test("accepts known relation types and flags unknown ones", () => {
+		expect(findRelationTypeProblems([{ id: "r1", from: "a", to: "b", relationType: "imports" }])).toEqual([]);
+		const problems = findRelationTypeProblems([
+			{ id: "ok", from: "a", to: "b", relationType: "extends" },
+			{ id: "bad", from: "a", to: "b", relationType: "teleports" },
 		]);
 		expect(problems).toHaveLength(1);
-		expect(problems[0]!).toContain('edge "bad"');
+		expect(problems[0]!).toContain('relation "bad"');
 		expect(problems[0]!).toContain("teleports");
 	});
 });
@@ -172,7 +172,7 @@ describe("verifyModelFiles", () => {
 				{ id: "u1", name: "U", construct: "module", file: "somewhere.ts", purl: "pkg:github/a/repo-remote" },
 				{ id: "f1", name: "F", construct: "module", file: "", purl: "pkg:github/a/repo-a" },
 			],
-			edges: [],
+			relations: [],
 			repoRoot: repoA,
 			repoRoots: {
 				"pkg:github/a/repo-a": repoA,
@@ -216,7 +216,7 @@ describe("fileDeclaresSymbol", () => {
 });
 
 describe("verifyModelFiles symbol pass", () => {
-	test("counts declared symbols and lists undeclared ones", async () => {
+	test("no longer text-checks symbols (graphify owns that)", async () => {
 		const result = await verifyModelFiles({
 			components: [
 				{ id: "ok-exported", name: "A", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "exportedFn" },
@@ -226,62 +226,62 @@ describe("verifyModelFiles symbol pass", () => {
 				{ id: "mention-only", name: "E", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "buildAgentSessionsView" },
 				{ id: "no-symbol", name: "F", construct: "module", file: "exists.ts", purl: "pkg:github/a/repo-a" },
 			],
-			edges: [],
+			relations: [],
 			repoRoots: { "pkg:github/a/repo-a": repoA },
 		});
 
 		expect(result.verifiedCount).toBe(6);
-		expect(result.symbolsVerified).toBe(3);
-		expect(result.symbolsMissing.map((m) => m.componentId).sort()).toEqual(["bad-symbol", "mention-only"]);
+		expect(result.symbolsVerified).toBe(0);
+		expect(result.symbolsMissing).toEqual([]);
 	});
 });
 
-describe("detail provenance", () => {
-	const fnDetail = { construct: "function" as const, parameters: [], callers: [], callees: [] };
+describe("declaration provenance", () => {
+	const fnDetail = { kind: "function" as const, parameters: [], callers: [], callees: [] };
 
 	test("pins the provenance set", () => {
-		expect([...SUBSYSTEM_DETAIL_PROVENANCES]).toEqual(["verified", "authored"]);
+		expect([...SUBSYSTEM_DECLARATION_PROVENANCES]).toEqual(["verified", "authored"]);
 	});
 
 	test("accepts explicit verified/authored, flags anything else", () => {
 		const ok = [
-			{ id: "a", detail: fnDetail, detailProvenance: "verified" },
-			{ id: "b", detail: fnDetail, detailProvenance: "authored" },
-			{ id: "c" }, // no detail at all
+			{ id: "a", declaration: fnDetail, declarationProvenance: "verified" },
+			{ id: "b", declaration: fnDetail, declarationProvenance: "authored" },
+			{ id: "c" }, // no declaration at all
 		];
-		expect(findDetailProvenanceProblems(ok)).toEqual([]);
+		expect(findDeclarationProvenanceProblems(ok)).toEqual([]);
 		const bad = [
-			{ id: "x", detail: fnDetail, detailProvenance: "graphify" },
-			{ id: "y", detail: fnDetail, detailProvenance: 42 },
+			{ id: "x", declaration: fnDetail, declarationProvenance: "graphify" },
+			{ id: "y", declaration: fnDetail, declarationProvenance: 42 },
 		];
-		expect(findDetailProvenanceProblems(bad)).toHaveLength(2);
-		expect(findDetailProvenanceProblems(bad)[0]).toContain('"graphify"');
-		expect(findDetailProvenanceProblems(undefined)).toEqual([]);
+		expect(findDeclarationProvenanceProblems(bad)).toHaveLength(2);
+		expect(findDeclarationProvenanceProblems(bad)[0]).toContain('"graphify"');
+		expect(findDeclarationProvenanceProblems(undefined)).toEqual([]);
 	});
 
 	test("normalize defaults missing provenance to authored and strips orphan claims", () => {
 		const components = [
-			{ id: "a", detail: fnDetail }, // -> authored
-			{ id: "b", detailProvenance: "verified", other: 1 }, // no detail -> stripped
-			{ id: "c", detail: fnDetail, detailProvenance: "verified" }, // untouched
+			{ id: "a", declaration: fnDetail }, // -> authored
+			{ id: "b", declarationProvenance: "verified", other: 1 }, // no declaration -> stripped
+			{ id: "c", declaration: fnDetail, declarationProvenance: "verified" }, // untouched
 		];
-		normalizeDetailProvenance(components);
-		expect(components[0]["detailProvenance"]).toBe("authored");
-		expect(components[1]["detailProvenance"]).toBeUndefined();
-		expect(components[2]["detailProvenance"]).toBe("verified");
+		normalizeDeclarationProvenance(components);
+		expect(components[0]["declarationProvenance"]).toBe("authored");
+		expect(components[1]["declarationProvenance"]).toBeUndefined();
+		expect(components[2]["declarationProvenance"]).toBe("verified");
 	});
 
 	test("normalize backfills per-construct arrays the published renderer requires", () => {
 		const components = [
-			{ id: "f", detail: { kind: "function", parameters: [{ name: "id", type: "string" }] } },
-			{ id: "c", detail: { kind: "class", methods: [] } },
-			{ id: "t", detail: { kind: "type" } },
-			{ id: "m", detail: { kind: "module" } },
-			{ id: "e", detail: { kind: "custom_entity" } },
+			{ id: "f", declaration: { kind: "function", parameters: [{ name: "id", type: "string" }] } },
+			{ id: "c", declaration: { kind: "class", methods: [] } },
+			{ id: "t", declaration: { kind: "type" } },
+			{ id: "m", declaration: { kind: "module" } },
+			{ id: "e", declaration: { kind: "custom_entity" } },
 		];
-		normalizeDetailProvenance(components);
+		normalizeDeclarationProvenance(components);
 		const d = (id: string) =>
-			(components.find((x) => x["id"] === id)?.["detail"] ?? {}) as Record<string, unknown>;
+			(components.find((x) => x["id"] === id)?.["declaration"] ?? {}) as Record<string, unknown>;
 		expect(Object.keys(d("f"))).toContain("callers");
 		expect(d("f")["callees"]).toEqual([]);
 		expect(d("c")["extends"]).toEqual([]);
@@ -294,39 +294,36 @@ describe("detail provenance", () => {
 	});
 
 	test("verification counts details by provenance", async () => {
-		// `detailProvenance` ships in the next @principal-ai/subsystems-react
+		// `declarationProvenance` ships in the next @principal-ai/subsystems-react
 		// publish; until then the store treats it as payload-level JSON, so the
 		// fixture is typed loosely here.
 		const components = [
-			{ id: "v1", name: "V1", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "exportedFn", detail: fnDetail, detailProvenance: "verified" },
-			{ id: "a1", name: "A1", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "privateFn", detail: fnDetail },
+			{ id: "v1", name: "V1", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "exportedFn", declaration: fnDetail, declarationProvenance: "verified" },
+			{ id: "a1", name: "A1", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "privateFn", declaration: fnDetail },
 		] as unknown as Parameters<typeof verifyModelFiles>[0]["components"];
 		const result = await verifyModelFiles({
 			components,
-			edges: [],
+			relations: [],
 			repoRoots: { "pkg:github/a/repo-a": repoA },
 		});
-		expect(result.detailsVerified).toBe(1);
-		expect(result.detailsAuthored).toBe(1); // defaulted from missing
+		expect(result.declarationsVerified).toBe(1);
+		expect(result.declarationsAuthored).toBe(1); // defaulted from missing
 	});
 });
 
-describe("findEdgeMechanismProblems", () => {
-	test("pins the mechanism set (mirror of SubsystemEdgeMechanism)", () => {
+describe("relation and walkthrough mechanism sets", () => {
+	test("pins the combined edge-mechanism union for drift checks", () => {
 		expect([...SUBSYSTEM_EDGE_MECHANISMS]).toEqual([
 			"imports",
-			"imports_from",
-			"re_exports",
-			"defines",
-			"calls",
 			"extends",
 			"inherits",
 			"implements",
 			"mixes_in",
-			"uses",
 			"method",
 			"references",
 			"contains",
+			"calls",
+			"uses",
 			"feeds",
 			"produces",
 			"writes",
@@ -337,33 +334,14 @@ describe("findEdgeMechanismProblems", () => {
 		expect(SUBSYSTEM_EDGE_MECHANISMS_COVER_PUBLISHED_UNION).toBe(true);
 	});
 
-	test("accepts every allowed mechanism", () => {
-		const edges = SUBSYSTEM_EDGE_MECHANISMS.map((mechanism, i) => ({
-			id: `e${i}`,
+	test("accepts every allowed relation type", () => {
+		const rels = SUBSYSTEM_RELATION_TYPES.map((relationType, i) => ({
+			id: `r${i}`,
 			from: "a",
 			to: "b",
-			mechanism,
+			relationType,
 		}));
-		expect(findEdgeMechanismProblems(edges)).toEqual([]);
-	});
-
-	test("flags unknown labels with the allowed set in the message", () => {
-		const problems = findEdgeMechanismProblems([
-			{ id: "bad-1", from: "a", to: "b", mechanism: "Electrobun RPC: analyzeSession" },
-			{ id: "ok", from: "a", to: "b", mechanism: "calls" },
-			{ id: "bad-2", from: "a", to: "b", mechanism: "spawns worker" },
-		]);
-		expect(problems).toHaveLength(2);
-		expect(problems[0]).toContain('"bad-1"');
-		expect(problems[0]).toContain("registers-into");
-		expect(problems[1]).toContain('"bad-2"');
-	});
-
-	test("flags non-string and missing mechanisms", () => {
-		expect(findEdgeMechanismProblems([{ id: "n1", mechanism: 42 }])).toHaveLength(1);
-		expect(findEdgeMechanismProblems([{ id: "n2" }])).toHaveLength(1);
-		expect(findEdgeMechanismProblems([])).toEqual([]);
-		expect(findEdgeMechanismProblems(undefined)).toEqual([]);
+		expect(findRelationTypeProblems(rels)).toEqual([]);
 	});
 });
 
@@ -419,55 +397,58 @@ describe("findComponentConstructProblems", () => {
 	});
 });
 
-describe("findThroughlineProblems", () => {
-	const edges = [
-		{ id: "e1", from: "a", to: "b", mechanism: "calls" },
-		{ id: "e2", from: "b", to: "store", mechanism: "writes" },
-	];
-
-	test("tolerates absent throughlines", () => {
-		expect(findThroughlineProblems(edges, undefined)).toEqual([]);
+describe("findWalkthroughProblems", () => {
+	test("tolerates absent walkthroughs", () => {
+		expect(findWalkthroughProblems(undefined)).toEqual([]);
 	});
 
-	test("accepts a well-formed throughline whose steps reference existing edges", () => {
-		const problems = findThroughlineProblems(edges, [
-			{ id: "tl", title: "save", steps: [{ edgeId: "e1", file: "src/a.ts", line: 3 }] },
+	test("accepts a well-formed walkthrough step", () => {
+		const problems = findWalkthroughProblems([
+			{
+				id: "wt",
+				title: "save",
+				steps: [{ from: "a", to: "b", mechanism: "calls", file: "src/a.ts", line: 3 }],
+			},
 		]);
 		expect(problems).toEqual([]);
 	});
 
-	test("rejects non-array throughlines", () => {
-		expect(findThroughlineProblems(edges, {})[0]).toContain("must be an array");
+	test("rejects non-array walkthroughs", () => {
+		expect(findWalkthroughProblems({})[0]).toContain("must be an array");
 	});
 
-	test("rejects missing id / title / steps and unknown edge references", () => {
-		const missingId = findThroughlineProblems(edges, [
-			{ id: "", title: "t", steps: [{ edgeId: "e1", file: "a.ts", line: 3 }] },
+	test("rejects missing id / title / steps and invalid hop fields", () => {
+		const missingId = findWalkthroughProblems([
+			{ id: "", title: "t", steps: [{ from: "a", to: "b", mechanism: "calls", file: "a.ts", line: 3 }] },
 		]);
 		expect(missingId.join("; ")).toContain("id is required");
 
-		const missingTitle = findThroughlineProblems(edges, [
-			{ id: "tl", title: "", steps: [{ edgeId: "e1", file: "a.ts", line: 3 }] },
+		const missingTitle = findWalkthroughProblems([
+			{ id: "wt", title: "", steps: [{ from: "a", to: "b", mechanism: "calls", file: "a.ts", line: 3 }] },
 		]);
 		expect(missingTitle.join("; ")).toContain("title is required");
 
-		const badEdge = findThroughlineProblems(edges, [
-			{ id: "tl", title: "t", steps: [{ edgeId: "nope", file: "a.ts", line: 3 }] },
+		const badMech = findWalkthroughProblems([
+			{ id: "wt", title: "t", steps: [{ from: "a", to: "b", mechanism: "imports", file: "a.ts", line: 3 }] },
 		]);
-		expect(badEdge.join("; ")).toContain('"nope"');
+		expect(badMech.join("; ")).toContain("unknown mechanism");
 	});
 
 	test("rejects non-positive or non-integer line", () => {
-		const problems = findThroughlineProblems(edges, [
-			{ id: "tl", title: "t", steps: [{ edgeId: "e1", file: "a.ts", line: 0 }] },
+		const problems = findWalkthroughProblems([
+			{
+				id: "wt",
+				title: "t",
+				steps: [{ from: "a", to: "b", mechanism: "calls", file: "a.ts", line: 0 }],
+			},
 		]);
 		expect(problems.join("; ")).toContain("positive 1-based integer");
 	});
 });
 
-describe("throughline verify pass", () => {
+describe("walkthrough verify pass", () => {
 	test("resolves steps to real site lines and flags stuck/blank/misfit sites", async () => {
-		const local = mkdtempSync(join(tmpdir(), "tl-verify-"));
+		const local = mkdtempSync(join(tmpdir(), "wt-verify-"));
 		try {
 			mkdirSync(join(local, "src"), { recursive: true });
 			writeFileSync(
@@ -479,32 +460,27 @@ describe("throughline verify pass", () => {
 				{ id: "a", name: "a", construct: "function", symbol: "a", file: "src/seam.ts", purl: "pkg:github/a/repo-a" },
 				{ id: "store", name: "store", construct: "store", file: "src/seam.ts", purl: "pkg:github/a/repo-a" },
 			];
-			const edges: SubsystemComponentEdge[] = [
-				{ id: "e1", from: "a", to: "store", mechanism: "calls", refs: ["writer", "createStore"] },
-			];
 			const result = await verifyModelFiles({
 				components,
-				edges,
-				throughlines: [
+				relations: [],
+				walkthroughs: [
 					{
-						id: "tl",
+						id: "wt",
 						title: "save",
 						steps: [
-							{ edgeId: "e1", file: "src/seam.ts", line: 3 }, // "writer(store, a());" — affinity via 'writer'
-							{ edgeId: "e1", file: "src/seam.ts", line: 999 }, // out of range
-							{ edgeId: "missing", file: "src/seam.ts", line: 1 }, // unknown edge
-							{ edgeId: "e1", file: "src/nope.ts", line: 1 }, // missing file
-							{ edgeId: "e1", file: "src/seam.ts", line: 4 }, // blank line
+							{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 3 },
+							{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 999 },
+							{ from: "a", to: "store", mechanism: "calls", file: "src/nope.ts", line: 1 },
+							{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 4 },
 						],
 					},
 				],
 				repoRoots: { "pkg:github/a/repo-a": local },
 			});
 
-			expect(result.throughlinesChecked).toBe(1); // only the line-3 step resolves
-			const reasons = result.throughlinesFailed.map((f) => f.reason);
+			expect(result.walkthroughsChecked).toBe(1);
+			const reasons = result.walkthroughsFailed.map((f) => f.reason);
 			expect(reasons.some((r) => r.includes("out of range"))).toBe(true);
-			expect(reasons.some((r) => r.includes("is not in the graph"))).toBe(true);
 			expect(reasons.some((r) => r.includes("not found"))).toBe(true);
 			expect(reasons.some((r) => r.includes("blank"))).toBe(true);
 		} finally {

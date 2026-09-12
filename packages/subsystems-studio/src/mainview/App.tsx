@@ -28,6 +28,8 @@ import { AgentSessionsOverviewView } from "./views/AgentSessions";
 import { LibraryView } from "./views/LibraryView";
 import { SubsystemModelsView } from "./views/SubsystemModelsView";
 import { GraphifyReposView } from "./views/GraphifyReposView";
+import { OpencodeV2DebugView } from "./views/OpencodeV2DebugView";
+import { MaintainEventsView } from "./views/MaintainEventsView";
 import { AnalysisView } from "./views/AnalysisView";
 import { SessionEventsView } from "./views/SessionEventsView";
 import { PromptView } from "./views/PromptView";
@@ -81,7 +83,14 @@ class ErrorBoundary extends Component<
 // while inactive), so heavy views like the library don't reload every time you
 // switch back to them. Trail tabs are excluded — each one mounts a full 3D
 // city, so only the active trail is mounted at a time.
-const STATIC_TAB_IDS = new Set(["library", "agent-sessions", "subsystems", "graphify"]);
+const STATIC_TAB_IDS = new Set([
+	"library",
+	"agent-sessions",
+	"maintenance-sessions",
+	"subsystems",
+	"graphify",
+	"opencode-v2",
+]);
 
 // Permanent tabs carry no host payload — their resolved state is known from the
 // tab id alone, so they mount without a getTab round-trip. The static views
@@ -90,18 +99,27 @@ const STATIC_TAB_IDS = new Set(["library", "agent-sessions", "subsystems", "grap
 function staticTabState(tabId: string): TabState | null {
 	if (tabId === "library") return { kind: "library" };
 	if (tabId === "agent-sessions") return { kind: "agent-sessions" };
+	if (tabId === "maintenance-sessions") return { kind: "maintenance-sessions" };
 	if (tabId === "subsystems") return { kind: "subsystems" };
 	if (tabId === "graphify") return { kind: "graphify" };
+	if (tabId === "opencode-v2") return { kind: "opencode-v2" };
 	return null;
 }
 
-// Rendered view for a resolved static tab, or null for transient states. The
-// returned node is registered with App's keep-mounted stack on first resolve.
-function renderStaticView(state: TabState): ReactNode | null {
+// Rendered view for a resolved static tab, or null for transient states.
+// `active` is true while this tab is the focused strip tab — permanent views
+// stay mounted when inactive, so they use it for engage/reload behavior.
+function renderStaticView(tabId: string, active: boolean): ReactNode | null {
+	const state = staticTabState(tabId);
+	if (!state) return null;
 	if (state.kind === "library") return <LibraryView />;
-	if (state.kind === "agent-sessions") return <AgentSessionsOverviewView />;
+	if (state.kind === "agent-sessions")
+		return <AgentSessionsOverviewView active={active} />;
+	if (state.kind === "maintenance-sessions")
+		return <AgentSessionsOverviewView scope="maintain" active={active} />;
 	if (state.kind === "subsystems") return <SubsystemModelsView />;
 	if (state.kind === "graphify") return <GraphifyReposView />;
+	if (state.kind === "opencode-v2") return <OpencodeV2DebugView />;
 	return null;
 }
 
@@ -112,7 +130,7 @@ function ActiveTab({
 }: {
 	tabId: string;
 	isStaticMounted: boolean;
-	onRegister: (id: string, node: ReactNode) => void;
+	onRegister: (id: string) => void;
 }) {
 	const [state, setState] = useState<TabState>(
 		() => staticTabState(tabId) ?? { kind: "loading" },
@@ -142,6 +160,16 @@ function ActiveTab({
 						kind: "session-events",
 						id: tab.id,
 						sessionId: tab.sessionId ?? "",
+					});
+					return;
+				}
+				if (tab.kind === "maintain-events") {
+					setState({
+						kind: "maintain-events",
+						id: tab.id,
+						sessionId: tab.sessionId ?? "",
+						agent: tab.agent,
+						title: tab.title,
 					});
 					return;
 				}
@@ -212,15 +240,15 @@ function ActiveTab({
 	useLayoutEffect(() => {
 		if (isStaticMounted) return;
 		if (!STATIC_TAB_IDS.has(tabId)) return;
-		const node = renderStaticView(state);
-		if (node) onRegister(tabId, node);
+		if (!staticTabState(tabId)) return;
+		onRegister(tabId);
 	}, [state, tabId, isStaticMounted, onRegister]);
 
 	if (isStaticMounted) return null;
 	if (state.kind === "loading") {
-		// The agent-sessions tab mounts its own "Pulling Agent Sessions" loader,
-		// so a "Loading trail…" flash here would double up and read wrong.
-		if (tabId === "agent-sessions") return null;
+		// Agent / maintenance sessions mount their own loader — skip the generic
+		// "Loading trail…" flash here.
+		if (tabId === "agent-sessions" || tabId === "maintenance-sessions") return null;
 		return <CenteredMessage title="Loading trail…" />;
 	}
 	if (state.kind === "error")
@@ -255,6 +283,15 @@ function ActiveTab({
 	if (state.kind === "session-events") {
 		return <SessionEventsView sessionId={state.sessionId} />;
 	}
+	if (state.kind === "maintain-events") {
+		return (
+			<MaintainEventsView
+				sessionId={state.sessionId}
+				agent={state.agent}
+				title={state.title}
+			/>
+		);
+	}
 	if (state.kind === "prompt") {
 		return <PromptView tabId={state.id} />;
 	}
@@ -283,13 +320,13 @@ export function App() {
 	// Keep-mounted views for permanent tabs (library, agent sessions,
 	// subsystems). Each view registers once on first visit and stays in the
 	// stack hidden via display:none while inactive, so switching back doesn't
-	// remount (and reload) it.
-	const mountedViews = useRef<Map<string, ReactNode>>(new Map());
+	// remount (and reload) it — except views that opt into `active`-driven refresh.
+	const mountedStaticIds = useRef(new Set<string>());
 	const [, bump] = useReducer((n: number) => n + 1, 0);
 
-	const registerView = useCallback((id: string, node: ReactNode) => {
-		if (mountedViews.current.has(id)) return;
-		mountedViews.current.set(id, node);
+	const registerView = useCallback((id: string) => {
+		if (mountedStaticIds.current.has(id)) return;
+		mountedStaticIds.current.add(id);
 		bump();
 	}, []);
 
@@ -387,7 +424,7 @@ export function App() {
 					flexDirection: "column",
 				}}
 			>
-				{Array.from(mountedViews.current.entries()).map(([id, node]) => (
+				{Array.from(mountedStaticIds.current).map((id) => (
 					<div
 						key={id}
 						style={{
@@ -398,13 +435,13 @@ export function App() {
 							overflow: "hidden",
 						}}
 					>
-						{node}
+						{renderStaticView(id, id === activeTabId)}
 					</div>
 				))}
 				<ActiveTab
 					key={activeTabId}
 					tabId={activeTabId}
-					isStaticMounted={mountedViews.current.has(activeTabId)}
+					isStaticMounted={mountedStaticIds.current.has(activeTabId)}
 					onRegister={registerView}
 				/>
 			</div>

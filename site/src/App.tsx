@@ -14,6 +14,10 @@ const Gist = lazy(() =>
   import('./pages/Gist').then((m) => ({ default: m.Gist })),
 )
 
+const ModelMaintainer = lazy(() =>
+  import('./pages/ModelMaintainer').then((m) => ({ default: m.ModelMaintainer })),
+)
+
 const HeroGraphic = lazy(() =>
   import('./components/HeroGraphic').then((m) => ({ default: m.HeroGraphic })),
 )
@@ -154,7 +158,9 @@ function App() {
             ? 'shell shell--start'
             : pathname === '/gist'
               ? 'shell shell--gist'
-              : 'shell'
+              : pathname === '/maintainer'
+                ? 'shell shell--maintainer'
+                : 'shell'
 
   return (
     <div className={shellClass}>
@@ -217,6 +223,7 @@ function App() {
         <div className="nav-links">
           <Link to="/start">Try it</Link>
           <Link to="/gist">Gist</Link>
+          <Link to="/maintainer">Maintainer</Link>
           <Link to="/about">Mission</Link>
           <Link to="/schema">Schema</Link>
           <a href={GALLERY_HREF}>Gallery</a>
@@ -270,6 +277,14 @@ function App() {
             element={
               <Suspense fallback={<section className="gist-page">Loading…</section>}>
                 <Gist />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/maintainer"
+            element={
+              <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
+                <ModelMaintainer />
               </Suspense>
             }
           />

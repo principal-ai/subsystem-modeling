@@ -138,7 +138,7 @@ function verificationSummary(
   const bits: string[] = [];
   if (v.file) {
     if (!v.file.exists) bits.push('file missing');
-    else if (v.file.symbolDeclared === false) bits.push('symbol not declared in file');
+    else if (v.file.symbolDeclared === false) bits.push('symbol not in graphify');
     else if (v.file.symbolDeclared === true) bits.push('file+symbol ok');
     else bits.push('file exists');
   }

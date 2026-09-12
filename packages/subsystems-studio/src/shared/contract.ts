@@ -19,6 +19,11 @@ import type {
 	SubsystemDeclarationRef,
 	SubsystemEdgeMechanism,
 	SubsystemModelDocument,
+	SubsystemRelation,
+	SubsystemRelationType,
+	SubsystemWalkthrough,
+	SubsystemWalkthroughMechanism,
+	SubsystemWalkthroughStep,
 } from "@principal-ai/subsystems-react";
 
 /** Canonical subsystem-model types, re-shared with both processes. */
@@ -27,37 +32,12 @@ export type {
 	SubsystemComponentEdge,
 	SubsystemModelDocument,
 	SubsystemEdgeMechanism,
+	SubsystemRelation,
+	SubsystemRelationType,
+	SubsystemWalkthrough,
+	SubsystemWalkthroughMechanism,
+	SubsystemWalkthroughStep,
 };
-
-/**
- * A single site on an existing edge — the exact `file:line` where that
- * edge's seam manifests for a given flow. The edge stays the abstract
- * contract (`from`, `to`, `mechanism`); a throughline step picks the concrete
- * manifestation. One edge can appear in many steps (e.g. a `calls` edge whose
- * `readFile` and `writeFile` sites serve different flows).
- */
-export interface SubsystemThroughlineStep {
-	/** Id of the existing edge this hop traverses. */
-	edgeId: string;
-	/** Repo-root-relative path of the file where the edge fires. */
-	file: string;
-	/** 1-based line of the site within `file`. */
-	line: number;
-	/** Frame name for this hop (function/method/symbol). Optional. */
-	symbol?: string;
-}
-
-/**
- * An ordered execution story over a graph's edges — the structured successor
- * to a free-form sequence story. Each step references an existing edge and the
- * exact site where that relationship fires for this flow; ordering is the
- * array. One throughline per flow (save flow, load flow, …).
- */
-export interface SubsystemThroughline {
-	id: string;
-	title: string;
-	steps: SubsystemThroughlineStep[];
-}
 
 export type ViewerMode = "local" | "remote";
 export type PayloadKind = "trail" | "tour";
@@ -70,21 +50,63 @@ export type PayloadKind = "trail" | "tour";
 export interface DefaultTabFlags {
 	/** Agent Sessions overview tab. */
 	sessions: boolean;
+	/** Historical Maintain sessions overview tab. */
+	maintenanceSessions: boolean;
 	/** Trails library tab. */
 	trails: boolean;
 	/** Graphify repos tab. */
 	graphify: boolean;
 	/** Subsystems list tab. */
 	subsystems: boolean;
+	/** OpenCode V2 debug / runtime tab. */
+	opencodeV2: boolean;
 }
 
 export interface ViewerSettings {
 	defaultTabs: DefaultTabFlags;
+	/**
+	 * When true, agent-proposed subsystem model corrections are applied
+	 * immediately. Default false — user confirms each proposal first.
+	 */
+	autoAcceptSubsystemModelProposals: boolean;
+	/**
+	 * OpenCode model for Maintain agents (`provider/id`).
+	 * `null` = auto-pick a free-tier model from `opencode models`.
+	 */
+	subsystemMaintainerModel: string | null;
+	/**
+	 * When true, the host periodically dry-runs audit across all stored
+	 * subsystem models while Studio is open. Default true.
+	 */
+	regularAuditEnabled: boolean;
+	/**
+	 * Minutes between regular audit passes. Clamped on load (min 5).
+	 * Default 5.
+	 */
+	regularAuditIntervalMinutes: number;
+}
+
+/** Live status of the host regular-audit scheduler (for countdown UI). */
+export interface RegularAuditStatus {
+	enabled: boolean;
+	intervalMinutes: number;
+	/** True while a pass is auditing models. */
+	running: boolean;
+	/**
+	 * ISO timestamp of the next scheduled pass when enabled and idle.
+	 * `null` when disabled or currently running.
+	 */
+	nextAuditAt: string | null;
 }
 
 /** Partial update accepted by `setSettings` — nested objects are merged. */
 export interface PartialViewerSettings {
 	defaultTabs?: Partial<DefaultTabFlags>;
+	autoAcceptSubsystemModelProposals?: boolean;
+	/** Pass `null` to clear a manual pick and return to auto free-tier. */
+	subsystemMaintainerModel?: string | null;
+	regularAuditEnabled?: boolean;
+	regularAuditIntervalMinutes?: number;
 }
 
 export interface RepoInfo {
@@ -107,6 +129,11 @@ export interface SessionSummary {
 	repoRoot?: string;
 	repos?: RepoInfo[];
 	agent?: string;
+	/**
+	 * OpenCode durable identity when known: `session_v2` → v2, `session` → v1.
+	 * Used to badge V2 Maintain / Agent Sessions in the drawer.
+	 */
+	opencodeKind?: "v1" | "v2";
 	/** Distinct model ids the session used, in first-use order. */
 	models?: string[];
 }
@@ -256,9 +283,9 @@ export interface StoredSubsystemModel {
 	title: string;
 	description?: string;
 	components: SubsystemComponent[];
-	edges: SubsystemComponentEdge[];
-	/** Ordered execution stories over the graph's edges (one per flow). */
-	throughlines?: SubsystemThroughline[];
+	relations: SubsystemRelation[];
+	/** Ordered runtime walkthroughs (one per flow). */
+	walkthroughs?: SubsystemWalkthrough[];
 	createdAt: string;
 	updatedAt: string;
 	/** Host-local: when a viewer last opened this graph (machine-specific). */
@@ -280,8 +307,8 @@ export interface StoredSubsystemModel {
 }
 
 /**
- * Whether a subsystem's component purls have *any* cached graphify graph —
- * cache presence for verification, not an exact HEAD/dirty match.
+ * Whether a subsystem's component purls have a graphify graph for the
+ * **current** HEAD(+dirty) checkout — same bar as Alexandria "Up to date".
  */
 export type SubsystemGraphifyAggregateStatus =
 	| "possible"
@@ -326,14 +353,28 @@ export interface SubsystemModelSummary {
 	gist?: { id: string; fileName?: string };
 	/** Graphify cache readiness for this graph's component purls. */
 	graphify?: SubsystemGraphifyReadiness;
+	/**
+	 * Last persisted dry-run audit for this model (host-only).
+	 * `stale` means inputs changed since `checkedAt` — re-audit recommended.
+	 */
+	lastAudit?: {
+		checkedAt: string;
+		needsUpdate: boolean;
+		issueCount: number;
+		/** fully_verified | partially_verified (gaps only) | issues (verification failed). */
+		verdict: "fully_verified" | "partially_verified" | "issues";
+		stale: boolean;
+	};
+	/** Pending agent correction proposals awaiting confirm. */
+	pendingProposalCount?: number;
 }
 
 /** Result of verifying one subsystem component (declaration-panel Verify). */
 export interface SubsystemComponentVerificationResult {
 	ok: boolean;
 	error?: string;
-	/** Stable failure code for agents (`construct_mismatch` | `construct_unknown` | `signature_mismatch`). */
-	code?: "construct_mismatch" | "construct_unknown" | "signature_mismatch" | string;
+	/** Stable code for agents (`construct_mismatch` | `construct_unconfirmed` | `signature_mismatch`). */
+	code?: "construct_mismatch" | "construct_unconfirmed" | "construct_unknown" | "signature_mismatch" | string;
 	componentId?: string;
 	/** Filesystem check against the local checkout. */
 	file?: {
@@ -341,6 +382,24 @@ export interface SubsystemComponentVerificationResult {
 		symbolDeclared?: boolean | null;
 		repoRoot?: string;
 	};
+	/**
+	 * When the claimed file is missing but Graphify has exactly one definition
+	 * for the claimed symbol at another path that exists on disk.
+	 */
+	fileSuggest?: {
+		file: string;
+		nodeId?: string;
+		label?: string;
+	};
+	/**
+	 * When the claimed file is missing and Graphify has the symbol in multiple
+	 * files — agent judgment required (no deterministic fix).
+	 */
+	fileCandidates?: Array<{
+		file: string;
+		nodeId?: string;
+		label?: string;
+	}>;
 	/** Graphify cache status for the component's purl. */
 	cache?: {
 		status: "ready" | "missing" | "unavailable";
@@ -362,18 +421,20 @@ export interface SubsystemComponentVerificationResult {
 		}>;
 	};
 	/**
-	 * Kind check after an exact anchor (skipped for `external` / non-exact).
-	 * Hard-fail: `ok: false` when inferred ≠ claimed or inferred is `unknown`.
+	 * Construct check after an exact anchor (skipped for `external` / non-exact).
+	 * Hard-fail (`ok: false`) only on known inferred ≠ claimed.
+	 * `match: null` means inferred was `unknown` — unconfirmed, for agent follow-up.
 	 */
 	construct?: {
 		claimed: string;
 		inferred: "class" | "function" | "method" | "type" | "module" | "unknown";
-		match: boolean;
+		/** true = match, false = known mismatch, null = unconfirmed (inferred unknown). */
+		match: boolean | null;
 		evidence?: string[];
 	};
 	/**
 	 * Signature / params check for function|method after kind ok.
-	 * Compares named type bags from authored detail vs graphify
+	 * Compares named type bags from authored declaration vs graphify
 	 * `parameter_type` / `return_type` edges. Skipped when graphify has no
 	 * signature edges (common for many TS functions today).
 	 */
@@ -397,6 +458,215 @@ export interface SubsystemComponentVerificationResult {
 		ref?: SubsystemDeclarationRef;
 		liveLineHash?: string;
 	};
+}
+
+/** One finding from a dry-run deterministic subsystem-model audit. */
+export type SubsystemModelAuditFindingKind =
+	| "missing_file"
+	| "missing_symbol"
+	| "walkthrough"
+	| "stale_declaration"
+	| "construct_mismatch"
+	| "construct_unconfirmed"
+	| "signature_mismatch"
+	| "signature_unconfirmed"
+	| "anchor"
+	| "unresolved";
+
+export type SubsystemModelAuditSeverity = "error" | "warn" | "info";
+
+/**
+ * Deterministic fix the user can apply from the audit UI (no agent).
+ */
+export type SubsystemModelAuditFix =
+	| {
+			id: "adopt_graphify_signature";
+			label: string;
+			parameterTypes: string[];
+			returnTypes: string[];
+	  }
+	| {
+			id: "adopt_graphify_file";
+			label: string;
+			/** New file path from Graphify’s definition node. */
+			file: string;
+			previousFile?: string;
+	  }
+	| {
+			id: "adopt_graphify_declaration_ref";
+			label: string;
+			/** Re-pin from Graphify `source_location` + current line hash. */
+			declarationRef: SubsystemDeclarationRef;
+			previousStartLine?: number;
+	  };
+
+export interface SubsystemModelAuditFinding {
+	kind: SubsystemModelAuditFindingKind;
+	severity: SubsystemModelAuditSeverity;
+	componentId?: string;
+	componentName?: string;
+	walkthroughId?: string;
+	step?: number;
+	message: string;
+	/** Present when a one-click deterministic fix is available. */
+	fix?: SubsystemModelAuditFix;
+}
+
+/** Per-component checklist of what the deterministic audit actually inspected. */
+export interface SubsystemModelAuditCheck {
+	componentId: string;
+	componentName?: string;
+	construct?: string;
+	symbol?: string;
+	file?: string;
+	/** null = not applicable / unresolved root. */
+	fileExists: boolean | null;
+	/** null = no symbol claimed or file unresolved. */
+	symbolDeclared: boolean | null;
+	declarationFreshness?:
+		| "valid"
+		| "stale"
+		| "missing"
+		| "unanchored"
+		| "unchecked"
+		| "n/a";
+	constructMatch?: boolean | null;
+	/** Claimed construct from the model (when construct was checked). */
+	constructClaimed?: string;
+	/** Construct inferred from graphify structure (when construct was checked). */
+	constructInferred?: string;
+	/** Evidence strings from construct inference (when available). */
+	constructEvidence?: string[];
+	signature?: "match" | "mismatch" | "skipped" | "n/a";
+	anchor?: "exact" | "file-only" | "ambiguous" | "missing" | "n/a";
+	/**
+	 * Whether graphify confirmed this component:
+	 * `confirmed` = exact anchor in cache; `weak` = cache ready but not exact;
+	 * `unavailable` = no usable cache; `skipped` = external / no source check.
+	 */
+	graphify: "confirmed" | "weak" | "unavailable" | "skipped";
+	verdict: "ok" | "issue" | "skipped";
+	note?: string;
+}
+
+/** Aggregated dry-run audit report (also persisted under ~/.principal/subsystem-model-audits). */
+export interface SubsystemModelAuditReport {
+	graphId: string;
+	title: string;
+	checkedAt: string;
+	needsUpdate: boolean;
+	summary: {
+		components: number;
+		filesVerified: number;
+		symbolsVerified: number;
+		declarationsValid: number;
+		constructsMatched: number;
+		signaturesMatched: number;
+		anchorsExact: number;
+		/** Components with an exact graphify anchor (graphify-confirmed). */
+		graphifyConfirmed: number;
+		externalsSkipped: number;
+		missingFiles: number;
+		missingSymbols: number;
+		walkthroughFailures: number;
+		staleDeclarations: number;
+		constructMismatches: number;
+		signatureMismatches: number;
+		weakAnchors: number;
+		unresolved: number;
+		ok: number;
+	};
+	/** What was inspected, one row per component — shown even when clean. */
+	checks: SubsystemModelAuditCheck[];
+	findings: SubsystemModelAuditFinding[];
+}
+
+/** One field-level correction an agent proposes for user confirmation. */
+export type SubsystemModelProposalChange =
+	| {
+			target: "component";
+			componentId: string;
+			field: "file" | "symbol" | "construct" | "name" | "purl";
+			/** `null` clears an optional field (e.g. symbol). */
+			value: string | null;
+	  }
+	| {
+			target: "component";
+			componentId: string;
+			field: "declarationRef";
+			value: SubsystemDeclarationRef | null;
+	  }
+	| {
+			target: "walkthrough-step";
+			walkthroughId: string;
+			stepIndex: number;
+			field: "file" | "line" | "symbol" | "from" | "to" | "mechanism" | "annotation";
+			value: string | number | null;
+	  }
+	| {
+			/**
+			 * Confirm a sparse fact about a codebase symbol when graphify left it
+			 * thin (e.g. construct unclassified). Accept writes the augmentation
+			 * store — it does not change the model JSON.
+			 */
+			target: "augmentation";
+			componentId: string;
+			field: "construct";
+			value: string;
+			/** Defaults from the component when omitted. */
+			file?: string;
+			symbol?: string;
+			purl?: string;
+	  }
+	| {
+			/**
+			 * Confirm named param/return types when Graphify has no signature edges.
+			 * Accept writes the augmentation store.
+			 */
+			target: "augmentation";
+			componentId: string;
+			field: "signature";
+			value: { parameterTypes: string[]; returnTypes: string[] };
+			file?: string;
+			symbol?: string;
+			purl?: string;
+	  };
+
+export type SubsystemModelProposalStatus = "pending" | "accepted" | "rejected";
+
+/** Before/after row captured at propose time for the confirm UI. */
+export interface SubsystemModelProposalPreviewRow {
+	label: string;
+	before: unknown;
+	after: unknown;
+}
+
+/**
+ * Agent-authored correction awaiting (or after) human confirmation.
+ * Persisted under ~/.principal/subsystem-model-proposals/<graphId>.json
+ */
+export interface SubsystemModelProposal {
+	id: string;
+	graphId: string;
+	status: SubsystemModelProposalStatus;
+	createdAt: string;
+	resolvedAt?: string;
+	/** Why the agent wants this change. */
+	rationale: string;
+	/** Optional link back to a deterministic audit finding. */
+	finding?: {
+		kind?: string;
+		severity?: string;
+		componentId?: string;
+		componentName?: string;
+		walkthroughId?: string;
+		step?: number;
+		message?: string;
+	};
+	changes: SubsystemModelProposalChange[];
+	preview: SubsystemModelProposalPreviewRow[];
+	/** Free-form author tag (e.g. agent name). */
+	author?: string;
 }
 
 /** Cached graphify knowledge-graph slot under ~/.principal/graphify-graphs. */
@@ -423,6 +693,35 @@ export interface GraphifyCliStatus {
 	updateAvailable: boolean | null;
 	/** Host is running install/update/uninstall in the background. */
 	cliBusy?: "install" | "update" | "uninstall" | null;
+}
+
+/** OpenCode V2 (`opencode2`) CLI status for the debug / Maintain runtime tab. */
+export interface OpencodeV2Status {
+	installed: boolean;
+	bin: string | null;
+	conventionalBin: string;
+	installCommand: string;
+	installedVersion: string | null;
+	latestVersion: string | null;
+	updateAvailable: boolean | null;
+	/** Host is running install/update in the background. */
+	cliBusy?: "install" | "update" | null;
+}
+
+/** One SSE event captured during an OpenCode V2 debug probe. */
+export interface OpencodeV2ProbeEvent {
+	at: number;
+	type: string;
+	sessionId?: string;
+	summary: string;
+}
+
+/** Live state for the OpenCode V2 debug probe session + event feed. */
+export interface OpencodeV2ProbeState {
+	status: "idle" | "starting" | "running" | "done" | "error";
+	sessionId: string | null;
+	events: OpencodeV2ProbeEvent[];
+	error: string | null;
 }
 
 /** Installed Subsystems Studio vs latest on npm (for the header Update button). */
@@ -521,7 +820,7 @@ export interface AnalysisSummary {
 
 export interface TabSummary {
 	id: string;
-	kind: "library" | "trail" | "agent-sessions" | "analysis" | "session-events" | "prompt" | "subsystem-model" | "subsystems" | "graphify";
+	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "analysis" | "session-events" | "prompt" | "subsystem-model" | "subsystems" | "graphify" | "opencode-v2" | "maintain-events";
 	title: string;
 	mode?: ViewerMode;
 	payloadKind?: PayloadKind;
@@ -533,13 +832,15 @@ export interface TabFullState {
 	ok: boolean;
 	error?: string;
 	id: string;
-	kind: "library" | "trail" | "agent-sessions" | "analysis" | "session-events" | "prompt" | "subsystem-model" | "subsystems" | "graphify";
+	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "analysis" | "session-events" | "prompt" | "subsystem-model" | "subsystems" | "graphify" | "opencode-v2" | "maintain-events";
 	title: string;
 	mode?: ViewerMode;
 	payloadKind?: PayloadKind;
 	repoRoot?: string;
 	trailFilePath?: string;
 	sessionId?: string;
+	/** For `session-events` / `maintain-events` — agent label when known. */
+	agent?: string;
 	/** For `analysis` tabs — the analysis id the tab renders. */
 	analysisId?: string;
 	/** For `subsystem-model` tabs — the graph id the tab renders. */
@@ -680,6 +981,14 @@ export type StudioRequests = {
 			hasMore?: boolean;
 		};
 	};
+	/** Historical Maintain sessions only (from opencode.db). Not live SSE. */
+	listMaintainSessions: {
+		params: { days?: number; limit?: number };
+		response: {
+			sessions: SessionSummary[];
+			hasMore?: boolean;
+		};
+	};
 	getSessionEvents: {
 		params: {
 			sessionId: string;
@@ -713,7 +1022,11 @@ export type StudioRequests = {
 	};
 	getAgentSessionsOverview: {
 		/** How many days back the overview covers (defaults to 7). */
-		params: { days?: number };
+		params: {
+			days?: number;
+			/** `maintain` = historical Maintain runs only. Default `agents`. */
+			scope?: "agents" | "maintain";
+		};
 		response: {
 			ok: boolean;
 			error?: string;
@@ -820,9 +1133,217 @@ export type StudioRequests = {
 		params: { graphId: string; componentId: string };
 		response: SubsystemComponentVerificationResult;
 	};
+	/**
+	 * Dry-run deterministic audit of a whole subsystem model (files, symbols,
+	 * declarations, graphify anchors). Does not mutate the stored graph.
+	 * Persists the report under ~/.principal/subsystem-model-audits for reuse.
+	 * Walkthrough affinity is not included — reserved for a later agent pass.
+	 */
+	auditSubsystemModel: {
+		params: { graphId: string };
+		response: {
+			ok: boolean;
+			error?: string;
+			report?: SubsystemModelAuditReport;
+			/** Fingerprint saved with the report (for stale detection). */
+			fingerprint?: string;
+		};
+	};
+	/**
+	 * Apply a deterministic audit fix (e.g. adopt graphify signature bags when
+	 * the model has no named types). Re-audits and returns the fresh report.
+	 */
+	applySubsystemModelAuditFix: {
+		params: {
+			graphId: string;
+			fixId:
+				| "adopt_graphify_signature"
+				| "adopt_graphify_file"
+				| "adopt_graphify_declaration_ref";
+			/** One component, or omit to apply every adoptable instance of this fix. */
+			componentId?: string;
+		};
+		response: {
+			ok: boolean;
+			error?: string;
+			applied?: number;
+			report?: SubsystemModelAuditReport;
+			fingerprint?: string;
+		};
+	};
+	/**
+	 * Load the last persisted audit report for a model.
+	 * `stale: true` when model/graphify inputs changed since the report was saved.
+	 */
+	getSubsystemModelAudit: {
+		params: { graphId: string };
+		response: {
+			ok: boolean;
+			error?: string;
+			report?: SubsystemModelAuditReport;
+			stale?: boolean;
+			fingerprint?: string;
+			checkedAt?: string;
+		};
+	};
+	/** Pending (and optionally resolved) agent correction proposals for a model. */
+	listSubsystemModelProposals: {
+		params: { graphId: string; includeResolved?: boolean };
+		response: {
+			ok: boolean;
+			error?: string;
+			proposals?: SubsystemModelProposal[];
+			pendingCount?: number;
+		};
+	};
+	/**
+	 * Record an agent correction proposal. Does not mutate the model unless
+	 * `autoAcceptSubsystemModelProposals` is enabled in viewer settings.
+	 */
+	proposeSubsystemModelCorrection: {
+		params: {
+			graphId: string;
+			rationale: string;
+			changes: SubsystemModelProposalChange[];
+			finding?: SubsystemModelProposal["finding"];
+			author?: string;
+		};
+		response: {
+			ok: boolean;
+			error?: string;
+			proposal?: SubsystemModelProposal;
+			/** True when settings auto-accepted and the model was updated. */
+			autoAccepted?: boolean;
+		};
+	};
+	acceptSubsystemModelProposal: {
+		params: { graphId: string; proposalId: string };
+		response: {
+			ok: boolean;
+			error?: string;
+			proposal?: SubsystemModelProposal;
+		};
+	};
+	rejectSubsystemModelProposal: {
+		params: { graphId: string; proposalId: string };
+		response: {
+			ok: boolean;
+			error?: string;
+			proposal?: SubsystemModelProposal;
+		};
+	};
+	/**
+	 * Start a background Maintain OpenCode run for this model.
+	 * Host re-audits and routes: issues → issue-fixer, partially_verified →
+	 * gap-filler, fully_verified → no-op. Progress via
+	 * `subsystemModelMaintainChanged`. Does not auto-accept proposals.
+	 */
+	maintainSubsystemModel: {
+		params: {
+			graphId: string;
+			/** OpenCode `provider/id`. Omit to use settings / auto free-tier. */
+			model?: string;
+			/** Persist `model` (or clear when null) as subsystemMaintainerModel. */
+			remember?: boolean;
+		};
+		response: {
+			ok: boolean;
+			started?: boolean;
+			error?: string;
+			/** True when a run is already in flight for this graph. */
+			alreadyRunning?: boolean;
+		};
+	};
+	/**
+	 * Free / configured OpenCode models for the subsystem maintainer.
+	 * Today Studio auto-picks a free model; `configured` is reserved for a
+	 * future explicit picker (`subsystemMaintainerModel` setting).
+	 */
+	getSubsystemMaintainerModels: {
+		params: { refresh?: boolean };
+		response: {
+			ok: boolean;
+			error?: string;
+			/** Model that will be used on the next Maintain run. */
+			resolved?: string;
+			source?: "settings" | "env" | "auto" | "fallback";
+			/** Persisted override, or null when auto. */
+			configured?: string | null;
+			freeModels?: Array<{
+				ref: string;
+				id: string;
+				providerID: string;
+				name?: string;
+			}>;
+		};
+	};
 	getGraphifyStatus: {
 		params: { detailed?: boolean };
 		response: GraphifyCliStatus;
+	};
+	getOpencodeV2Status: {
+		params: { detailed?: boolean };
+		response: OpencodeV2Status;
+	};
+	/**
+	 * Install `@opencode-ai/cli@beta` globally when `opencode2` is missing.
+	 * Returns immediately with `started` while work continues; listen for
+	 * `opencodeV2Changed`.
+	 */
+	installOpencodeV2: {
+		params: Record<string, never>;
+		response: {
+			ok: boolean;
+			error?: string;
+			started?: boolean;
+			status?: OpencodeV2Status;
+		};
+	};
+	/** Re-run npm install -g @opencode-ai/cli@beta when already installed. */
+	updateOpencodeV2: {
+		params: Record<string, never>;
+		response: {
+			ok: boolean;
+			error?: string;
+			started?: boolean;
+			status?: OpencodeV2Status;
+		};
+	};
+	/** Snapshot of the OpenCode V2 debug probe (session + event feed). */
+	getOpencodeV2ProbeState: {
+		params: Record<string, never>;
+		response: OpencodeV2ProbeState;
+	};
+	/**
+	 * Ensure the V2 service, open `/api/event`, create a short session, and
+	 * prompt it. Events stream via `opencodeV2ProbeChanged`.
+	 */
+	startOpencodeV2Probe: {
+		params: { message?: string; directory?: string };
+		response: {
+			ok: boolean;
+			error?: string;
+			started?: boolean;
+			sessionId?: string;
+		};
+	};
+	stopOpencodeV2Probe: {
+		params: Record<string, never>;
+		response: { ok: boolean };
+	};
+	/** Snapshot of a live OpenCode V2 session event feed (Maintain tab). */
+	getOpencodeLiveFeed: {
+		params: { sessionId: string };
+		response: {
+			ok: boolean;
+			sessionId?: string;
+			status?: "starting" | "running" | "done" | "error";
+			events?: OpencodeV2ProbeEvent[];
+			error?: string | null;
+			title?: string;
+			agent?: string;
+			graphId?: string;
+		};
 	};
 	/**
 	 * Current Studio package version vs npm latest. When `detailed` is true the
@@ -860,7 +1381,11 @@ export type StudioRequests = {
 	 * is pushed via `graphifyChanged` (host RPC is capped at a few seconds).
 	 */
 	ensureGraphifyGraph: {
-		params: { purl: string; repoRoot?: string; force?: boolean };
+		params: {
+			purl: string;
+			repoRoot?: string;
+			force?: boolean;
+		};
 		response: {
 			ok: boolean;
 			error?: string;
@@ -984,6 +1509,11 @@ export type StudioRequests = {
 		params: { settings: PartialViewerSettings };
 		response: { ok: boolean; settings: ViewerSettings; error?: string };
 	};
+	/** Live regular-audit scheduler status (countdown / running). */
+	getRegularAuditStatus: {
+		params: Record<string, never>;
+		response: RegularAuditStatus;
+	};
 	getOpencodeServerStatus: {
 		params: Record<string, never>;
 		response: OpencodeServerStatus;
@@ -1060,10 +1590,56 @@ export type StudioMessages = {
 		graphId: string;
 		reason: "created" | "updated" | "deleted" | "external";
 	};
+	/** Agent proposals created / accepted / rejected for a model. */
+	subsystemModelProposalsChanged: {
+		graphId: string;
+		pendingCount: number;
+	};
+	/** Maintain agent run started / finished (issue-fixer or gap-filler). */
+	subsystemModelMaintainChanged: {
+		graphId: string;
+		status: "running" | "done" | "error";
+		error?: string;
+		pendingCount?: number;
+		summary?: string;
+		/** OpenCode model used for the run. */
+		model?: string;
+		/** issue-fixer | gap-filler when an agent ran (or was selected). */
+		agent?: "issue-fixer" | "gap-filler";
+		/** True when audit was fully verified and no agent ran. */
+		skipped?: boolean;
+	};
+	/** Host regular-audit scheduler status changed (enable/interval/tick/running). */
+	regularAuditChanged: RegularAuditStatus;
 	/** npm latest check finished (or failed). Header Update button should refresh. */
 	studioVersionChanged: {
 		status: StudioVersionStatus;
 		error?: string;
+	};
+	/**
+	 * OpenCode V2 CLI status refreshed (npm beta check, install/update finished).
+	 * OpenCode V2 debug tab should refresh from this.
+	 */
+	opencodeV2Changed: {
+		status: OpencodeV2Status;
+		error?: string;
+	};
+	/** Live probe session + SSE event feed for the OpenCode V2 debug tab. */
+	opencodeV2ProbeChanged: {
+		state: OpencodeV2ProbeState;
+	};
+	/**
+	 * Live OpenCode V2 SSE feed for a Maintain (or other agent) session tab.
+	 * Keyed by sessionId; renderer merges into the open maintain-events tab.
+	 */
+	opencodeLiveFeedChanged: {
+		sessionId: string;
+		status: "starting" | "running" | "done" | "error";
+		events: OpencodeV2ProbeEvent[];
+		error?: string | null;
+		title?: string;
+		agent?: string;
+		graphId?: string;
 	};
 }
 

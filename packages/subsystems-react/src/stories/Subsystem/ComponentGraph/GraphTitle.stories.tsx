@@ -3,7 +3,7 @@ import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
-import { components, edges } from './fixtures';
+import { components, graphSpecFromEdges, relations } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/GraphTitle',
@@ -30,7 +30,7 @@ const graphOnlyComponents = components([
   ['caller', 'Web client', 'external', '', 'external', undefined, undefined],
 ]);
 
-const graphOnlyEdges = edges([
+const graphOnlyEdges = graphSpecFromEdges([
   ['caller', 'entry', 'calls'],
   ['entry', 'store', 'writes'],
   ['entry', 'stripe', 'calls'],
@@ -41,7 +41,7 @@ function GraphOnly() {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={graphOnlyComponents}
-        edges={graphOnlyEdges}
+        relations={graphOnlyEdges.relations} walkthroughs={graphOnlyEdges.walkthroughs}
         graphTitle="Checkout"
         hideSidebar
       />
@@ -60,7 +60,7 @@ export const WithSidebar: Story = {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={graphOnlyComponents}
-        edges={graphOnlyEdges}
+        relations={graphOnlyEdges.relations} walkthroughs={graphOnlyEdges.walkthroughs}
         title="Checkout"
         description="A small e-commerce checkout subsystem: an HTTP entry point that writes to retained cart state and calls out to Stripe."
         graphTitle="Checkout"

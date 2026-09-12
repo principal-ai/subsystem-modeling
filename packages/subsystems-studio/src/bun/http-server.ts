@@ -24,19 +24,38 @@ import {
 import {
 	createSubsystemModel,
 	findComponentConstructProblems,
-	findDetailProvenanceProblems,
-	findEdgeMechanismProblems,
-	findThroughlineProblems,
+	findDeclarationProvenanceProblems,
+	findRelationTypeProblems,
+	findWalkthroughProblems,
 	getSubsystemModel,
 	listSubsystemModels,
-	normalizeDetailProvenance,
+	normalizeDeclarationProvenance,
 	subsystemModelFilePath,
 	updateSubsystemModel,
 	type StoredSubsystemModel,
 	type SubsystemModelDocument,
 } from "./subsystem-model-store";
-
+import {
+	acceptSubsystemModelProposal,
+	createSubsystemModelProposal,
+	listSubsystemModelProposals,
+	pendingProposalCount,
+	rejectSubsystemModelProposal,
+} from "./proposal-store";
+import { loadViewerSettings } from "./viewer-settings";
+import type { SubsystemModelProposalChange } from "../shared/contract";
 const PORT = Number(process.env["PRINCIPAL_STUDIO_HTTP_PORT"] ?? 3045);
+
+async function reauditSubsystemModelAfterHttpMutation(graphId: string): Promise<void> {
+	try {
+		const { auditSubsystemModel } = await import("./verify-subsystem-component");
+		await auditSubsystemModel(graphId);
+	} catch (err) {
+		console.warn(
+			`[principal-studio] re-audit after model change failed for ${graphId}: ${(err as Error).message}`,
+		);
+	}
+}
 
 /** Callback invoked when an agent requests a graph be opened in a tab. */
 export type OpenGraphTabHandler = (id: string) => Promise<{ ok: boolean; error?: string; tabId?: string }>;
@@ -45,7 +64,11 @@ export type OpenGraphTabHandler = (id: string) => Promise<{ ok: boolean; error?:
  *  close tabs rendering it before the record disappears). */
 export type DeleteGraphHandler = (id: string) => Promise<{ ok: boolean; error?: string }>;
 
+/** Notify the renderer when HTTP creates/accepts/rejects proposals. */
+export type ProposalsChangedHandler = (graphId: string, pendingCount: number) => void;
+
 let server: ReturnType<typeof Bun.serve> | null = null;
+let onProposalsChanged: ProposalsChangedHandler | null = null;
 
 function json(data: unknown, status = 200): Response {
 	return new Response(JSON.stringify(data), {
@@ -253,22 +276,22 @@ export async function handleSubsystemModelRequest(
 		if (!body) return error("Invalid JSON body");
 		if (!body["title"] || typeof body["title"] !== "string") return error("title is required");
 		if (!Array.isArray(body["components"])) return error("components array is required");
-		if (!Array.isArray(body["edges"])) return error("edges array is required");
+		if (!Array.isArray(body["relations"])) return error("relations array is required");
 		const problems = [
 			...findComponentConstructProblems(body["components"]),
-			...findDetailProvenanceProblems(body["components"]),
-			...findEdgeMechanismProblems(body["edges"]),
-			...findThroughlineProblems(body["edges"], body["throughlines"]),
+			...findDeclarationProvenanceProblems(body["components"]),
+			...findRelationTypeProblems(body["relations"]),
+			...findWalkthroughProblems(body["walkthroughs"]),
 		];
 		if (problems.length > 0) return error(`invalid graph: ${problems.join("; ")}`);
-		normalizeDetailProvenance(body["components"]);
+		normalizeDeclarationProvenance(body["components"]);
 
 		const record = await createSubsystemModel({
 			title: body["title"] as string,
 			description: typeof body["description"] === "string" ? body["description"] : undefined,
 			components: body["components"] as SubsystemModelDocument["components"],
-			edges: body["edges"] as SubsystemModelDocument["edges"],
-			throughlines: body["throughlines"] as StoredSubsystemModel["throughlines"],
+			relations: body["relations"] as SubsystemModelDocument["relations"],
+			walkthroughs: body["walkthroughs"] as StoredSubsystemModel["walkthroughs"],
 			source: typeof body["source"] === "string" ? body["source"] : undefined,
 			repo: body["repo"] as { owner: string; name: string } | undefined,
 			repoRoot: typeof body["repoRoot"] === "string" ? body["repoRoot"] : undefined,
@@ -299,6 +322,98 @@ export async function handleSubsystemModelRequest(
 		return json(result);
 	}
 
+	// Dry-run audit (same as RPC auditSubsystemModel)
+	const auditMatch = path.match(/^\/api\/subsystem-model\/([^/]+)\/audit$/);
+	if (auditMatch && method === "GET") {
+		const id = auditMatch[1]!;
+		const { auditSubsystemModel } = await import("./verify-subsystem-component");
+		const result = await auditSubsystemModel(id);
+		if (!result.ok) return error(result.error, 404);
+		return json({
+			ok: true,
+			report: result.report,
+			fingerprint: result.fingerprint,
+		});
+	}
+
+	// List / create proposals
+	const proposalsMatch = path.match(/^\/api\/subsystem-model\/([^/]+)\/proposals$/);
+	if (proposalsMatch) {
+		const id = proposalsMatch[1]!;
+		if (method === "GET") {
+			const includeResolved = url.searchParams.get("includeResolved") === "1";
+			const proposals = await listSubsystemModelProposals(id, { includeResolved });
+			const pendingCount = await pendingProposalCount(id);
+			return json({ ok: true, proposals, pendingCount });
+		}
+		if (method === "POST") {
+			const body = (await parseBody(req)) as Record<string, unknown> | null;
+			if (!body) return error("Invalid JSON body");
+			if (typeof body["rationale"] !== "string") return error("rationale is required");
+			if (!Array.isArray(body["changes"])) return error("changes array is required");
+			const created = await createSubsystemModelProposal({
+				graphId: id,
+				rationale: body["rationale"],
+				changes: body["changes"] as SubsystemModelProposalChange[],
+				finding:
+					typeof body["finding"] === "object" && body["finding"] !== null
+						? (body["finding"] as never)
+						: undefined,
+				author: typeof body["author"] === "string" ? body["author"] : undefined,
+			});
+			if (!created.ok) return error(created.error);
+			const settings = loadViewerSettings();
+			let proposal = created.proposal;
+			let autoAccepted = false;
+			if (settings.autoAcceptSubsystemModelProposals) {
+				const accepted = await acceptSubsystemModelProposal(id, created.proposal.id);
+				if (accepted.ok) {
+					proposal = accepted.proposal;
+					autoAccepted = true;
+				} else {
+					const pendingCount = await pendingProposalCount(id);
+					onProposalsChanged?.(id, pendingCount);
+					return json(
+						{
+							ok: true,
+							proposal: created.proposal,
+							autoAccepted: false,
+							autoAcceptError: accepted.error,
+						},
+						201,
+					);
+				}
+			}
+			const pendingCount = await pendingProposalCount(id);
+			onProposalsChanged?.(id, pendingCount);
+			if (autoAccepted) {
+				await reauditSubsystemModelAfterHttpMutation(id);
+			}
+			return json({ ok: true, proposal, autoAccepted }, 201);
+		}
+	}
+
+	// Accept / reject a proposal
+	const proposalActionMatch = path.match(
+		/^\/api\/subsystem-model\/([^/]+)\/proposals\/([^/]+)\/(accept|reject)$/,
+	);
+	if (proposalActionMatch && method === "POST") {
+		const id = proposalActionMatch[1]!;
+		const proposalId = proposalActionMatch[2]!;
+		const action = proposalActionMatch[3]!;
+		const result =
+			action === "accept"
+				? await acceptSubsystemModelProposal(id, proposalId)
+				: await rejectSubsystemModelProposal(id, proposalId);
+		if (!result.ok) return error(result.error, 400);
+		const pendingCount = await pendingProposalCount(id);
+		onProposalsChanged?.(id, pendingCount);
+		if (action === "accept") {
+			await reauditSubsystemModelAfterHttpMutation(id);
+		}
+		return json({ ok: true, proposal: result.proposal });
+	}
+
 	// Get / Open / Update / Delete by id
 	const graphMatch = path.match(/^\/api\/subsystem-model\/([^/]+)$/);
 	if (graphMatch) {
@@ -315,12 +430,12 @@ export async function handleSubsystemModelRequest(
 			if (!body) return error("Invalid JSON body");
 			const problems = [
 				...(body["components"] !== undefined ? findComponentConstructProblems(body["components"]) : []),
-				...(body["components"] !== undefined ? findDetailProvenanceProblems(body["components"]) : []),
-				...(body["edges"] !== undefined ? findEdgeMechanismProblems(body["edges"]) : []),
-				...(body["throughlines"] !== undefined ? findThroughlineProblems(body["edges"], body["throughlines"]) : []),
+				...(body["components"] !== undefined ? findDeclarationProvenanceProblems(body["components"]) : []),
+				...(body["relations"] !== undefined ? findRelationTypeProblems(body["relations"]) : []),
+				...(body["walkthroughs"] !== undefined ? findWalkthroughProblems(body["walkthroughs"]) : []),
 			];
 			if (problems.length > 0) return error(`invalid graph: ${problems.join("; ")}`);
-			if (body["components"] !== undefined) normalizeDetailProvenance(body["components"]);
+			if (body["components"] !== undefined) normalizeDeclarationProvenance(body["components"]);
 			const updated = await updateSubsystemModel(id, body as Parameters<typeof updateSubsystemModel>[1]);
 			if (!updated) return error("Graph not found", 404);
 			return json({ ok: true, graph: updated });
@@ -348,7 +463,12 @@ export async function handleSubsystemModelRequest(
  * Start the HTTP server. `onOpenTab` is called when an agent wants to open
  * a graph in the viewer (the host bridges it to the renderer via RPC).
  */
-export function startHttpServer(onOpenTab: OpenGraphTabHandler, onDeleteGraph: DeleteGraphHandler): void {
+export function startHttpServer(
+	onOpenTab: OpenGraphTabHandler,
+	onDeleteGraph: DeleteGraphHandler,
+	proposalsChanged?: ProposalsChangedHandler,
+): void {
+	onProposalsChanged = proposalsChanged ?? null;
 	server = Bun.serve({
 		port: PORT,
 		hostname: "127.0.0.1",

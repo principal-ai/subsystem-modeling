@@ -1,8 +1,8 @@
 import type {
   SubsystemComponent,
-  SubsystemComponentEdge,
+  SubsystemRelation,
+  SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
-import type { SubsystemThroughline } from '@principal-ai/subsystems-react/dist/subsystem/model.js';
 
 const PURL = 'pkg:github/you/booking-page';
 
@@ -129,147 +129,165 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const edges: SubsystemComponentEdge[] = [
-  { id: 'e0', from: 'booking-page', to: 'list-open-slots', mechanism: 'calls' },
-  { id: 'e1', from: 'booking-page', to: 'book-slot', mechanism: 'calls' },
-  { id: 'e2', from: 'booking-page', to: 'cancel-slot', mechanism: 'calls' },
-  { id: 'e3', from: 'booking-page', to: 'capture-event', mechanism: 'calls' },
-  { id: 'e4', from: 'list-open-slots', to: 'list-slots', mechanism: 'calls' },
-  { id: 'e5', from: 'book-slot', to: 'create-booking', mechanism: 'calls' },
-  { id: 'e6', from: 'cancel-slot', to: 'cancel-booking', mechanism: 'calls' },
-  { id: 'e7', from: 'list-slots', to: 'Database', mechanism: 'reads' },
-  { id: 'e8', from: 'create-booking', to: 'Database', mechanism: 'writes' },
-  { id: 'e9', from: 'cancel-booking', to: 'Database', mechanism: 'writes' },
-  { id: 'e10', from: 'capture-event', to: 'PostHog', mechanism: 'calls' },
-];
+export const relations = [] as SubsystemRelation[];
 
-export const throughlines: SubsystemThroughline[] = [
+export const walkthroughs = [
   {
-    id: 'tl-pick-slot',
-    title: 'Guest picks a slot',
-    steps: [
+    "id": "tl-pick-slot",
+    "title": "Guest picks a slot",
+    "steps": [
       {
-        edgeId: 'e0',
-        file: 'app/book/page.tsx',
-        line: 17,
-        symbol: 'listOpenSlots',
-        annotation: 'Client calls a server action — not the DB.',
+        "from": "booking-page",
+        "to": "list-open-slots",
+        "mechanism": "calls",
+        "file": "app/book/page.tsx",
+        "line": 17,
+        "symbol": "listOpenSlots",
+        "annotation": "Client calls a server action — not the DB."
       },
       {
-        edgeId: 'e4',
-        file: 'app/book/actions.ts',
-        line: 14,
-        symbol: 'listSlots',
-        annotation: 'Server action crosses into server libs.',
+        "from": "list-open-slots",
+        "to": "list-slots",
+        "mechanism": "calls",
+        "file": "app/book/actions.ts",
+        "line": 14,
+        "symbol": "listSlots",
+        "annotation": "Server action crosses into server libs."
       },
       {
-        edgeId: 'e7',
-        file: 'lib/listSlots.ts',
-        line: 9,
-        symbol: 'findOpen',
-        annotation: 'DB read stays on the server.',
+        "from": "list-slots",
+        "to": "Database",
+        "mechanism": "reads",
+        "file": "lib/listSlots.ts",
+        "line": 9,
+        "symbol": "findOpen",
+        "annotation": "DB read stays on the server."
       },
       {
-        edgeId: 'e3',
-        file: 'app/book/page.tsx',
-        line: 19,
-        symbol: "captureEvent('slot_viewed')",
-        annotation: 'Analytics fires in the browser after slots return.',
+        "from": "booking-page",
+        "to": "capture-event",
+        "mechanism": "calls",
+        "file": "app/book/page.tsx",
+        "line": 19,
+        "symbol": "captureEvent('slot_viewed')",
+        "annotation": "Analytics fires in the browser after slots return."
       },
       {
-        edgeId: 'e10',
-        file: 'lib/captureEvent.ts',
-        line: 7,
-        symbol: 'captureEvent',
-        annotation: 'PostHog from the client — separate from the booking store.',
-      },
-    ],
+        "from": "capture-event",
+        "to": "PostHog",
+        "mechanism": "calls",
+        "file": "lib/captureEvent.ts",
+        "line": 7,
+        "symbol": "captureEvent",
+        "annotation": "PostHog from the client — separate from the booking store."
+      }
+    ]
   },
   {
-    id: 'tl-book',
-    title: 'Guest books',
-    steps: [
+    "id": "tl-book",
+    "title": "Guest books",
+    "steps": [
       {
-        edgeId: 'e1',
-        file: 'app/book/page.tsx',
-        line: 24,
-        symbol: 'bookSlot',
-        annotation: 'Confirm — client → server action wire boundary.',
+        "from": "booking-page",
+        "to": "book-slot",
+        "mechanism": "calls",
+        "file": "app/book/page.tsx",
+        "line": 24,
+        "symbol": "bookSlot",
+        "annotation": "Confirm — client → server action wire boundary."
       },
       {
-        edgeId: 'e5',
-        file: 'app/book/actions.ts',
-        line: 22,
-        symbol: 'createBooking',
-        annotation: 'Server action delegates to the booking lib.',
+        "from": "book-slot",
+        "to": "create-booking",
+        "mechanism": "calls",
+        "file": "app/book/actions.ts",
+        "line": 22,
+        "symbol": "createBooking",
+        "annotation": "Server action delegates to the booking lib."
       },
       {
-        edgeId: 'e8',
-        file: 'lib/createBooking.ts',
-        line: 13,
-        symbol: 'insert',
-        annotation: 'Persist on the server — source of truth.',
+        "from": "create-booking",
+        "to": "Database",
+        "mechanism": "writes",
+        "file": "lib/createBooking.ts",
+        "line": 13,
+        "symbol": "insert",
+        "annotation": "Persist on the server — source of truth."
       },
       {
-        edgeId: 'e3',
-        file: 'app/book/page.tsx',
-        line: 26,
-        symbol: "captureEvent('booking_created')",
-        annotation: 'Client records the product moment after success.',
+        "from": "booking-page",
+        "to": "capture-event",
+        "mechanism": "calls",
+        "file": "app/book/page.tsx",
+        "line": 26,
+        "symbol": "captureEvent('booking_created')",
+        "annotation": "Client records the product moment after success."
       },
       {
-        edgeId: 'e10',
-        file: 'lib/captureEvent.ts',
-        line: 7,
-        symbol: 'captureEvent',
-        annotation: 'PostHog booking_created — not the source of truth.',
-      },
-    ],
+        "from": "capture-event",
+        "to": "PostHog",
+        "mechanism": "calls",
+        "file": "lib/captureEvent.ts",
+        "line": 7,
+        "symbol": "captureEvent",
+        "annotation": "PostHog booking_created — not the source of truth."
+      }
+    ]
   },
   {
-    id: 'tl-cancel',
-    title: 'Guest cancels',
-    steps: [
+    "id": "tl-cancel",
+    "title": "Guest cancels",
+    "steps": [
       {
-        edgeId: 'e2',
-        file: 'app/book/page.tsx',
-        line: 31,
-        symbol: 'cancelSlot',
-        annotation: 'Same client→server pattern on the release path.',
+        "from": "booking-page",
+        "to": "cancel-slot",
+        "mechanism": "calls",
+        "file": "app/book/page.tsx",
+        "line": 31,
+        "symbol": "cancelSlot",
+        "annotation": "Same client→server pattern on the release path."
       },
       {
-        edgeId: 'e6',
-        file: 'app/book/actions.ts',
-        line: 26,
-        symbol: 'cancelBooking',
-        annotation: 'Server action → server lib.',
+        "from": "cancel-slot",
+        "to": "cancel-booking",
+        "mechanism": "calls",
+        "file": "app/book/actions.ts",
+        "line": 26,
+        "symbol": "cancelBooking",
+        "annotation": "Server action → server lib."
       },
       {
-        edgeId: 'e9',
-        file: 'lib/cancelBooking.ts',
-        line: 7,
-        symbol: 'update',
-        annotation: 'DB write on the server frees the slot.',
+        "from": "cancel-booking",
+        "to": "Database",
+        "mechanism": "writes",
+        "file": "lib/cancelBooking.ts",
+        "line": 7,
+        "symbol": "update",
+        "annotation": "DB write on the server frees the slot."
       },
       {
-        edgeId: 'e3',
-        file: 'app/book/page.tsx',
-        line: 32,
-        symbol: "captureEvent('booking_cancelled')",
-        annotation: 'Browser analytics mirrors the cancel.',
+        "from": "booking-page",
+        "to": "capture-event",
+        "mechanism": "calls",
+        "file": "app/book/page.tsx",
+        "line": 32,
+        "symbol": "captureEvent('booking_cancelled')",
+        "annotation": "Browser analytics mirrors the cancel."
       },
       {
-        edgeId: 'e10',
-        file: 'lib/captureEvent.ts',
-        line: 7,
-        symbol: 'captureEvent',
-        annotation: 'PostHog booking_cancelled alongside the server update.',
-      },
-    ],
-  },
-];
+        "from": "capture-event",
+        "to": "PostHog",
+        "mechanism": "calls",
+        "file": "lib/captureEvent.ts",
+        "line": 7,
+        "symbol": "captureEvent",
+        "annotation": "PostHog booking_cancelled alongside the server update."
+      }
+    ]
+  }
+] as SubsystemWalkthrough[];
 
 export const title = 'Booking page';
 
 export const description =
-  'Calendly-style Next.js booking with a real **client / server** split: the browser calls server actions; only the server touches the database. **PostHog** captures product moments in the client. Open **Flows** for pick / book / cancel.';
+  'Calendly-style Next.js booking with a real **client / server** split: the browser calls server actions; only the server touches the database. **PostHog** captures product moments in the client. Open **Walkthroughs** for pick / book / cancel.';

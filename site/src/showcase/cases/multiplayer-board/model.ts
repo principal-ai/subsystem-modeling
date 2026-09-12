@@ -1,8 +1,8 @@
 import type {
   SubsystemComponent,
-  SubsystemComponentEdge,
+  SubsystemRelation,
+  SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
-import type { SubsystemThroughline } from '@principal-ai/subsystems-react/dist/subsystem/model.js';
 
 const PURL = 'pkg:github/you/multiplayer-board';
 
@@ -90,96 +90,102 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const edges: SubsystemComponentEdge[] = [
-  { id: 'e0', from: 'board-page', to: 'list-shapes', mechanism: 'calls' },
-  { id: 'e1', from: 'board-page', to: 'upsert-shape', mechanism: 'calls' },
-  { id: 'e2', from: 'board-page', to: 'use-presence', mechanism: 'calls' },
-  { id: 'e3', from: 'use-presence', to: 'list-presence', mechanism: 'calls' },
-  { id: 'e4', from: 'use-presence', to: 'update-presence', mechanism: 'calls' },
-  { id: 'e5', from: 'list-shapes', to: 'Convex', mechanism: 'reads' },
-  { id: 'e6', from: 'upsert-shape', to: 'Convex', mechanism: 'writes' },
-  { id: 'e7', from: 'list-presence', to: 'Convex', mechanism: 'reads' },
-  { id: 'e8', from: 'update-presence', to: 'Convex', mechanism: 'writes' },
-];
+export const relations = [] as SubsystemRelation[];
 
-export const throughlines: SubsystemThroughline[] = [
+export const walkthroughs = [
   {
-    id: 'tl-draw',
-    title: 'Draw a stroke',
-    steps: [
+    "id": "tl-draw",
+    "title": "Draw a stroke",
+    "steps": [
       {
-        edgeId: 'e1',
-        file: 'app/board/[room]/page.tsx',
-        line: 17,
-        symbol: 'upsertShape',
-        annotation: 'Local pointer-up becomes a Convex mutation.',
+        "from": "board-page",
+        "to": "upsert-shape",
+        "mechanism": "calls",
+        "file": "app/board/[room]/page.tsx",
+        "line": 17,
+        "symbol": "upsertShape",
+        "annotation": "Local pointer-up becomes a Convex mutation."
       },
       {
-        edgeId: 'e6',
-        file: 'convex/shapes.ts',
-        line: 32,
-        symbol: 'insert',
-        annotation: 'Shape lands in Convex — the shared board state.',
-      },
-    ],
+        "from": "upsert-shape",
+        "to": "Convex",
+        "mechanism": "writes",
+        "file": "convex/shapes.ts",
+        "line": 32,
+        "symbol": "insert",
+        "annotation": "Shape lands in Convex — the shared board state."
+      }
+    ]
   },
   {
-    id: 'tl-remote',
-    title: 'Remote peer draw',
-    steps: [
+    "id": "tl-remote",
+    "title": "Remote peer draw",
+    "steps": [
       {
-        edgeId: 'e0',
-        file: 'app/board/[room]/page.tsx',
-        line: 12,
-        symbol: 'useQuery(listShapes)',
-        annotation: 'Same query subscription every client holds open.',
+        "from": "board-page",
+        "to": "list-shapes",
+        "mechanism": "calls",
+        "file": "app/board/[room]/page.tsx",
+        "line": 12,
+        "symbol": "useQuery(listShapes)",
+        "annotation": "Same query subscription every client holds open."
       },
       {
-        edgeId: 'e5',
-        file: 'convex/shapes.ts',
-        line: 8,
-        symbol: 'ctx.db.query',
-        annotation: 'Convex pushes an update; React re-renders the canvas list.',
-      },
-    ],
+        "from": "list-shapes",
+        "to": "Convex",
+        "mechanism": "reads",
+        "file": "convex/shapes.ts",
+        "line": 8,
+        "symbol": "ctx.db.query",
+        "annotation": "Convex pushes an update; React re-renders the canvas list."
+      }
+    ]
   },
   {
-    id: 'tl-presence',
-    title: 'Cursor / presence',
-    steps: [
+    "id": "tl-presence",
+    "title": "Cursor / presence",
+    "steps": [
       {
-        edgeId: 'e2',
-        file: 'app/board/[room]/page.tsx',
-        line: 14,
-        symbol: 'usePresence',
-        annotation: 'Board mounts the presence hook alongside shapes.',
+        "from": "board-page",
+        "to": "use-presence",
+        "mechanism": "calls",
+        "file": "app/board/[room]/page.tsx",
+        "line": 14,
+        "symbol": "usePresence",
+        "annotation": "Board mounts the presence hook alongside shapes."
       },
       {
-        edgeId: 'e4',
-        file: 'lib/usePresence.ts',
-        line: 16,
-        symbol: 'updatePresence',
-        annotation: 'Pointer moves publish local cursor position.',
+        "from": "use-presence",
+        "to": "update-presence",
+        "mechanism": "calls",
+        "file": "lib/usePresence.ts",
+        "line": 16,
+        "symbol": "updatePresence",
+        "annotation": "Pointer moves publish local cursor position."
       },
       {
-        edgeId: 'e8',
-        file: 'convex/presence.ts',
-        line: 30,
-        symbol: 'patch',
-        annotation: 'Presence row updates in Convex for peers to read.',
+        "from": "update-presence",
+        "to": "Convex",
+        "mechanism": "writes",
+        "file": "convex/presence.ts",
+        "line": 30,
+        "symbol": "patch",
+        "annotation": "Presence row updates in Convex for peers to read."
       },
       {
-        edgeId: 'e3',
-        file: 'lib/usePresence.ts',
-        line: 11,
-        symbol: 'useQuery(listPresence)',
-        annotation: 'Peers arrive through the reactive presence query.',
-      },
-    ],
-  },
-];
+        "from": "use-presence",
+        "to": "list-presence",
+        "mechanism": "calls",
+        "file": "lib/usePresence.ts",
+        "line": 11,
+        "symbol": "useQuery(listPresence)",
+        "annotation": "Peers arrive through the reactive presence query."
+      }
+    ]
+  }
+] as SubsystemWalkthrough[];
 
 export const title = 'Multiplayer whiteboard';
 
 export const description =
-  'Excalidraw-style Next.js board backed by **Convex**: local strokes upsert shapes, peers see them via reactive queries, and presence tracks live cursors. Open **Flows** for draw / remote update / presence.';
+  'Excalidraw-style Next.js board backed by **Convex**: local strokes upsert shapes, peers see them via reactive queries, and presence tracks live cursors. Open **Walkthroughs** for draw / remote update / presence.';

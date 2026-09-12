@@ -62,9 +62,39 @@ export const studioVersionChangeSubscribers = new Set<
 	(payload: StudioMessages["studioVersionChanged"]) => void
 >();
 
+/** OpenCode V2 CLI detect/install push (`opencodeV2Changed`). */
+export const opencodeV2ChangeSubscribers = new Set<
+	(payload: StudioMessages["opencodeV2Changed"]) => void
+>();
+
+/** OpenCode V2 probe SSE feed push (`opencodeV2ProbeChanged`). */
+export const opencodeV2ProbeChangeSubscribers = new Set<
+	(payload: StudioMessages["opencodeV2ProbeChanged"]) => void
+>();
+
+/** Live Maintain / agent session SSE feed (`opencodeLiveFeedChanged`). */
+export const opencodeLiveFeedSubscribers = new Set<
+	(payload: StudioMessages["opencodeLiveFeedChanged"]) => void
+>();
+
 /** Subsystem graph store writes + disk watch push `subsystemModelChanged`. */
 export const subsystemModelChangeSubscribers = new Set<
 	(payload: StudioMessages["subsystemModelChanged"]) => void
+>();
+
+/** Agent correction proposals push `subsystemModelProposalsChanged`. */
+export const subsystemModelProposalsChangeSubscribers = new Set<
+	(payload: StudioMessages["subsystemModelProposalsChanged"]) => void
+>();
+
+/** Maintain agent runs push `subsystemModelMaintainChanged`. */
+export const subsystemModelMaintainChangeSubscribers = new Set<
+	(payload: StudioMessages["subsystemModelMaintainChanged"]) => void
+>();
+
+/** Regular audit scheduler status push (`regularAuditChanged`). */
+export const regularAuditChangeSubscribers = new Set<
+	(payload: StudioMessages["regularAuditChanged"]) => void
 >();
 
 const rpc = Electroview.defineRPC<StudioRPC>({
@@ -91,8 +121,26 @@ const rpc = Electroview.defineRPC<StudioRPC>({
 			studioVersionChanged: (payload) => {
 				for (const fn of studioVersionChangeSubscribers) fn(payload);
 			},
+			opencodeV2Changed: (payload) => {
+				for (const fn of opencodeV2ChangeSubscribers) fn(payload);
+			},
+			opencodeV2ProbeChanged: (payload) => {
+				for (const fn of opencodeV2ProbeChangeSubscribers) fn(payload);
+			},
+			opencodeLiveFeedChanged: (payload) => {
+				for (const fn of opencodeLiveFeedSubscribers) fn(payload);
+			},
 			subsystemModelChanged: (payload) => {
 				for (const fn of subsystemModelChangeSubscribers) fn(payload);
+			},
+			subsystemModelProposalsChanged: (payload) => {
+				for (const fn of subsystemModelProposalsChangeSubscribers) fn(payload);
+			},
+			subsystemModelMaintainChanged: (payload) => {
+				for (const fn of subsystemModelMaintainChangeSubscribers) fn(payload);
+			},
+			regularAuditChanged: (payload) => {
+				for (const fn of regularAuditChangeSubscribers) fn(payload);
 			},
 		},
 	},

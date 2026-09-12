@@ -8,8 +8,9 @@ import {
 	cacheSlotKey,
 	cachedGraphJsonPath,
 	dirtyFingerprint,
-	findAnyCachedGraphifyGraph,
+	ensureCurrentGraphifyCachesForModel,
 	getCachedGraphifyGraph,
+	gitHeadSha,
 	sanitizePurlDirName,
 	assessSubsystemGraphifyReadiness,
 } from "./graphify-store";
@@ -105,7 +106,6 @@ describe("getCachedGraphifyGraph", () => {
 			headSha: "deadbeef",
 			dirtyHash: null,
 			storeRoot: root,
-			anySlot: false,
 		});
 		expect(hit).toBeNull();
 	});
@@ -145,7 +145,7 @@ describe("getCachedGraphifyGraph", () => {
 		expect(hit?.path).toBe(join(slot, "graph.json"));
 	});
 
-	test("falls back to any slot when exact dirty miss", async () => {
+	test("returns null when exact dirty slot misses", async () => {
 		const root = mkdtempSync(join(tmpdir(), "gf-store-"));
 		const purl = "pkg:github/a/b";
 		const head = "abc123def";
@@ -170,56 +170,12 @@ describe("getCachedGraphifyGraph", () => {
 				edgeCount: 0,
 			}),
 		);
-		const hit = await getCachedGraphifyGraph(purl, {
+		const miss = await getCachedGraphifyGraph(purl, {
 			headSha: head,
 			dirtyHash: "ffffffffffff",
 			storeRoot: root,
 		});
-		expect(hit?.meta.dirtyHash).toBe(dirty);
-		expect(hit?.meta.nodeCount).toBe(1);
-
-		const exactOnly = await getCachedGraphifyGraph(purl, {
-			headSha: head,
-			dirtyHash: "ffffffffffff",
-			storeRoot: root,
-			anySlot: false,
-		});
-		expect(exactOnly).toBeNull();
-	});
-});
-
-describe("findAnyCachedGraphifyGraph", () => {
-	test("picks newest builtAt among slots", () => {
-		const root = mkdtempSync(join(tmpdir(), "gf-store-"));
-		const purl = "pkg:github/a/b";
-		for (const [head, builtAt, nodes] of [
-			["aaa", "2026-01-01T00:00:00.000Z", 1],
-			["bbb", "2026-06-01T00:00:00.000Z", 9],
-		] as const) {
-			const slot = cacheSlotDir(purl, head, null, root);
-			mkdirSync(slot, { recursive: true });
-			writeFileSync(
-				join(slot, "graph.json"),
-				JSON.stringify({ nodes: Array.from({ length: nodes }, (_, i) => ({ id: String(i) })), links: [] }),
-			);
-			writeFileSync(
-				join(slot, "meta.json"),
-				JSON.stringify({
-					purl,
-					purlKey: purl,
-					headSha: head,
-					dirtyHash: null,
-					slotKey: head,
-					repoRoot: "/repo",
-					builtAt,
-					nodeCount: nodes,
-					edgeCount: 0,
-				}),
-			);
-		}
-		const hit = findAnyCachedGraphifyGraph(purl, root);
-		expect(hit?.meta.headSha).toBe("bbb");
-		expect(hit?.meta.nodeCount).toBe(9);
+		expect(miss).toBeNull();
 	});
 });
 
@@ -252,7 +208,7 @@ describe("assessSubsystemGraphifyReadiness", () => {
 		expect(r.purls[0]?.status).toBe("unavailable");
 	});
 
-	test("any cached slot → ready without matching dirty", () => {
+	test("old cached slot without matching checkout → unavailable", () => {
 		const root = mkdtempSync(join(tmpdir(), "gf-store-"));
 		const purl = "pkg:github/acme/cached-only";
 		const slot = cacheSlotDir(purl, "oldhead", "olddirty", root);
@@ -280,7 +236,165 @@ describe("assessSubsystemGraphifyReadiness", () => {
 			undefined,
 			root,
 		);
+		expect(r.status).toBe("unavailable");
+		expect(r.purls[0]?.status).toBe("unavailable");
+	});
+
+	test("current HEAD slot present → ready", () => {
+		const storeRoot = mkdtempSync(join(tmpdir(), "gf-store-"));
+		const repo = mkdtempSync(join(tmpdir(), "gf-repo-"));
+		spawnSync("git", ["init"], { cwd: repo, stdio: "ignore" });
+		spawnSync("git", ["config", "user.email", "t@t.com"], {
+			cwd: repo,
+			stdio: "ignore",
+		});
+		spawnSync("git", ["config", "user.name", "t"], {
+			cwd: repo,
+			stdio: "ignore",
+		});
+		writeFileSync(join(repo, "a.txt"), "x\n");
+		spawnSync("git", ["add", "."], { cwd: repo, stdio: "ignore" });
+		spawnSync("git", ["commit", "-m", "init"], { cwd: repo, stdio: "ignore" });
+		const head = spawnSync("git", ["rev-parse", "HEAD"], {
+			cwd: repo,
+			encoding: "utf8",
+		}).stdout.trim();
+		expect(head.length).toBeGreaterThan(0);
+
+		const purl = "pkg:github/acme/current-slot";
+		const slot = cacheSlotDir(purl, head, null, storeRoot);
+		mkdirSync(slot, { recursive: true });
+		writeFileSync(
+			join(slot, "graph.json"),
+			JSON.stringify({ nodes: [], links: [] }),
+		);
+		writeFileSync(
+			join(slot, "meta.json"),
+			JSON.stringify({
+				purl,
+				purlKey: purl,
+				headSha: head,
+				dirtyHash: null,
+				slotKey: head,
+				repoRoot: repo,
+				builtAt: "2026-01-01T00:00:00.000Z",
+				nodeCount: 0,
+				edgeCount: 0,
+			}),
+		);
+
+		const r = assessSubsystemGraphifyReadiness(
+			{ components: [{ purl }], repoRoot: repo },
+			undefined,
+			storeRoot,
+		);
 		expect(r.status).toBe("possible");
 		expect(r.purls[0]?.status).toBe("ready");
+	});
+
+	test("checkout present but only old slot → missing", () => {
+		const storeRoot = mkdtempSync(join(tmpdir(), "gf-store-"));
+		const repo = mkdtempSync(join(tmpdir(), "gf-repo-"));
+		spawnSync("git", ["init"], { cwd: repo, stdio: "ignore" });
+		spawnSync("git", ["config", "user.email", "t@t.com"], {
+			cwd: repo,
+			stdio: "ignore",
+		});
+		spawnSync("git", ["config", "user.name", "t"], {
+			cwd: repo,
+			stdio: "ignore",
+		});
+		writeFileSync(join(repo, "a.txt"), "x\n");
+		spawnSync("git", ["add", "."], { cwd: repo, stdio: "ignore" });
+		spawnSync("git", ["commit", "-m", "init"], { cwd: repo, stdio: "ignore" });
+
+		const purl = "pkg:github/acme/stale-slot";
+		const slot = cacheSlotDir(purl, "oldhead", null, storeRoot);
+		mkdirSync(slot, { recursive: true });
+		writeFileSync(
+			join(slot, "graph.json"),
+			JSON.stringify({ nodes: [], links: [] }),
+		);
+		writeFileSync(
+			join(slot, "meta.json"),
+			JSON.stringify({
+				purl,
+				purlKey: purl,
+				headSha: "oldhead",
+				dirtyHash: null,
+				slotKey: "oldhead",
+				repoRoot: repo,
+				builtAt: "2026-01-01T00:00:00.000Z",
+				nodeCount: 0,
+				edgeCount: 0,
+			}),
+		);
+
+		const r = assessSubsystemGraphifyReadiness(
+			{ components: [{ purl }], repoRoot: repo },
+			undefined,
+			storeRoot,
+		);
+		expect(r.status).toBe("not_ready");
+		expect(r.purls[0]?.status).toBe("missing");
+	});
+});
+
+describe("ensureCurrentGraphifyCachesForModel", () => {
+	test("reports failure when no repoRoot can be resolved", async () => {
+		const storeRoot = mkdtempSync(join(tmpdir(), "gf-ensure-"));
+		const purl = "pkg:github/acme/no-checkout-xyz";
+		const r = await ensureCurrentGraphifyCachesForModel(
+			{ components: [{ purl, construct: "function" }] },
+			{ storeRoot },
+		);
+		expect(r.ensured).toEqual([]);
+		expect(r.failed[0]?.purl).toBe(purl);
+	});
+
+	test("hits existing current HEAD(+dirty) slot without re-extract", async () => {
+		const repo = mkdtempSync(join(tmpdir(), "gf-ensure-repo-"));
+		spawnSync("git", ["init"], { cwd: repo, encoding: "utf8" });
+		spawnSync("git", ["config", "user.email", "t@t.com"], { cwd: repo });
+		spawnSync("git", ["config", "user.name", "t"], { cwd: repo });
+		writeFileSync(join(repo, "a.ts"), "export const a = 1;\n");
+		spawnSync("git", ["add", "."], { cwd: repo });
+		spawnSync("git", ["commit", "-m", "init"], { cwd: repo });
+
+		const head = gitHeadSha(repo);
+		expect(head).toBeTruthy();
+		const dirty = dirtyFingerprint(repo);
+		const storeRoot = mkdtempSync(join(tmpdir(), "gf-ensure-store-"));
+		const purl = "pkg:github/acme/ensure-hit";
+		const slot = cacheSlotDir(purl, head!, dirty, storeRoot);
+		mkdirSync(slot, { recursive: true });
+		writeFileSync(
+			join(slot, "graph.json"),
+			JSON.stringify({ nodes: [{ id: "1" }], links: [] }),
+		);
+		writeFileSync(
+			join(slot, "meta.json"),
+			JSON.stringify({
+				purl,
+				purlKey: purl,
+				headSha: head,
+				dirtyHash: dirty,
+				slotKey: cacheSlotKey(head!, dirty),
+				repoRoot: repo,
+				builtAt: "2026-01-01T00:00:00.000Z",
+				nodeCount: 1,
+				edgeCount: 0,
+			}),
+		);
+
+		const r = await ensureCurrentGraphifyCachesForModel(
+			{
+				components: [{ purl, construct: "function" }],
+				repoRoot: repo,
+			},
+			{ storeRoot, bin: "/nonexistent/graphify-should-not-run" },
+		);
+		expect(r.failed).toEqual([]);
+		expect(r.ensured).toEqual([purl]);
 	});
 });

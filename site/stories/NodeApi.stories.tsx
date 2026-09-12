@@ -4,9 +4,9 @@ import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme
 import { SubsystemComponentGraph } from '@principal-ai/subsystems-react';
 import type {
   SubsystemComponent,
-  SubsystemComponentEdge,
+  SubsystemRelation,
+  SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
-import type { SubsystemThroughline } from '@principal-ai/subsystems-react/dist/subsystem/model.js';
 import { makeShowcaseRenderers } from '../src/showcase/files.tsx';
 
 const components: SubsystemComponent[] = [
@@ -70,50 +70,53 @@ const components: SubsystemComponent[] = [
   },
 ];
 
-const edges: SubsystemComponentEdge[] = [
-  { id: 'e0', from: 'orders-routes', to: 'order-service', mechanism: 'calls' },
-  { id: 'e1', from: 'order-service', to: 'order-repo', mechanism: 'calls' },
-  { id: 'e2', from: 'order-service', to: 'Stripe', mechanism: 'calls' },
-  { id: 'e3', from: 'order-repo', to: 'Postgres', mechanism: 'writes' },
-  { id: 'e4', from: 'order-service', to: 'Redis', mechanism: 'writes' },
-  { id: 'e5', from: 'orders-routes', to: 'Redis', mechanism: 'reads' },
-];
+const relations: SubsystemRelation[] = [];
 
-const throughlines: SubsystemThroughline[] = [
+const walkthroughs: SubsystemWalkthrough[] = [
   {
     id: 'tl-post-order',
     title: 'POST /orders',
     steps: [
       {
-        edgeId: 'e0',
+        from: 'orders-routes',
+        to: 'order-service',
+        mechanism: 'calls',
         file: 'src/routes/orders.ts',
         line: 14,
         symbol: "router.post('/orders')",
         annotation: 'Wire boundary — reserves an idempotency key before touching Stripe.',
       },
       {
-        edgeId: 'e4',
+        from: 'order-service',
+        to: 'Redis',
+        mechanism: 'writes',
         file: 'src/services/orderService.ts',
         line: 23,
         symbol: 'reserveIdempotencyKey',
         annotation: 'Key lands in Redis first so a crash mid-flight folds into the cached result.',
       },
       {
-        edgeId: 'e2',
+        from: 'order-service',
+        to: 'Stripe',
+        mechanism: 'calls',
         file: 'src/services/orderService.ts',
         line: 31,
         symbol: 'capturePayment',
         annotation: 'Only truly irreversible side effect — bound to the reserved key.',
       },
       {
-        edgeId: 'e1',
+        from: 'order-service',
+        to: 'order-repo',
+        mechanism: 'calls',
         file: 'src/services/orderService.ts',
         line: 38,
         symbol: 'saveOrder',
         annotation: 'Persist the order with the payment id for reconciliation.',
       },
       {
-        edgeId: 'e3',
+        from: 'order-repo',
+        to: 'Postgres',
+        mechanism: 'writes',
         file: 'src/repositories/orderRepository.ts',
         line: 12,
         symbol: 'insert',
@@ -130,12 +133,12 @@ function OrdersApiDemo() {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={components}
-        edges={edges}
-        throughlines={throughlines}
+        relations={relations}
+        walkthroughs={walkthroughs}
         title="Orders API"
-        description="A typical Express service: a router as the wire boundary, a service class with the business rules, a repository for persistence — and the retained state (Postgres, Redis) plus payment capture (Stripe) as external systems. Open the **Flows** tab to walk the `POST /orders` request path."
+        description="A typical Express service: a router as the wire boundary, a service class with the business rules, a repository for persistence — and the retained state (Postgres, Redis) plus payment capture (Stripe) as external systems. Open the **Walkthroughs** tab to walk the `POST /orders` request path."
         renderFileViewer={showcase.renderFileViewer}
-        renderThroughlineViewer={showcase.renderThroughlineViewer}
+        renderWalkthroughViewer={showcase.renderWalkthroughViewer}
       />
     </div>
   );

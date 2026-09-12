@@ -1,7 +1,7 @@
 /**
  * Demo: Pierre CodeView with snippets from different files.
  *
- * Throughlines want many short windows across files in one scroll —
+ * Walkthroughs want many short windows across files in one scroll —
  * CodeView is the Pierre primitive for that (virtualized list of file items).
  */
 import React, { useMemo, useRef } from 'react';
@@ -54,7 +54,7 @@ const SNIPPETS: SnippetSpec[] = [
     startLine: 216,
     endLine: 250,
     focusLine: 216,
-    label: '3 · Throughline types',
+    label: '3 · Walkthrough types',
   },
 ];
 
@@ -159,7 +159,7 @@ function MultiFileSnippetsDemo() {
         }}
       >
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
-          Throughline steps
+          Walkthrough steps
         </div>
         <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 8 }}>
           Click a step to scroll + highlight its site line.

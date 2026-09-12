@@ -184,8 +184,8 @@ export function Gist() {
               <SubsystemComponentGraph
                 key={`${state.gistId}:${state.fileName}:${refParam ?? 'main'}`}
                 components={state.document.components}
-                edges={state.document.edges}
-                throughlines={state.document.throughlines}
+                relations={state.document.relations}
+                walkthroughs={state.document.walkthroughs}
                 title={state.document.title}
                 description={state.document.description}
                 showEdgeLabels

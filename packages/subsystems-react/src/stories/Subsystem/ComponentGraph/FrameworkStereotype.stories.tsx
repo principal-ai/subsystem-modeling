@@ -137,7 +137,7 @@ export const ReactComponentsAndHooks: Story = {
         title="Framework + stereotype"
         description="construct stays language-shaped (function / type_alias). framework + stereotype label React units as component / hook without inventing a react_component construct. Empty fields mean language-only."
         components={reactUiComponents}
-        edges={reactUiEdges}
+        relations={reactUiEdges.relations} walkthroughs={reactUiEdges.walkthroughs}
       />
     </div>
   ),
@@ -209,7 +209,7 @@ export const NestControllerStack: Story = {
         title="Nest framework stereotypes"
         description="Same optional fields work outside React: class/function constructs plus nestjs controller / guard / middleware / injectable stereotypes."
         components={nestComponents}
-        edges={nestEdges}
+        relations={nestEdges.relations} walkthroughs={nestEdges.walkthroughs}
       />
     </div>
   ),

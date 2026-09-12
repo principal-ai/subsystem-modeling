@@ -5,7 +5,7 @@ import {
 	makeGraphifyId,
 	normalizeGraphifyId,
 } from './ids';
-import { resolveComponentAnchor, symbolLabelVariants } from './anchor';
+import { resolveComponentAnchor, symbolLabelVariants, findUniqueDefinitionBySymbol } from './anchor';
 
 function node(
 	id: string,
@@ -31,7 +31,7 @@ describe('makeGraphifyId', () => {
 			'packages/subsystems-studio/src/mainview/views/SubsystemModelView',
 		);
 		expect(makeGraphifyId(stem, 'SubsystemModelView')).toBe(
-			'packages_trail_viewer_src_mainview_views_subsystemmodelview_subsystemmodelview',
+			'packages_subsystems_studio_src_mainview_views_subsystemmodelview_subsystemmodelview',
 		);
 	});
 
@@ -120,5 +120,34 @@ describe('resolveComponentAnchor', () => {
 			symbol: 'SessionReader',
 		});
 		expect(r.resolution).toBe('missing');
+	});
+});
+
+describe('findUniqueDefinitionBySymbol', () => {
+	test('unique when one defining file', () => {
+		const nodes = [
+			node('a', 'HostInfo', 'src/a.ts', 'L1'),
+			node('b', 'Other', 'src/b.ts', 'L1'),
+		];
+		const r = findUniqueDefinitionBySymbol(nodes, 'HostInfo');
+		expect(r.status).toBe('unique');
+		if (r.status === 'unique') expect(r.node.source_file).toBe('src/a.ts');
+	});
+
+	test('ambiguous when same symbol in two files', () => {
+		const nodes = [
+			node('a', 'Foo()', 'src/a.ts', 'L1'),
+			node('b', 'Foo()', 'src/b.ts', 'L1'),
+		];
+		const r = findUniqueDefinitionBySymbol(nodes, 'Foo');
+		expect(r.status).toBe('ambiguous');
+	});
+
+	test('none when symbol absent', () => {
+		const r = findUniqueDefinitionBySymbol(
+			[node('a', 'Bar', 'src/a.ts')],
+			'Foo',
+		);
+		expect(r.status).toBe('none');
 	});
 });

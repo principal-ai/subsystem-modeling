@@ -45,6 +45,8 @@ export function Start() {
         {' · '}
         <Link to="/schema">Read the schema</Link>
         {' · '}
+        <Link to="/maintainer">Model Maintainer</Link>
+        {' · '}
         <Link to="/about">Mission</Link>
       </p>
     </section>

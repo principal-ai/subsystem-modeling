@@ -7,7 +7,7 @@
  * `file.name`s — so we force plain text for those paths until Pierre/WebKit
  * is safe with them.
  *
- * Distinct throughline slices of the same path still need unique `file.name`s
+ * Distinct walkthrough slices of the same path still need unique `file.name`s
  * (see `pierreCodeViewFileName`).
  */
 

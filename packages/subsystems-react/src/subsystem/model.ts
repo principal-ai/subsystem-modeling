@@ -21,6 +21,10 @@ import { computeElkLayout, calculatePathLength } from '../utils/elkLayout';
 import type { GraphifyComponentDetail } from '../graphify';
 import type { SubsystemDeclarationRef } from './declarationRef';
 
+/** Structured declaration shape — same union as graphify drill-down payloads. */
+export type SubsystemConstructDeclaration = GraphifyComponentDetail;
+export type SubsystemDeclarationProvenance = 'verified' | 'authored';
+
 export type SubsystemComponentConstruct =
   | 'class'
   | 'function'
@@ -82,26 +86,37 @@ export interface SubsystemDeclToken {
   color?: string;
 }
 
-export type SubsystemEdgeMechanism =
+/**
+ * Topology relation type — structural / module / type claims.
+ * Belongs on `relations[]`, not on walkthrough hops.
+ */
+export type SubsystemRelationType =
   | 'imports'
-  | 'imports_from'
-  | 're_exports'
-  | 'defines'
-  | 'calls'
   | 'extends'
   | 'inherits'
   | 'implements'
   | 'mixes_in'
-  | 'uses'
   | 'method'
   | 'references'
-  | 'contains'
+  | 'contains';
+
+/**
+ * Walkthrough hop mechanism — runtime seams with a `file:line` site.
+ */
+export type SubsystemWalkthroughMechanism =
+  | 'calls'
+  | 'uses'
   | 'feeds'
   | 'produces'
   | 'writes'
   | 'reads'
   | 'watches'
   | 'registers-into';
+
+/** Union for derived graph-edge styling (relationType or hop mechanism). */
+export type SubsystemEdgeMechanism =
+  | SubsystemRelationType
+  | SubsystemWalkthroughMechanism;
 
 /** A component node — the named unit, construct-tagged; `file` is its location. */
 export interface SubsystemComponent {
@@ -126,6 +141,13 @@ export interface SubsystemComponent {
   purl: string;
   /** One-line purpose shown on the node. */
   purpose?: string;
+  /**
+   * Design / migration placeholder — participates in edges and flows but is
+   * not a live source declaration yet. Verification skips source checks until
+   * promoted (`proposed` cleared, `file` + `symbol` filled). Orthogonal to
+   * `construct` (intended shape) and `role` (topology).
+   */
+  proposed?: boolean;
   /**
    * Semantic role — where the node sits in the topology (boundary element,
    * external system), orthogonal to `construct` (what it is). Drives the
@@ -180,27 +202,20 @@ export interface SubsystemComponent {
    */
   layer?: number;
   /**
-   * How this session *occupied* the component — `edited` (modified it) vs
-   * `analyzed` (read deeply / built an understanding) vs `referenced`
-   * (touched in passing). Drives clustering: edits strengthen a subsystem,
-   * but a read-only investigation can still form one around an analyzed seam.
+   * Structured declaration shape of the construct (params, members, type
+   * buckets, …). Single source of truth for the click panel — authored by
+   * agents/CLI or filled by verified graphify capture. Discriminated by kind.
    */
-  capture?: 'edited' | 'analyzed' | 'referenced';
+  declaration?: SubsystemConstructDeclaration;
   /**
-   * Graphify drill-down detail for this component, when the facet is anchored
-   * to a graphify node. Discriminated by kind (class/function/type/module/store/
-   * external); rendered in the detail panel on click.
-   */
-  detail?: GraphifyComponentDetail;
-  /**
-   * Where the drill-down `detail` came from. `verified` = extracted from
+   * Where the structured `declaration` came from. `verified` = extracted from
    * source by tooling (graphify AST, signature extraction) — may be trusted
    * as matching the code. `authored` = written by the authoring agent/human
    * to highlight specific inputs/outputs — informative, not checked against
-   * source. Detail without provenance is treated as `authored`; only tooling
-   * may claim `verified`.
+   * source. Declaration without provenance is treated as `authored`; only
+   * tooling may claim `verified`.
    */
-  detailProvenance?: 'verified' | 'authored';
+  declarationProvenance?: SubsystemDeclarationProvenance;
   /**
    * Pre-tokenized declaration for the detail panel. When present, the
    * renderer skips client-side tokenization. Tokens are language-agnostic;
@@ -214,7 +229,20 @@ export interface SubsystemComponent {
   declarationRef?: SubsystemDeclarationRef;
 }
 
-/** A cross-component edge in the subsystem graph. */
+/** A topology relation between components (structural / module / type). */
+export interface SubsystemRelation {
+  id: string;
+  from: string;
+  to: string;
+  relationType: SubsystemRelationType;
+  /** Concrete file/symbol refs backing the relation. */
+  refs?: string[];
+}
+
+/**
+ * Derived / display graph edge used by renderers. Built from `relations`
+ * and/or walkthrough hops — not authored as its own document field.
+ */
 export interface SubsystemComponentEdge {
   id: string;
   from: string; // component id
@@ -225,41 +253,97 @@ export interface SubsystemComponentEdge {
 }
 
 /**
- * A single site on an existing edge — the exact `file:line` where that edge's
- * seam manifests for a given flow. The edge stays the abstract contract
- * (`from`, `to`, `mechanism`); a throughline step picks the concrete
- * manifestation. One edge can appear in many steps.
+ * A single runtime hop — `from`/`to`/`mechanism` plus the exact `file:line`
+ * where that seam fires for a walkthrough.
  */
-export interface SubsystemThroughlineStep {
-  /** Id of the existing edge this hop traverses. */
-  edgeId: string;
-  /** Repo-root-relative path of the file where the edge fires. */
+export interface SubsystemWalkthroughStep {
+  from: string;
+  to: string;
+  mechanism: SubsystemWalkthroughMechanism;
+  /** Repo-root-relative path of the file where the seam fires. */
   file: string;
   /** 1-based line of the site within `file`. */
   line: number;
   /**
    * Frame name for this hop — the function/method/symbol on the stack at
-   * this site. Optional so existing throughlines keep working; when set the
-   * flows list shows it instead of mechanism + filename.
+   * this site. Optional; when set the walkthroughs list shows it instead of
+   * mechanism + filename.
    */
   symbol?: string;
   /**
    * Free-text note anchored to this hop's site line. Optional — informative
-   * only, never verified against source; the Pierre throughline code view
+   * only, never verified against source; the Pierre walkthrough code view
    * surfaces it in the annotation column next to the highlighted line.
    */
   annotation?: string;
 }
 
-/**
- * An ordered execution story over a graph's edges — each step references an
- * existing edge and the exact site where that relationship fires for a flow;
- * ordering is the array. One throughline per flow (save flow, load flow, …).
- */
-export interface SubsystemThroughline {
+/** An ordered runtime walkthrough — one named behavior story. */
+export interface SubsystemWalkthrough {
   id: string;
   title: string;
-  steps: SubsystemThroughlineStep[];
+  steps: SubsystemWalkthroughStep[];
+}
+
+export interface SubsystemModelDocument {
+  components: SubsystemComponent[];
+  /** Topology relations (structural / module / type). May be empty. */
+  relations: SubsystemRelation[];
+  /** Ordered runtime walkthroughs (one per named behavior). */
+  walkthroughs?: SubsystemWalkthrough[];
+}
+
+/** Stable id for a derived graph edge from a relation or walkthrough hop. */
+export function derivedGraphEdgeId(
+  from: string,
+  to: string,
+  mechanism: SubsystemEdgeMechanism,
+): string {
+  return `${from}--${mechanism}-->${to}`;
+}
+
+/**
+ * Build display edges for the graph canvas from topology relations and
+ * walkthrough hops (deduped by from/to/mechanism).
+ */
+/** React Flow / canvas edge id for a walkthrough hop. */
+export function walkthroughStepGraphEdgeId(
+  step: Pick<SubsystemWalkthroughStep, 'from' | 'to' | 'mechanism'>,
+): string {
+  return derivedGraphEdgeId(step.from, step.to, step.mechanism);
+}
+
+export function deriveGraphEdges(doc: {
+  relations?: SubsystemRelation[];
+  walkthroughs?: SubsystemWalkthrough[];
+}): SubsystemComponentEdge[] {
+  const byId = new Map<string, SubsystemComponentEdge>();
+  for (const r of doc.relations ?? []) {
+    const id = r.id || derivedGraphEdgeId(r.from, r.to, r.relationType);
+    if (!byId.has(id)) {
+      byId.set(id, {
+        id,
+        from: r.from,
+        to: r.to,
+        mechanism: r.relationType,
+        refs: r.refs,
+      });
+    }
+  }
+  for (const w of doc.walkthroughs ?? []) {
+    for (const step of w.steps) {
+      const id = derivedGraphEdgeId(step.from, step.to, step.mechanism);
+      if (!byId.has(id)) {
+        byId.set(id, {
+          id,
+          from: step.from,
+          to: step.to,
+          mechanism: step.mechanism,
+        });
+      }
+    }
+  }
+  return [...byId.values()];
 }
 
 /**
@@ -335,13 +419,6 @@ export function formatPurl(purl: string): string {
     return `${identity.slice('local--'.length)} (local)`;
   }
   return identity;
-}
-
-export interface SubsystemModelDocument {
-  components: SubsystemComponent[];
-  edges: SubsystemComponentEdge[];
-  /** Ordered execution stories over the graph's edges (one per flow). */
-  throughlines?: SubsystemThroughline[];
 }
 
 // ---------------------------------------------------------------------------
@@ -429,9 +506,6 @@ export type SubsystemGraphEdge = Edge<SubsystemGraphEdgeData>;
 
 export const MECHANISM_COLOR: Record<SubsystemEdgeMechanism, string> = {
   imports: '#0893d2', // blue
-  imports_from: '#5aa9e6', // light blue
-  re_exports: '#3aa5c9', // cyan-blue
-  defines: '#2e86ab', // steel blue
   calls: '#4ec9b0', // teal
   extends: '#b48ead', // purple
   inherits: '#9b6fd0', // purple
@@ -451,9 +525,6 @@ export const MECHANISM_COLOR: Record<SubsystemEdgeMechanism, string> = {
 
 export const MECHANISM_STYLE: Record<SubsystemEdgeMechanism, 'solid' | 'dashed' | 'dotted'> = {
   imports: 'solid',
-  imports_from: 'solid',
-  re_exports: 'solid',
-  defines: 'solid',
   calls: 'solid',
   extends: 'dashed',
   inherits: 'dashed',
@@ -475,9 +546,6 @@ export const MECHANISM_STYLE: Record<SubsystemEdgeMechanism, 'solid' | 'dashed' 
  *  directly verifiable" styling of edge labels. */
 export const MECHANISM_DESCRIPTIONS: [SubsystemEdgeMechanism, string, boolean][] = [
   ['imports', 'import statement (code-level dependency)', true],
-  ['imports_from', 'imported by (reverse dependency)', true],
-  ['re_exports', 're-exports symbols from', true],
-  ['defines', 'defines / declares symbol', true],
   ['calls', 'function/method call (call graph edge)', true],
   ['extends', 'class inheritance', true],
   ['inherits', 'class inheritance', true],
@@ -524,6 +592,77 @@ export const ROLE_LABEL: Record<SubsystemComponentRole, string> = {
   entry: 'entry',
   service: 'service',
 };
+
+/** Right-badge accent for `proposed: true` (no role, or combined with role). */
+export const PROPOSED_COLOR = '#b8860b'; // darkgoldenrod — not-yet-in-source
+
+/**
+ * Top-right badge label: proposed wins over role when both are set
+ * (proposed is the temporary exception to scan for; role stays on the model).
+ * Returns null when neither applies.
+ */
+export function rightBadgeLabel(component: {
+  role?: SubsystemComponentRole;
+  proposed?: boolean;
+}): string | null {
+  if (component.proposed) return 'proposed';
+  if (component.role != null) return ROLE_LABEL[component.role];
+  return null;
+}
+
+/** Color for the top-right badge (role and/or proposed). */
+export function rightBadgeColor(component: {
+  role?: SubsystemComponentRole;
+  proposed?: boolean;
+}): string | null {
+  if (component.proposed) return PROPOSED_COLOR;
+  if (component.role != null) return ROLE_COLOR[component.role];
+  return null;
+}
+
+/** Display label per store `storage` backing. */
+export const STORAGE_LABEL: Record<string, string> = {
+  memory: 'memory',
+  disk: 'disk',
+  external: 'db',
+};
+
+/** Right-badge accent per store `storage` backing — retention reads as its
+ *  own hue so memory / disk / db are scannable from far on a canvas. */
+export const STORAGE_COLOR: Record<string, string> = {
+  memory: '#5aa9e6', // sky — process-lifetime RAM
+  disk: '#e3b341', // amber — this process on the filesystem
+  external: '#c46fd8', // violet — mediated by another system (db/service)
+};
+
+function storeStorage(component: {
+  declaration?: GraphifyComponentDetail;
+}): string | undefined {
+  return component.declaration?.kind === 'store'
+    ? component.declaration.storage
+    : undefined;
+}
+
+/** Top-right storage badge for `construct: 'store'` nodes with an authored
+ *  `storage` declaration — how the retained state is backed. Sits beside the
+ *  role/proposed badge (storage is orthogonal to topology). Null otherwise. */
+export function storageBadgeLabel(component: {
+  construct: SubsystemComponentConstruct;
+  declaration?: GraphifyComponentDetail;
+}): string | null {
+  if (component.construct !== 'store') return null;
+  const storage = storeStorage(component);
+  return storage ? (STORAGE_LABEL[storage] ?? storage) : null;
+}
+
+export function storageBadgeColor(component: {
+  construct: SubsystemComponentConstruct;
+  declaration?: GraphifyComponentDetail;
+}): string | null {
+  if (component.construct !== 'store') return null;
+  const storage = storeStorage(component);
+  return storage ? (STORAGE_COLOR[storage] ?? null) : null;
+}
 
 /**
  * Primary badge text for a node: prefer framework stereotype over the
@@ -576,13 +715,21 @@ export function nodeMinWidthForBadges(component: {
   framework?: string;
   stereotype?: string;
   role?: SubsystemComponentRole;
+  proposed?: boolean;
   entityKind?: string;
+  declaration?: GraphifyComponentDetail;
 }): number {
   const left = estimateBadgeLabelWidth(constructBadgeLabel(component));
-  if (component.role == null) {
+  const rightBadges = [
+    storageBadgeLabel(component),
+    rightBadgeLabel(component),
+  ].filter((l): l is string => l != null);
+  if (rightBadges.length === 0) {
     return Math.max(NODE_CSS_MIN_WIDTH, BADGE_EDGE_INSET + left + BADGE_EDGE_INSET);
   }
-  const right = estimateBadgeLabelWidth(ROLE_LABEL[component.role]);
+  const right = rightBadges
+    .map(estimateBadgeLabelWidth)
+    .reduce((acc, w) => acc + BADGE_PAIR_GAP + w);
   return Math.max(
     NODE_CSS_MIN_WIDTH,
     BADGE_EDGE_INSET + left + BADGE_PAIR_GAP + right + BADGE_EDGE_INSET,
@@ -685,7 +832,7 @@ export function convertSubsystemToEdges(doc: SubsystemModelDocument): SubsystemG
   const compIds = new Set(doc.components.map((c) => c.id));
   const edges: SubsystemGraphEdge[] = [];
 
-  for (const e of doc.edges) {
+  for (const e of deriveGraphEdges(doc)) {
     const color = MECHANISM_COLOR[e.mechanism];
     const style = MECHANISM_STYLE[e.mechanism];
     // If `to` is a real component, connect directly; otherwise point at a stub node.
@@ -712,14 +859,14 @@ export function convertSubsystemToEdges(doc: SubsystemModelDocument): SubsystemG
 
 /** Stable key for layout-affecting graph fields (ignores declarationRef, etc.). */
 export function subsystemGraphLayoutKey(
-  doc: Pick<SubsystemModelDocument, 'components' | 'edges'>,
+  doc: Pick<SubsystemModelDocument, 'components' | 'relations' | 'walkthroughs'>,
 ): string {
   const components = doc.components
     .map(({ id, purl, name, symbol, construct, file, purpose, process }) =>
       [id, purl, name, symbol ?? '', construct, file, purpose ?? '', process ?? ''].join('\0'))
     .sort()
     .join('\n');
-  const edgeKey = doc.edges
+  const edgeKey = deriveGraphEdges(doc)
     .map(({ id, from, to, mechanism }) => [id, from, to, mechanism].join('\0'))
     .sort()
     .join('\n');
@@ -759,7 +906,7 @@ export async function buildSubsystemGraph(
   // cross-package edges have something to land on.
   const realIds = new Set(doc.components.map((c) => c.id));
   const externalIds: string[] = [];
-  for (const e of doc.edges) {
+  for (const e of deriveGraphEdges(doc)) {
     if (!realIds.has(e.to)) {
       const extId = `external:${e.to}`;
       if (!externalIds.includes(extId)) externalIds.push(extId);

@@ -50,9 +50,9 @@ export async function tokenizeComponent(
   if (component.tokens) return component.tokens;
 
   // External kind — not valid TypeScript, bypass Prettier.
-  const kind = component.detail?.kind ?? component.construct;
+  const kind = component.declaration?.kind ?? component.construct;
   if (kind === 'external') {
-    const label = component.detail?.kind === 'external' ? component.detail.label : component.name;
+    const label = component.declaration?.kind === 'external' ? component.declaration.label : component.name;
     const escaped = label.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     return tokenizeFormatted(`external '${escaped}'`, themeName);
   }

@@ -36,13 +36,16 @@ import { ChevronDown, ChevronUp, Pause, Play, X } from 'lucide-react';
 import { IndustryMarkdownSlide } from 'themed-markdown';
 import {
   buildSubsystemGraph,
+  deriveGraphEdges,
   MECHANISM_COLOR,
   MECHANISM_DESCRIPTIONS,
   subsystemGraphLayoutKey,
+  walkthroughStepGraphEdgeId,
   type SubsystemComponentEdge,
   type SubsystemComponent,
   type SubsystemEdgeMechanism,
-  type SubsystemThroughline,
+  type SubsystemRelation,
+  type SubsystemWalkthrough,
 } from './model';
 import type { SubsystemOpenFileOptions } from './declarationRef';
 import { SubsystemComponentNode, SubsystemGroupNode, SubsystemEdge, SUBSYSTEM_CALLBACKS, hexWithAlpha, EDGE_DIM_ALPHA, fileMatchForNode, flowElementVisibility } from './nodes';
@@ -58,33 +61,34 @@ const EDGE_LABEL_MAX_EDGE_FRACTION = 0.55;
 /** Rough monospace width at fontSize 10 + horizontal padding/border. */
 const EDGE_LABEL_CHAR_PX = 6.2;
 const EDGE_LABEL_PAD_PX = 18;
-/** Pause (ms) between steps when a throughline autoplays. */
-const THROUGHLINE_PLAY_PAUSE_MS = 2500;
+/** Pause (ms) between steps when a walkthrough autoplays. */
+const WALKTHROUGH_PLAY_PAUSE_MS = 2500;
 
-/** Context passed to `renderThroughlineViewer` when a flow/step is focused. */
-export interface ThroughlineViewerContext {
-  throughline: SubsystemThroughline;
+/** Context passed to `renderWalkthroughViewer` when a flow/step is focused. */
+export interface WalkthroughViewerContext {
+  walkthrough: SubsystemWalkthrough;
   /** Focused step index; `null` means the whole flow (no specific step). */
   stepIndex: number | null;
 }
 
 type DrawerTarget =
   | { kind: 'file'; file: string; startLine?: number }
-  | { kind: 'throughline'; throughlineId: string; stepIndex: number | null };
+  | { kind: 'walkthrough'; walkthroughId: string; stepIndex: number | null };
 
 export interface SubsystemComponentGraphProps {
   components: SubsystemComponent[];
-  edges: SubsystemComponentEdge[];
+  /** Topology relations (structural / module / type). Display edges are derived with walkthrough hops. */
+  relations: SubsystemRelation[];
   /**
-   * Ordered execution stories over the graph's edges — one throughline per
-   * flow. When present the sidebar's bottom half offers a Files/Flows toggle:
-   * the flows panel lists each throughline's steps (`symbol` or `file:line`);
+   * Ordered runtime walkthroughs — one walkthrough per flow. When present the
+   * sidebar's bottom half offers a Files/Walkthroughs toggle:
+   * the flows panel lists each walkthrough's steps (`symbol` or `file:line`);
    * clicking a flow row toggles its steps; clicking a step focuses that
-   * step's edge and (when `renderThroughlineViewer` is set) opens the bottom
+   * step's edge and (when `renderWalkthroughViewer` is set) opens the bottom
    * drawer on that flow's snippets. Opened flows stay on the canvas
    * (unselected ones dimmed); everything else is hidden.
    */
-  throughlines?: SubsystemThroughline[];
+  walkthroughs?: SubsystemWalkthrough[];
   onSelect?: (componentId: string) => void;
   /** Called when an edge is clicked (relationship / mechanism + refs seam). */
   onEdgeSelect?: (edge: SubsystemComponentEdge) => void;
@@ -97,29 +101,29 @@ export interface SubsystemComponentGraphProps {
   title?: string;
   /**
    * Suppresses the sidebar entirely (title, description, file tree,
-   * throughlines) for graph-only embeds. Pair with `graphTitle` to keep the
+   * walkthroughs) for graph-only embeds. Pair with `graphTitle` to keep the
    * subsystem name visible as an overlay on the canvas.
    */
   hideSidebar?: boolean;
   /**
-   * How throughline step highlighting behaves on the canvas.
+   * How walkthrough step highlighting behaves on the canvas.
    * - `focus` (default): zoom to the step, hide non-participants, open drawer
    * - `dim`: keep the full graph, dim non-participants (same as hovering a step)
    */
-  throughlineStepMode?: 'focus' | 'dim';
+  walkthroughStepMode?: 'focus' | 'dim';
   /**
-   * When true, cycles throughline steps automatically using `dim` highlighting
-   * (no zoom, no drawer). Loops across all throughlines that have steps.
+   * When true, cycles walkthrough steps automatically using `dim` highlighting
+   * (no zoom, no drawer). Loops across all walkthroughs that have steps.
    * Useful for graph-only embeds (`hideSidebar`).
    */
-  autoPlayThroughlines?: boolean;
+  autoPlayWalkthroughs?: boolean;
   /** Pause between autoplay steps in ms. @default 2500 */
-  throughlineAutoPlayIntervalMs?: number;
+  walkthroughAutoPlayIntervalMs?: number;
   /**
-   * When false, focusing a throughline/step does not call `fitView`.
+   * When false, focusing a walkthrough/step does not call `fitView`.
    * @default true
    */
-  zoomOnThroughlineFocus?: boolean;
+  zoomOnWalkthroughFocus?: boolean;
   /**
    * Subsystem title rendered as a non-interactive overlay chip on the graph
    * canvas (top-center). Does not trigger the sidebar — for graph-only
@@ -127,11 +131,11 @@ export interface SubsystemComponentGraphProps {
    */
   graphTitle?: string;
   /**
-   * When true, shows the active throughline's title as a non-interactive
+   * When true, shows the active walkthrough's title as a non-interactive
    * overlay chip on the canvas (under `graphTitle` when both are set).
-   * Uses the focused or hover-highlighted throughline.
+   * Uses the focused or hover-highlighted walkthrough.
    */
-  showThroughlineTitle?: boolean;
+  showWalkthroughTitle?: boolean;
   /** Markdown description rendered in the sidebar. */
   description?: string;
   /** Rendered over the graph canvas only (not the title/legend sidebar). */
@@ -147,11 +151,11 @@ export interface SubsystemComponentGraphProps {
    */
   renderFileViewer?: (file: string, opts?: SubsystemOpenFileOptions) => ReactNode;
   /**
-   * Host-injected multi-snippet viewer for a focused throughline. When set,
+   * Host-injected multi-snippet viewer for a focused walkthrough. When set,
    * clicking a flow step opens the bottom drawer with this content and
    * updates it as the focused step changes.
    */
-  renderThroughlineViewer?: (ctx: ThroughlineViewerContext) => ReactNode;
+  renderWalkthroughViewer?: (ctx: WalkthroughViewerContext) => ReactNode;
   /**
    * Legacy component-keyed variant, kept for backward compatibility. When
    * `renderFileViewer` is absent, drawer content resolves via the first
@@ -194,33 +198,37 @@ const FileDrawerContent = memo(function FileDrawerContent({
   return <>{render(file, startLine != null ? { startLine } : undefined)}</>;
 });
 
-const ThroughlineDrawerContent = memo(function ThroughlineDrawerContent({
+const WalkthroughDrawerContent = memo(function WalkthroughDrawerContent({
   render,
-  throughline,
+  walkthrough,
   stepIndex,
 }: {
-  render: (ctx: ThroughlineViewerContext) => ReactNode;
-  throughline: SubsystemThroughline;
+  render: (ctx: WalkthroughViewerContext) => ReactNode;
+  walkthrough: SubsystemWalkthrough;
   stepIndex: number | null;
 }) {
-  return <>{render({ throughline, stepIndex })}</>;
+  return <>{render({ walkthrough, stepIndex })}</>;
 });
 
 interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, title, hideSidebar, throughlineStepMode = 'focus', autoPlayThroughlines = false, throughlineAutoPlayIntervalMs = THROUGHLINE_PLAY_PAUSE_MS, zoomOnThroughlineFocus = true, graphTitle, showThroughlineTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, renderFileView, renderFileViewer, renderThroughlineViewer, onFileSelect, onVerifyComponent, componentVerification }: InnerProps) {
+function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, onVerifyComponent, componentVerification }: InnerProps) {
   const { theme } = useTheme();
   const { fitView } = useReactFlow();
   const viewport = useViewport();
+  const graphEdges = useMemo(
+    () => deriveGraphEdges({ relations, walkthroughs }),
+    [relations, walkthroughs],
+  );
   const [built, setBuilt] = useState<{ nodes: Node[]; edges: Edge[] }>({
     nodes: [],
     edges: [],
   });
   const [layoutReady, setLayoutReady] = useState(false);
   const [selected, setSelected] = useState<SubsystemComponent | null>(null);
-  /** Bottom drawer: single file or throughline multi-snippet mode. */
+  /** Bottom drawer: single file or walkthrough multi-snippet mode. */
   const [drawerTarget, setDrawerTarget] = useState<DrawerTarget | null>(null);
   // Mirror so step-focus can decide whether to wait for the drawer open
   // transition before fitView (avoids framing against full-height canvas).
@@ -230,27 +238,27 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   const pendingFocusFitRef = useRef<number | null>(null);
   // Component the pointer is over (null on leave) → transient tree highlight.
   const [hoveredComponentId, setHoveredComponentId] = useState<string | null>(null);
-  // Throughline focus — selected flow (or step) is full strength; other
+  // Walkthrough focus — selected flow (or step) is full strength; other
   // opened-flow members stay visible but dimmed; everything else is hidden.
-  const [focusedThroughlineId, setFocusedThroughlineId] = useState<string | null>(null);
+  const [focusedWalkthroughId, setFocusedWalkthroughId] = useState<string | null>(null);
   // `null` = whole flow focused; a number = that single step's edge focused.
   const [focusedStepIndex, setFocusedStepIndex] = useState<number | null>(null);
-  // Hovered throughline in the flows panel: dims every canvas node/edge not
+  // Hovered walkthrough in the flows panel: dims every canvas node/edge not
   // involved in the hover preview (or selected ∪ hovered when a step is
   // focused). `stepIndex: null` = whole flow (collapsed title hover);
   // a number = that step. Transient — no drawer. Camera only reframes when
   // a step is already selected.
-  const [hoveredThroughlineStep, setHoveredThroughlineStep] = useState<{
-    throughlineId: string;
+  const [hoveredWalkthroughStep, setHoveredWalkthroughStep] = useState<{
+    walkthroughId: string;
     stepIndex: number | null;
   } | null>(null);
-  // Sidebar bottom half: which panel is shown when throughlines exist.
-  const [sidebarView, setSidebarView] = useState<'files' | 'flows'>(() =>
-    throughlines?.length ? 'flows' : 'files',
+  // Sidebar bottom half: which panel is shown when walkthroughs exist.
+  const [sidebarView, setSidebarView] = useState<'files' | 'walkthroughs'>(() =>
+    walkthroughs?.length ? 'walkthroughs' : 'files',
   );
-  // Throughline flows the user has expanded (via the title row). Closed by
+  // Walkthrough flows the user has expanded (via the title row). Closed by
   // default so a graph with several flows doesn't dump every step list at once.
-  const [expandedThroughlines, setExpandedThroughlines] = useState<Set<string>>(new Set());
+  const [expandedWalkthroughs, setExpandedWalkthroughs] = useState<Set<string>>(new Set());
   // Sidebar description visibility. Hidden by default so the files/flows
   // panel gets the vertical room; the title-row toggle reveals it.
   const [descriptionVisible, setDescriptionVisible] = useState(false);
@@ -314,36 +322,36 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
       ? { file: drawerTarget.file, startLine: drawerTarget.startLine }
       : null;
 
-  const focusedThroughline = useMemo(() => {
-    if (drawerTarget?.kind !== 'throughline' || !throughlines) return null;
-    return throughlines.find((t) => t.id === drawerTarget.throughlineId) ?? null;
-  }, [drawerTarget, throughlines]);
+  const focusedWalkthrough = useMemo(() => {
+    if (drawerTarget?.kind !== 'walkthrough' || !walkthroughs) return null;
+    return walkthroughs.find((t) => t.id === drawerTarget.walkthroughId) ?? null;
+  }, [drawerTarget, walkthroughs]);
 
-  // Throughline shown on the canvas title chip (focus or hover/autoplay highlight).
-  const overlayThroughlineTitle = useMemo(() => {
-    if (!showThroughlineTitle || !throughlines?.length) return null;
-    const id = focusedThroughlineId ?? hoveredThroughlineStep?.throughlineId;
+  // Walkthrough shown on the canvas title chip (focus or hover/autoplay highlight).
+  const overlayWalkthroughTitle = useMemo(() => {
+    if (!showWalkthroughTitle || !walkthroughs?.length) return null;
+    const id = focusedWalkthroughId ?? hoveredWalkthroughStep?.walkthroughId;
     if (!id) return null;
-    return throughlines.find((t) => t.id === id)?.title ?? null;
+    return walkthroughs.find((t) => t.id === id)?.title ?? null;
   }, [
-    showThroughlineTitle,
-    throughlines,
-    focusedThroughlineId,
-    hoveredThroughlineStep,
+    showWalkthroughTitle,
+    walkthroughs,
+    focusedWalkthroughId,
+    hoveredWalkthroughStep,
   ]);
 
   // Active step for the bottom-of-title progress + annotation chip.
-  const overlayThroughlineStep = useMemo(() => {
-    if (!showThroughlineTitle || !throughlines?.length) return null;
-    const tlId = focusedThroughlineId ?? hoveredThroughlineStep?.throughlineId ?? null;
+  const overlayWalkthroughStep = useMemo(() => {
+    if (!showWalkthroughTitle || !walkthroughs?.length) return null;
+    const tlId = focusedWalkthroughId ?? hoveredWalkthroughStep?.walkthroughId ?? null;
     let stepIndex: number | null = null;
-    if (focusedThroughlineId != null) {
+    if (focusedWalkthroughId != null) {
       stepIndex = focusedStepIndex;
-    } else if (hoveredThroughlineStep != null) {
-      stepIndex = hoveredThroughlineStep.stepIndex;
+    } else if (hoveredWalkthroughStep != null) {
+      stepIndex = hoveredWalkthroughStep.stepIndex;
     }
     if (tlId == null || stepIndex == null) return null;
-    const tl = throughlines.find((t) => t.id === tlId);
+    const tl = walkthroughs.find((t) => t.id === tlId);
     const step = tl?.steps[stepIndex];
     if (!step || !tl) return null;
     return {
@@ -352,24 +360,24 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
       annotation: step.annotation,
     };
   }, [
-    showThroughlineTitle,
-    throughlines,
-    focusedThroughlineId,
+    showWalkthroughTitle,
+    walkthroughs,
+    focusedWalkthroughId,
     focusedStepIndex,
-    hoveredThroughlineStep,
+    hoveredWalkthroughStep,
   ]);
 
   const drawerTitle = useMemo(() => {
     if (!drawerTarget) return null;
     if (drawerTarget.kind === 'file') return drawerTarget.file;
-    const tl = focusedThroughline;
+    const tl = focusedWalkthrough;
     if (!tl) return null;
     if (drawerTarget.stepIndex == null) return tl.title;
     const step = tl.steps[drawerTarget.stepIndex];
     if (!step) return tl.title;
     const site = `${step.file.split('/').pop() ?? step.file}:${step.line}`;
     return `${tl.title} · ${site}`;
-  }, [drawerTarget, focusedThroughline]);
+  }, [drawerTarget, focusedWalkthrough]);
 
   // Refresh selected component when the components list updates (e.g. verify
   // writes back declarationRef).
@@ -383,13 +391,15 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   // The pane stays hidden until Pass 2 completes. Key off layout-affecting
   // fields only — declarationRef updates after verify must not re-run ELK.
   const layoutKey = useMemo(
-    () => subsystemGraphLayoutKey({ components, edges }),
-    [components, edges],
+    () => subsystemGraphLayoutKey({ components, relations, walkthroughs }),
+    [components, relations, walkthroughs],
   );
   const componentsRef = useRef(components);
-  const edgesRef = useRef(edges);
+  const relationsRef = useRef(relations);
+  const walkthroughsRef = useRef(walkthroughs);
   componentsRef.current = components;
-  edgesRef.current = edges;
+  relationsRef.current = relations;
+  walkthroughsRef.current = walkthroughs;
 
   // Track measured dimensions from React Flow's dimension changes.
   // These arrive as { type: 'dimensions', id, dimensions } in onNodesChange.
@@ -406,7 +416,11 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
     prevMeasuredSigRef.current = '';
     // Bump generation so any in-flight Pass 2 from the prior layoutKey is ignored.
     pass2GenRef.current += 1;
-    const doc = { components: componentsRef.current, edges: edgesRef.current };
+    const doc = {
+      components: componentsRef.current,
+      relations: relationsRef.current,
+      walkthroughs: walkthroughsRef.current,
+    };
     void buildSubsystemGraph(doc, { maxNodeWidth, showEdgeLabels })
       .then(({ nodes, edges: e }) => {
         if (!alive) return;
@@ -455,7 +469,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
     const measuredHeights = new Map(leafNodes.map((n) => [n.id, dims.get(n.id)!.height]));
     const gen = ++pass2GenRef.current;
     void buildSubsystemGraph(
-      { components, edges },
+      { components, relations, walkthroughs },
       { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights },
     )
       .then(({ nodes, edges: e }) => {
@@ -469,7 +483,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
         // Reveal Pass 1 layout rather than leaving the cover up forever.
         setLayoutReady(true);
       });
-  }, [built.nodes, components, edges, maxNodeWidth, showEdgeLabels]);
+  }, [built.nodes, components, relations, walkthroughs, maxNodeWidth, showEdgeLabels]);
 
   // After Pass 1 commits, try Pass 2 immediately with retained measurements.
   // Same-id live updates often get no new React Flow `dimensions` events, so
@@ -498,7 +512,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   // Node components call SUBSYSTEM_CALLBACKS.onSelect on click (their inner
   // onClick stops React Flow propagation), so wire selection + width through it.
   // Lookup from edge id → the authored SubsystemComponentEdge (for onEdgeSelect).
-  const edgeById = useMemo(() => new Map(edges.map((e) => [e.id, e])), [edges]);
+  const edgeById = useMemo(() => new Map(graphEdges.map((e) => [e.id, e])), [graphEdges]);
 
   // Shared edge-selection logic used by both React Flow's onEdgeClick and the
   // clickable edge label (SUBSYSTEM_CALLBACKS.onEdgeSelect).
@@ -510,8 +524,8 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
       }
       const src = edgeById.get(edgeId);
       setSelectedEdgeId(edgeId);
-      // A direct edge selection on the canvas supersedes any throughline focus.
-      setFocusedThroughlineId(null);
+      // A direct edge selection on the canvas supersedes any walkthrough focus.
+      setFocusedWalkthroughId(null);
       setFocusedStepIndex(null);
       if (src) onEdgeSelect?.(src);
     },
@@ -531,7 +545,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
         }
         setSelected(comp);
         setSelectedEdgeId(null);
-        setFocusedThroughlineId(null);
+        setFocusedWalkthroughId(null);
         setFocusedStepIndex(null);
         onSelect?.(id);
       }
@@ -557,45 +571,45 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   // without a stale closure value.
   const selectedEdgeIdRef = useRef<string | null>(null);
   selectedEdgeIdRef.current = selectedEdgeId;
-  // Edge ids in throughline focus (an active flow's edge set, or a single
-  // step's edge). Used to frame the camera. `null` = no throughline focus.
+  // Edge ids in walkthrough focus (an active flow's edge set, or a single
+  // step's edge). Used to frame the camera. `null` = no walkthrough focus.
   const focusEdgeIds = useMemo(() => {
-    if (focusedThroughlineId == null || !throughlines) return null;
-    const tl = throughlines.find((t) => t.id === focusedThroughlineId);
+    if (focusedWalkthroughId == null || !walkthroughs) return null;
+    const tl = walkthroughs.find((t) => t.id === focusedWalkthroughId);
     if (!tl) return null;
     if (focusedStepIndex != null) {
       const step = tl.steps[focusedStepIndex];
-      return step ? new Set([step.edgeId]) : null;
+      return step ? new Set([walkthroughStepGraphEdgeId(step)]) : null;
     }
-    return new Set(tl.steps.map((s) => s.edgeId));
-  }, [throughlines, focusedThroughlineId, focusedStepIndex]);
+    return new Set(tl.steps.map((s) => walkthroughStepGraphEdgeId(s)));
+  }, [walkthroughs, focusedWalkthroughId, focusedStepIndex]);
 
   // 1-based step numbers per edge of the active flow (focused or
   // hover/autoplay-highlighted). An edge can appear in more than one step.
   const selectedFlowStepNos = useMemo(() => {
-    const activeId = focusedThroughlineId ?? hoveredThroughlineStep?.throughlineId;
-    if (activeId == null || !throughlines) return null;
-    const tl = throughlines.find((t) => t.id === activeId);
+    const activeId = focusedWalkthroughId ?? hoveredWalkthroughStep?.walkthroughId;
+    if (activeId == null || !walkthroughs) return null;
+    const tl = walkthroughs.find((t) => t.id === activeId);
     if (!tl) return null;
     const map = new Map<string, number[]>();
     tl.steps.forEach((s, i) => {
-      const list = map.get(s.edgeId) ?? [];
+      const list = map.get(walkthroughStepGraphEdgeId(s)) ?? [];
       list.push(i + 1);
-      map.set(s.edgeId, list);
+      map.set(walkthroughStepGraphEdgeId(s), list);
     });
     return map;
-  }, [throughlines, focusedThroughlineId, hoveredThroughlineStep]);
+  }, [walkthroughs, focusedWalkthroughId, hoveredWalkthroughStep]);
 
-  // Union of every expanded (opened) throughline's edges — the visible set.
+  // Union of every expanded (opened) walkthrough's edges — the visible set.
   const openedEdgeIds = useMemo(() => {
-    if (!throughlines || expandedThroughlines.size === 0) return null;
+    if (!walkthroughs || expandedWalkthroughs.size === 0) return null;
     const ids = new Set<string>();
-    for (const tl of throughlines) {
-      if (!expandedThroughlines.has(tl.id)) continue;
-      for (const s of tl.steps) ids.add(s.edgeId);
+    for (const tl of walkthroughs) {
+      if (!expandedWalkthroughs.has(tl.id)) continue;
+      for (const s of tl.steps) ids.add(walkthroughStepGraphEdgeId(s));
     }
     return ids.size > 0 ? ids : null;
-  }, [throughlines, expandedThroughlines]);
+  }, [walkthroughs, expandedWalkthroughs]);
 
   const endpointsOf = (edgeIds: ReadonlySet<string> | null): Set<string> | null => {
     if (!edgeIds) return null;
@@ -609,15 +623,15 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   };
   // Edge/nodes involved in the hovered step or whole flow.
   const hoverEdgeIds = useMemo(() => {
-    if (!hoveredThroughlineStep || !throughlines) return null;
-    const tl = throughlines.find((t) => t.id === hoveredThroughlineStep.throughlineId);
+    if (!hoveredWalkthroughStep || !walkthroughs) return null;
+    const tl = walkthroughs.find((t) => t.id === hoveredWalkthroughStep.walkthroughId);
     if (!tl) return null;
-    if (hoveredThroughlineStep.stepIndex == null) {
-      return new Set(tl.steps.map((s) => s.edgeId));
+    if (hoveredWalkthroughStep.stepIndex == null) {
+      return new Set(tl.steps.map((s) => walkthroughStepGraphEdgeId(s)));
     }
-    const step = tl.steps[hoveredThroughlineStep.stepIndex];
-    return step ? new Set([step.edgeId]) : null;
-  }, [throughlines, hoveredThroughlineStep]);
+    const step = tl.steps[hoveredWalkthroughStep.stepIndex];
+    return step ? new Set([walkthroughStepGraphEdgeId(step)]) : null;
+  }, [walkthroughs, hoveredWalkthroughStep]);
   // While hovering with a *step* already selected, brighten the union of
   // selected + hovered participants. Whole-flow focus (or no focus) keeps
   // the old hover-replace preview so a step hover still dims the rest.
@@ -667,8 +681,8 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   // React Flow's own selection state from updating.
   const dispNodes = useMemo(() => {
     // While a step/flow is hovered, selected + hovered participants stay
-    // bright; everything else among the currently-visible (opened-throughline)
-    // nodes is dimmed. Nodes outside the opened-throughline set stay hidden.
+    // bright; everything else among the currently-visible (opened-walkthrough)
+    // nodes is dimmed. Nodes outside the opened-walkthrough set stay hidden.
     return xyflowNodesBase.map((n) => {
       // Boundary frames follow their members: hidden when no member is
       // visible, dimmed when members are dimmed. Never selectable.
@@ -800,7 +814,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
     (_e, node: Node) => {
       const comp = (node.data as { component?: SubsystemComponent } | undefined)?.component;
       setSelectedEdgeId(null);
-      setFocusedThroughlineId(null);
+      setFocusedWalkthroughId(null);
       setFocusedStepIndex(null);
       if (node.type === 'subsystem-component' && comp) {
         // Clicking the already-selected node unselects it (toggle off).
@@ -827,14 +841,14 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   const onPaneClick = useCallback(() => {
     setSelected(null);
     setSelectedEdgeId(null);
-    setFocusedThroughlineId(null);
+    setFocusedWalkthroughId(null);
     setFocusedStepIndex(null);
   }, []);
 
   // Sidebar file trees — one per repo on multi-repo graphs, each under its
   // own owner-avatar header. Clicking a header collapses that repo's tree.
   const repoGroups = useMemo(() => buildRepoGroups(components), [components]);
-  const hasThroughlines = useMemo(() => (throughlines?.length ?? 0) > 0, [throughlines]);
+  const hasWalkthroughs = useMemo(() => (walkthroughs?.length ?? 0) > 0, [walkthroughs]);
   const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(new Set());
   const toggleRepoCollapsed = useCallback((key: string) => {
     setCollapsedRepos((prev) => {
@@ -876,13 +890,13 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
     [onFileSelect],
   );
 
-  // Camera helper shared by the throughline interactions: frames the focused
+  // Camera helper shared by the walkthrough interactions: frames the focused
   // edges' endpoint nodes via `fitView({ nodes })`, which uses the store's
   // live positions + measured dims — so the frame always includes BOTH
   // components the edge attaches to (and therefore the edge line between them).
   const fitFocusBounds = useCallback(
     (ids: ReadonlySet<string>) => {
-      if (!zoomOnThroughlineFocus) return;
+      if (!zoomOnWalkthroughFocus) return;
       const nodeIds = new Set<string>();
       for (const e of baseEdges) {
         if (!ids.has(e.id)) continue;
@@ -896,13 +910,13 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
         duration: 300,
       });
     },
-    [baseEdges, fitView, zoomOnThroughlineFocus],
+    [baseEdges, fitView, zoomOnWalkthroughFocus],
   );
 
-  // Zoom back out to the full diagram after the last expanded throughline
+  // Zoom back out to the full diagram after the last expanded walkthrough
   // closes (visibility restores non-flow nodes that were hidden).
   const fitOverview = useCallback(() => {
-    if (!zoomOnThroughlineFocus) return;
+    if (!zoomOnWalkthroughFocus) return;
     fitView({
       padding: 0.1,
       includeHiddenNodes: false,
@@ -910,68 +924,83 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
       maxZoom: 2,
       duration: 300,
     });
-  }, [fitView, zoomOnThroughlineFocus]);
+  }, [fitView, zoomOnWalkthroughFocus]);
 
   // Focus an entire flow: hide everything but the flow's nodes and edges, and
   // frame the flow on the canvas. Selection state is cleared — the graph now
   // reads as the narrative. No drawer: the code view only opens on a step
-  // click. A stale throughline drawer (from a previously focused flow's step)
+  // click. A stale walkthrough drawer (from a previously focused flow's step)
   // closes; an explicitly opened file drawer stays.
   // In `dim` mode: clear step highlight and leave the full graph visible
   // (no zoom / hide) — matching "step away from a hovered step".
-  const focusThroughlineEdges = useCallback(
-    (tl: SubsystemThroughline) => {
+  const focusWalkthroughEdges = useCallback(
+    (tl: SubsystemWalkthrough) => {
       setSelected(null);
       setSelectedEdgeId(null);
-      setHoveredThroughlineStep(null);
-      if (throughlineStepMode === 'dim') {
+      setHoveredWalkthroughStep(null);
+      if (walkthroughStepMode === 'dim') {
         setFocusedStepIndex(null);
-        setFocusedThroughlineId(null);
-        setDrawerTarget((prev) => (prev?.kind === 'throughline' ? null : prev));
+        setFocusedWalkthroughId(null);
+        setDrawerTarget((prev) => (prev?.kind === 'walkthrough' ? null : prev));
         return;
       }
       setFocusedStepIndex(null);
-      setFocusedThroughlineId(tl.id);
-      fitFocusBounds(new Set(tl.steps.map((s) => s.edgeId)));
-      setDrawerTarget((prev) => (prev?.kind === 'throughline' ? null : prev));
+      setFocusedWalkthroughId(tl.id);
+      fitFocusBounds(new Set(tl.steps.map((s) => walkthroughStepGraphEdgeId(s))));
+      setDrawerTarget((prev) => (prev?.kind === 'walkthrough' ? null : prev));
     },
-    [fitFocusBounds, throughlineStepMode],
+    [fitFocusBounds, walkthroughStepMode],
   );
 
-  const clearThroughlineFocus = useCallback(() => {
-    setFocusedThroughlineId(null);
+  const clearWalkthroughFocus = useCallback(() => {
+    setFocusedWalkthroughId(null);
     setFocusedStepIndex(null);
-    setHoveredThroughlineStep(null);
-    setDrawerTarget((prev) => (prev?.kind === 'throughline' ? null : prev));
+    setHoveredWalkthroughStep(null);
+    setDrawerTarget((prev) => (prev?.kind === 'walkthrough' ? null : prev));
   }, []);
 
-  // Focus a single step's edge on the canvas and open/scroll the throughline
-  // drawer to that step's snippet.
+  // Focus a single step's edge on the canvas and open/scroll the walkthrough
+  // drawer to that step's snippet. Clicking the already-focused step clears
+  // step focus and returns to whole-flow (high-level) framing.
   // In `dim` mode: only dim non-participants (same as hovering a step) —
   // no camera move, no drawer, no hide.
-  const focusThroughlineStep = useCallback(
-    (tl: SubsystemThroughline, stepIndex: number) => {
+  const focusWalkthroughStep = useCallback(
+    (tl: SubsystemWalkthrough, stepIndex: number) => {
       const step = tl.steps[stepIndex];
       if (!step) return;
       setSelected(null);
       setSelectedEdgeId(null);
-      if (throughlineStepMode === 'dim') {
+      if (walkthroughStepMode === 'dim') {
         setFocusedStepIndex(null);
-        setFocusedThroughlineId(null);
-        setHoveredThroughlineStep({ throughlineId: tl.id, stepIndex });
-        setDrawerTarget((prev) => (prev?.kind === 'throughline' ? null : prev));
+        setFocusedWalkthroughId(null);
+        setHoveredWalkthroughStep({ walkthroughId: tl.id, stepIndex });
+        setDrawerTarget((prev) => (prev?.kind === 'walkthrough' ? null : prev));
+        return;
+      }
+      // Toggle: clicking the selected step unselects it (back to whole flow).
+      if (focusedWalkthroughId === tl.id && focusedStepIndex === stepIndex) {
+        setFocusedStepIndex(null);
+        // Pointer is still over the row — keep hover preview so dimming doesn't
+        // flash off until mouseleave.
+        setHoveredWalkthroughStep({ walkthroughId: tl.id, stepIndex });
+        setDrawerTarget((prev) => (prev?.kind === 'walkthrough' ? null : prev));
+        if (pendingFocusFitRef.current != null) {
+          window.clearTimeout(pendingFocusFitRef.current);
+          pendingFocusFitRef.current = null;
+        }
+        fitFocusBounds(new Set(tl.steps.map((s) => walkthroughStepGraphEdgeId(s))));
         return;
       }
       setFocusedStepIndex(stepIndex);
-      setFocusedThroughlineId(tl.id);
-      setHoveredThroughlineStep(null);
+      setFocusedWalkthroughId(tl.id);
+      setHoveredWalkthroughStep(null);
       // Open the drawer before fitting. If it was closed, wait for its height
       // transition so fitView uses the reduced canvas — not full height.
       const drawerWasOpen = drawerOpenRef.current;
-      if (renderThroughlineViewer) {
+      if (renderWalkthroughViewer) {
         setDrawerTarget({
-          kind: 'throughline',
-          throughlineId: tl.id,
+          kind: 'walkthrough',
+          walkthroughId: tl.id,
           stepIndex,
         });
       } else {
@@ -981,7 +1010,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
           startLine: step.line,
         });
       }
-      const edgeIds = new Set([step.edgeId]);
+      const edgeIds = new Set([walkthroughStepGraphEdgeId(step)]);
       if (pendingFocusFitRef.current != null) {
         window.clearTimeout(pendingFocusFitRef.current);
         pendingFocusFitRef.current = null;
@@ -995,7 +1024,13 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
         }, FILE_DRAWER_HEIGHT_MS + 20);
       }
     },
-    [fitFocusBounds, renderThroughlineViewer, throughlineStepMode],
+    [
+      fitFocusBounds,
+      focusedStepIndex,
+      focusedWalkthroughId,
+      renderWalkthroughViewer,
+      walkthroughStepMode,
+    ],
   );
 
   useEffect(() => {
@@ -1016,9 +1051,9 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
     const prev = prevPreviewEdgeIdsRef.current;
     prevPreviewEdgeIdsRef.current = previewEdgeIds;
 
-    if (!zoomOnThroughlineFocus || throughlineStepMode === 'dim') return;
+    if (!zoomOnWalkthroughFocus || walkthroughStepMode === 'dim') return;
     // Camera follows hover only when a specific step is already focused.
-    if (focusedThroughlineId == null || focusedStepIndex == null) return;
+    if (focusedWalkthroughId == null || focusedStepIndex == null) return;
 
     if (previewEdgeIds) {
       fitFocusBounds(previewEdgeIds);
@@ -1030,33 +1065,33 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
   }, [
     previewEdgeIds,
     focusEdgeIds,
-    focusedThroughlineId,
+    focusedWalkthroughId,
     focusedStepIndex,
     fitFocusBounds,
-    zoomOnThroughlineFocus,
-    throughlineStepMode,
+    zoomOnWalkthroughFocus,
+    walkthroughStepMode,
   ]);
 
-  // Graph-only embeds: cycle throughline steps with hover-style dimming.
+  // Graph-only embeds: cycle walkthrough steps with hover-style dimming.
   useEffect(() => {
-    if (!autoPlayThroughlines || !throughlines?.length || !layoutReady) return;
-    const playable = throughlines.filter((tl) => tl.steps.length > 0);
+    if (!autoPlayWalkthroughs || !walkthroughs?.length || !layoutReady) return;
+    const playable = walkthroughs.filter((tl) => tl.steps.length > 0);
     if (playable.length === 0) return;
 
     let cancelled = false;
     let tlIdx = 0;
     let stepIdx = 0;
     let timer: number | null = null;
-    const interval = Math.max(400, throughlineAutoPlayIntervalMs);
+    const interval = Math.max(400, walkthroughAutoPlayIntervalMs);
 
     const tick = () => {
       if (cancelled) return;
       const tl = playable[tlIdx]!;
       setSelected(null);
       setSelectedEdgeId(null);
-      setFocusedThroughlineId(null);
+      setFocusedWalkthroughId(null);
       setFocusedStepIndex(null);
-      setHoveredThroughlineStep({ throughlineId: tl.id, stepIndex: stepIdx });
+      setHoveredWalkthroughStep({ walkthroughId: tl.id, stepIndex: stepIdx });
       stepIdx += 1;
       if (stepIdx >= tl.steps.length) {
         stepIdx = 0;
@@ -1069,17 +1104,17 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
     return () => {
       cancelled = true;
       if (timer != null) window.clearTimeout(timer);
-      setHoveredThroughlineStep(null);
+      setHoveredWalkthroughStep(null);
     };
-  }, [autoPlayThroughlines, throughlines, throughlineAutoPlayIntervalMs, layoutReady]);
+  }, [autoPlayWalkthroughs, walkthroughs, walkthroughAutoPlayIntervalMs, layoutReady]);
 
-  // Arrow keys step through the focused throughline once a step is active
+  // Arrow keys step through the focused walkthrough once a step is active
   // (sidebar click or drawer open). Ignores typing targets and chords.
   useEffect(() => {
-    if (focusedThroughlineId == null || focusedStepIndex == null || !throughlines) {
+    if (focusedWalkthroughId == null || focusedStepIndex == null || !walkthroughs) {
       return;
     }
-    const tl = throughlines.find((t) => t.id === focusedThroughlineId);
+    const tl = walkthroughs.find((t) => t.id === focusedWalkthroughId);
     if (!tl || tl.steps.length === 0) return;
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1105,31 +1140,31 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
       }
       if (next === focusedStepIndex) return;
       e.preventDefault();
-      focusThroughlineStep(tl, next);
+      focusWalkthroughStep(tl, next);
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
-    focusedThroughlineId,
+    focusedWalkthroughId,
     focusedStepIndex,
-    throughlines,
-    focusThroughlineStep,
+    walkthroughs,
+    focusWalkthroughStep,
   ]);
 
-  const toggleThroughlineCollapsed = useCallback(
+  const toggleWalkthroughCollapsed = useCallback(
     (tlId: string) => {
       const collapsingLast =
-        expandedThroughlines.has(tlId) && expandedThroughlines.size === 1;
+        expandedWalkthroughs.has(tlId) && expandedWalkthroughs.size === 1;
 
-      setExpandedThroughlines((prev) => {
+      setExpandedWalkthroughs((prev) => {
         const next = new Set(prev);
         if (next.has(tlId)) next.delete(tlId);
         else next.add(tlId);
         return next;
       });
 
-      if (!collapsingLast || !zoomOnThroughlineFocus) return;
+      if (!collapsingLast || !zoomOnWalkthroughFocus) return;
 
       // Cancel any pending focus fit so it doesn't fight the overview zoom.
       if (pendingFocusFitRef.current != null) {
@@ -1149,7 +1184,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
         drawerWasOpen ? FILE_DRAWER_HEIGHT_MS + 20 : 20,
       );
     },
-    [expandedThroughlines, fitOverview, zoomOnThroughlineFocus],
+    [expandedWalkthroughs, fitOverview, zoomOnWalkthroughFocus],
   );
 
   // Filename-badge clicks on nodes open the drawer through the same path as
@@ -1179,7 +1214,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
       if (!comp || comp.id === selectedRef.current?.id) return;
       setSelected(comp);
       setSelectedEdgeId(null);
-      setFocusedThroughlineId(null);
+      setFocusedWalkthroughId(null);
       setFocusedStepIndex(null);
       onSelect?.(comp.id);
     },
@@ -1245,11 +1280,11 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
     [],
   );
 
-  const throughlineViewerRef = useRef(renderThroughlineViewer);
-  throughlineViewerRef.current = renderThroughlineViewer;
-  const renderThroughlineDrawerContent = useCallback(
-    (ctx: ThroughlineViewerContext) =>
-      throughlineViewerRef.current?.(ctx) ?? null,
+  const walkthroughViewerRef = useRef(renderWalkthroughViewer);
+  walkthroughViewerRef.current = renderWalkthroughViewer;
+  const renderWalkthroughDrawerContent = useCallback(
+    (ctx: WalkthroughViewerContext) =>
+      walkthroughViewerRef.current?.(ctx) ?? null,
     [],
   );
 
@@ -1258,7 +1293,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
       {/* Sidebar: scrollable title/description on top, files or flows pinned below.
           The description hides by default so files/flows get the room; the
           title-row toggle reveals it, and the lower panel yields back to 50%. */}
-      {!hideSidebar && (title || description || sidebarExtra || sidebarAfterDescription || treeFilePaths.length > 0 || hasThroughlines) && (
+      {!hideSidebar && (title || description || sidebarExtra || sidebarAfterDescription || treeFilePaths.length > 0 || hasWalkthroughs) && (
         <div
           style={{
             width: sidebarWidth,
@@ -1347,7 +1382,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
           )}
           {sidebarAfterDescription}
           </div>
-          {(treeFilePaths.length > 0 || hasThroughlines) && (
+          {(treeFilePaths.length > 0 || hasWalkthroughs) && (
             <div
               style={{
                 ...(showDesc ? { height: '50%' as const } : { flex: 1, minHeight: 0 }),
@@ -1359,7 +1394,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
                 overflow: 'hidden',
               }}
             >
-              {hasThroughlines && (
+              {hasWalkthroughs && (
                 <div
                   role="tablist"
                   aria-label="Sidebar view"
@@ -1371,7 +1406,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
                     background: theme.colors.backgroundSecondary ?? theme.colors.background,
                   }}
                 >
-                  {(['flows', 'files'] as const).map((view) => (
+                  {(['walkthroughs', 'files'] as const).map((view) => (
                     <button
                       key={view}
                       type="button"
@@ -1395,12 +1430,12 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
                         cursor: 'pointer',
                       }}
                     >
-                      {view}
+                      {view === 'walkthroughs' ? 'Walkthroughs' : 'Files'}
                     </button>
                   ))}
                 </div>
               )}
-              {sidebarView === 'flows' && throughlines && throughlines.length > 0 ? (
+              {sidebarView === 'walkthroughs' && walkthroughs && walkthroughs.length > 0 ? (
                 <div
                   style={{
                     flex: 1,
@@ -1409,30 +1444,29 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
                     padding: '0 0 12px',
                   }}
                 >
-                  {throughlines.map((tl) => (
-                    <ThroughlineFlow
+                  {walkthroughs.map((tl) => (
+                    <WalkthroughFlow
                       key={tl.id}
-                      throughline={tl}
-                      edges={edges}
-                      collapsed={!expandedThroughlines.has(tl.id)}
+                      walkthrough={tl}
+                      collapsed={!expandedWalkthroughs.has(tl.id)}
                       active={
-                        focusedThroughlineId === tl.id
+                        focusedWalkthroughId === tl.id
                           ? { stepIndex: focusedStepIndex }
-                          : hoveredThroughlineStep?.throughlineId === tl.id
-                            ? { stepIndex: hoveredThroughlineStep.stepIndex }
+                          : hoveredWalkthroughStep?.walkthroughId === tl.id
+                            ? { stepIndex: hoveredWalkthroughStep.stepIndex }
                             : null
                       }
-                      onToggleCollapsed={toggleThroughlineCollapsed}
-                      onFocusFlow={focusThroughlineEdges}
-                      onClearFocus={clearThroughlineFocus}
-                      onFocusStep={focusThroughlineStep}
+                      onToggleCollapsed={toggleWalkthroughCollapsed}
+                      onFocusFlow={focusWalkthroughEdges}
+                      onClearFocus={clearWalkthroughFocus}
+                      onFocusStep={focusWalkthroughStep}
                       onHoverStep={(tl, i) =>
-                        setHoveredThroughlineStep({ throughlineId: tl.id, stepIndex: i })
+                        setHoveredWalkthroughStep({ walkthroughId: tl.id, stepIndex: i })
                       }
                       onHoverFlow={(tl) =>
-                        setHoveredThroughlineStep({ throughlineId: tl.id, stepIndex: null })
+                        setHoveredWalkthroughStep({ walkthroughId: tl.id, stepIndex: null })
                       }
-                      onLeaveStep={() => setHoveredThroughlineStep(null)}
+                      onLeaveStep={() => setHoveredWalkthroughStep(null)}
                     />
                   ))}
                 </div>
@@ -1479,7 +1513,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
       )}
       
       {/* Drag handle between sidebar and canvas — resize the left panel. */}
-      {!hideSidebar && (title || description || sidebarExtra || sidebarAfterDescription || treeFilePaths.length > 0 || hasThroughlines) && (
+      {!hideSidebar && (title || description || sidebarExtra || sidebarAfterDescription || treeFilePaths.length > 0 || hasWalkthroughs) && (
         <div
           onMouseDown={onSidebarResizeStart}
           aria-label="Resize sidebar"
@@ -1604,9 +1638,9 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
         <Controls showZoom showFitView showInteractive />
       </ReactFlow>
-      {/* Graph / throughline / step titles — non-interactive chips at the top
+      {/* Graph / walkthrough / step titles — non-interactive chips at the top
           of the canvas. Graph-only embeds use these without opening the sidebar. */}
-      {(graphTitle || overlayThroughlineTitle || overlayThroughlineStep) && (
+      {(graphTitle || overlayWalkthroughTitle || overlayWalkthroughStep) && (
         <div
           style={{
             position: 'absolute',
@@ -1643,11 +1677,11 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
               {graphTitle}
             </div>
           )}
-          {overlayThroughlineTitle && (
+          {overlayWalkthroughTitle && (
             <div
               style={{
                 maxWidth: '100%',
-                minWidth: overlayThroughlineStep ? 160 : undefined,
+                minWidth: overlayWalkthroughStep ? 160 : undefined,
                 display: 'flex',
                 flexDirection: 'column',
                 background: theme.colors.backgroundSecondary ?? theme.colors.background,
@@ -1658,9 +1692,9 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
                 opacity: 0.95,
               }}
               aria-label={
-                overlayThroughlineStep
-                  ? `${overlayThroughlineTitle}, step ${overlayThroughlineStep.index} of ${overlayThroughlineStep.total}`
-                  : overlayThroughlineTitle
+                overlayWalkthroughStep
+                  ? `${overlayWalkthroughTitle}, step ${overlayWalkthroughStep.index} of ${overlayWalkthroughStep.total}`
+                  : overlayWalkthroughTitle
               }
             >
               <div
@@ -1676,9 +1710,9 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
                   textAlign: 'center',
                 }}
               >
-                {overlayThroughlineTitle}
+                {overlayWalkthroughTitle}
               </div>
-              {overlayThroughlineStep && overlayThroughlineStep.total > 0 && (
+              {overlayWalkthroughStep && overlayWalkthroughStep.total > 0 && (
                 <div
                   style={{
                     display: 'flex',
@@ -1687,10 +1721,10 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
                   }}
                   aria-hidden="true"
                 >
-                  {Array.from({ length: overlayThroughlineStep.total }, (_, i) => {
+                  {Array.from({ length: overlayWalkthroughStep.total }, (_, i) => {
                     const n = i + 1;
-                    const active = n === overlayThroughlineStep.index;
-                    const done = n < overlayThroughlineStep.index;
+                    const active = n === overlayWalkthroughStep.index;
+                    const done = n < overlayWalkthroughStep.index;
                     return (
                       <span
                         key={n}
@@ -1713,7 +1747,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
               )}
             </div>
           )}
-          {overlayThroughlineStep?.annotation && (
+          {overlayWalkthroughStep?.annotation && (
             <div
               style={{
                 maxWidth: '100%',
@@ -1729,7 +1763,7 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
                 lineHeight: 1.35,
               }}
             >
-              {overlayThroughlineStep.annotation}
+              {overlayWalkthroughStep.annotation}
             </div>
           )}
         </div>
@@ -1763,12 +1797,12 @@ function Inner({ components, edges, throughlines, onSelect, onEdgeSelect, measur
         )}
         </div>
       <FileDrawer title={drawerTitle} onClose={() => setDrawerTarget(null)}>
-        {drawerTarget?.kind === 'throughline' &&
-        focusedThroughline &&
-        renderThroughlineViewer ? (
-          <ThroughlineDrawerContent
-            render={renderThroughlineDrawerContent}
-            throughline={focusedThroughline}
+        {drawerTarget?.kind === 'walkthrough' &&
+        focusedWalkthrough &&
+        renderWalkthroughViewer ? (
+          <WalkthroughDrawerContent
+            render={renderWalkthroughDrawerContent}
+            walkthrough={focusedWalkthrough}
             stepIndex={drawerTarget.stepIndex}
           />
         ) : drawerTarget?.kind === 'file' ? (
@@ -1866,13 +1900,12 @@ function RepoGroupHeader({
   );
 }
 
-/** One collapsible throughline in the sidebar's flows panel. Clicking the
+/** One collapsible walkthrough in the sidebar's flows panel. Clicking the
  *  title: closed → open + select; open and unselected → select; open and
  *  selected → close + clear focus. The right-aligned close button collapses
  *  without selecting. A step row focuses that step's edge. */
-function ThroughlineFlow({
-  throughline,
-  edges,
+function WalkthroughFlow({
+  walkthrough,
   collapsed,
   active,
   onToggleCollapsed,
@@ -1883,24 +1916,22 @@ function ThroughlineFlow({
   onHoverFlow,
   onLeaveStep,
 }: {
-  throughline: SubsystemThroughline;
-  edges: SubsystemComponentEdge[];
+  walkthrough: SubsystemWalkthrough;
   collapsed: boolean;
   /** `{ stepIndex: null }` = whole flow focused; `{ stepIndex }` = one step. */
   active: { stepIndex: number | null } | null;
   onToggleCollapsed: (tlId: string) => void;
-  onFocusFlow: (tl: SubsystemThroughline) => void;
+  onFocusFlow: (tl: SubsystemWalkthrough) => void;
   onClearFocus: () => void;
-  onFocusStep: (tl: SubsystemThroughline, stepIndex: number) => void;
-  onHoverStep: (tl: SubsystemThroughline, stepIndex: number) => void;
+  onFocusStep: (tl: SubsystemWalkthrough, stepIndex: number) => void;
+  onHoverStep: (tl: SubsystemWalkthrough, stepIndex: number) => void;
   /** Preview the whole flow on the canvas (used while the row is collapsed). */
-  onHoverFlow: (tl: SubsystemThroughline) => void;
+  onHoverFlow: (tl: SubsystemWalkthrough) => void;
   onLeaveStep: () => void;
 }) {
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const hoverBg = theme.colors.background;
-  const edgeById = useMemo(() => new Map(edges.map((e) => [e.id, e])), [edges]);
   const wholeFlowActive = active !== null && active.stepIndex === null;
   const [headerHover, setHeaderHover] = useState(false);
   const [closeHover, setCloseHover] = useState(false);
@@ -1924,9 +1955,9 @@ function ThroughlineFlow({
   useEffect(() => () => stopPlaying(), []);
 
   const startPlaying = useCallback(() => {
-    if (collapsed) onToggleCollapsed(throughline.id);
-    if (active === null || active.stepIndex !== null) onFocusFlow(throughline);
-    const stepCount = throughline.steps.length;
+    if (collapsed) onToggleCollapsed(walkthrough.id);
+    if (active === null || active.stepIndex !== null) onFocusFlow(walkthrough);
+    const stepCount = walkthrough.steps.length;
     if (stepCount === 0) return;
     setPlaying(true);
     let i = 0;
@@ -1936,12 +1967,12 @@ function ThroughlineFlow({
         setPlaying(false);
         return;
       }
-      onFocusStep(throughline, i);
+      onFocusStep(walkthrough, i);
       i += 1;
-      playTimerRef.current = window.setTimeout(tick, THROUGHLINE_PLAY_PAUSE_MS);
+      playTimerRef.current = window.setTimeout(tick, WALKTHROUGH_PLAY_PAUSE_MS);
     };
     tick();
-  }, [collapsed, active, onToggleCollapsed, onFocusFlow, throughline, onFocusStep]);
+  }, [collapsed, active, onToggleCollapsed, onFocusFlow, walkthrough, onFocusStep]);
 
   const togglePlay = useCallback(() => {
     if (playing) {
@@ -1964,7 +1995,7 @@ function ThroughlineFlow({
       <div
         onMouseEnter={() => {
           setHeaderHover(true);
-          if (collapsed) onHoverFlow(throughline);
+          if (collapsed) onHoverFlow(walkthrough);
         }}
         onMouseLeave={() => {
           setHeaderHover(false);
@@ -1983,12 +2014,12 @@ function ThroughlineFlow({
           type="button"
           onClick={() => {
             if (collapsed) {
-              onToggleCollapsed(throughline.id);
-              onFocusFlow(throughline);
+              onToggleCollapsed(walkthrough.id);
+              onFocusFlow(walkthrough);
             } else if (active === null) {
-              onFocusFlow(throughline);
+              onFocusFlow(walkthrough);
             } else {
-              onToggleCollapsed(throughline.id);
+              onToggleCollapsed(walkthrough.id);
               onClearFocus();
             }
           }}
@@ -2015,14 +2046,14 @@ function ThroughlineFlow({
               color: theme.colors.text,
             }}
           >
-            {throughline.title}
+            {walkthrough.title}
           </span>
         </button>
         {!collapsed && (
           <>
           <button
             type="button"
-            aria-label={playing ? `Pause ${throughline.title} autoplay` : `Play ${throughline.title}`}
+            aria-label={playing ? `Pause ${walkthrough.title} autoplay` : `Play ${walkthrough.title}`}
             title={playing ? 'Pause' : 'Play through steps'}
             onMouseEnter={() => setPlayHover(true)}
             onMouseLeave={() => setPlayHover(false)}
@@ -2050,12 +2081,12 @@ function ThroughlineFlow({
           </button>
           <button
             type="button"
-            aria-label={`Close ${throughline.title}`}
+            aria-label={`Close ${walkthrough.title}`}
             onMouseEnter={() => setCloseHover(true)}
             onMouseLeave={() => setCloseHover(false)}
             onClick={(e) => {
               e.stopPropagation();
-              onToggleCollapsed(throughline.id);
+              onToggleCollapsed(walkthrough.id);
               if (active !== null) onClearFocus();
             }}
             style={{
@@ -2087,23 +2118,22 @@ function ThroughlineFlow({
             onLeaveStep();
           }}
         >
-          {throughline.steps.map((step, i) => {
-            const edge = edgeById.get(step.edgeId);
-            const mech = edge?.mechanism;
+          {walkthrough.steps.map((step, i) => {
+            const mech = step.mechanism;
             const color = mech ? MECHANISM_COLOR[mech] : muted;
             const stepActive = active !== null && active.stepIndex === i;
             return (
               <button
-                key={`${step.edgeId}-${i}`}
+                key={`${walkthroughStepGraphEdgeId(step)}-${i}`}
                 ref={(el) => {
                   stepButtonRefs.current[i] = el;
                 }}
                 type="button"
                 onMouseEnter={() => {
                   setHoveredStep(i);
-                  onHoverStep(throughline, i);
+                  onHoverStep(walkthrough, i);
                 }}
-                onClick={() => onFocusStep(throughline, i)}
+                onClick={() => onFocusStep(walkthrough, i)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -2159,7 +2189,7 @@ function ThroughlineFlow({
                         color,
                       }}
                     >
-                      {mech ?? step.edgeId}
+                      {mech ?? step.mechanism}
                     </span>
                     <span
                       style={{

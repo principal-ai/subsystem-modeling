@@ -22,17 +22,48 @@ migrateLegacyStoreFile("trail-viewer-settings.json", STORE_PATH);
 
 const DEFAULT_TAB_FLAGS: DefaultTabFlags = {
 	sessions: true,
+	maintenanceSessions: true,
 	trails: true,
 	graphify: true,
 	subsystems: true,
+	opencodeV2: true,
 };
 
+/** Floor for regular audit interval (minutes). */
+export const REGULAR_AUDIT_INTERVAL_MIN_MINUTES = 5;
+/** Default interval when the setting is missing or invalid. */
+export const REGULAR_AUDIT_INTERVAL_DEFAULT_MINUTES = 5;
+
 export function defaultViewerSettings(): ViewerSettings {
-	return { defaultTabs: { ...DEFAULT_TAB_FLAGS } };
+	return {
+		defaultTabs: { ...DEFAULT_TAB_FLAGS },
+		autoAcceptSubsystemModelProposals: false,
+		subsystemMaintainerModel: null,
+		regularAuditEnabled: true,
+		regularAuditIntervalMinutes: REGULAR_AUDIT_INTERVAL_DEFAULT_MINUTES,
+	};
 }
 
 function coerceBool(value: unknown, fallback: boolean): boolean {
 	return typeof value === "boolean" ? value : fallback;
+}
+
+function coerceModelRef(value: unknown): string | null {
+	if (value === null || value === undefined) return null;
+	if (typeof value !== "string") return null;
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? trimmed : null;
+}
+
+export function coerceRegularAuditIntervalMinutes(value: unknown): number {
+	const n =
+		typeof value === "number"
+			? value
+			: typeof value === "string"
+				? Number(value)
+				: NaN;
+	if (!Number.isFinite(n)) return REGULAR_AUDIT_INTERVAL_DEFAULT_MINUTES;
+	return Math.max(REGULAR_AUDIT_INTERVAL_MIN_MINUTES, Math.round(n));
 }
 
 function normalize(raw: unknown): ViewerSettings {
@@ -46,10 +77,31 @@ function normalize(raw: unknown): ViewerSettings {
 	return {
 		defaultTabs: {
 			sessions: coerceBool(tabs["sessions"], defaults.defaultTabs.sessions),
+			maintenanceSessions: coerceBool(
+				tabs["maintenanceSessions"],
+				defaults.defaultTabs.maintenanceSessions,
+			),
 			trails: coerceBool(tabs["trails"], defaults.defaultTabs.trails),
 			graphify: coerceBool(tabs["graphify"], defaults.defaultTabs.graphify),
 			subsystems: coerceBool(tabs["subsystems"], defaults.defaultTabs.subsystems),
+			opencodeV2: coerceBool(tabs["opencodeV2"], defaults.defaultTabs.opencodeV2),
 		},
+		autoAcceptSubsystemModelProposals: coerceBool(
+			obj["autoAcceptSubsystemModelProposals"],
+			defaults.autoAcceptSubsystemModelProposals,
+		),
+		subsystemMaintainerModel:
+			"subsystemMaintainerModel" in obj
+				? coerceModelRef(obj["subsystemMaintainerModel"])
+				: defaults.subsystemMaintainerModel,
+		regularAuditEnabled: coerceBool(
+			obj["regularAuditEnabled"],
+			defaults.regularAuditEnabled,
+		),
+		regularAuditIntervalMinutes: coerceRegularAuditIntervalMinutes(
+			obj["regularAuditIntervalMinutes"] ??
+				defaults.regularAuditIntervalMinutes,
+		),
 	};
 }
 
@@ -89,6 +141,19 @@ export function patchViewerSettings(
 			...current.defaultTabs,
 			...(patch.defaultTabs ?? {}),
 		},
+		autoAcceptSubsystemModelProposals:
+			patch.autoAcceptSubsystemModelProposals ??
+			current.autoAcceptSubsystemModelProposals,
+		subsystemMaintainerModel:
+			patch.subsystemMaintainerModel !== undefined
+				? patch.subsystemMaintainerModel
+				: current.subsystemMaintainerModel,
+		regularAuditEnabled:
+			patch.regularAuditEnabled ?? current.regularAuditEnabled,
+		regularAuditIntervalMinutes:
+			patch.regularAuditIntervalMinutes !== undefined
+				? coerceRegularAuditIntervalMinutes(patch.regularAuditIntervalMinutes)
+				: current.regularAuditIntervalMinutes,
 	};
 	return saveViewerSettings(next);
 }

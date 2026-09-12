@@ -13,7 +13,7 @@ Peer dependency: `@principal-ai/subsystems-core` (>= 0.29.0), plus React 18/19.
 ## Main exports
 
 - `SubsystemComponentGraph` — interactive subsystem model graph
-- Pierre wrappers — `PierreFileView`, `PierreSnippetView`, `PierreThroughlineCodeView`
+- Pierre wrappers — `PierreFileView`, `PierreSnippetView`, `PierreWalkthroughCodeView`
 - Graphify helpers — anchor/signature/kind utilities
 - `SessionEventFeed` / `SessionEventFeedGrouped` — agent session event feeds
 - ELK layout helpers — `computeElkLayout`, `useElkLayout`

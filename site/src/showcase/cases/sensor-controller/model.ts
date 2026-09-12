@@ -1,8 +1,8 @@
 import type {
   SubsystemComponent,
-  SubsystemComponentEdge,
+  SubsystemRelation,
+  SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
-import type { SubsystemThroughline } from '@principal-ai/subsystems-react/dist/subsystem/model.js';
 
 const PURL = 'pkg:github/you/sensor-controller';
 
@@ -74,93 +74,105 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const edges: SubsystemComponentEdge[] = [
-  { id: 'e0', from: 'main', to: 'sensor', mechanism: 'calls' },
-  { id: 'e1', from: 'main', to: 'control-logic', mechanism: 'calls' },
-  { id: 'e2', from: 'main', to: 'actuator', mechanism: 'calls' },
-  { id: 'e3', from: 'sensor', to: 'SensorHW', mechanism: 'reads' },
-  { id: 'e4', from: 'actuator', to: 'ActuatorHW', mechanism: 'writes' },
-];
+export const relations = [] as SubsystemRelation[];
 
-export const throughlines: SubsystemThroughline[] = [
+export const walkthroughs = [
   {
-    id: 'tl-tick',
-    title: 'Control loop tick',
-    steps: [
+    "id": "tl-tick",
+    "title": "Control loop tick",
+    "steps": [
       {
-        edgeId: 'e0',
-        file: 'src/main.cpp',
-        line: 19,
-        symbol: 'sensor.read',
-        annotation: 'One tick starts with a fresh sample.',
+        "from": "main",
+        "to": "sensor",
+        "mechanism": "calls",
+        "file": "src/main.cpp",
+        "line": 19,
+        "symbol": "sensor.read",
+        "annotation": "One tick starts with a fresh sample."
       },
       {
-        edgeId: 'e3',
-        file: 'src/sensor.cpp',
-        line: 7,
-        symbol: 'read',
-        annotation: 'ADC → engineering units (hardware read).',
+        "from": "sensor",
+        "to": "SensorHW",
+        "mechanism": "reads",
+        "file": "src/sensor.cpp",
+        "line": 7,
+        "symbol": "read",
+        "annotation": "ADC → engineering units (hardware read)."
       },
       {
-        edgeId: 'e1',
-        file: 'src/main.cpp',
-        line: 20,
-        symbol: 'control.decide',
-        annotation: 'Pure decision — Heat / Cool / Off.',
+        "from": "main",
+        "to": "control-logic",
+        "mechanism": "calls",
+        "file": "src/main.cpp",
+        "line": 20,
+        "symbol": "control.decide",
+        "annotation": "Pure decision — Heat / Cool / Off."
       },
       {
-        edgeId: 'e2',
-        file: 'src/main.cpp',
-        line: 21,
-        symbol: 'actuator.apply',
-        annotation: 'Drive outputs for this tick.',
+        "from": "main",
+        "to": "actuator",
+        "mechanism": "calls",
+        "file": "src/main.cpp",
+        "line": 21,
+        "symbol": "actuator.apply",
+        "annotation": "Drive outputs for this tick."
       },
       {
-        edgeId: 'e4',
-        file: 'src/actuator.cpp',
-        line: 7,
-        symbol: 'apply',
-        annotation: 'GPIO/PWM write to actuator hardware.',
-      },
-    ],
+        "from": "actuator",
+        "to": "ActuatorHW",
+        "mechanism": "writes",
+        "file": "src/actuator.cpp",
+        "line": 7,
+        "symbol": "apply",
+        "annotation": "GPIO/PWM write to actuator hardware."
+      }
+    ]
   },
   {
-    id: 'tl-heat',
-    title: 'Below threshold → heat',
-    steps: [
+    "id": "tl-heat",
+    "title": "Below threshold → heat",
+    "steps": [
       {
-        edgeId: 'e0',
-        file: 'src/main.cpp',
-        line: 19,
-        symbol: 'sensor.read',
-        annotation: 'Sample comes in cold.',
+        "from": "main",
+        "to": "sensor",
+        "mechanism": "calls",
+        "file": "src/main.cpp",
+        "line": 19,
+        "symbol": "sensor.read",
+        "annotation": "Sample comes in cold."
       },
       {
-        edgeId: 'e1',
-        file: 'src/control.cpp',
-        line: 4,
-        symbol: 'decide',
-        annotation: 'celsius < kLow → Command::Heat.',
+        "from": "main",
+        "to": "control-logic",
+        "mechanism": "calls",
+        "file": "src/control.cpp",
+        "line": 4,
+        "symbol": "decide",
+        "annotation": "celsius < kLow → Command::Heat."
       },
       {
-        edgeId: 'e2',
-        file: 'src/main.cpp',
-        line: 21,
-        symbol: 'actuator.apply',
-        annotation: 'Apply Heat for this tick.',
+        "from": "main",
+        "to": "actuator",
+        "mechanism": "calls",
+        "file": "src/main.cpp",
+        "line": 21,
+        "symbol": "actuator.apply",
+        "annotation": "Apply Heat for this tick."
       },
       {
-        edgeId: 'e4',
-        file: 'src/actuator.cpp',
-        line: 9,
-        symbol: 'Command::Heat',
-        annotation: 'Heater pin asserted.',
-      },
-    ],
-  },
-];
+        "from": "actuator",
+        "to": "ActuatorHW",
+        "mechanism": "writes",
+        "file": "src/actuator.cpp",
+        "line": 9,
+        "symbol": "Command::Heat",
+        "annotation": "Heater pin asserted."
+      }
+    ]
+  }
+] as SubsystemWalkthrough[];
 
 export const title = 'Sensor → actuator';
 
 export const description =
-  'Embedded **C++** control loop: read a sensor, run threshold logic, drive an actuator. Hardware shows up as externals. Open **Flows** for a generic tick and the heat path.';
+  'Embedded **C++** control loop: read a sensor, run threshold logic, drive an actuator. Hardware shows up as externals. Open **Walkthroughs** for a generic tick and the heat path.';

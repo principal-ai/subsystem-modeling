@@ -5,7 +5,7 @@ import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import type { SubsystemComponent, SubsystemComponentEdge } from '../../../subsystem/model';
 import type { GraphifyComponentDetail } from '../../../graphify';
-import { investigateOnlyComponents, investigateOnlyEdges } from './fixtures';
+import { investigateOnlyComponents, investigateOnlyRelations, investigateOnlyWalkthroughs } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Appearance',
@@ -32,7 +32,7 @@ export const NarrowMaxWidth: Story = {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={investigateOnlyComponents}
-        edges={investigateOnlyEdges}
+        relations={investigateOnlyRelations} walkthroughs={investigateOnlyWalkthroughs}
         maxNodeWidth={140}
       />
     </div>
@@ -93,7 +93,6 @@ const namingConventionComponents: SubsystemComponent[] = [
   },
 ];
 
-const namingConventionEdges: SubsystemComponentEdge[] = [];
 
 /** Nodes with compact `maxNodeWidth` so the different conventions visibly wrap
  *  at their word boundaries (camelCase, snake_case, PascalCase, acronyms). */
@@ -102,7 +101,7 @@ export const NamingConventions: Story = {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={namingConventionComponents}
-        edges={namingConventionEdges}
+        relations={[]}
         maxNodeWidth={180}
       />
     </div>
@@ -137,7 +136,7 @@ const kindVariationComponents: SubsystemComponent[] = [
     purpose: 'members only — methods with typed params + returns, a typed field',
     symbol: 'Transcoder',
     layer: 1,
-    detail: {
+    declaration: {
       kind: 'class',
       methods: [
         { nodeId: 'tm1', name: 'encode', parameters: [{ type: 'RawFrame' }], returnType: 'Uint8Array' },
@@ -160,7 +159,7 @@ const kindVariationComponents: SubsystemComponent[] = [
     purpose: 'relationships only — extends + implements, constructed-by comment; empty body elides the braces',
     symbol: 'HttpTransport',
     layer: 1,
-    detail: {
+    declaration: {
       kind: 'class',
       methods: [],
       properties: [],
@@ -191,7 +190,7 @@ const kindVariationComponents: SubsystemComponent[] = [
     purpose: 'signature only — named + positional (type-only) params, array return; no callers/callees comments',
     symbol: 'normalizeSession',
     layer: 2,
-    detail: {
+    declaration: {
       kind: 'function',
       parameters: [
         { name: 'session', type: 'SessionRecord' },
@@ -211,7 +210,7 @@ const kindVariationComponents: SubsystemComponent[] = [
     purpose: 'signature + call relationships — union-typed param, generic return, called-by / calls trailing comments',
     symbol: 'mergeSessions',
     layer: 2,
-    detail: {
+    declaration: {
       kind: 'function',
       parameters: [
         { name: 'sessions', type: 'SessionRecord[]' },
@@ -243,7 +242,7 @@ const kindVariationComponents: SubsystemComponent[] = [
     purpose: 'fields only — typed interface body, nothing else',
     symbol: 'SessionRecord',
     layer: 3,
-    detail: {
+    declaration: {
       kind: 'type',
       properties: [
         { name: 'id', type: 'string' },
@@ -262,7 +261,7 @@ const kindVariationComponents: SubsystemComponent[] = [
     purpose: 'full — fields + implemented-by (clicks through to HttpTransport) + used-by comments',
     symbol: 'Transport',
     layer: 3,
-    detail: {
+    declaration: {
       kind: 'type',
       properties: [{ name: 'name', type: 'string' }],
       usedBy: [{ nodeId: 'u1', name: 'main', context: 'parameter_type' }],
@@ -290,7 +289,7 @@ const kindVariationComponents: SubsystemComponent[] = [
     purpose: 'exports only — export statement + defines comment',
     symbol: '',
     layer: 4,
-    detail: {
+    declaration: {
       kind: 'module',
       exports: ['extractToolName', 'extractFilePath'],
       imports: [],
@@ -306,10 +305,10 @@ const kindVariationComponents: SubsystemComponent[] = [
     purpose: 'full — import statements + re-export statement + defines comment',
     symbol: '',
     layer: 4,
-    detail: {
+    declaration: {
       kind: 'module',
       exports: ['SessionReader', 'SessionStore'],
-      imports: [{ nodeId: 'i1', name: 'transcript', relation: 'imports_from' }],
+      imports: [{ nodeId: 'i1', name: 'transcript', relation: 'imports' }],
       symbols: ['SessionReader', 'SessionStore'],
     } satisfies GraphifyComponentDetail,
   },
@@ -334,14 +333,13 @@ const kindVariationComponents: SubsystemComponent[] = [
     purpose: 'labeled — the full purl as a quoted string literal',
     symbol: '',
     layer: 5,
-    detail: {
+    declaration: {
       kind: 'external',
       label: 'pkg:npm/@principal-ai/subsystems-studio',
     } satisfies GraphifyComponentDetail,
   },
 ];
 
-const kindVariationEdges: SubsystemComponentEdge[] = [];
 
 function KindVariationsDemo() {
   const [selected, setSelected] = useState<string | null>(null);
@@ -349,7 +347,7 @@ function KindVariationsDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={kindVariationComponents}
-        edges={kindVariationEdges}
+        relations={[]}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>

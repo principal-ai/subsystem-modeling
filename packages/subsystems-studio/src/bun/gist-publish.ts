@@ -14,8 +14,8 @@ export type GistPublishDocument = {
 	title: string;
 	description?: string;
 	components: unknown;
-	edges: unknown;
-	throughlines?: unknown;
+	relations: unknown;
+	walkthroughs?: unknown;
 	$schema?: string;
 };
 
@@ -37,26 +37,26 @@ const SITE_GIST_BASE =
 function toPortableGistPayload(doc: GistPublishDocument): {
 	title: string;
 	components: unknown;
-	edges: unknown;
+	relations: unknown;
 	$schema?: string;
 	description?: string;
-	throughlines?: unknown;
+	walkthroughs?: unknown;
 } {
 	const out: {
 		title: string;
 		components: unknown;
-		edges: unknown;
+		relations: unknown;
 		$schema?: string;
 		description?: string;
-		throughlines?: unknown;
+		walkthroughs?: unknown;
 	} = {
 		title: doc.title,
 		components: doc.components,
-		edges: doc.edges,
+		relations: doc.relations,
 	};
 	if (doc.$schema) out.$schema = doc.$schema;
 	if (doc.description) out.description = doc.description;
-	if (doc.throughlines) out.throughlines = doc.throughlines;
+	if (doc.walkthroughs) out.walkthroughs = doc.walkthroughs;
 	return out;
 }
 

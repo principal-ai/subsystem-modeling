@@ -1,8 +1,8 @@
 import type {
   SubsystemComponent,
-  SubsystemComponentEdge,
+  SubsystemRelation,
+  SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
-import type { SubsystemThroughline } from '@principal-ai/subsystems-react/dist/subsystem/model.js';
 
 const PURL = 'pkg:github/you/swift-notes';
 const SRC = 'Sources/Notes';
@@ -90,50 +90,146 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const edges: SubsystemComponentEdge[] = [
-  { id: 'e0', from: 'content-view', to: 'notes-view-model', mechanism: 'calls' },
-  { id: 'e1', from: 'notes-view-model', to: 'notes-repository', mechanism: 'calls' },
-  { id: 'e2', from: 'notes-repository', to: 'notes-store', mechanism: 'calls' },
-  { id: 'e3', from: 'notes-repository', to: 'notes-api', mechanism: 'calls' },
-  { id: 'e4', from: 'notes-store', to: 'CoreData', mechanism: 'reads' },
-  { id: 'e5', from: 'notes-store', to: 'CoreData', mechanism: 'writes' },
-  { id: 'e6', from: 'notes-api', to: 'NotesBackend', mechanism: 'calls' },
-];
+export const relations = [] as SubsystemRelation[];
 
-export const throughlines: SubsystemThroughline[] = [
+export const walkthroughs = [
   {
-    id: 'tl-open',
-    title: 'Open notes screen',
-    steps: [
-      { edgeId: 'e0', file: `${SRC}/ContentView.swift`, line: 17, symbol: 'load', annotation: 'onAppear → view model.' },
-      { edgeId: 'e1', file: `${SRC}/NotesViewModel.swift`, line: 16, symbol: 'fetchAll', annotation: 'ViewModel loads via repository.' },
-      { edgeId: 'e2', file: `${SRC}/NotesRepository.swift`, line: 14, symbol: 'fetchAll', annotation: 'Repository reads the store.' },
-      { edgeId: 'e4', file: `${SRC}/NotesStore.swift`, line: 7, symbol: 'fetchAll', annotation: 'Local persistence boundary.' },
-    ],
+    "id": "tl-open",
+    "title": "Open notes screen",
+    "steps": [
+      {
+        "from": "content-view",
+        "to": "notes-view-model",
+        "mechanism": "calls",
+        "file": "Sources/Notes/ContentView.swift",
+        "line": 17,
+        "symbol": "load",
+        "annotation": "onAppear → view model."
+      },
+      {
+        "from": "notes-view-model",
+        "to": "notes-repository",
+        "mechanism": "calls",
+        "file": "Sources/Notes/NotesViewModel.swift",
+        "line": 16,
+        "symbol": "fetchAll",
+        "annotation": "ViewModel loads via repository."
+      },
+      {
+        "from": "notes-repository",
+        "to": "notes-store",
+        "mechanism": "calls",
+        "file": "Sources/Notes/NotesRepository.swift",
+        "line": 14,
+        "symbol": "fetchAll",
+        "annotation": "Repository reads the store."
+      },
+      {
+        "from": "notes-store",
+        "to": "CoreData",
+        "mechanism": "reads",
+        "file": "Sources/Notes/NotesStore.swift",
+        "line": 7,
+        "symbol": "fetchAll",
+        "annotation": "Local persistence boundary."
+      }
+    ]
   },
   {
-    id: 'tl-save',
-    title: 'Add a note',
-    steps: [
-      { edgeId: 'e0', file: `${SRC}/ContentView.swift`, line: 14, symbol: 'addNote', annotation: 'Toolbar button → view model.' },
-      { edgeId: 'e1', file: `${SRC}/NotesViewModel.swift`, line: 22, symbol: 'insert', annotation: 'Validate then repository insert.' },
-      { edgeId: 'e2', file: `${SRC}/NotesRepository.swift`, line: 18, symbol: 'insert', annotation: 'Repository owns the write.' },
-      { edgeId: 'e5', file: `${SRC}/NotesStore.swift`, line: 9, symbol: 'insert', annotation: 'Persist locally.' },
-    ],
+    "id": "tl-save",
+    "title": "Add a note",
+    "steps": [
+      {
+        "from": "content-view",
+        "to": "notes-view-model",
+        "mechanism": "calls",
+        "file": "Sources/Notes/ContentView.swift",
+        "line": 14,
+        "symbol": "addNote",
+        "annotation": "Toolbar button → view model."
+      },
+      {
+        "from": "notes-view-model",
+        "to": "notes-repository",
+        "mechanism": "calls",
+        "file": "Sources/Notes/NotesViewModel.swift",
+        "line": 22,
+        "symbol": "insert",
+        "annotation": "Validate then repository insert."
+      },
+      {
+        "from": "notes-repository",
+        "to": "notes-store",
+        "mechanism": "calls",
+        "file": "Sources/Notes/NotesRepository.swift",
+        "line": 18,
+        "symbol": "insert",
+        "annotation": "Repository owns the write."
+      },
+      {
+        "from": "notes-store",
+        "to": "CoreData",
+        "mechanism": "writes",
+        "file": "Sources/Notes/NotesStore.swift",
+        "line": 9,
+        "symbol": "insert",
+        "annotation": "Persist locally."
+      }
+    ]
   },
   {
-    id: 'tl-refresh',
-    title: 'Refresh from network',
-    steps: [
-      { edgeId: 'e0', file: `${SRC}/ContentView.swift`, line: 15, symbol: 'refresh', annotation: 'Refresh control.' },
-      { edgeId: 'e1', file: `${SRC}/NotesViewModel.swift`, line: 27, symbol: 'refreshFromNetwork', annotation: 'ViewModel → repository.' },
-      { edgeId: 'e3', file: `${SRC}/NotesRepository.swift`, line: 22, symbol: 'fetchNotes', annotation: 'Network before replace.' },
-      { edgeId: 'e6', file: `${SRC}/NotesStore.swift`, line: 16, symbol: 'fetchNotes', annotation: 'HTTP to backend.' },
-      { edgeId: 'e2', file: `${SRC}/NotesRepository.swift`, line: 23, symbol: 'replaceAll', annotation: 'Replace local cache.' },
-    ],
-  },
-];
+    "id": "tl-refresh",
+    "title": "Refresh from network",
+    "steps": [
+      {
+        "from": "content-view",
+        "to": "notes-view-model",
+        "mechanism": "calls",
+        "file": "Sources/Notes/ContentView.swift",
+        "line": 15,
+        "symbol": "refresh",
+        "annotation": "Refresh control."
+      },
+      {
+        "from": "notes-view-model",
+        "to": "notes-repository",
+        "mechanism": "calls",
+        "file": "Sources/Notes/NotesViewModel.swift",
+        "line": 27,
+        "symbol": "refreshFromNetwork",
+        "annotation": "ViewModel → repository."
+      },
+      {
+        "from": "notes-repository",
+        "to": "notes-api",
+        "mechanism": "calls",
+        "file": "Sources/Notes/NotesRepository.swift",
+        "line": 22,
+        "symbol": "fetchNotes",
+        "annotation": "Network before replace."
+      },
+      {
+        "from": "notes-api",
+        "to": "NotesBackend",
+        "mechanism": "calls",
+        "file": "Sources/Notes/NotesStore.swift",
+        "line": 16,
+        "symbol": "fetchNotes",
+        "annotation": "HTTP to backend."
+      },
+      {
+        "from": "notes-repository",
+        "to": "notes-store",
+        "mechanism": "calls",
+        "file": "Sources/Notes/NotesRepository.swift",
+        "line": 23,
+        "symbol": "replaceAll",
+        "annotation": "Replace local cache."
+      }
+    ]
+  }
+] as SubsystemWalkthrough[];
 
 export const title = 'SwiftUI notes screen';
 export const description =
-  'iOS twin to the Android case: **SwiftUI → ViewModel → Repository → Core Data/API**. Open **Flows** for open, add, and refresh.';
+  'iOS twin to the Android case: **SwiftUI → ViewModel → Repository → Core Data/API**. Open **Walkthroughs** for open, add, and refresh.';

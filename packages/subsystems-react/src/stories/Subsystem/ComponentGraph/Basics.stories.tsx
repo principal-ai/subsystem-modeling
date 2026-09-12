@@ -4,7 +4,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import type { SubsystemComponent, SubsystemComponentEdge } from '../../../subsystem/model';
-import { components, edges } from './fixtures';
+import { components, graphSpecFromEdges } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Basics',
@@ -33,7 +33,7 @@ const twoNodeComponents = components([
   ['dst', 'SessionReader', 'class', 'SessionReader.ts', 'pkg:github/principal-ai/agent-monitoring', 'normalizes sessions into events'],
 ]);
 
-const twoNodeEdges = edges([
+const twoNodeEdges = graphSpecFromEdges([
   ['src', 'dst', 'imports'],
 ]);
 
@@ -44,7 +44,7 @@ function TwoNodeDemo({ showEdgeLabels = true }: { showEdgeLabels?: boolean }) {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={twoNodeComponents}
-        edges={twoNodeEdges}
+        relations={twoNodeEdges.relations} walkthroughs={twoNodeEdges.walkthroughs}
         onSelect={(id) => setSelected(id)}
         onEdgeSelect={(e) => setSelectedEdge(e)}
         showEdgeLabels={showEdgeLabels}
@@ -74,7 +74,7 @@ export const TwoNodeNoLabels: Story = {
 // ---------------------------------------------------------------------------
 function PlaygroundDemo({ leftCount, rightCount, showEdgeLabels }: { leftCount: number; rightCount: number; showEdgeLabels: boolean }) {
   const comps: SubsystemComponent[] = [];
-  const edgeList: SubsystemComponentEdge[] = [];
+  const edgeSpec: Array<[string, string, SubsystemComponentEdge['mechanism']]> = [];
 
   for (let i = 0; i < leftCount; i++) {
     comps.push({
@@ -97,16 +97,16 @@ function PlaygroundDemo({ leftCount, rightCount, showEdgeLabels }: { leftCount: 
     });
   }
 
-  let ei = 0;
   for (let i = 0; i < leftCount; i++) {
     for (let j = 0; j < rightCount; j++) {
-      edgeList.push({ id: `e${ei++}`, from: `l${i}`, to: `r${j}`, mechanism: 'imports' });
+      edgeSpec.push([`l${i}`, `r${j}`, 'imports']);
     }
   }
+  const graph = graphSpecFromEdges(edgeSpec);
 
   return (
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <SubsystemComponentGraph components={comps} edges={edgeList} showEdgeLabels={showEdgeLabels} />
+      <SubsystemComponentGraph components={comps} relations={graph.relations} walkthroughs={graph.walkthroughs} showEdgeLabels={showEdgeLabels} />
     </div>
   );
 }
@@ -131,7 +131,7 @@ export const Playground: Story = {
 export const Empty: Story = {
   render: () => (
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <SubsystemComponentGraph components={[]} edges={[]} />
+      <SubsystemComponentGraph components={[]} relations={[]} />
     </div>
   ),
 };

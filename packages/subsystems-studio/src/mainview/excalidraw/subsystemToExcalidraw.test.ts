@@ -14,7 +14,7 @@ const components: SubsystemComponent[] = [
 	{
 		id: "src",
 		name: "Parser",
-		kind: "class",
+		construct: "class",
 		file: "parser.ts",
 		purl: "pkg:github/example/repo",
 		purpose: "parses input",
@@ -24,7 +24,7 @@ const components: SubsystemComponent[] = [
 	{
 		id: "dst",
 		name: "Reader",
-		kind: "class",
+		construct: "class",
 		file: "reader.ts",
 		purl: "pkg:github/example/repo",
 		purpose: "reads sessions",
@@ -67,14 +67,31 @@ describe("layoutSubsystemForExcalidraw", () => {
 			type: "subsystem-component",
 			id: "src",
 			name: "Parser",
-			kind: "class",
+			construct: "class",
 			file: "parser.ts",
 			purl: "pkg:github/example/repo",
 			symbol: "Parser",
 			purpose: "parses input",
 			layer: 1,
 		});
-		expect("capture" in meta).toBe(false);
+		expect("proposed" in meta).toBe(false);
+		expect("role" in meta).toBe(false);
+	});
+
+	test("principalMetaForComponent round-trips proposed and role", () => {
+		const meta = principalMetaForComponent({
+			id: "lifecycle",
+			name: "OpenCodeV2Lifecycle",
+			construct: "function",
+			file: "",
+			purl: "pkg:github/example/repo",
+			symbol: "OpenCodeV2Lifecycle",
+			proposed: true,
+			role: "entry",
+		});
+		expect(meta.proposed).toBe(true);
+		expect(meta.role).toBe("entry");
+		expect(meta.construct).toBe("function");
 	});
 
 	test("principalMetaForEdge stores resolved endpoints and refs", () => {

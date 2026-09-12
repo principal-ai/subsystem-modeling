@@ -29,18 +29,28 @@ const SUBSYSTEM_MODEL_JSON = `{
       "construct": "external", "purl": "external"
     }
   ],
-  "edges": [
+  "relations": [],
+  "walkthroughs": [
     {
-      "id": "e0", "mechanism": "calls",
-      "from": "Web client", "to": "checkout-api"
-    },
-    {
-      "id": "e1", "mechanism": "writes",
-      "from": "checkout-api", "to": "cart-store"
-    },
-    {
-      "id": "e2", "mechanism": "calls",
-      "from": "checkout-api", "to": "Stripe"
+      "id": "wt-checkout",
+      "title": "Checkout",
+      "steps": [
+        {
+          "from": "Web client", "to": "checkout-api",
+          "mechanism": "calls",
+          "file": "src/checkout/api.ts", "line": 1
+        },
+        {
+          "from": "checkout-api", "to": "cart-store",
+          "mechanism": "writes",
+          "file": "src/checkout/api.ts", "line": 12
+        },
+        {
+          "from": "checkout-api", "to": "Stripe",
+          "mechanism": "calls",
+          "file": "src/checkout/api.ts", "line": 24
+        }
+      ]
     }
   ]
 }`

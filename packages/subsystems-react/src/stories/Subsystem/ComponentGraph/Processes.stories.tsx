@@ -2,7 +2,7 @@ import '@xyflow/react/dist/style.css';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
-import { components, edges } from './fixtures';
+import { components, graphSpecFromEdges, relations } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Processes',
@@ -47,7 +47,7 @@ const processComponents = [
       : c,
 );
 
-const processEdges = edges([
+const processEdges = graphSpecFromEdges([
   ['main', 'store', 'writes'],
   ['main', 'bridge', 'calls'],
   ['bridge', 'view', 'feeds'],
@@ -61,7 +61,7 @@ export const ProcessBoundaries: Story = {
         title="Process boundaries"
         description="Host and renderer each render in their own ELK-aware boundary frame. The telemetry service has no `process` and sits outside every boundary."
         components={processComponents}
-        edges={processEdges}
+        relations={processEdges.relations} walkthroughs={processEdges.walkthroughs}
       />
     </div>
   ),

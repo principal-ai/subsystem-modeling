@@ -5,7 +5,7 @@ import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import type { SubsystemComponent, SubsystemComponentEdge } from '../../../subsystem/model';
 import type { GraphifyComponentDetail } from '../../../graphify';
-import { components, edges, readerDetail, investigateOnlyComponents, investigateOnlyEdges } from './fixtures';
+import { components, graphSpecFromEdges, readerDetail, investigateOnlyComponents, investigateOnlyRelations, investigateOnlyWalkthroughs } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Captures',
@@ -37,7 +37,7 @@ const v2ReaderComponents = components([
   ['registry', 'supported-agents', 'module', 'supported-agents.ts', 'pkg:github/principal-ai/agent-monitoring', 'registry of supported agents (the shared seam)', 'registerAgent'],
 ]);
 
-const v2ReaderEdges = edges([
+const v2ReaderEdges = graphSpecFromEdges([
   ['transcript', 'reader', 'imports'],
   ['paths', 'reader', 'imports'],
   ['capture', 'reader', 'calls'],
@@ -55,7 +55,7 @@ function V2ReaderDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={v2ReaderComponents}
-        edges={v2ReaderEdges}
+        relations={v2ReaderEdges.relations} walkthroughs={v2ReaderEdges.walkthroughs}
         onSelect={(id) => setSelected(id)}
         onEdgeSelect={(e) => setSelectedEdge(e)}
       />
@@ -80,7 +80,7 @@ export const V2ReaderSubsystem: Story = {
 export const InvestigateOnly: Story = {
   render: () => (
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <SubsystemComponentGraph components={investigateOnlyComponents} edges={investigateOnlyEdges} />
+      <SubsystemComponentGraph components={investigateOnlyComponents} relations={investigateOnlyRelations} walkthroughs={investigateOnlyWalkthroughs} />
     </div>
   ),
 };
@@ -98,18 +98,18 @@ const minimalComponents = components([
   ['transcript', 'transcript', 'module', 'transcript.ts', 'pkg:github/principal-ai/agent-monitoring', 'parses session records + type guards', 'transcript'],
 ]);
 
-const sharedEdges = edges([
-  ['transcript', 'record', 'defines'],
+const sharedEdges = graphSpecFromEdges([
+  ['transcript', 'record', 'contains'],
   ['reader', 'normalize', 'method'],
   ['normalize', 'record', 'references'],
 ]);
 
 /** The same subsystem after `resolveSubsystemToGraphify` populates `detail`. */
 const resolvedComponents: SubsystemComponent[] = [
-  { ...minimalComponents[0], detail: readerDetail },
+  { ...minimalComponents[0], declaration: readerDetail },
   {
     ...minimalComponents[1],
-    detail: {
+    declaration: {
       kind: 'function',
       parameters: [{ name: 'session', type: 'SessionRecord' }],
       returnType: 'SessionEvent[]',
@@ -119,7 +119,7 @@ const resolvedComponents: SubsystemComponent[] = [
   },
   {
     ...minimalComponents[2],
-    detail: {
+    declaration: {
       kind: 'type',
       properties: [
         { name: 'id', type: 'string' },
@@ -131,10 +131,10 @@ const resolvedComponents: SubsystemComponent[] = [
   },
   {
     ...minimalComponents[3],
-    detail: {
+    declaration: {
       kind: 'module',
       exports: ['CodexRolloutRecord', 'CodexSessionMeta'],
-      imports: [{ nodeId: 'i1', name: 'paths', relation: 'imports_from' }],
+      imports: [{ nodeId: 'i1', name: 'paths', relation: 'imports' }],
       symbols: ['CodexRolloutRecord', 'CodexSessionMeta'],
     } satisfies GraphifyComponentDetail,
   },
@@ -146,12 +146,12 @@ function MinimalVsResolvedDemo({ resolved }: { resolved: boolean }) {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={resolved ? resolvedComponents : minimalComponents}
-        edges={sharedEdges}
+        relations={sharedEdges.relations} walkthroughs={sharedEdges.walkthroughs}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
         {resolved
-          ? 'post-graphify: click a component to see the enriched GraphifyComponentDetail'
+          ? 'post-graphify: click a component to see the enriched declaration'
           : 'pre-graphify: LLM-authored symbols only — no detail yet'}
       </div>
     </div>
@@ -168,8 +168,7 @@ export const ResolvedPostGraphify: Story = {
 
 // ---------------------------------------------------------------------------
 // Investigation-derived subsystem — grok session 019fd2a9 (t3code)
-// Read-only analysis of "provider / event threading". Components are occupied
-// (analyzed, not edited) — no code touched, but a coherent concept was worked.
+// Read-only analysis of "provider / event threading".
 // ---------------------------------------------------------------------------
 const investigationComponents: SubsystemComponent[] = [
   {
@@ -180,11 +179,10 @@ const investigationComponents: SubsystemComponent[] = [
     purl: 'pkg:github/t3code/t3code',
     purpose: 'adapts opencode session/threads + events to the t3 runtime',
     symbol: 'makeOpenCodeAdapter',
-    capture: 'analyzed',
-    detail: {
+    declaration: {
       kind: 'module',
       exports: ['makeOpenCodeAdapter', 'OpenCodeAdapterLiveOptions'],
-      imports: [{ nodeId: 'i1', name: 'orchestration', relation: 'imports_from' }],
+      imports: [{ nodeId: 'i1', name: 'orchestration', relation: 'imports' }],
       symbols: ['makeOpenCodeAdapter', 'isOpenCodeNotFound', 'OpenCodeSessionContext'],
     } satisfies GraphifyComponentDetail,
   },
@@ -196,7 +194,6 @@ const investigationComponents: SubsystemComponent[] = [
     purl: 'pkg:github/t3code/t3code',
     purpose: 'ingests provider events into the runtime',
     symbol: 'ProviderRuntimeIngestion',
-    capture: 'analyzed',
   },
   {
     id: 'contracts',
@@ -206,12 +203,11 @@ const investigationComponents: SubsystemComponent[] = [
     purl: 'pkg:github/t3code/t3code',
     purpose: 'contracts for orchestration/providers',
     symbol: 'ORCHESTRATION_WS_METHODS',
-    capture: 'analyzed',
   },
 ];
 
-const investigationEdges = edges([
-  ['adapter', 'contracts', 'imports_from'],
+const investigationEdges = graphSpecFromEdges([
+  ['adapter', 'contracts', 'imports'],
   ['ingestion', 'adapter', 'uses'],
   ['ingestion', 'contracts', 'references'],
 ]);
@@ -222,11 +218,11 @@ function InvestigationDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={investigationComponents}
-        edges={investigationEdges}
+        relations={investigationEdges.relations} walkthroughs={investigationEdges.walkthroughs}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
-        read-only investigation snapshot (grok 019fd2a9) — components analyzed, not edited
+        read-only investigation snapshot (grok 019fd2a9)
         {selected ? ` · selected: ${selected}` : ''}
       </div>
     </div>

@@ -1,5 +1,6 @@
 /**
- * Generate a TypeScript declaration string from a SubsystemComponent's detail.
+ * Generate a TypeScript declaration string from a SubsystemComponent's
+ * structured `declaration`.
  *
  * This is the "source code" that Prettier will format. The output is valid
  * TypeScript (except for `external`, which is handled separately). The string
@@ -17,34 +18,34 @@ const TYPE_FAMILY_CONSTRUCTS: ReadonlySet<string> = new Set([
 ]);
 
 export function generateDeclarationString(component: SubsystemComponent): string {
-  const detail = component.detail;
-  // Type-family constructs own their rendering even when the detail payload
-  // is the shared `type` shape — the construct says which keyword is honest.
+  const declaration = component.declaration;
+  // Type-family constructs own their rendering even when the declaration
+  // payload is the shared `type` shape — the construct says which keyword is honest.
   const construct = TYPE_FAMILY_CONSTRUCTS.has(component.construct)
     ? component.construct
-    : detail?.kind ?? component.construct;
+    : declaration?.kind ?? component.construct;
   const rawName = component.symbol || component.name || 'untitled';
   // Strip class/object prefix from dotted symbols (e.g. "SessionReader.normalize" → "normalize").
   const name = rawName.includes('.') ? rawName.split('.').pop()! : rawName;
 
   switch (construct) {
     case 'class':
-      return generateClass(name, detail);
+      return generateClass(name, declaration);
     case 'function':
-      return generateFunction(name, detail);
+      return generateFunction(name, declaration);
     case 'method':
-      return generateMethod(name, detail);
+      return generateMethod(name, declaration);
     case 'interface':
     case 'type_alias':
     case 'enum':
-      return generateType(name, component.construct, detail);
+      return generateType(name, component.construct, declaration);
     case 'module':
-      return generateModule(detail);
+      return generateModule(declaration);
     case 'store':
-      return generateStore(name, detail);
+      return generateStore(name, declaration);
     case 'external':
       // Not valid TypeScript — caller should handle formatting.
-      return `external '${detail?.kind === 'external' ? detail.label : name}'`;
+      return `external '${declaration?.kind === 'external' ? declaration.label : name}'`;
     case 'custom_entity':
       // An actor, not code — no declaration to generate. Renders as a
       // non-TypeScript block: `entity 'Name' — kind` followed by the authored
@@ -52,7 +53,7 @@ export function generateDeclarationString(component: SubsystemComponent): string
       // bypass Prettier.
     {
       const kindLabel = component.entityKind ? ` — ${component.entityKind}` : '';
-      const attrs = detail?.kind === 'custom_entity' ? detail.attributes : [];
+      const attrs = declaration?.kind === 'custom_entity' ? declaration.attributes : [];
       const attrLines = attrs.map((a) => `  ${a.key}: ${a.value}`).join('\n');
       return attrLines
         ? `entity '${name}'${kindLabel}\n${attrLines}`
@@ -78,8 +79,8 @@ function formatParams(params: { name?: string; type: string }[]): string {
 // Per-construct generators
 // ---------------------------------------------------------------------------
 
-function generateClass(name: string, detail?: GraphifyComponentDetail): string {
-  const cls = detail?.kind === 'class' ? detail : undefined;
+function generateClass(name: string, declaration?: GraphifyComponentDetail): string {
+  const cls = declaration?.kind === 'class' ? declaration : undefined;
   const parts: string[] = [`class ${name}`];
 
   if (cls?.extends && cls.extends.length > 0) {
@@ -110,15 +111,15 @@ function generateClass(name: string, detail?: GraphifyComponentDetail): string {
   return parts.join(' ');
 }
 
-function generateFunction(name: string, detail?: GraphifyComponentDetail): string {
-  const fn = detail?.kind === 'function' ? detail : undefined;
+function generateFunction(name: string, declaration?: GraphifyComponentDetail): string {
+  const fn = declaration?.kind === 'function' ? declaration : undefined;
   const params = formatParams(fn?.parameters ?? []);
   const ret = fn?.returnType ? `: ${fn.returnType}` : '';
   return `function ${name}(${params})${ret};`;
 }
 
-function generateMethod(name: string, detail?: GraphifyComponentDetail): string {
-  const m = detail?.kind === 'method' ? detail : undefined;
+function generateMethod(name: string, declaration?: GraphifyComponentDetail): string {
+  const m = declaration?.kind === 'method' ? declaration : undefined;
   const hostClass = m?.hostClass ?? 'Host';
   const params = formatParams(m?.parameters ?? []);
   const ret = m?.returnType ? `: ${m.returnType}` : '';
@@ -128,32 +129,54 @@ function generateMethod(name: string, detail?: GraphifyComponentDetail): string 
 function generateType(
   name: string,
   construct: SubsystemComponentConstruct,
-  detail?: GraphifyComponentDetail,
+  declaration?: GraphifyComponentDetail,
 ): string {
   // The type-family constructs render their declaration keyword honestly —
   // the construct itself says interface / type (alias) / enum / variable.
-  const tpe = detail?.kind === 'type' ? detail : undefined;
+  const tpe = declaration?.kind === 'type' ? declaration : undefined;
+  const params = (tpe?.generics ?? [])
+    .map((g) => `${g.name}${g.constraint ? ` extends ${g.constraint}` : ''}`)
+    .join(', ');
+  const header = params ? `${name}<${params}>` : name;
+
+  // Verbatim RHS escape hatch — shown as-is when the shape doesn't fit one
+  // of the structured buckets below. Wins over everything else.
+  if (tpe?.rhs) return `type ${header} = ${tpe.rhs};`;
+  if (tpe?.aliasOf) return `type ${header} = ${tpe.aliasOf};`;
+  if (tpe?.signature) {
+    const sigParams = formatParams(tpe.signature.parameters ?? []);
+    const ret = tpe.signature.returnType ?? 'void';
+    return `type ${header} = (${sigParams}) => ${ret};`;
+  }
+  if (tpe?.unionOf?.length) {
+    return `type ${header} = ${tpe.unionOf.join(' | ')};`;
+  }
+  if (construct === 'enum') {
+    const members = tpe?.enumMembers?.length
+      ? tpe.enumMembers.map((m) => `${m.name}${m.value ? ` = ${m.value}` : ''}`).join(', ')
+      : (tpe?.properties ?? []).map((p) => p.name).join(', ');
+    return `enum ${header} { ${members} }`;
+  }
+
   const props = (tpe?.properties ?? [])
     .map((p) => `  ${p.name}${p.type ? `: ${p.type}` : ''};`)
     .join('\n');
 
   switch (construct) {
-    case 'enum':
-      return `enum ${name} { ${(tpe?.properties ?? []).map((p) => p.name).join(', ')} }`;
     case 'type_alias':
       return props
-        ? `type ${name} = {\n${props}\n};`
-        : `type ${name} = unknown;`;
+        ? `type ${header} = {\n${props}\n};`
+        : `type ${header} = unknown;`;
     default:
       if (props) {
-        return `interface ${name} {\n${props}\n}`;
+        return `interface ${header} {\n${props}\n}`;
       }
-      return `interface ${name} {}`;
+      return `interface ${header} {}`;
   }
 }
 
-function generateModule(detail?: GraphifyComponentDetail): string {
-  const mod = detail?.kind === 'module' ? detail : undefined;
+function generateModule(declaration?: GraphifyComponentDetail): string {
+  const mod = declaration?.kind === 'module' ? declaration : undefined;
   if (!mod) return 'module {}';
 
   const parts: string[] = [];
@@ -174,14 +197,15 @@ function generateModule(detail?: GraphifyComponentDetail): string {
  * the state members, never a class/method stub. The node's name labels the
  * block; the access mechanism lives in separate accessor nodes.
  */
-function generateStore(name: string, detail?: GraphifyComponentDetail): string {
-  const store = detail?.kind === 'store' ? detail : undefined;
+function generateStore(name: string, declaration?: GraphifyComponentDetail): string {
+  const store = declaration?.kind === 'store' ? declaration : undefined;
+  const backing = store?.storage ? `\n// backing: ${store.storage}` : '';
   const props = (store?.properties ?? [])
     .map((p) => `declare const ${p.name}${p.type ? `: ${p.type}` : ''};`)
     .join('\n');
 
   if (!props) {
-    return `// store: ${name} — no captured state members`;
+    return `// store: ${name} — no captured state members${backing}`;
   }
-  return `// store: ${name}\n${props}`;
+  return `// store: ${name}${backing}\n${props}`;
 }

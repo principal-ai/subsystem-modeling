@@ -8,6 +8,7 @@ import {
   buildSubsystemGraph,
   deriveNameFromSymbol,
   constructBadgeLabel,
+  rightBadgeLabel,
   nodeMinWidthForBadges,
   formatPurl,
   packageColor,
@@ -16,26 +17,28 @@ import {
 import type { SubsystemComponent, SubsystemComponentEdge } from './model';
 
 const comps: SubsystemComponent[] = [
-  { id: 'reader', name: 'SessionReader', kind: 'class', file: 'SessionReader.ts', purl: 'pkg:github/principal-ai/agent-monitoring' },
-  { id: 'transcript', name: 'transcript', kind: 'module', file: 'transcript.ts', purl: 'pkg:github/principal-ai/agent-monitoring' },
+  { id: 'reader', name: 'SessionReader', construct: 'class', file: 'SessionReader.ts', purl: 'pkg:github/principal-ai/agent-monitoring' },
+  { id: 'transcript', name: 'transcript', construct: 'function', file: 'transcript.ts', purl: 'pkg:github/principal-ai/agent-monitoring' },
 ];
 
-const edges: SubsystemComponentEdge[] = [
-  { id: 'e1', from: 'transcript', to: 'reader', mechanism: 'imports' },
+const relations = [
+  { id: 'e1', from: 'transcript', to: 'reader', relationType: 'imports' as const },
   // 'host' is NOT a component — this is the cross-package external case.
-  { id: 'e2', from: 'reader', to: 'host', mechanism: 'imports', refs: ['bun/index.ts'] },
+  { id: 'e2', from: 'reader', to: 'host', relationType: 'imports' as const, refs: ['bun/index.ts'] },
 ];
+
+const doc = { components: comps, relations };
 
 describe('subsystem graph model', () => {
   test('converts all components to flat component nodes', () => {
-    const nodes = convertSubsystemToNodes({ components: comps, edges });
+    const nodes = convertSubsystemToNodes(doc);
     const components = nodes.filter((n) => n.type === 'subsystem-component');
     expect(components).toHaveLength(comps.length);
     expect(components.every((n) => n.type === 'subsystem-component')).toBe(true);
   });
 
   test('converts edges with directed markers', () => {
-    const converted = convertSubsystemToEdges({ components: comps, edges });
+    const converted = convertSubsystemToEdges(doc);
     expect(converted).toHaveLength(2);
     expect(converted[0].source).toBe('transcript');
     expect(converted[0].target).toBe('reader');
@@ -47,7 +50,7 @@ describe('subsystem graph model', () => {
       {
         id: "proposed-watcher",
         name: "watchDir",
-        kind: "external",
+        construct: "external",
         // Intentionally omit file/purl — agents often leave these off for externals.
         file: undefined as unknown as string,
         purl: undefined as unknown as string,
@@ -55,13 +58,18 @@ describe('subsystem graph model', () => {
     ];
     const { nodes } = await buildSubsystemGraph({
       components: withExternal,
-      edges: [{ id: 'e3', from: 'reader', to: 'proposed-watcher', mechanism: 'feeds' }],
+      relations: [],
+      walkthroughs: [{
+        id: 'w1',
+        title: 'feed',
+        steps: [{ from: 'reader', to: 'proposed-watcher', mechanism: 'feeds', file: 'x.ts', line: 1 }],
+      }],
     });
     expect(nodes.find((n) => n.id === 'proposed-watcher')).toBeDefined();
   });
 
   test('buildSubsystemGraph creates external stub nodes for non-component targets', async () => {
-    const { nodes, edges: gEdges } = await buildSubsystemGraph({ components: comps, edges });
+    const { nodes, edges: gEdges } = await buildSubsystemGraph(doc);
     const external = nodes.find((n) => n.id === 'external:host');
     expect(external).toBeDefined();
     expect(external!.data.component.construct).toBe('external');
@@ -70,7 +78,7 @@ describe('subsystem graph model', () => {
   });
 
   test('buildSubsystemGraph positions nodes via ELK (non-zero coords)', async () => {
-    const { nodes } = await buildSubsystemGraph({ components: comps, edges });
+    const { nodes } = await buildSubsystemGraph(doc);
     const placed = nodes.filter((n) => n.type === 'subsystem-component' && n.position);
     expect(placed.length).toBeGreaterThan(0);
     // ELK (or the grid fallback) gives finite coordinates.
@@ -156,6 +164,27 @@ describe('subsystem graph model', () => {
       role: 'entry',
     });
     expect(withRole).toBeGreaterThan(stereotype);
+
+    const withProposed = nodeMinWidthForBadges({
+      construct: 'function',
+      proposed: true,
+    });
+    expect(withProposed).toBeGreaterThan(plain);
+
+    const withBoth = nodeMinWidthForBadges({
+      construct: 'function',
+      role: 'entry',
+      proposed: true,
+    });
+    // proposed-only label is shorter than entry · proposed; still wider than plain
+    expect(withBoth).toBe(withProposed);
+  });
+
+  test('rightBadgeLabel prefers proposed over role', () => {
+    expect(rightBadgeLabel({})).toBeNull();
+    expect(rightBadgeLabel({ proposed: true })).toBe('proposed');
+    expect(rightBadgeLabel({ role: 'entry' })).toBe('entry');
+    expect(rightBadgeLabel({ role: 'service', proposed: true })).toBe('proposed');
   });
 
   test('deriveNameFromSymbol falls back to file basename for modules', () => {
@@ -196,7 +225,7 @@ describe('subsystem graph model', () => {
         { id: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
         { id: 'd', name: 'd', construct: 'function', file: 'd.ts', purl: 'pkg:github/acme/app' },
       ],
-      edges: [],
+      relations: [],
     });
     expect((nodes.find((n) => n.id === 'a') as { parentId?: string }).parentId).toBe(
       processGroupNodeId('app/host'),
@@ -223,7 +252,12 @@ describe('subsystem graph model', () => {
         { id: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
         { id: 'solo', name: 'solo', construct: 'function', file: 's.ts', purl: 'pkg:github/acme/app', process: 'app/lonely' },
       ],
-      edges: [{ id: 'e1', from: 'a', to: 'b', mechanism: 'calls' }],
+      relations: [],
+      walkthroughs: [{
+        id: 'w1',
+        title: 'call',
+        steps: [{ from: 'a', to: 'b', mechanism: 'calls', file: 'a.ts', line: 1 }],
+      }],
     });
     expect(regions.map((r) => r.key)).toEqual(['app/host']);
     expect((nodes.find((n) => n.id === 'solo') as { parentId?: string }).parentId).toBeUndefined();
@@ -231,7 +265,7 @@ describe('subsystem graph model', () => {
   });
 
   test('subsystemGraphLayoutKey ignores declarationRef-only changes', () => {
-    const base = { components: comps, edges };
+    const base = doc;
     const withRef = {
       components: comps.map((c, i) =>
         i === 0
@@ -246,7 +280,7 @@ describe('subsystem graph model', () => {
             }
           : c,
       ),
-      edges,
+      relations,
     };
     expect(subsystemGraphLayoutKey(base)).toBe(subsystemGraphLayoutKey(withRef));
   });

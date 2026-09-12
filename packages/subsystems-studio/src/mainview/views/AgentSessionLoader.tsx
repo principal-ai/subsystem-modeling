@@ -50,7 +50,16 @@ const LOADER_KEYFRAMES = `
 export function AgentLogo({ agent, size = 14 }: { agent: string; size?: number }) {
 	const { theme } = useTheme();
 	const key = agent.toLowerCase();
-	const url = AGENT_LOGOS[key];
+	// Maintain OpenCode sub-agents / V2 pipeline tag share the opencode mark.
+	const logoKey =
+		key === "issue-fixer" ||
+		key === "gap-filler" ||
+		key === "maintain" ||
+		key === "opencode-v2" ||
+		key === "opencode2"
+			? "opencode"
+			: key;
+	const url = AGENT_LOGOS[logoKey];
 	if (url) {
 		return (
 			<img
@@ -87,13 +96,19 @@ export function AgentLogo({ agent, size = 14 }: { agent: string; size?: number }
 export function AgentSessionLoader({
 	repos,
 	agents,
+	title = "Pulling Agent Sessions",
+	knownAgents = SUPPORTED_AGENTS,
 }: {
 	repos: DiscoveredRepo[];
 	agents: string[];
+	/** Headline while days page in. */
+	title?: string;
+	/** Agent keys shown across the top (dimmed until seen). */
+	knownAgents?: string[];
 }) {
 	const { theme } = useTheme();
 	const presentAgents = new Set(agents.map((a) => a.toLowerCase()));
-	const knownAgentKeys = SUPPORTED_AGENTS;
+	const knownAgentKeys = knownAgents;
 	return (
 		<div
 			style={{
@@ -120,7 +135,7 @@ export function AgentSessionLoader({
 						color: theme.colors.text,
 					}}
 				>
-					Pulling Agent Sessions
+					{title}
 				</div>
 
 				{/* Agent logos across the top — dimmed until a session for that

@@ -1,8 +1,8 @@
 import type {
   SubsystemComponent,
-  SubsystemComponentEdge,
+  SubsystemRelation,
+  SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
-import type { SubsystemThroughline } from '@principal-ai/subsystems-react/dist/subsystem/model.js';
 
 const PURL = 'pkg:github/you/traced-api';
 
@@ -145,214 +145,237 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const edges: SubsystemComponentEdge[] = [
-  // Boot: wire the in-process sink, then the exporter
-  { id: 'e0', from: 'create-app', to: 'setup-tracing', mechanism: 'calls' },
-  { id: 'e1', from: 'setup-tracing', to: 'tracer-provider', mechanism: 'registers-into' },
-  { id: 'e2', from: 'tracer-provider', to: 'OTLPCollector', mechanism: 'produces' },
+export const relations = [] as SubsystemRelation[];
 
-  // Business calls
-  { id: 'e3', from: 'post-order', to: 'create-order', mechanism: 'calls' },
-  { id: 'e4', from: 'read-order', to: 'get-order', mechanism: 'calls' },
-  { id: 'e5', from: 'create-order', to: 'capture-payment', mechanism: 'calls' },
-  { id: 'e6', from: 'create-order', to: 'orders-repo', mechanism: 'calls' },
-  { id: 'e7', from: 'get-order', to: 'orders-repo', mechanism: 'calls' },
-  { id: 'e8', from: 'orders-repo', to: 'Postgres', mechanism: 'reads' },
-  { id: 'e9', from: 'orders-repo', to: 'Postgres', mechanism: 'writes' },
-  { id: 'e10', from: 'capture-payment', to: 'PaymentsAPI', mechanism: 'calls' },
-
-  // Runtime instrumentation: spans/events record into TracerProvider on every hop
-  { id: 'e11', from: 'read-order', to: 'tracer-provider', mechanism: 'produces' },
-  { id: 'e12', from: 'post-order', to: 'tracer-provider', mechanism: 'produces' },
-  { id: 'e13', from: 'get-order', to: 'tracer-provider', mechanism: 'produces' },
-  { id: 'e14', from: 'create-order', to: 'tracer-provider', mechanism: 'produces' },
-  { id: 'e15', from: 'orders-repo', to: 'tracer-provider', mechanism: 'produces' },
-  { id: 'e16', from: 'capture-payment', to: 'tracer-provider', mechanism: 'produces' },
-];
-
-export const throughlines: SubsystemThroughline[] = [
+export const walkthroughs = [
   {
-    id: 'tl-read',
-    title: 'GET /orders/{id} (traced)',
-    steps: [
+    "id": "tl-read",
+    "title": "GET /orders/{id} (traced)",
+    "steps": [
       {
-        edgeId: 'e11',
-        file: 'app/routes/orders.py',
-        line: 13,
-        symbol: 'start_as_current_span("orders.read")',
-        annotation: 'Runtime: open the route span (not setup).',
+        "from": "read-order",
+        "to": "tracer-provider",
+        "mechanism": "produces",
+        "file": "app/routes/orders.py",
+        "line": 13,
+        "symbol": "start_as_current_span(\"orders.read\")",
+        "annotation": "Runtime: open the route span (not setup)."
       },
       {
-        edgeId: 'e11',
-        file: 'app/routes/orders.py',
-        line: 15,
-        symbol: 'add_event("orders.read.started")',
-        annotation: 'Span event recorded into the TracerProvider.',
+        "from": "read-order",
+        "to": "tracer-provider",
+        "mechanism": "produces",
+        "file": "app/routes/orders.py",
+        "line": 15,
+        "symbol": "add_event(\"orders.read.started\")",
+        "annotation": "Span event recorded into the TracerProvider."
       },
       {
-        edgeId: 'e4',
-        file: 'app/routes/orders.py',
-        line: 16,
-        symbol: 'get_order',
-        annotation: 'Business call under the active span context.',
+        "from": "read-order",
+        "to": "get-order",
+        "mechanism": "calls",
+        "file": "app/routes/orders.py",
+        "line": 16,
+        "symbol": "get_order",
+        "annotation": "Business call under the active span context."
       },
       {
-        edgeId: 'e13',
-        file: 'app/services/order_service.py',
-        line: 11,
-        symbol: 'start_as_current_span("OrderService.get")',
-        annotation: 'Child span — still the same trace.',
+        "from": "get-order",
+        "to": "tracer-provider",
+        "mechanism": "produces",
+        "file": "app/services/order_service.py",
+        "line": 11,
+        "symbol": "start_as_current_span(\"OrderService.get\")",
+        "annotation": "Child span — still the same trace."
       },
       {
-        edgeId: 'e7',
-        file: 'app/services/order_service.py',
-        line: 13,
-        symbol: 'find_by_id',
-        annotation: 'Service delegates to the repo.',
+        "from": "get-order",
+        "to": "orders-repo",
+        "mechanism": "calls",
+        "file": "app/services/order_service.py",
+        "line": 13,
+        "symbol": "find_by_id",
+        "annotation": "Service delegates to the repo."
       },
       {
-        edgeId: 'e15',
-        file: 'app/db.py',
-        line: 13,
-        symbol: 'start_as_current_span("db.orders.find")',
-        annotation: 'DB span + db.query.execute / db.query.done events.',
+        "from": "orders-repo",
+        "to": "tracer-provider",
+        "mechanism": "produces",
+        "file": "app/db.py",
+        "line": 13,
+        "symbol": "start_as_current_span(\"db.orders.find\")",
+        "annotation": "DB span + db.query.execute / db.query.done events."
       },
       {
-        edgeId: 'e8',
-        file: 'app/db.py',
-        line: 17,
-        symbol: '_ORDERS.get',
-        annotation: 'Actual Postgres read (showcase stand-in).',
+        "from": "orders-repo",
+        "to": "Postgres",
+        "mechanism": "reads",
+        "file": "app/db.py",
+        "line": 17,
+        "symbol": "_ORDERS.get",
+        "annotation": "Actual Postgres read (showcase stand-in)."
       },
       {
-        edgeId: 'e2',
-        file: 'app/telemetry.py',
-        line: 22,
-        symbol: 'BatchSpanProcessor',
-        annotation: 'When spans end, the processor exports them to the OTLP collector.',
-      },
-    ],
+        "from": "tracer-provider",
+        "to": "OTLPCollector",
+        "mechanism": "produces",
+        "file": "app/telemetry.py",
+        "line": 22,
+        "symbol": "BatchSpanProcessor",
+        "annotation": "When spans end, the processor exports them to the OTLP collector."
+      }
+    ]
   },
   {
-    id: 'tl-create',
-    title: 'POST /orders (traced + downstream)',
-    steps: [
+    "id": "tl-create",
+    "title": "POST /orders (traced + downstream)",
+    "steps": [
       {
-        edgeId: 'e12',
-        file: 'app/routes/orders.py',
-        line: 26,
-        symbol: 'start_as_current_span("orders.create")',
-        annotation: 'Runtime: route span + orders.create.started event.',
+        "from": "post-order",
+        "to": "tracer-provider",
+        "mechanism": "produces",
+        "file": "app/routes/orders.py",
+        "line": 26,
+        "symbol": "start_as_current_span(\"orders.create\")",
+        "annotation": "Runtime: route span + orders.create.started event."
       },
       {
-        edgeId: 'e12',
-        file: 'app/routes/orders.py',
-        line: 28,
-        symbol: 'add_event("orders.create.started")',
-        annotation: 'Event on the parent span before work begins.',
+        "from": "post-order",
+        "to": "tracer-provider",
+        "mechanism": "produces",
+        "file": "app/routes/orders.py",
+        "line": 28,
+        "symbol": "add_event(\"orders.create.started\")",
+        "annotation": "Event on the parent span before work begins."
       },
       {
-        edgeId: 'e3',
-        file: 'app/routes/orders.py',
-        line: 29,
-        symbol: 'create_order',
-        annotation: 'Into the service under the active context.',
+        "from": "post-order",
+        "to": "create-order",
+        "mechanism": "calls",
+        "file": "app/routes/orders.py",
+        "line": 29,
+        "symbol": "create_order",
+        "annotation": "Into the service under the active context."
       },
       {
-        edgeId: 'e14',
-        file: 'app/services/order_service.py',
-        line: 19,
-        symbol: 'start_as_current_span("OrderService.create")',
-        annotation: 'Child span for the write path.',
+        "from": "create-order",
+        "to": "tracer-provider",
+        "mechanism": "produces",
+        "file": "app/services/order_service.py",
+        "line": 19,
+        "symbol": "start_as_current_span(\"OrderService.create\")",
+        "annotation": "Child span for the write path."
       },
       {
-        edgeId: 'e5',
-        file: 'app/services/order_service.py',
-        line: 21,
-        symbol: 'capture_payment',
-        annotation: 'Payment before persist.',
+        "from": "create-order",
+        "to": "capture-payment",
+        "mechanism": "calls",
+        "file": "app/services/order_service.py",
+        "line": 21,
+        "symbol": "capture_payment",
+        "annotation": "Payment before persist."
       },
       {
-        edgeId: 'e16',
-        file: 'app/clients/payments.py',
-        line: 12,
-        symbol: 'start_as_current_span("payments.capture")',
-        annotation: 'Outbound span + payments.capture.requested event.',
+        "from": "capture-payment",
+        "to": "tracer-provider",
+        "mechanism": "produces",
+        "file": "app/clients/payments.py",
+        "line": 12,
+        "symbol": "start_as_current_span(\"payments.capture\")",
+        "annotation": "Outbound span + payments.capture.requested event."
       },
       {
-        edgeId: 'e10',
-        file: 'app/clients/payments.py',
-        line: 16,
-        symbol: 'inject',
-        annotation: 'W3C traceparent so Payments API continues this trace.',
+        "from": "capture-payment",
+        "to": "PaymentsAPI",
+        "mechanism": "calls",
+        "file": "app/clients/payments.py",
+        "line": 16,
+        "symbol": "inject",
+        "annotation": "W3C traceparent so Payments API continues this trace."
       },
       {
-        edgeId: 'e14',
-        file: 'app/services/order_service.py',
-        line: 23,
-        symbol: 'add_event("service.payment_captured")',
-        annotation: 'Event on the service span after capture returns.',
+        "from": "create-order",
+        "to": "tracer-provider",
+        "mechanism": "produces",
+        "file": "app/services/order_service.py",
+        "line": 23,
+        "symbol": "add_event(\"service.payment_captured\")",
+        "annotation": "Event on the service span after capture returns."
       },
       {
-        edgeId: 'e6',
-        file: 'app/services/order_service.py',
-        line: 24,
-        symbol: 'insert',
-        annotation: 'Persist with payment id.',
+        "from": "create-order",
+        "to": "orders-repo",
+        "mechanism": "calls",
+        "file": "app/services/order_service.py",
+        "line": 24,
+        "symbol": "insert",
+        "annotation": "Persist with payment id."
       },
       {
-        edgeId: 'e15',
-        file: 'app/db.py',
-        line: 23,
-        symbol: 'start_as_current_span("db.orders.insert")',
-        annotation: 'DB write span + query events into TracerProvider.',
+        "from": "orders-repo",
+        "to": "tracer-provider",
+        "mechanism": "produces",
+        "file": "app/db.py",
+        "line": 23,
+        "symbol": "start_as_current_span(\"db.orders.insert\")",
+        "annotation": "DB write span + query events into TracerProvider."
       },
       {
-        edgeId: 'e9',
-        file: 'app/db.py',
-        line: 29,
-        symbol: '_ORDERS[order_id]',
-        annotation: 'Actual write (showcase stand-in).',
+        "from": "orders-repo",
+        "to": "Postgres",
+        "mechanism": "writes",
+        "file": "app/db.py",
+        "line": 29,
+        "symbol": "_ORDERS[order_id]",
+        "annotation": "Actual write (showcase stand-in)."
       },
       {
-        edgeId: 'e2',
-        file: 'app/telemetry.py',
-        line: 22,
-        symbol: 'BatchSpanProcessor',
-        annotation: 'Finished span tree (route → service → payment → db) exports to OTLP.',
-      },
-    ],
+        "from": "tracer-provider",
+        "to": "OTLPCollector",
+        "mechanism": "produces",
+        "file": "app/telemetry.py",
+        "line": 22,
+        "symbol": "BatchSpanProcessor",
+        "annotation": "Finished span tree (route → service → payment → db) exports to OTLP."
+      }
+    ]
   },
   {
-    id: 'tl-boot',
-    title: 'Boot: wire TracerProvider',
-    steps: [
+    "id": "tl-boot",
+    "title": "Boot: wire TracerProvider",
+    "steps": [
       {
-        edgeId: 'e0',
-        file: 'app/main.py',
-        line: 15,
-        symbol: 'setup_tracing',
-        annotation: 'Once at process start — not per request.',
+        "from": "create-app",
+        "to": "setup-tracing",
+        "mechanism": "calls",
+        "file": "app/main.py",
+        "line": 15,
+        "symbol": "setup_tracing",
+        "annotation": "Once at process start — not per request."
       },
       {
-        edgeId: 'e1',
-        file: 'app/telemetry.py',
-        line: 20,
-        symbol: 'TracerProvider',
-        annotation: 'Install the in-process sink tracers will produce into.',
+        "from": "setup-tracing",
+        "to": "tracer-provider",
+        "mechanism": "registers-into",
+        "file": "app/telemetry.py",
+        "line": 20,
+        "symbol": "TracerProvider",
+        "annotation": "Install the in-process sink tracers will produce into."
       },
       {
-        edgeId: 'e2',
-        file: 'app/telemetry.py',
-        line: 21,
-        symbol: 'OTLPSpanExporter',
-        annotation: 'Exporter attached; request throughlines are what actually fill it.',
-      },
-    ],
-  },
-];
+        "from": "tracer-provider",
+        "to": "OTLPCollector",
+        "mechanism": "produces",
+        "file": "app/telemetry.py",
+        "line": 21,
+        "symbol": "OTLPSpanExporter",
+        "annotation": "Exporter attached; request walkthroughs are what actually fill it."
+      }
+    ]
+  }
+] as SubsystemWalkthrough[];
 
 export const title = 'Traced HTTP API';
 
 export const description =
-  'Python FastAPI orders service with **OpenTelemetry on the request path**: each handler/service/DB/payment hop opens a span and records events into an in-process TracerProvider, which exports finished spans to an OTLP collector. Open **Flows** — read and create interleave business calls with instrumentation; boot is separate.';
+  'Python FastAPI orders service with **OpenTelemetry on the request path**: each handler/service/DB/payment hop opens a span and records events into an in-process TracerProvider, which exports finished spans to an OTLP collector. Open **Walkthroughs** — read and create interleave business calls with instrumentation; boot is separate.';

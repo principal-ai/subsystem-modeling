@@ -158,3 +158,49 @@ export function resolveComponentAnchor(
 		triedIds,
 	};
 }
+
+export type UniqueDefinitionBySymbolResult =
+	| { status: 'unique'; node: GraphifyNode }
+	| { status: 'ambiguous'; candidates: GraphifyNode[] }
+	| { status: 'none' };
+
+/**
+ * Corpus-wide definition lookup by symbol label only (no claimed file).
+ * Used when the model’s file path is missing and we want a deterministic
+ * relocate if exactly one defining file still declares the symbol.
+ *
+ * Unique means a single `source_file` among matching definition nodes.
+ */
+export function findUniqueDefinitionBySymbol(
+	nodes: readonly GraphifyNode[],
+	symbol: string,
+): UniqueDefinitionBySymbolResult {
+	const trimmed = symbol.trim();
+	if (!trimmed) return { status: 'none' };
+
+	const hits: GraphifyNode[] = [];
+	for (const node of nodes) {
+		if (!isDefinition(node)) continue;
+		if (!labelMatchesSymbol(String(node.label ?? ''), trimmed)) continue;
+		hits.push(node);
+	}
+	if (hits.length === 0) return { status: 'none' };
+
+	const byFile = new Map<string, GraphifyNode[]>();
+	for (const n of hits) {
+		const sf = normalizeSourcePath(String(n.source_file ?? ''));
+		if (!sf) continue;
+		const list = byFile.get(sf) ?? [];
+		list.push(n);
+		byFile.set(sf, list);
+	}
+	if (byFile.size === 0) return { status: 'none' };
+	if (byFile.size > 1) {
+		return {
+			status: 'ambiguous',
+			candidates: hits.slice(0, 12),
+		};
+	}
+	const only = [...byFile.values()][0]!;
+	return { status: 'unique', node: only[0]! };
+}

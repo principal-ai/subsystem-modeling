@@ -1,8 +1,8 @@
 import type {
   SubsystemComponent,
-  SubsystemComponentEdge,
+  SubsystemRelation,
+  SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
-import type { SubsystemThroughline } from '@principal-ai/subsystems-react/dist/subsystem/model.js';
 
 const PURL = 'pkg:github/you/terraform-site';
 
@@ -57,26 +57,53 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const edges: SubsystemComponentEdge[] = [
-  { id: 'e0', from: 'root-module', to: 'static-site', mechanism: 'calls' },
-  { id: 'e1', from: 'static-site', to: 'aws-provider', mechanism: 'uses' },
-  { id: 'e2', from: 'aws-provider', to: 'AWS', mechanism: 'calls' },
-  { id: 'e3', from: 'static-site', to: 'AWS', mechanism: 'writes' },
-];
+export const relations = [] as SubsystemRelation[];
 
-export const throughlines: SubsystemThroughline[] = [
+export const walkthroughs = [
   {
-    id: 'tl-apply',
-    title: 'terraform apply',
-    steps: [
-      { edgeId: 'e0', file: 'main.tf', line: 2, symbol: 'module "site"', annotation: 'Root invokes the child module.' },
-      { edgeId: 'e3', file: 'modules/static_site/main.tf', line: 1, symbol: 'aws_s3_bucket', annotation: 'Module declares the bucket resource.' },
-      { edgeId: 'e3', file: 'modules/static_site/main.tf', line: 6, symbol: 'aws_s3_bucket_website_configuration', annotation: 'Website hosting config on the same bucket.' },
-      { edgeId: 'e2', file: 'providers.tf', line: 10, symbol: 'provider "aws"', annotation: 'Provider authenticates calls to AWS.' },
-    ],
-  },
-];
+    "id": "tl-apply",
+    "title": "terraform apply",
+    "steps": [
+      {
+        "from": "root-module",
+        "to": "static-site",
+        "mechanism": "calls",
+        "file": "main.tf",
+        "line": 2,
+        "symbol": "module \"site\"",
+        "annotation": "Root invokes the child module."
+      },
+      {
+        "from": "static-site",
+        "to": "AWS",
+        "mechanism": "writes",
+        "file": "modules/static_site/main.tf",
+        "line": 1,
+        "symbol": "aws_s3_bucket",
+        "annotation": "Module declares the bucket resource."
+      },
+      {
+        "from": "static-site",
+        "to": "AWS",
+        "mechanism": "writes",
+        "file": "modules/static_site/main.tf",
+        "line": 6,
+        "symbol": "aws_s3_bucket_website_configuration",
+        "annotation": "Website hosting config on the same bucket."
+      },
+      {
+        "from": "aws-provider",
+        "to": "AWS",
+        "mechanism": "calls",
+        "file": "providers.tf",
+        "line": 10,
+        "symbol": "provider \"aws\"",
+        "annotation": "Provider authenticates calls to AWS."
+      }
+    ]
+  }
+] as SubsystemWalkthrough[];
 
 export const title = 'Terraform static site';
 export const description =
-  'Infra-as-code subsystem: **root module → static_site module → AWS** (S3 website bucket). Open **Flows** for `terraform apply`.';
+  'Infra-as-code subsystem: **root module → static_site module → AWS** (S3 website bucket). Open **Walkthroughs** for `terraform apply`.';

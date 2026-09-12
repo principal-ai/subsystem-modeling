@@ -1,8 +1,8 @@
 import type {
   SubsystemComponent,
-  SubsystemComponentEdge,
+  SubsystemRelation,
+  SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
-import type { SubsystemThroughline } from '@principal-ai/subsystems-react/dist/subsystem/model.js';
 
 const PURL = 'pkg:github/you/dbt-orders';
 
@@ -69,36 +69,66 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const edges: SubsystemComponentEdge[] = [
-  { id: 'e0', from: 'stg-orders', to: 'RawOrders', mechanism: 'reads' },
-  { id: 'e1', from: 'fct-daily-orders', to: 'stg-orders', mechanism: 'reads' },
-  { id: 'e2', from: 'stg-orders', to: 'Warehouse', mechanism: 'writes' },
-  { id: 'e3', from: 'fct-daily-orders', to: 'Warehouse', mechanism: 'writes' },
-  { id: 'e4', from: 'schema-tests', to: 'stg-orders', mechanism: 'references' },
-  { id: 'e5', from: 'schema-tests', to: 'fct-daily-orders', mechanism: 'references' },
-];
+export const relations = [
+  {
+    "id": "e4",
+    "from": "schema-tests",
+    "to": "stg-orders",
+    "relationType": "references"
+  },
+  {
+    "id": "e5",
+    "from": "schema-tests",
+    "to": "fct-daily-orders",
+    "relationType": "references"
+  }
+] as SubsystemRelation[];
 
-export const throughlines: SubsystemThroughline[] = [
+export const walkthroughs = [
   {
-    id: 'tl-run',
-    title: 'dbt run (build models)',
-    steps: [
-      { edgeId: 'e0', file: 'models/staging/stg_orders.sql', line: 8, symbol: "source('raw','orders')", annotation: 'Staging reads the raw source.' },
-      { edgeId: 'e2', file: 'models/staging/stg_orders.sql', line: 2, symbol: 'select', annotation: 'Materialize stg_orders in the warehouse.' },
-      { edgeId: 'e1', file: 'models/marts/fct_daily_orders.sql', line: 6, symbol: "ref('stg_orders')", annotation: 'Mart depends on staging via ref().' },
-      { edgeId: 'e3', file: 'models/marts/fct_daily_orders.sql', line: 2, symbol: 'select', annotation: 'Materialize daily facts.' },
-    ],
-  },
-  {
-    id: 'tl-test',
-    title: 'dbt test',
-    steps: [
-      { edgeId: 'e4', file: 'models/schema.yml', line: 11, symbol: 'unique, not_null', annotation: 'Assert staging grain.' },
-      { edgeId: 'e5', file: 'models/schema.yml', line: 17, symbol: 'unique, not_null', annotation: 'Assert mart grain.' },
-    ],
-  },
-];
+    "id": "tl-run",
+    "title": "dbt run (build models)",
+    "steps": [
+      {
+        "from": "stg-orders",
+        "to": "RawOrders",
+        "mechanism": "reads",
+        "file": "models/staging/stg_orders.sql",
+        "line": 8,
+        "symbol": "source('raw','orders')",
+        "annotation": "Staging reads the raw source."
+      },
+      {
+        "from": "stg-orders",
+        "to": "Warehouse",
+        "mechanism": "writes",
+        "file": "models/staging/stg_orders.sql",
+        "line": 2,
+        "symbol": "select",
+        "annotation": "Materialize stg_orders in the warehouse."
+      },
+      {
+        "from": "fct-daily-orders",
+        "to": "stg-orders",
+        "mechanism": "reads",
+        "file": "models/marts/fct_daily_orders.sql",
+        "line": 6,
+        "symbol": "ref('stg_orders')",
+        "annotation": "Mart depends on staging via ref()."
+      },
+      {
+        "from": "fct-daily-orders",
+        "to": "Warehouse",
+        "mechanism": "writes",
+        "file": "models/marts/fct_daily_orders.sql",
+        "line": 2,
+        "symbol": "select",
+        "annotation": "Materialize daily facts."
+      }
+    ]
+  }
+] as SubsystemWalkthrough[];
 
 export const title = 'dbt orders models';
 export const description =
-  'Data-eng subsystem: **raw source → stg_orders → fct_daily_orders** with schema tests. Not an app — a transform graph. Open **Flows** for `dbt run` and `dbt test`.';
+  'Data-eng subsystem: **raw source → stg_orders → fct_daily_orders** with schema tests. Not an app — a transform graph. Open **Walkthroughs** for `dbt run` and `dbt test`.';

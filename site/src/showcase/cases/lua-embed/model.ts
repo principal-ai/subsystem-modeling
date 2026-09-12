@@ -1,8 +1,8 @@
 import type {
   SubsystemComponent,
-  SubsystemComponentEdge,
+  SubsystemRelation,
+  SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
-import type { SubsystemThroughline } from '@principal-ai/subsystems-react/dist/subsystem/model.js';
 
 const PURL = 'pkg:github/you/lua-embed';
 
@@ -54,28 +54,71 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const edges: SubsystemComponentEdge[] = [
-  { id: 'e0', from: 'main', to: 'LuaVM', mechanism: 'calls' },
-  { id: 'e1', from: 'main', to: 'host-log', mechanism: 'registers-into' },
-  { id: 'e2', from: 'main', to: 'greet', mechanism: 'calls' },
-  { id: 'e3', from: 'greet', to: 'host-log', mechanism: 'calls' },
-];
+export const relations = [] as SubsystemRelation[];
 
-export const throughlines: SubsystemThroughline[] = [
+export const walkthroughs = [
   {
-    id: 'tl-embed',
-    title: 'Host runs Lua (with callback)',
-    steps: [
-      { edgeId: 'e0', file: 'host/main.c', line: 16, symbol: 'luaL_newstate', annotation: 'Create the embedded VM.' },
-      { edgeId: 'e1', file: 'host/main.c', line: 18, symbol: 'lua_register(host_log)', annotation: 'Expose a native function to Lua.' },
-      { edgeId: 'e0', file: 'host/main.c', line: 20, symbol: 'luaL_dofile', annotation: 'Load script.lua into the VM.' },
-      { edgeId: 'e2', file: 'host/main.c', line: 27, symbol: 'lua_pcall(greet)', annotation: 'Host calls into the guest.' },
-      { edgeId: 'e3', file: 'script.lua', line: 3, symbol: 'host_log', annotation: 'Guest calls back into native host_log.' },
-      { edgeId: 'e3', file: 'host/main.c', line: 11, symbol: 'printf', annotation: 'Native side effect from the callback.' },
-    ],
-  },
-];
+    "id": "tl-embed",
+    "title": "Host runs Lua (with callback)",
+    "steps": [
+      {
+        "from": "main",
+        "to": "LuaVM",
+        "mechanism": "calls",
+        "file": "host/main.c",
+        "line": 16,
+        "symbol": "luaL_newstate",
+        "annotation": "Create the embedded VM."
+      },
+      {
+        "from": "main",
+        "to": "host-log",
+        "mechanism": "registers-into",
+        "file": "host/main.c",
+        "line": 18,
+        "symbol": "lua_register(host_log)",
+        "annotation": "Expose a native function to Lua."
+      },
+      {
+        "from": "main",
+        "to": "LuaVM",
+        "mechanism": "calls",
+        "file": "host/main.c",
+        "line": 20,
+        "symbol": "luaL_dofile",
+        "annotation": "Load script.lua into the VM."
+      },
+      {
+        "from": "main",
+        "to": "greet",
+        "mechanism": "calls",
+        "file": "host/main.c",
+        "line": 27,
+        "symbol": "lua_pcall(greet)",
+        "annotation": "Host calls into the guest."
+      },
+      {
+        "from": "greet",
+        "to": "host-log",
+        "mechanism": "calls",
+        "file": "script.lua",
+        "line": 3,
+        "symbol": "host_log",
+        "annotation": "Guest calls back into native host_log."
+      },
+      {
+        "from": "greet",
+        "to": "host-log",
+        "mechanism": "calls",
+        "file": "host/main.c",
+        "line": 11,
+        "symbol": "printf",
+        "annotation": "Native side effect from the callback."
+      }
+    ]
+  }
+] as SubsystemWalkthrough[];
 
 export const title = 'Lua embedded in C';
 export const description =
-  'Scripting-island pattern: **C host** embeds a **Lua VM**, calls `greet`, and Lua calls back via `host_log`. Open **Flows** for the round trip.';
+  'Scripting-island pattern: **C host** embeds a **Lua VM**, calls `greet`, and Lua calls back via `host_log`. Open **Walkthroughs** for the round trip.';

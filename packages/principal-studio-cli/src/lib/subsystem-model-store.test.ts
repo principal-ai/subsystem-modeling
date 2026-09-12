@@ -6,15 +6,15 @@ import { describe, expect, test } from 'bun:test';
 import {
   findCreateProblems,
   findComponentConstructProblems,
-  findEdgeMechanismProblems,
+  findRelationTypeProblems,
 } from '../lib/subsystem-model-store.js';
 
 describe('findCreateProblems', () => {
-  test('requires title, components, edges', () => {
+  test('requires title, components, relations', () => {
     expect(findCreateProblems({})).toEqual([
       'title is required',
       'components array is required',
-      'edges array is required',
+      'relations array is required',
     ]);
   });
 
@@ -31,7 +31,7 @@ describe('findCreateProblems', () => {
             purl: 'pkg:github/you/app',
           },
         ],
-        edges: [],
+        relations: [],
       }),
     ).toEqual([]);
   });
@@ -39,7 +39,7 @@ describe('findCreateProblems', () => {
   test('rejects unknown construct and mechanism', () => {
     expect(findComponentConstructProblems([{ id: 'a', construct: 'module' }])).toHaveLength(1);
     expect(
-      findEdgeMechanismProblems([{ id: 'e1', from: 'a', to: 'b', mechanism: 'teleports' }]),
+      findRelationTypeProblems([{ id: 'r1', from: 'a', to: 'b', relationType: 'teleports' }]),
     ).toHaveLength(1);
   });
 
@@ -53,7 +53,7 @@ describe('findCreateProblems', () => {
           entityKind: 'Person',
           file: '',
           purl: 'pkg:github/novatech/facilities-ops',
-          detail: {
+          declaration: {
             kind: 'custom_entity',
             attributes: [{ key: 'level', value: 'L1' }],
           },

@@ -7,7 +7,7 @@
  * free functions carry parameter_type/return_type/generic_arg edges.
  *
  * This script loads the PATCHEd cached graph and runs the exact Verify
- * machinery (resolveComponentAnchor → inferGraphifyKind → extractGraphifySignature
+ * machinery (resolveComponentAnchor → inferConstructFromGraphify → extractGraphifySignature
  * → compareSignatures) against authored `ClaimedSignature` values taken from the
  * real TS sources.
  */

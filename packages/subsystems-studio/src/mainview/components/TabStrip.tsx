@@ -67,8 +67,10 @@ export function TabStrip({
 				const isPermanent =
 					tab.kind === "library" ||
 					tab.kind === "agent-sessions" ||
+					tab.kind === "maintenance-sessions" ||
 					tab.kind === "subsystems" ||
-					tab.kind === "graphify";
+					tab.kind === "graphify" ||
+					tab.kind === "opencode-v2";
 				const canCopyPath =
 					tab.kind === "subsystem-model" && typeof tab.path === "string";
 				const justCopied = copiedTabId === tab.id;

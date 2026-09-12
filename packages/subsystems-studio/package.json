@@ -1,7 +1,7 @@
 {
   "name": "@principal-ai/subsystems-studio",
-  "version": "0.6.6",
-  "description": "Subsystems Studio — desktop host for subsystem models, throughlines, trails, and agent sessions. Pairs with the principal-ai CLI.",
+  "version": "0.6.9",
+  "description": "Subsystems Studio — desktop host for subsystem models, walkthroughs, trails, and agent sessions. Pairs with the principal-ai CLI.",
   "type": "module",
   "os": [
     "darwin"
@@ -44,8 +44,8 @@
     "@principal-ai/file-city-react": "^0.5.91",
     "@principal-ai/logo-component": "^0.1.23",
     "@principal-ai/repository-abstraction": "^0.5.7",
-    "@principal-ai/subsystems-core": "0.31.3",
-    "@principal-ai/subsystems-react": "0.20.5",
+    "@principal-ai/subsystems-core": "0.32.0",
+    "@principal-ai/subsystems-react": "0.21.1",
     "@types/bun": "latest",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

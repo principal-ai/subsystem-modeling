@@ -42,7 +42,24 @@ import { handoffToRunning, startIpcServer, type LoadTrailMessage } from "./ipc";
 import { startHttpServer } from "./http-server";
 import { deleteSubsystemModel, getSubsystemModel, listSubsystemModels, resolveRepoRootForComponent, setSubsystemModelChangeListener, startSubsystemModelDirWatcher, subsystemModelFilePath, touchSubsystemModelOpened, updateSubsystemModel } from "./subsystem-model-store";
 import { publishSubsystemModelGist } from "./gist-publish";
-import { verifySubsystemComponent } from "./verify-subsystem-component";
+import {
+	buildAuditFingerprint,
+	deleteSubsystemModelAudit,
+	getSubsystemModelAuditListSummary,
+	loadSubsystemModelAudit,
+} from "./audit-report-store";
+import {
+	acceptSubsystemModelProposal as acceptProposalInStore,
+	createSubsystemModelProposal,
+	deleteSubsystemModelProposals,
+	listSubsystemModelProposals,
+	pendingProposalCount,
+	rejectSubsystemModelProposal as rejectProposalInStore,
+} from "./proposal-store";
+import { maintainSubsystemModel as runMaintainSubsystemModel } from "./maintain-model";
+import { listMaintainSessions } from "./maintain-sessions";
+import { resolveSubsystemMaintainerModel } from "./opencode-models";
+import { auditSubsystemModel, applySubsystemModelAuditFix, verifySubsystemComponent } from "./verify-subsystem-component";
 import {
 	getGraphifyStatus,
 	getGraphifyStatusDetailed,
@@ -57,6 +74,23 @@ import {
 	getStudioVersionStatusDetailed,
 	startStudioUpdate,
 } from "./studio-version";
+import {
+	getOpencodeV2Status,
+	getOpencodeV2StatusDetailed,
+	installOpencodeV2,
+	resolveOpencode2Bin,
+	updateOpencodeV2,
+} from "./opencode-v2";
+import {
+	getOpencodeV2ProbeState,
+	setOpencodeV2ProbeListener,
+	startOpencodeV2Probe,
+	stopOpencodeV2Probe,
+} from "./opencode-v2-probe";
+import {
+	getOpencodeLiveFeed,
+	subscribeOpencodeLiveFeeds,
+} from "./opencode-v2-live";
 import { ensureGraphifyGraph, listGraphifyGraphs, listGraphifyRepos, assessSubsystemGraphifyReadiness } from "./graphify-store";
 import {
 	walkLibrary,
@@ -71,6 +105,7 @@ import { analyzeBeats } from "./beat-analysis";
 import type {
 	DefaultTabFlags,
 	GraphifyCliStatus,
+	OpencodeV2Status,
 	PayloadKind,
 	RepoInfo,
 	ServerSessionRow,
@@ -100,6 +135,7 @@ import {
 	loadViewerSettings,
 	patchViewerSettings,
 } from "./viewer-settings";
+import { createRegularAuditScheduler } from "./regular-audit";
 
 /**
  * Resident store — the in-memory home for the recent window's processed
@@ -249,14 +285,22 @@ function startWarmupWorker(): void {
 
 const LIBRARY_TAB_ID = "library";
 const AGENT_SESSIONS_TAB_ID = "agent-sessions";
+const MAINTENANCE_SESSIONS_TAB_ID = "maintenance-sessions";
 const SUBSYSTEMS_TAB_ID = "subsystems";
 const GRAPHIFY_TAB_ID = "graphify";
+const OPENCODE_V2_TAB_ID = "opencode-v2";
 
 /** Permanent tabs controlled by `ViewerSettings.defaultTabs`. Order here is
  *  the strip order when all are enabled. */
 const PERMANENT_TAB_DEFS: Array<{
 	id: string;
-	kind: "agent-sessions" | "subsystems" | "graphify" | "library";
+	kind:
+		| "agent-sessions"
+		| "maintenance-sessions"
+		| "subsystems"
+		| "graphify"
+		| "library"
+		| "opencode-v2";
 	title: string;
 	flag: keyof DefaultTabFlags;
 }> = [
@@ -265,6 +309,12 @@ const PERMANENT_TAB_DEFS: Array<{
 		kind: "agent-sessions",
 		title: "Agent Sessions",
 		flag: "sessions",
+	},
+	{
+		id: MAINTENANCE_SESSIONS_TAB_ID,
+		kind: "maintenance-sessions",
+		title: "Maintenance Sessions",
+		flag: "maintenanceSessions",
 	},
 	{
 		id: SUBSYSTEMS_TAB_ID,
@@ -277,6 +327,12 @@ const PERMANENT_TAB_DEFS: Array<{
 		kind: "graphify",
 		title: "Graphify",
 		flag: "graphify",
+	},
+	{
+		id: OPENCODE_V2_TAB_ID,
+		kind: "opencode-v2",
+		title: "OpenCode V2",
+		flag: "opencodeV2",
 	},
 	{
 		id: LIBRARY_TAB_ID,
@@ -372,6 +428,12 @@ interface AgentSessionsTabState {
 	title: "Agent Sessions";
 }
 
+interface MaintenanceSessionsTabState {
+	id: typeof MAINTENANCE_SESSIONS_TAB_ID;
+	kind: "maintenance-sessions";
+	title: "Maintenance Sessions";
+}
+
 interface SubsystemsTabState {
 	id: typeof SUBSYSTEMS_TAB_ID;
 	kind: "subsystems";
@@ -382,6 +444,12 @@ interface GraphifyTabState {
 	id: typeof GRAPHIFY_TAB_ID;
 	kind: "graphify";
 	title: "Graphify";
+}
+
+interface OpencodeV2TabState {
+	id: typeof OPENCODE_V2_TAB_ID;
+	kind: "opencode-v2";
+	title: "OpenCode V2";
 }
 
 interface AnalysisTabState {
@@ -396,6 +464,15 @@ interface SessionEventsTabState {
 	kind: "session-events";
 	title: string;
 	sessionId: string;
+	agent?: string;
+}
+
+interface MaintainEventsTabState {
+	id: string;
+	kind: "maintain-events";
+	title: string;
+	sessionId: string;
+	graphId: string;
 	agent?: string;
 }
 
@@ -415,10 +492,13 @@ interface SubsystemModelTabState {
 type TabState =
 	| LibraryTabState
 	| AgentSessionsTabState
+	| MaintenanceSessionsTabState
 	| SubsystemsTabState
 	| GraphifyTabState
+	| OpencodeV2TabState
 	| AnalysisTabState
 	| SessionEventsTabState
+	| MaintainEventsTabState
 	| PromptTabState
 	| SubsystemModelTabState
 	| TrailTabState;
@@ -427,17 +507,29 @@ function permanentTabState(
 	def: (typeof PERMANENT_TAB_DEFS)[number],
 ):
 	| AgentSessionsTabState
+	| MaintenanceSessionsTabState
 	| SubsystemsTabState
 	| GraphifyTabState
+	| OpencodeV2TabState
 	| LibraryTabState {
 	if (def.kind === "agent-sessions") {
 		return { id: AGENT_SESSIONS_TAB_ID, kind: "agent-sessions", title: "Agent Sessions" };
+	}
+	if (def.kind === "maintenance-sessions") {
+		return {
+			id: MAINTENANCE_SESSIONS_TAB_ID,
+			kind: "maintenance-sessions",
+			title: "Maintenance Sessions",
+		};
 	}
 	if (def.kind === "subsystems") {
 		return { id: SUBSYSTEMS_TAB_ID, kind: "subsystems", title: "Subsystems" };
 	}
 	if (def.kind === "graphify") {
 		return { id: GRAPHIFY_TAB_ID, kind: "graphify", title: "Graphify" };
+	}
+	if (def.kind === "opencode-v2") {
+		return { id: OPENCODE_V2_TAB_ID, kind: "opencode-v2", title: "OpenCode V2" };
 	}
 	return { id: LIBRARY_TAB_ID, kind: "library", title: "Trails" };
 }
@@ -476,11 +568,21 @@ function ensurePermanentTab(id: string): void {
 		defaultTabs: {
 			sessions:
 				id === AGENT_SESSIONS_TAB_ID || viewerSettings.defaultTabs.sessions,
+			maintenanceSessions:
+				id === MAINTENANCE_SESSIONS_TAB_ID ||
+				viewerSettings.defaultTabs.maintenanceSessions,
 			trails: id === LIBRARY_TAB_ID || viewerSettings.defaultTabs.trails,
 			graphify: id === GRAPHIFY_TAB_ID || viewerSettings.defaultTabs.graphify,
 			subsystems:
 				id === SUBSYSTEMS_TAB_ID || viewerSettings.defaultTabs.subsystems,
+			opencodeV2:
+				id === OPENCODE_V2_TAB_ID || viewerSettings.defaultTabs.opencodeV2,
 		},
+		autoAcceptSubsystemModelProposals:
+			viewerSettings.autoAcceptSubsystemModelProposals,
+		subsystemMaintainerModel: viewerSettings.subsystemMaintainerModel,
+		regularAuditEnabled: viewerSettings.regularAuditEnabled,
+		regularAuditIntervalMinutes: viewerSettings.regularAuditIntervalMinutes,
 	};
 	syncPermanentTabs(forced);
 }
@@ -795,6 +897,43 @@ function openSessionEventsTab(
 }
 
 /**
+ * Focus or create the live SSE tab for a Maintain OpenCode V2 session.
+ */
+function openMaintainEventsTab(opts: {
+	sessionId: string;
+	graphId: string;
+	title?: string;
+	agent?: string;
+}): string {
+	for (const existing of tabs.values()) {
+		if (
+			existing.kind === "maintain-events" &&
+			existing.sessionId === opts.sessionId
+		) {
+			suggestedTabId = existing.id;
+			broadcastTabsChanged(existing.id);
+			return existing.id;
+		}
+	}
+	const id = String(nextTabId++);
+	const agentLabel = opts.agent ?? "maintain";
+	tabs.set(id, {
+		id,
+		kind: "maintain-events",
+		title: opts.title ?? `Maintain — ${agentLabel}`,
+		sessionId: opts.sessionId,
+		graphId: opts.graphId,
+		agent: opts.agent,
+	});
+	suggestedTabId = id;
+	console.log(
+		`[principal-studio] maintain-events tab ${id} added: ${opts.sessionId}`,
+	);
+	broadcastTabsChanged(id);
+	return id;
+}
+
+/**
  * Focus or create the prompt tab — the surface that shows what the extractor
  * agent is asked (system prompt + task template). Deduped like analysis tabs.
  */
@@ -842,28 +981,54 @@ function openAnalysisTab(analysisId: string): string {
 	return id;
 }
 
-async function openSubsystemModelTab(graphId: string): Promise<string> {
-	const graph = await getSubsystemModel(graphId);
-	const title = graph?.title || `Subsystem Graph — ${graphId.slice(0, 12)}`;
-	// Stamp last-opened once here — covers both the focus and create paths
-	// below, and both the renderer RPC and the agent HTTP route funnel through
-	// this function.
-	await touchSubsystemModelOpened(graphId);
+async function openSubsystemModelTab(graphId: string): Promise<string | null> {
+	// Fast path: already open — no I/O. Broadcast first so the tab switches
+	// immediately; stamp last-opened in the background. The detail view owns
+	// its Loading / not-found empty states and fills in via getSubsystemModel.
 	for (const existing of tabs.values()) {
 		if (existing.kind === "subsystem-model" && existing.graphId === graphId) {
-			// Keep the label current if the graph was renamed since it opened.
-			if (existing.title !== title) existing.title = title;
 			suggestedTabId = existing.id;
 			console.log(`[principal-studio] subsystem-model tab ${existing.id} focused (already open): ${graphId}`);
 			broadcastTabsChanged(existing.id);
+			void touchSubsystemModelOpened(graphId).catch(() => {});
+			// Refresh a stale label in the background if the graph was
+			// renamed since the tab opened (cheap index read, off the click path).
+			void listSubsystemModels()
+				.then((entries) => {
+					const entry = entries.find((e) => e.id === graphId);
+					if (entry && existing.title !== entry.title) {
+						existing.title = entry.title;
+						broadcastTabsChanged(existing.id);
+					}
+				})
+				.catch(() => {});
 			return existing.id;
 		}
+	}
+	// Resolve the title from the small index file instead of parsing the full
+	// graph record, so a first open doesn't block on graph JSON I/O either.
+	let title: string | null = null;
+	try {
+		title = (await listSubsystemModels()).find((e) => e.id === graphId)?.title ?? null;
+	} catch {
+		title = null;
+	}
+	if (title == null) {
+		// Stale or missing index entry — fall back to a full read. A null
+		// return preserves the unknown-graph contract: no tab is created and
+		// callers report the error; the detail view is never mounted.
+		const graph = await getSubsystemModel(graphId);
+		if (!graph) return null;
+		title = graph.title;
 	}
 	const id = String(nextTabId++);
 	tabs.set(id, { id, kind: "subsystem-model", title, graphId });
 	suggestedTabId = id;
 	console.log(`[principal-studio] subsystem-model tab ${id} added: ${graphId}`);
 	broadcastTabsChanged(id);
+	// Fire-and-forget: the last-opened stamp (full re-read + record/index
+	// rewrites) must not gate tab visibility.
+	void touchSubsystemModelOpened(graphId).catch(() => {});
 	return id;
 }
 
@@ -876,9 +1041,12 @@ async function deleteGraphAndCloseTabs(graphId: string): Promise<{ ok: boolean; 
 		}
 	}
 	const deleted = await deleteSubsystemModel(graphId);
-	return deleted
-		? { ok: true }
-		: { ok: false, error: `unknown graph: ${graphId}` };
+	if (deleted) {
+		await deleteSubsystemModelAudit(graphId);
+		await deleteSubsystemModelProposals(graphId);
+		return { ok: true };
+	}
+	return { ok: false, error: `unknown graph: ${graphId}` };
 }
 
 async function walkFiles(
@@ -1062,12 +1230,20 @@ function persistShareMutation(
  */
 function isStaticTab(
 	tab: TabState,
-): tab is LibraryTabState | AgentSessionsTabState | SubsystemsTabState | GraphifyTabState {
+): tab is
+	| LibraryTabState
+	| AgentSessionsTabState
+	| MaintenanceSessionsTabState
+	| SubsystemsTabState
+	| GraphifyTabState
+	| OpencodeV2TabState {
 	return (
 		tab.kind === "library" ||
 		tab.kind === "agent-sessions" ||
+		tab.kind === "maintenance-sessions" ||
 		tab.kind === "subsystems" ||
-		tab.kind === "graphify"
+		tab.kind === "graphify" ||
+		tab.kind === "opencode-v2"
 	);
 }
 
@@ -1077,6 +1253,9 @@ function summarize(tab: TabState): TabSummary {
 	}
 	if (tab.kind === "session-events") {
 		return { id: tab.id, kind: "session-events", title: tab.title };
+	}
+	if (tab.kind === "maintain-events") {
+		return { id: tab.id, kind: "maintain-events", title: tab.title };
 	}
 	if (tab.kind === "prompt") {
 		return { id: tab.id, kind: "prompt", title: tab.title };
@@ -1119,6 +1298,17 @@ function fullState(tab: TabState): TabFullState {
 			kind: "session-events",
 			title: tab.title,
 			sessionId: tab.sessionId,
+		};
+	}
+	if (tab.kind === "maintain-events") {
+		return {
+			ok: true,
+			id: tab.id,
+			kind: "maintain-events",
+			title: tab.title,
+			sessionId: tab.sessionId,
+			graphId: tab.graphId,
+			agent: tab.agent,
 		};
 	}
 	if (tab.kind === "prompt") {
@@ -1253,7 +1443,7 @@ const requests: RequestHandlers = {
 						return { ok: false, error: (err as Error).message };
 					}
 				}
-				if (tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt") {
+				if (tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt") {
 					return { ok: false, error: `${tab.kind} tab does not serve files` };
 				}
 				return tab.mode === "remote"
@@ -1264,7 +1454,7 @@ const requests: RequestHandlers = {
 				const walkPath = path ?? null;
 				if (!walkPath) {
 					const tab = getTab(tabId);
-					if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model") return { files: [] };
+					if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model") return { files: [] };
 					return tab.mode === "remote"
 						? getFileTreeRemote(tab)
 						: { files: await walkFiles(tab.repoRoot) };
@@ -1284,10 +1474,12 @@ const requests: RequestHandlers = {
 				return { entries };
 			},
 			listSessions: async ({ days }) => buildSessionIndex({ days }),
+			listMaintainSessions: async ({ days, limit }) =>
+				listMaintainSessions({ days, limit }),
 
 			createTrailNote: ({ tabId, draft }) => {
 				const tab = getTab(tabId);
-				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model") {
+				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model") {
 					return { ok: false, error: `unknown trail tab: ${tabId}` };
 				}
 				if (tab.payloadKind === "tour") {
@@ -1312,7 +1504,7 @@ const requests: RequestHandlers = {
 			},
 			updateTrailNote: ({ tabId, noteId, body }) => {
 				const tab = getTab(tabId);
-				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model") {
+				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model") {
 					return { ok: false, error: `unknown trail tab: ${tabId}` };
 				}
 				if (tab.payloadKind === "tour") {
@@ -1398,11 +1590,13 @@ const requests: RequestHandlers = {
 				viewerSettings = patchViewerSettings(viewerSettings, settings);
 				const prevSuggested = suggestedTabId;
 				syncPermanentTabs(viewerSettings);
+				regularAuditScheduler.sync(viewerSettings);
 				broadcastTabsChanged(
 					suggestedTabId !== prevSuggested ? suggestedTabId : undefined,
 				);
 				return { ok: true, settings: viewerSettings };
 			},
+			getRegularAuditStatus: () => regularAuditScheduler.getStatus(),
 			getOpencodeServerStatus: async () => probeOpencodeServer(),
 			getServerSessions: async () => listRecentServerSessions(),
 			setServerEventWatch: async ({ active }) => {
@@ -1411,7 +1605,7 @@ const requests: RequestHandlers = {
 			},
 			shareTrail: ({ tabId }) => {
 				const tab = getTab(tabId);
-				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model") {
+				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model") {
 					return { ok: false, error: `unknown trail tab: ${tabId}` };
 				}
 				if (tab.payloadKind === "tour") {
@@ -1496,7 +1690,7 @@ const requests: RequestHandlers = {
 			},
 			deleteTrailNote: ({ tabId, noteId }) => {
 				const tab = getTab(tabId);
-				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model") {
+				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model") {
 					return { ok: false, error: `unknown trail tab: ${tabId}` };
 				}
 				if (tab.payloadKind === "tour") {
@@ -1571,39 +1765,68 @@ const requests: RequestHandlers = {
 				};
 			},
 
-			getAgentSessionsOverview: async ({ days }) => {
+			getAgentSessionsOverview: async ({ days, scope }) => {
 				try {
+					const processSummaries = async (
+						sessions: SessionSummary[],
+					): Promise<
+						Array<{
+							id: string;
+							agent: string;
+							session: { slug: string; title: string; agent?: string };
+							repoRoot?: string;
+							repos: RepoInfo[];
+							events: SessionEventRow[];
+						}>
+					> => {
+						const processed: Array<{
+							id: string;
+							agent: string;
+							session: { slug: string; title: string; agent?: string };
+							repoRoot?: string;
+							repos: RepoInfo[];
+							events: SessionEventRow[];
+						}> = [];
+						for (const s of sessions) {
+							const res = await buildSessionEvents(s.id, {
+								includeRaw: false,
+								useCache: true,
+							});
+							if (res.ok) {
+								processed.push({
+									id: s.id,
+									agent: res.session.agent ?? s.agent ?? "opencode",
+									session: res.session,
+									repoRoot: res.repoRoot,
+									repos: res.repos,
+									events: res.events,
+								});
+							}
+						}
+						return processed;
+					};
+
+					if (scope === "maintain") {
+						const index = await listMaintainSessions({ days });
+						return {
+							ok: true,
+							groups: [],
+							standalone: index.sessions,
+							hasMore: index.hasMore,
+							processed: await processSummaries(index.sessions),
+						};
+					}
+
 					const index = await buildSessionIndex({ days });
 					const sessions: SessionSummary[] = [];
 					for (const g of index.groups) sessions.push(g.parent);
 					sessions.push(...index.standalone);
-					const processed: Array<{
-						id: string;
-						agent: string;
-						session: { slug: string; title: string; agent?: string };
-						repoRoot?: string;
-						repos: RepoInfo[];
-						events: SessionEventRow[];
-					}> = [];
-					for (const s of sessions) {
-						const res = await buildSessionEvents(s.id, { includeRaw: false, useCache: true });
-						if (res.ok) {
-							processed.push({
-								id: s.id,
-								agent: res.session.agent ?? s.agent ?? "opencode",
-								session: res.session,
-								repoRoot: res.repoRoot,
-								repos: res.repos,
-								events: res.events,
-							});
-						}
-					}
 					return {
 						ok: true,
 						groups: index.groups,
 						standalone: index.standalone,
 						hasMore: index.hasMore,
-						processed,
+						processed: await processSummaries(sessions),
 					};
 				} catch (err) {
 					return {
@@ -1685,6 +1908,36 @@ const requests: RequestHandlers = {
 						const graphify = full
 							? assessSubsystemGraphifyReadiness(full, graphifyBuildingPurls)
 							: undefined;
+						let lastAudit:
+							| {
+									checkedAt: string;
+									needsUpdate: boolean;
+									issueCount: number;
+									verdict: "fully_verified" | "partially_verified" | "issues";
+									stale: boolean;
+							  }
+							| undefined;
+						if (full) {
+							const fingerprint = buildAuditFingerprint({
+								updatedAt: full.updatedAt,
+								components: full.components,
+								graphify,
+							});
+							const summary = await getSubsystemModelAuditListSummary(
+								e.id,
+								fingerprint,
+							);
+							if (summary) {
+								lastAudit = {
+									checkedAt: summary.checkedAt,
+									needsUpdate: summary.needsUpdate,
+									issueCount: summary.issueCount,
+									verdict: summary.verdict,
+									stale: summary.stale,
+								};
+							}
+						}
+						const pendingCount = await pendingProposalCount(e.id);
 						return {
 							id: e.id,
 							title: e.title,
@@ -1699,15 +1952,16 @@ const requests: RequestHandlers = {
 							path: subsystemModelFilePath(e.id),
 							gist: e.gist ?? full?.gist,
 							graphify,
+							lastAudit,
+							pendingProposalCount: pendingCount > 0 ? pendingCount : undefined,
 						};
 					}),
 				);
 				return { graphs };
 			},
 			openSubsystemModel: async ({ graphId }) => {
-				const graph = await getSubsystemModel(graphId);
-				if (!graph) return { ok: false, error: `unknown graph: ${graphId}` };
 				const tabId = await openSubsystemModelTab(graphId);
+				if (!tabId) return { ok: false, error: `unknown graph: ${graphId}` };
 				return { ok: true, tabId };
 			},
 			deleteSubsystemModel: async ({ graphId }) => deleteGraphAndCloseTabs(graphId),
@@ -1739,6 +1993,133 @@ const requests: RequestHandlers = {
 			},
 			verifySubsystemComponent: async ({ graphId, componentId }) =>
 				verifySubsystemComponent(graphId, componentId),
+			auditSubsystemModel: async ({ graphId }) => auditSubsystemModel(graphId),
+			applySubsystemModelAuditFix: async ({ graphId, fixId, componentId }) =>
+				applySubsystemModelAuditFix({ graphId, fixId, componentId }),
+			getSubsystemModelAudit: async ({ graphId }) => {
+				const full = await getSubsystemModel(graphId);
+				if (!full) return { ok: false, error: `unknown graph: ${graphId}` };
+				const saved = await loadSubsystemModelAudit(graphId);
+				if (!saved) return { ok: false, error: `no audit saved for ${graphId}` };
+				const graphify = assessSubsystemGraphifyReadiness(
+					full,
+					graphifyBuildingPurls,
+				);
+				const live = buildAuditFingerprint({
+					updatedAt: full.updatedAt,
+					components: full.components,
+					graphify,
+				});
+				return {
+					ok: true,
+					report: saved.report,
+					fingerprint: saved.fingerprint,
+					checkedAt: saved.report.checkedAt,
+					stale: saved.fingerprint !== live,
+				};
+			},
+			listSubsystemModelProposals: async ({ graphId, includeResolved }) => {
+				const full = await getSubsystemModel(graphId);
+				if (!full) return { ok: false, error: `unknown graph: ${graphId}` };
+				const proposals = await listSubsystemModelProposals(graphId, {
+					includeResolved: includeResolved === true,
+				});
+				const pendingCount = await pendingProposalCount(graphId);
+				return { ok: true, proposals, pendingCount };
+			},
+			proposeSubsystemModelCorrection: async ({
+				graphId,
+				rationale,
+				changes,
+				finding,
+				author,
+			}) => {
+				const created = await createSubsystemModelProposal({
+					graphId,
+					rationale,
+					changes,
+					finding,
+					author,
+				});
+				if (!created.ok) return { ok: false, error: created.error };
+				let proposal = created.proposal;
+				let autoAccepted = false;
+				if (viewerSettings.autoAcceptSubsystemModelProposals) {
+					const accepted = await acceptProposalInStore(
+						graphId,
+						proposal.id,
+					);
+					if (accepted.ok) {
+						proposal = accepted.proposal;
+						autoAccepted = true;
+					}
+				}
+				const pendingCount = await pendingProposalCount(graphId);
+				broadcastSubsystemModelProposalsChanged({ graphId, pendingCount });
+				if (autoAccepted) {
+					broadcastSubsystemModelChanged({ graphId, reason: "updated" });
+					await reauditSubsystemModelQuietly(graphId);
+				}
+				return { ok: true, proposal, autoAccepted };
+			},
+			acceptSubsystemModelProposal: async ({ graphId, proposalId }) => {
+				const result = await acceptProposalInStore(graphId, proposalId);
+				if (!result.ok) return { ok: false, error: result.error };
+				const pendingCount = await pendingProposalCount(graphId);
+				broadcastSubsystemModelProposalsChanged({ graphId, pendingCount });
+				broadcastSubsystemModelChanged({ graphId, reason: "updated" });
+				await reauditSubsystemModelQuietly(graphId);
+				return { ok: true, proposal: result.proposal };
+			},
+			rejectSubsystemModelProposal: async ({ graphId, proposalId }) => {
+				const result = await rejectProposalInStore(graphId, proposalId);
+				if (!result.ok) return { ok: false, error: result.error };
+				const pendingCount = await pendingProposalCount(graphId);
+				broadcastSubsystemModelProposalsChanged({ graphId, pendingCount });
+				return { ok: true, proposal: result.proposal };
+			},
+			maintainSubsystemModel: async ({ graphId, model, remember }) => {
+				const full = await getSubsystemModel(graphId);
+				if (!full) return { ok: false, error: `unknown graph: ${graphId}` };
+				if (maintainingGraphIds.has(graphId)) {
+					return { ok: true, started: false, alreadyRunning: true };
+				}
+				if (remember === true) {
+					const trimmed = typeof model === "string" ? model.trim() : "";
+					viewerSettings = patchViewerSettings(viewerSettings, {
+						subsystemMaintainerModel: trimmed.length > 0 ? trimmed : null,
+					});
+				}
+				maintainSubsystemModelInBackground(graphId, {
+					model: typeof model === "string" && model.trim() ? model.trim() : undefined,
+				});
+				return { ok: true, started: true };
+			},
+			getSubsystemMaintainerModels: async ({ refresh }) => {
+				try {
+					const resolved = await resolveSubsystemMaintainerModel({
+						configured: viewerSettings.subsystemMaintainerModel,
+						refresh: refresh === true,
+					});
+					return {
+						ok: true,
+						resolved: resolved.model,
+						source: resolved.source,
+						configured: viewerSettings.subsystemMaintainerModel,
+						freeModels: resolved.freeModels.map((m) => ({
+							ref: m.ref,
+							id: m.id,
+							providerID: m.providerID,
+							name: m.name,
+						})),
+					};
+				} catch (err) {
+					return {
+						ok: false,
+						error: err instanceof Error ? err.message : String(err),
+					};
+				}
+			},
 			getGraphifyStatus: async ({ detailed }) => {
 				const base = withGraphifyCliBusy(
 					cachedDetailedGraphifyStatus ?? getGraphifyStatus(),
@@ -1747,6 +2128,42 @@ const requests: RequestHandlers = {
 					refreshGraphifyStatusDetailed();
 				}
 				return base;
+			},
+			getOpencodeV2Status: async ({ detailed }) => {
+				const base = withOpencodeV2CliBusy(
+					cachedDetailedOpencodeV2Status ?? getOpencodeV2Status(),
+				);
+				if (detailed) {
+					refreshOpencodeV2StatusDetailed();
+				}
+				return base;
+			},
+			installOpencodeV2: async () => startOpencodeV2CliJob("install"),
+			updateOpencodeV2: async () => startOpencodeV2CliJob("update"),
+			getOpencodeV2ProbeState: async () => getOpencodeV2ProbeState(),
+			startOpencodeV2Probe: async ({ message, directory }) => {
+				setOpencodeV2ProbeListener((probeState) => {
+					broadcastOpencodeV2ProbeChanged({ state: probeState });
+				});
+				return startOpencodeV2Probe({
+					message: typeof message === "string" ? message : undefined,
+					directory: typeof directory === "string" ? directory : undefined,
+				});
+			},
+			stopOpencodeV2Probe: async () => stopOpencodeV2Probe(),
+			getOpencodeLiveFeed: async ({ sessionId }) => {
+				const feed = getOpencodeLiveFeed(sessionId);
+				if (!feed) return { ok: false };
+				return {
+					ok: true,
+					sessionId: feed.sessionId,
+					status: feed.status,
+					events: feed.events,
+					error: feed.error,
+					title: feed.title,
+					agent: feed.agent,
+					graphId: feed.graphId,
+				};
 			},
 			getStudioVersionStatus: async ({ detailed }) => {
 				const base = cachedDetailedStudioVersion ?? getStudioVersionStatus();
@@ -1797,7 +2214,11 @@ const requests: RequestHandlers = {
 				graphifyBuildingPurls.add(key);
 				broadcastGraphifyChanged({ kind: "repos" });
 
-				const work = ensureGraphifyGraph({ purl: key, repoRoot, force });
+				const work = ensureGraphifyGraph({
+					purl: key,
+					repoRoot,
+					force,
+				});
 				const raced = await Promise.race([
 					work.then((r) => ({ done: true as const, r })),
 					sleepMs(250).then(() => ({ done: false as const })),
@@ -1976,6 +2397,9 @@ let cachedDetailedGraphifyStatus: GraphifyCliStatus | null = null;
 let detailedRefreshInflight: Promise<void> | null = null;
 let cachedDetailedStudioVersion: StudioVersionStatus | null = null;
 let studioVersionRefreshInflight: Promise<void> | null = null;
+let opencodeV2CliBusy: "install" | "update" | null = null;
+let cachedDetailedOpencodeV2Status: OpencodeV2Status | null = null;
+let opencodeV2RefreshInflight: Promise<void> | null = null;
 
 function sleepMs(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
@@ -1983,6 +2407,10 @@ function sleepMs(ms: number): Promise<void> {
 
 function withGraphifyCliBusy(status: GraphifyCliStatus): GraphifyCliStatus {
 	return { ...status, cliBusy: graphifyCliBusy };
+}
+
+function withOpencodeV2CliBusy(status: OpencodeV2Status): OpencodeV2Status {
+	return { ...status, cliBusy: opencodeV2CliBusy };
 }
 
 function broadcastGraphifyChanged(
@@ -2013,6 +2441,141 @@ function broadcastSubsystemModelChanged(
 	}
 }
 
+function broadcastSubsystemModelProposalsChanged(
+	payload: StudioMessages["subsystemModelProposalsChanged"],
+): void {
+	try {
+		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
+			"subsystemModelProposalsChanged"
+		](payload);
+	} catch (err) {
+		console.warn(
+			`[principal-studio] could not notify renderer (subsystemModelProposalsChanged): ${(err as Error).message}`,
+		);
+	}
+}
+
+function broadcastSubsystemModelMaintainChanged(
+	payload: StudioMessages["subsystemModelMaintainChanged"],
+): void {
+	try {
+		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
+			"subsystemModelMaintainChanged"
+		](payload);
+	} catch (err) {
+		console.warn(
+			`[principal-studio] could not notify renderer (subsystemModelMaintainChanged): ${(err as Error).message}`,
+		);
+	}
+}
+
+function broadcastRegularAuditChanged(
+	payload: StudioMessages["regularAuditChanged"],
+): void {
+	try {
+		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
+			"regularAuditChanged"
+		](payload);
+	} catch (err) {
+		console.warn(
+			`[principal-studio] could not notify renderer (regularAuditChanged): ${(err as Error).message}`,
+		);
+	}
+}
+
+/** Graphs with an in-flight Maintain agent run. */
+const maintainingGraphIds = new Set<string>();
+
+/** Re-run deterministic audit after model mutations so list badges aren't stale. */
+async function reauditSubsystemModelQuietly(graphId: string): Promise<void> {
+	try {
+		const audited = await auditSubsystemModel(graphId);
+		if (!audited.ok) {
+			console.warn(
+				`[principal-studio] re-audit after model change failed for ${graphId}: ${audited.error}`,
+			);
+			return;
+		}
+		broadcastSubsystemModelChanged({ graphId, reason: "updated" });
+	} catch (err) {
+		console.warn(
+			`[principal-studio] re-audit after model change failed for ${graphId}: ${(err as Error).message}`,
+		);
+	}
+}
+
+const regularAuditScheduler = createRegularAuditScheduler({
+	listGraphIds: async () => {
+		const entries = await listSubsystemModels();
+		return entries.map((e) => e.id);
+	},
+	auditOne: async (graphId) => {
+		await reauditSubsystemModelQuietly(graphId);
+	},
+	onStatusChange: (status) => {
+		broadcastRegularAuditChanged(status);
+	},
+});
+regularAuditScheduler.sync(viewerSettings);
+
+function maintainSubsystemModelInBackground(
+	graphId: string,
+	opts?: { model?: string },
+): void {
+	if (maintainingGraphIds.has(graphId)) return;
+	maintainingGraphIds.add(graphId);
+	ensureLiveFeedBroadcast();
+	broadcastSubsystemModelMaintainChanged({ graphId, status: "running" });
+	void (async () => {
+		try {
+			const result = await runMaintainSubsystemModel(graphId, {
+				model: opts?.model,
+				onSession: (sessionId) => {
+					const feed = getOpencodeLiveFeed(sessionId);
+					openMaintainEventsTab({
+						sessionId,
+						graphId,
+						title: feed?.title,
+						agent: feed?.agent,
+					});
+				},
+			});
+			const pendingCount =
+				result.pendingCount ?? (await pendingProposalCount(graphId));
+			broadcastSubsystemModelProposalsChanged({ graphId, pendingCount });
+			if (!result.ok) {
+				broadcastSubsystemModelMaintainChanged({
+					graphId,
+					status: "error",
+					error: result.error ?? "maintain failed",
+					pendingCount,
+					summary: result.summary,
+					model: result.model,
+					agent: result.agent,
+				});
+				return;
+			}
+			broadcastSubsystemModelMaintainChanged({
+				graphId,
+				status: "done",
+				pendingCount,
+				summary: result.summary,
+				model: result.model,
+				agent: result.agent,
+				skipped: result.skipped,
+			});
+		} catch (err) {
+			broadcastSubsystemModelMaintainChanged({
+				graphId,
+				status: "error",
+				error: err instanceof Error ? err.message : String(err),
+			});
+		} finally {
+			maintainingGraphIds.delete(graphId);
+		}
+	})();
+}
+
 function broadcastStudioVersionChanged(
 	payload: StudioMessages["studioVersionChanged"],
 ): void {
@@ -2025,6 +2588,65 @@ function broadcastStudioVersionChanged(
 			`[principal-studio] could not notify renderer (studioVersionChanged): ${(err as Error).message}`,
 		);
 	}
+}
+
+function broadcastOpencodeV2Changed(
+	payload: StudioMessages["opencodeV2Changed"],
+): void {
+	try {
+		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
+			"opencodeV2Changed"
+		](payload);
+	} catch (err) {
+		console.warn(
+			`[principal-studio] could not notify renderer (opencodeV2Changed): ${(err as Error).message}`,
+		);
+	}
+}
+
+function broadcastOpencodeV2ProbeChanged(
+	payload: StudioMessages["opencodeV2ProbeChanged"],
+): void {
+	try {
+		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
+			"opencodeV2ProbeChanged"
+		](payload);
+	} catch (err) {
+		console.warn(
+			`[principal-studio] could not notify renderer (opencodeV2ProbeChanged): ${(err as Error).message}`,
+		);
+	}
+}
+
+function broadcastOpencodeLiveFeedChanged(
+	payload: StudioMessages["opencodeLiveFeedChanged"],
+): void {
+	try {
+		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
+			"opencodeLiveFeedChanged"
+		](payload);
+	} catch (err) {
+		console.warn(
+			`[principal-studio] could not notify renderer (opencodeLiveFeedChanged): ${(err as Error).message}`,
+		);
+	}
+}
+
+let liveFeedSubscribed = false;
+function ensureLiveFeedBroadcast(): void {
+	if (liveFeedSubscribed) return;
+	liveFeedSubscribed = true;
+	subscribeOpencodeLiveFeeds((feed) => {
+		broadcastOpencodeLiveFeedChanged({
+			sessionId: feed.sessionId,
+			status: feed.status,
+			events: feed.events,
+			error: feed.error,
+			title: feed.title,
+			agent: feed.agent,
+			graphId: feed.graphId,
+		});
+	});
 }
 
 function refreshStudioVersionDetailed(): void {
@@ -2134,6 +2756,101 @@ async function startGraphifyCliJob(
 			});
 			console.error(
 				`[principal-studio] graphify ${action} failed: ${(err as Error).message}`,
+			);
+		}
+	})();
+
+	return { ok: true, started: true, status: busyStatus };
+}
+
+function refreshOpencodeV2StatusDetailed(): void {
+	if (opencodeV2RefreshInflight) return;
+	opencodeV2RefreshInflight = (async () => {
+		try {
+			const status = withOpencodeV2CliBusy(await getOpencodeV2StatusDetailed());
+			cachedDetailedOpencodeV2Status = status;
+			broadcastOpencodeV2Changed({ status });
+		} catch (err) {
+			const status = withOpencodeV2CliBusy(getOpencodeV2Status());
+			broadcastOpencodeV2Changed({
+				status,
+				error: err instanceof Error ? err.message : String(err),
+			});
+		} finally {
+			opencodeV2RefreshInflight = null;
+		}
+	})();
+}
+
+async function startOpencodeV2CliJob(
+	action: "install" | "update",
+): Promise<{
+	ok: boolean;
+	error?: string;
+	bin?: string;
+	started?: boolean;
+	status?: OpencodeV2Status;
+}> {
+	if (opencodeV2CliBusy) {
+		return {
+			ok: true,
+			started: true,
+			status: withOpencodeV2CliBusy(
+				cachedDetailedOpencodeV2Status ?? getOpencodeV2Status(),
+			),
+		};
+	}
+
+	if (action === "install" && resolveOpencode2Bin()) {
+		const status = withOpencodeV2CliBusy(
+			cachedDetailedOpencodeV2Status ?? getOpencodeV2Status(),
+		);
+		refreshOpencodeV2StatusDetailed();
+		return { ok: true, bin: status.bin ?? undefined, status };
+	}
+
+	if (action === "update" && !resolveOpencode2Bin()) {
+		return {
+			ok: false,
+			error: "opencode2 is not installed",
+			status: withOpencodeV2CliBusy(getOpencodeV2Status()),
+		};
+	}
+
+	opencodeV2CliBusy = action;
+	const busyStatus = withOpencodeV2CliBusy(getOpencodeV2Status());
+	broadcastOpencodeV2Changed({ status: busyStatus });
+
+	void (async () => {
+		try {
+			const result =
+				action === "install" ? await installOpencodeV2() : await updateOpencodeV2();
+			opencodeV2CliBusy = null;
+			const status = withOpencodeV2CliBusy(
+				result.status ?? (await getOpencodeV2StatusDetailed()),
+			);
+			cachedDetailedOpencodeV2Status = status;
+			if (!result.ok) {
+				broadcastOpencodeV2Changed({
+					status,
+					error: result.error ?? `${action} failed`,
+				});
+				console.error(
+					`[principal-studio] opencode2 ${action} failed: ${result.error}`,
+				);
+				return;
+			}
+			broadcastOpencodeV2Changed({ status });
+		} catch (err) {
+			opencodeV2CliBusy = null;
+			const status = withOpencodeV2CliBusy(getOpencodeV2Status());
+			cachedDetailedOpencodeV2Status = status;
+			broadcastOpencodeV2Changed({
+				status,
+				error: err instanceof Error ? err.message : String(err),
+			});
+			console.error(
+				`[principal-studio] opencode2 ${action} failed: ${(err as Error).message}`,
 			);
 		}
 	})();
@@ -2446,7 +3163,7 @@ startIpcServer(async (msg) => {
 		}
 		if (msg.kind === "LOAD_SUBSYSTEM_GRAPH") {
 			const tabId = await openSubsystemModelTab(msg.graphId);
-			broadcastTabsChanged(tabId);
+			if (!tabId) return { ok: false, error: `unknown graph: ${msg.graphId}` };
 			try {
 				browserWindow.focus();
 			} catch (err) {
@@ -2472,13 +3189,19 @@ setSubsystemModelChangeListener(broadcastSubsystemModelChanged);
 void startSubsystemModelDirWatcher().then(() => {
 	console.log("[principal-studio] watching ~/.principal/subsystem-models for changes");
 });
-startHttpServer(async (graphId) => {
-	const tabId = await openSubsystemModelTab(graphId);
-	broadcastTabsChanged(tabId);
-	try {
-		browserWindow.focus();
-	} catch (err) {
-		console.warn(`[principal-studio] could not focus window: ${(err as Error).message}`);
-	}
-	return { ok: true, tabId };
-}, async (graphId) => deleteGraphAndCloseTabs(graphId));
+startHttpServer(
+	async (graphId) => {
+		const tabId = await openSubsystemModelTab(graphId);
+		if (!tabId) return { ok: false, error: `unknown graph: ${graphId}` };
+		try {
+			browserWindow.focus();
+		} catch (err) {
+			console.warn(`[principal-studio] could not focus window: ${(err as Error).message}`);
+		}
+		return { ok: true, tabId };
+	},
+	async (graphId) => deleteGraphAndCloseTabs(graphId),
+	(graphId, pendingCount) => {
+		broadcastSubsystemModelProposalsChanged({ graphId, pendingCount });
+	},
+);

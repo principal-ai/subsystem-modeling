@@ -113,7 +113,7 @@ export interface GraphifyReferenceInfo {
   source_location?: string;
 }
 
-/** An import relationship (`imports` / `imports_from` / `re_exports`). */
+/** An import relationship (Graphify may emit `imports` / `imports_from` / `re_exports`). */
 export interface GraphifyImportInfo {
   /** The imported module/file node id. */
   nodeId: string;
@@ -161,6 +161,25 @@ export interface GraphifyFunctionDetail {
   callees: GraphifyCallInfo[];
 }
 
+/** One generic type parameter, e.g. `T` or `K extends keyof StudioMessages`. */
+export interface GraphifyTypeParamInfo {
+  name: string;
+  /** Constraint written after `extends` (or language equivalent). */
+  constraint?: string;
+}
+
+/** A callable/function type: `(params) => returnType`. */
+export interface GraphifyCallableTypeInfo {
+  parameters?: GraphifyParamInfo[];
+  returnType?: string;
+}
+
+/** One enum member, with its optional literal value. */
+export interface GraphifyEnumMemberInfo {
+  name: string;
+  value?: string;
+}
+
 /** A type-like node (interface/struct): revealed by incoming `implements` edges. */
 export interface GraphifyTypeDetail {
   kind: 'type';
@@ -170,6 +189,22 @@ export interface GraphifyTypeDetail {
   usedBy: GraphifyReferenceInfo[];
   /** Nodes that `inherits`/`implements` this type. */
   implementors: string[];
+  /** Generic type parameters, e.g. `<K extends keyof StudioMessages>`. */
+  generics?: GraphifyTypeParamInfo[];
+  /** Callable type — `(params) => returnType` (TS/Go/Rust fn, Java lambda). */
+  signature?: GraphifyCallableTypeInfo;
+  /** Enum members (name, optional literal value). */
+  enumMembers?: GraphifyEnumMemberInfo[];
+  /** Alias whose RHS is a plain reference, e.g. `StudioMessages[K]`. */
+  aliasOf?: string;
+  /** Simple union of alternatives, e.g. `'started' | 'stopped'`. */
+  unionOf?: string[];
+  /**
+   * Verbatim RHS — the escape hatch for shapes the structured fields can't
+   * express (mapped/conditional/template-literal/infer types, `typeof`/utility
+   * compositions, C pointers, Rust trait objects). Wins over every shape above.
+   */
+  rhs?: string;
 }
 
 /** A module/file-like node: a `contains` target with a filename label. */
@@ -221,6 +256,13 @@ export interface GraphifyStoreDetail {
   kind: 'store';
   /** The retained state members (module-level consts or class fields). */
   properties: GraphifyPropertyInfo[];
+  /**
+   * Where the retained state physically lives / who mediates access. Authored
+   * — graphify cannot infer it: `memory` = process-lifetime RAM, `disk` =
+   * this process reads/writes the filesystem, `external` = mediated by another
+   * system (db/service; carries no `process`).
+   */
+  storage?: 'memory' | 'disk' | 'external';
 }
 
 /** A standalone method selected from its owning class. */
@@ -235,7 +277,7 @@ export interface GraphifyMethodDetail {
 }
 
 /**
- * The drill-down payload for a subsystem component.
+ * The structured declaration payload for a subsystem component (click panel).
  *
  * The discriminant is derived from graph structure, not read off the node:
  * method edges → class; `()` label + no method edges → function; incoming

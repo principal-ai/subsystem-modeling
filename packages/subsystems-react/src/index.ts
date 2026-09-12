@@ -62,8 +62,8 @@ export {
   normalizeSourcePath,
   resolveComponentAnchor,
   symbolLabelVariants,
-  inferGraphifyKind,
-  kindsMatch,
+  inferConstructFromGraphify,
+  constructsMatch,
   extractNamedTypes,
   extractGraphifySignature,
   compareSignatures,
@@ -71,8 +71,8 @@ export {
 export type {
   ComponentAnchorInput,
   ComponentAnchorResult,
-  InferredGraphifyKind,
-  InferGraphifyKindResult,
+  InferredGraphifyConstruct,
+  InferConstructFromGraphifyResult,
   GraphifyInferredSignature,
   ClaimedSignature,
   SignatureCompareResult,
@@ -86,7 +86,7 @@ export type { UseElkLayoutOptions, UseElkLayoutResult } from './hooks/useElkLayo
 
 // Subsystem component graph
 export { SubsystemComponentGraph } from './subsystem/SubsystemComponentGraph';
-export type { SubsystemComponentGraphProps, ThroughlineViewerContext } from './subsystem/SubsystemComponentGraph';
+export type { SubsystemComponentGraphProps, WalkthroughViewerContext } from './subsystem/SubsystemComponentGraph';
 export type {
   ComponentVerificationState,
   ComponentVerificationPhase,
@@ -114,21 +114,32 @@ export type { GraphLayoutCoverProps } from './subsystem/GraphLayoutCover';
 export type {
   SubsystemComponent,
   SubsystemComponentEdge,
-  SubsystemThroughline,
-  SubsystemThroughlineStep,
+  SubsystemRelation,
+  SubsystemRelationType,
+  SubsystemWalkthrough,
+  SubsystemWalkthroughStep,
+  SubsystemWalkthroughMechanism,
   SubsystemModelDocument,
   SubsystemComponentConstruct,
   SubsystemComponentRole,
   SubsystemFramework,
   SubsystemStereotype,
   SubsystemEdgeMechanism,
+  SubsystemConstructDeclaration,
+  SubsystemDeclarationProvenance,
 } from './subsystem/model';
 export {
   constructBadgeLabel,
+  rightBadgeLabel,
+  rightBadgeColor,
   deriveNameFromSymbol,
   nodeMinWidthForBadges,
+  deriveGraphEdges,
+  derivedGraphEdgeId,
+  walkthroughStepGraphEdgeId,
   ROLE_COLOR,
   ROLE_LABEL,
+  PROPOSED_COLOR,
 } from './subsystem/model';
 export type {
   SubsystemDeclarationRef,
@@ -143,11 +154,11 @@ export {
 } from './subsystem/declarationRef';
 
 // Pierre code views (@pierre/diffs wrappers)
-export { PierreFileView, PierreSnippetView, PierreThroughlineCodeView, sliceSnippetWindow, resolvePierreSyntaxThemeName } from './pierre';
+export { PierreFileView, PierreSnippetView, PierreWalkthroughCodeView, sliceSnippetWindow, resolvePierreSyntaxThemeName } from './pierre';
 export type {
   PierreFileViewProps,
   PierreSnippetViewProps,
-  PierreThroughlineCodeViewProps,
+  PierreWalkthroughCodeViewProps,
   SnippetSlice,
   PierreSyntaxThemeName,
 } from './pierre';

@@ -9,22 +9,31 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { PenTool, X } from "lucide-react";
+import { ClipboardCheck, Loader2, PenTool, X } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
 	SubsystemComponentGraph,
+	deriveGraphEdges,
 	PierreFileView,
 	PierreSnippetView,
-	PierreThroughlineCodeView,
+	PierreWalkthroughCodeView,
 	type ComponentVerificationState,
 	type SubsystemOpenFileOptions,
-	type ThroughlineViewerContext,
+	type WalkthroughViewerContext,
 } from "@principal-ai/subsystems-react";
 import { electrobun, reloadSubscribers, subsystemModelChangeSubscribers } from "../rpc";
 import { CenteredMessage } from "../ui";
+import {
+	AuditResultsModal,
+	type AuditModalState,
+} from "../components/AuditResultsModal";
+import { runSubsystemModelAuditFlow } from "../auditSubsystemModelFlow";
 import { SubsystemExcalidrawOverlay } from "../components/SubsystemExcalidrawOverlay";
 import type { ExcalidrawSelectionInfo } from "../excalidraw/excalidrawToSubsystem";
-import type { StoredSubsystemModel, StudioMessages } from "../../shared/contract";
+import type {
+	StoredSubsystemModel,
+	StudioMessages,
+} from "../../shared/contract";
 
 // Disabled for now — Excalidraw edits don't save back to the store yet
 // (excalidrawSceneToSubsystemModel exists but nothing wires it up), so the
@@ -44,6 +53,8 @@ export function SubsystemModelView({
 	const [selection, setSelection] = useState<ExcalidrawSelectionInfo | null>(null);
 	const [verification, setVerification] = useState<ComponentVerificationState | null>(null);
 	const [verifyComponentId, setVerifyComponentId] = useState<string | null>(null);
+	const [auditBusy, setAuditBusy] = useState(false);
+	const [auditModal, setAuditModal] = useState<AuditModalState | null>(null);
 
 	const loadGraph = useCallback(() => {
 		void electrobun.rpc!.request
@@ -110,10 +121,10 @@ export function SubsystemModelView({
 		[readFile],
 	);
 
-	const renderThroughlineViewer = useCallback(
-		({ throughline, stepIndex }: ThroughlineViewerContext) => (
-			<PierreThroughlineCodeView
-				throughline={throughline}
+	const renderWalkthroughViewer = useCallback(
+		({ walkthrough, stepIndex }: WalkthroughViewerContext) => (
+			<PierreWalkthroughCodeView
+				walkthrough={walkthrough}
 				stepIndex={stepIndex}
 				readFile={readFile}
 				contextLines={8}
@@ -239,6 +250,19 @@ export function SubsystemModelView({
 		[verifyComponentId],
 	);
 
+	const onAudit = useCallback(async () => {
+		if (!graph || auditBusy) return;
+		setAuditBusy(true);
+		try {
+			await runSubsystemModelAuditFlow(graphId, {
+				graph,
+				onModal: setAuditModal,
+			});
+		} finally {
+			setAuditBusy(false);
+		}
+	}, [graph, graphId, auditBusy]);
+
 	if (graph === undefined) {
 		return <CenteredMessage title="Loading subsystem graph..." />;
 	}
@@ -250,6 +274,7 @@ export function SubsystemModelView({
 	return (
 		<div
 			style={{
+				position: "relative",
 				width: "100%",
 				height: "100%",
 				background: theme.colors.background,
@@ -257,12 +282,12 @@ export function SubsystemModelView({
 		>
 			<SubsystemComponentGraph
 				components={graph.components}
-				edges={graph.edges}
-				throughlines={graph.throughlines}
+				relations={graph.relations}
+				walkthroughs={graph.walkthroughs}
 				title={graph.title}
 				description={graph.description}
 				renderFileViewer={renderFileViewer}
-				renderThroughlineViewer={renderThroughlineViewer}
+				renderWalkthroughViewer={renderWalkthroughViewer}
 				onSelect={onSelect}
 				onVerifyComponent={(id) => void onVerifyComponent(id)}
 				componentVerification={verification}
@@ -292,7 +317,36 @@ export function SubsystemModelView({
 							<X size={14} />
 							Back to graph
 						</button>
-					) : undefined
+					) : (
+						<button
+							type="button"
+							disabled={auditBusy}
+							onClick={() => void onAudit()}
+							style={{
+								display: "inline-flex",
+								alignItems: "center",
+								gap: 6,
+								padding: "6px 12px",
+								borderRadius: 6,
+								border: `1px solid ${theme.colors.border ?? "#333"}`,
+								background: theme.colors.background,
+								color: theme.colors.text,
+								fontSize: theme.fontSizes[1],
+								fontFamily: theme.fonts.monospace,
+								cursor: auditBusy ? "default" : "pointer",
+								opacity: auditBusy ? 0.7 : 1,
+								alignSelf: "flex-start",
+							}}
+							title="Ensure graphify cache if needed, then run a dry-run audit"
+						>
+							{auditBusy ? (
+								<Loader2 size={14} className="principal-studio-spin" />
+							) : (
+								<ClipboardCheck size={14} />
+							)}
+							{auditBusy ? "Auditing…" : "Audit"}
+						</button>
+					)
 				}
 				canvasOverlay={
 					<>
@@ -327,23 +381,36 @@ export function SubsystemModelView({
 							open={excalidrawOpen}
 							title={graph.title}
 							components={graph.components}
-							edges={graph.edges}
+							edges={deriveGraphEdges({
+								relations: graph.relations,
+								walkthroughs: graph.walkthroughs,
+							})}
 							onSelectionChange={setSelection}
 						/>
 					</>
 				}
 			/>
+			{auditModal && (
+				<AuditResultsModal
+					state={auditModal}
+					onClose={() => setAuditModal(null)}
+					onReportChange={(report) => {
+						setAuditModal({ phase: "done", report });
+					}}
+				/>
+			)}
 		</div>
 	);
 }
 
 const INSPECTOR_KEYS = [
-	"kind",
+	"construct",
 	"symbol",
 	"file",
 	"purl",
 	"purpose",
-	"capture",
+	"role",
+	"proposed",
 	"layer",
 	"mechanism",
 	"from",

@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 import {
   PierreFileView,
-  PierreThroughlineCodeView,
-  type ThroughlineViewerContext,
+  PierreWalkthroughCodeView,
+  type WalkthroughViewerContext,
 } from '@principal-ai/subsystems-react'
 import type { SubsystemComponent } from '@principal-ai/subsystems-core'
 
@@ -107,7 +107,7 @@ export function makeGithubRenderers(
   refOverride?: string,
 ): {
   renderFileViewer: (file: string) => ReactNode
-  renderThroughlineViewer: (ctx: ThroughlineViewerContext) => ReactNode
+  renderWalkthroughViewer: (ctx: WalkthroughViewerContext) => ReactNode
 } | null {
   const readFile = makeGithubReadFile(components, refOverride)
   if (!readFile) return null
@@ -120,9 +120,9 @@ export function makeGithubRenderers(
         readFile={readFile}
       />
     ),
-    renderThroughlineViewer: (ctx) => (
-      <PierreThroughlineCodeView
-        throughline={ctx.throughline}
+    renderWalkthroughViewer: (ctx) => (
+      <PierreWalkthroughCodeView
+        walkthrough={ctx.walkthrough}
         stepIndex={ctx.stepIndex}
         readFile={readFile}
       />

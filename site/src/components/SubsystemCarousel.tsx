@@ -11,8 +11,8 @@ import { useTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '@principal-ai/subsystems-react/dist/subsystem/SubsystemComponentGraph.js';
 import type {
   SubsystemComponent,
-  SubsystemComponentEdge,
-  SubsystemThroughline,
+  SubsystemRelation,
+  SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
 
 export interface SubsystemCarouselItem {
@@ -21,8 +21,8 @@ export interface SubsystemCarouselItem {
   stack?: string;
   complexity?: 'low' | 'medium' | 'high';
   components: SubsystemComponent[];
-  edges: SubsystemComponentEdge[];
-  throughlines?: SubsystemThroughline[];
+  relations: SubsystemRelation[];
+  walkthroughs?: SubsystemWalkthrough[];
 }
 
 export interface SubsystemCarouselProps {
@@ -152,16 +152,16 @@ export function SubsystemCarousel({
           <SubsystemComponentGraph
             key={selected.id}
             components={selected.components}
-            edges={selected.edges}
-            throughlines={selected.throughlines}
+            relations={selected.relations}
+            walkthroughs={selected.walkthroughs}
             title={selected.title}
             hideSidebar
             showEdgeLabels
-            autoPlayThroughlines
-            throughlineAutoPlayIntervalMs={3200}
-            throughlineStepMode="dim"
-            zoomOnThroughlineFocus={false}
-            showThroughlineTitle
+            autoPlayWalkthroughs
+            walkthroughAutoPlayIntervalMs={3200}
+            walkthroughStepMode="dim"
+            zoomOnWalkthroughFocus={false}
+            showWalkthroughTitle
           />
         </div>
       )}

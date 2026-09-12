@@ -2,12 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://principal-ai.dev/schemas/subsystem-model.schema.json",
   "title": "Subsystem Model",
-  "description": "Portable subsystem model — the shareable standard. Construct-tagged components (nodes) plus typed edges describing one subsystem of a codebase. Ontology: construct = what a node is, framework + stereotype = which framework pattern it plays, role = where it sits, process = where it runs. Symbol is the code identity; name is the display label (often derived from symbol). Host-only fields (local path binding, provenance, store ids, verification) are NOT part of this document; they belong on a hydrated envelope around it.",
+  "description": "Portable subsystem model — the shareable standard. Construct-tagged components (nodes) plus topology relations and/or runtime walkthroughs describing one subsystem of a codebase. Ontology: construct = what a node is, framework + stereotype = which framework pattern it plays, role = where it sits, process = where it runs. Symbol is the code identity; name is the display label (often derived from symbol). Host-only fields (local path binding, provenance, store ids, verification) are NOT part of this document; they belong on a hydrated envelope around it.",
   "type": "object",
   "required": [
     "title",
     "components",
-    "edges"
+    "relations"
   ],
   "additionalProperties": false,
   "properties": {
@@ -31,18 +31,18 @@
         "$ref": "#/$defs/component"
       }
     },
-    "edges": {
+    "relations": {
       "type": "array",
-      "description": "Typed interactions between components. `from` / `to` reference component `id`s.",
+      "description": "Topology relations (structural / module / type). `from` / `to` reference component `id`s. Runtime seams belong on walkthrough steps, not here.",
       "items": {
-        "$ref": "#/$defs/edge"
+        "$ref": "#/$defs/relation"
       }
     },
-    "throughlines": {
+    "walkthroughs": {
       "type": "array",
-      "description": "Ordered execution stories over existing edges (one throughline per flow). Each step names an edge id, the concrete file:line where that seam fires, and an optional frame symbol.",
+      "description": "Ordered runtime walkthroughs (one per named behavior). Each step names from/to/mechanism and the concrete file:line where that seam fires.",
       "items": {
-        "$ref": "#/$defs/throughline"
+        "$ref": "#/$defs/walkthrough"
       }
     }
   },
@@ -70,6 +70,10 @@
         "service"
       ]
     },
+    "proposed": {
+      "type": "boolean",
+      "description": "Design / migration placeholder — not a live source declaration yet. Verification skips source checks until promoted. Keep a real construct for the intended shape."
+    },
     "framework": {
       "type": "string",
       "minLength": 1,
@@ -80,15 +84,6 @@
       "minLength": 1,
       "description": "Framework-level pattern stamped on a language construct (open string). Examples: component, hook, middleware, controller, guard. Prefer this over inventing framework-specific constructs. Pair with framework when set."
     },
-    "capture": {
-      "type": "string",
-      "description": "How the authoring session occupied this component.",
-      "enum": [
-        "edited",
-        "analyzed",
-        "referenced"
-      ]
-    },
     "declarationProvenance": {
       "type": "string",
       "description": "Where `declaration` came from. `verified` is reserved for tool-extracted data; hand-authored declarations must be `authored` (also the default when declaration is present without provenance).",
@@ -97,23 +92,26 @@
         "authored"
       ]
     },
-    "mechanism": {
+    "relationType": {
       "type": "string",
-      "description": "How `from` relates to `to`. Pick the closest label; put specifics in `refs`. `uses` = general dependency; `feeds` = data-flow into a processor; `produces` = emits an output; `references` = type/symbol reference that is not a call; `writes`/`reads`/`watches` = retained-state interactions.",
+      "description": "Topology relation type — structural / module / type claim between components.",
       "enum": [
         "imports",
-        "imports_from",
-        "re_exports",
-        "defines",
-        "calls",
         "extends",
         "inherits",
         "implements",
         "mixes_in",
-        "uses",
         "method",
         "references",
-        "contains",
+        "contains"
+      ]
+    },
+    "mechanism": {
+      "type": "string",
+      "description": "Walkthrough hop mechanism — how `from` relates to `to` at a runtime site. `uses` = general dependency; `feeds` = data-flow into a processor; `produces` = emits an output; `writes`/`reads`/`watches` = retained-state interactions.",
+      "enum": [
+        "calls",
+        "uses",
         "feeds",
         "produces",
         "writes",
@@ -136,7 +134,7 @@
         "id": {
           "type": "string",
           "minLength": 1,
-          "description": "Stable unique id. Referenced by edge `from` / `to`; never rename on update."
+          "description": "Stable unique id. Referenced by relation / walkthrough `from` / `to`; never rename on update."
         },
         "name": {
           "type": "string",
@@ -174,6 +172,9 @@
         "role": {
           "$ref": "#/$defs/role"
         },
+        "proposed": {
+          "$ref": "#/$defs/proposed"
+        },
         "framework": {
           "$ref": "#/$defs/framework"
         },
@@ -187,9 +188,6 @@
         "layer": {
           "type": "integer",
           "description": "Semantic layout layer/phase (lower = closer to entry). When set, layout places the component in this layer for a left-to-right pipeline."
-        },
-        "capture": {
-          "$ref": "#/$defs/capture"
         },
         "declaration": {
           "$ref": "#/$defs/constructDeclaration",
@@ -211,20 +209,20 @@
         }
       }
     },
-    "edge": {
+    "relation": {
       "type": "object",
       "required": [
         "id",
         "from",
         "to",
-        "mechanism"
+        "relationType"
       ],
       "additionalProperties": false,
       "properties": {
         "id": {
           "type": "string",
           "minLength": 1,
-          "description": "Stable unique edge id. Referenced by throughline steps."
+          "description": "Stable unique relation id."
         },
         "from": {
           "type": "string",
@@ -236,12 +234,12 @@
           "minLength": 1,
           "description": "Target component `id` (or external target label)."
         },
-        "mechanism": {
-          "$ref": "#/$defs/mechanism"
+        "relationType": {
+          "$ref": "#/$defs/relationType"
         },
         "refs": {
           "type": "array",
-          "description": "Concrete file/symbol evidence backing the edge (often purl refs).",
+          "description": "Concrete file/symbol evidence backing the relation (often purl refs).",
           "items": {
             "type": "string",
             "minLength": 1
@@ -249,24 +247,34 @@
         }
       }
     },
-    "throughlineStep": {
+    "walkthroughStep": {
       "type": "object",
       "required": [
-        "edgeId",
+        "from",
+        "to",
+        "mechanism",
         "file",
         "line"
       ],
       "additionalProperties": false,
       "properties": {
-        "edgeId": {
+        "from": {
           "type": "string",
           "minLength": 1,
-          "description": "Id of an existing edge this hop traverses."
+          "description": "Source component `id`."
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Target component `id`."
+        },
+        "mechanism": {
+          "$ref": "#/$defs/mechanism"
         },
         "file": {
           "type": "string",
           "minLength": 1,
-          "description": "Repo-root-relative path where the edge fires for this flow."
+          "description": "Repo-root-relative path where the seam fires for this walkthrough."
         },
         "line": {
           "type": "integer",
@@ -285,7 +293,7 @@
         }
       }
     },
-    "throughline": {
+    "walkthrough": {
       "type": "object",
       "required": [
         "id",
@@ -297,18 +305,18 @@
         "id": {
           "type": "string",
           "minLength": 1,
-          "description": "Stable unique throughline id."
+          "description": "Stable unique walkthrough id."
         },
         "title": {
           "type": "string",
           "minLength": 1,
-          "description": "Flow name (e.g. save flow, load flow)."
+          "description": "Walkthrough name (e.g. save, load, refresh)."
         },
         "steps": {
           "type": "array",
           "description": "Ordered hops; array order is execution order.",
           "items": {
-            "$ref": "#/$defs/throughlineStep"
+            "$ref": "#/$defs/walkthroughStep"
           }
         }
       }
@@ -671,6 +679,35 @@
         }
       }
     },
+    "typeParamInfo": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "constraint": { "type": "string" }
+      }
+    },
+    "callableTypeInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "parameters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/paramInfo" }
+        },
+        "returnType": { "type": "string" }
+      }
+    },
+    "enumMemberInfo": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "value": { "type": "string" }
+      }
+    },
     "typeDeclaration": {
       "type": "object",
       "required": [
@@ -680,6 +717,7 @@
         "implementors"
       ],
       "additionalProperties": false,
+      "description": "Type-family declaration (interface / type alias / enum). Prefer structured buckets; use `rhs` when none fit.",
       "properties": {
         "kind": {
           "const": "type"
@@ -701,6 +739,24 @@
           "items": {
             "type": "string"
           }
+        },
+        "generics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/typeParamInfo" }
+        },
+        "signature": { "$ref": "#/$defs/callableTypeInfo" },
+        "enumMembers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/enumMemberInfo" }
+        },
+        "aliasOf": { "type": "string" },
+        "unionOf": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "rhs": {
+          "type": "string",
+          "description": "Verbatim RHS escape hatch; wins over structured buckets when set."
         }
       }
     },
@@ -772,6 +828,11 @@
           "items": {
             "$ref": "#/$defs/propertyInfo"
           }
+        },
+        "storage": {
+          "type": "string",
+          "enum": ["memory", "disk", "external"],
+          "description": "Where the retained state physically lives / who mediates access. Authored — graphify cannot infer it: `memory` = process-lifetime RAM, `disk` = this process reads/writes the filesystem, `external` = mediated by another system (db/service)."
         }
       }
     },

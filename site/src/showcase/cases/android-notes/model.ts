@@ -1,8 +1,8 @@
 import type {
   SubsystemComponent,
-  SubsystemComponentEdge,
+  SubsystemRelation,
+  SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
-import type { SubsystemThroughline } from '@principal-ai/subsystems-react/dist/subsystem/model.js';
 
 const PURL = 'pkg:github/you/android-notes';
 const JAVA = 'app/src/main/java/com/example/notes';
@@ -92,129 +92,147 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const edges: SubsystemComponentEdge[] = [
-  { id: 'e0', from: 'main-activity', to: 'notes-view-model', mechanism: 'calls' },
-  { id: 'e1', from: 'notes-view-model', to: 'notes-repository', mechanism: 'calls' },
-  { id: 'e2', from: 'notes-repository', to: 'note-dao', mechanism: 'calls' },
-  { id: 'e3', from: 'notes-repository', to: 'notes-api', mechanism: 'calls' },
-  { id: 'e4', from: 'note-dao', to: 'Room', mechanism: 'reads' },
-  { id: 'e5', from: 'note-dao', to: 'Room', mechanism: 'writes' },
-  { id: 'e6', from: 'notes-api', to: 'NotesBackend', mechanism: 'calls' },
-];
+export const relations = [] as SubsystemRelation[];
 
-export const throughlines: SubsystemThroughline[] = [
+export const walkthroughs = [
   {
-    id: 'tl-open',
-    title: 'Open notes screen',
-    steps: [
+    "id": "tl-open",
+    "title": "Open notes screen",
+    "steps": [
       {
-        edgeId: 'e0',
-        file: `${JAVA}/MainActivity.java`,
-        line: 26,
-        symbol: 'getNotes().observe',
-        annotation: 'Activity observes LiveData from the ViewModel.',
+        "from": "main-activity",
+        "to": "notes-view-model",
+        "mechanism": "calls",
+        "file": "app/src/main/java/com/example/notes/MainActivity.java",
+        "line": 26,
+        "symbol": "getNotes().observe",
+        "annotation": "Activity observes LiveData from the ViewModel."
       },
       {
-        edgeId: 'e1',
-        file: `${JAVA}/NotesViewModel.java`,
-        line: 22,
-        symbol: 'observeNotes',
-        annotation: 'ViewModel forwards to the repository.',
+        "from": "notes-view-model",
+        "to": "notes-repository",
+        "mechanism": "calls",
+        "file": "app/src/main/java/com/example/notes/NotesViewModel.java",
+        "line": 22,
+        "symbol": "observeNotes",
+        "annotation": "ViewModel forwards to the repository."
       },
       {
-        edgeId: 'e2',
-        file: `${JAVA}/NotesRepository.java`,
-        line: 22,
-        symbol: 'observeAll',
-        annotation: 'Repository reads through the DAO — not the Activity.',
+        "from": "notes-repository",
+        "to": "note-dao",
+        "mechanism": "calls",
+        "file": "app/src/main/java/com/example/notes/NotesRepository.java",
+        "line": 22,
+        "symbol": "observeAll",
+        "annotation": "Repository reads through the DAO — not the Activity."
       },
       {
-        edgeId: 'e4',
-        file: `${JAVA}/NoteDao.java`,
-        line: 14,
-        symbol: 'observeAll',
-        annotation: 'Room query powers the list.',
-      },
-    ],
+        "from": "note-dao",
+        "to": "Room",
+        "mechanism": "reads",
+        "file": "app/src/main/java/com/example/notes/NoteDao.java",
+        "line": 14,
+        "symbol": "observeAll",
+        "annotation": "Room query powers the list."
+      }
+    ]
   },
   {
-    id: 'tl-save',
-    title: 'Save a note',
-    steps: [
+    "id": "tl-save",
+    "title": "Save a note",
+    "steps": [
       {
-        edgeId: 'e0',
-        file: `${JAVA}/MainActivity.java`,
-        line: 27,
-        symbol: 'addNote',
-        annotation: 'Click handler → ViewModel only.',
+        "from": "main-activity",
+        "to": "notes-view-model",
+        "mechanism": "calls",
+        "file": "app/src/main/java/com/example/notes/MainActivity.java",
+        "line": 27,
+        "symbol": "addNote",
+        "annotation": "Click handler → ViewModel only."
       },
       {
-        edgeId: 'e1',
-        file: `${JAVA}/NotesViewModel.java`,
-        line: 27,
-        symbol: 'insert',
-        annotation: 'ViewModel validates, then repository insert.',
+        "from": "notes-view-model",
+        "to": "notes-repository",
+        "mechanism": "calls",
+        "file": "app/src/main/java/com/example/notes/NotesViewModel.java",
+        "line": 27,
+        "symbol": "insert",
+        "annotation": "ViewModel validates, then repository insert."
       },
       {
-        edgeId: 'e2',
-        file: `${JAVA}/NotesRepository.java`,
-        line: 26,
-        symbol: 'insert',
-        annotation: 'Repository owns the write.',
+        "from": "notes-repository",
+        "to": "note-dao",
+        "mechanism": "calls",
+        "file": "app/src/main/java/com/example/notes/NotesRepository.java",
+        "line": 26,
+        "symbol": "insert",
+        "annotation": "Repository owns the write."
       },
       {
-        edgeId: 'e5',
-        file: `${JAVA}/NoteDao.java`,
-        line: 17,
-        symbol: 'insert',
-        annotation: 'Room persists on device.',
-      },
-    ],
+        "from": "note-dao",
+        "to": "Room",
+        "mechanism": "writes",
+        "file": "app/src/main/java/com/example/notes/NoteDao.java",
+        "line": 17,
+        "symbol": "insert",
+        "annotation": "Room persists on device."
+      }
+    ]
   },
   {
-    id: 'tl-refresh',
-    title: 'Refresh from network',
-    steps: [
+    "id": "tl-refresh",
+    "title": "Refresh from network",
+    "steps": [
       {
-        edgeId: 'e1',
-        file: `${JAVA}/NotesViewModel.java`,
-        line: 31,
-        symbol: 'refreshFromNetwork',
-        annotation: 'Pull-to-refresh style intent.',
+        "from": "notes-view-model",
+        "to": "notes-repository",
+        "mechanism": "calls",
+        "file": "app/src/main/java/com/example/notes/NotesViewModel.java",
+        "line": 31,
+        "symbol": "refreshFromNetwork",
+        "annotation": "Pull-to-refresh style intent."
       },
       {
-        edgeId: 'e3',
-        file: `${JAVA}/NotesRepository.java`,
-        line: 30,
-        symbol: 'fetchNotes',
-        annotation: 'Network before touching Room.',
+        "from": "notes-repository",
+        "to": "notes-api",
+        "mechanism": "calls",
+        "file": "app/src/main/java/com/example/notes/NotesRepository.java",
+        "line": 30,
+        "symbol": "fetchNotes",
+        "annotation": "Network before touching Room."
       },
       {
-        edgeId: 'e6',
-        file: `${JAVA}/NotesApi.java`,
-        line: 8,
-        symbol: 'fetchNotes',
-        annotation: 'HTTP to the notes backend.',
+        "from": "notes-api",
+        "to": "NotesBackend",
+        "mechanism": "calls",
+        "file": "app/src/main/java/com/example/notes/NotesApi.java",
+        "line": 8,
+        "symbol": "fetchNotes",
+        "annotation": "HTTP to the notes backend."
       },
       {
-        edgeId: 'e2',
-        file: `${JAVA}/NotesRepository.java`,
-        line: 31,
-        symbol: 'replaceAll',
-        annotation: 'Replace local cache with remote payload.',
+        "from": "notes-repository",
+        "to": "note-dao",
+        "mechanism": "calls",
+        "file": "app/src/main/java/com/example/notes/NotesRepository.java",
+        "line": 31,
+        "symbol": "replaceAll",
+        "annotation": "Replace local cache with remote payload."
       },
       {
-        edgeId: 'e5',
-        file: `${JAVA}/NoteDao.java`,
-        line: 20,
-        symbol: 'replaceAll',
-        annotation: 'Transactional Room rewrite.',
-      },
-    ],
-  },
-];
+        "from": "note-dao",
+        "to": "Room",
+        "mechanism": "writes",
+        "file": "app/src/main/java/com/example/notes/NoteDao.java",
+        "line": 20,
+        "symbol": "replaceAll",
+        "annotation": "Transactional Room rewrite."
+      }
+    ]
+  }
+] as SubsystemWalkthrough[];
 
 export const title = 'Android notes screen';
 
 export const description =
-  'Classic Android layering: **Activity → ViewModel → Repository → Room/API**. The UI never talks to the database. Open **Flows** for open, save, and network refresh.';
+  'Classic Android layering: **Activity → ViewModel → Repository → Room/API**. The UI never talks to the database. Open **Walkthroughs** for open, save, and network refresh.';

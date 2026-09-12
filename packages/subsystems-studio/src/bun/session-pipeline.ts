@@ -49,6 +49,12 @@ import type {
 	SessionSummary,
 } from "../shared/contract";
 import { statSync } from "node:fs";
+import { isMaintainSession } from "./maintain-sessions";
+import {
+	isOpencodeV2Session,
+	readOpencodeV2Session,
+	sessionMessagesToUniversalEvents,
+} from "./opencode-v2-messages";
 
 function openCodeDBPath(): string {
 	const env = process.env as Record<string, string | undefined>;
@@ -118,6 +124,130 @@ const cursorReader = new CursorSessionReader();
 
 function isCursorSession(sessionId: string): boolean {
 	return cursorReader.readSession(sessionId) !== null;
+}
+
+/**
+ * OpenCode V2 durable transcript: `session_v2` + `session_message` → universal
+ * events → same normalize/accumulate path as Cline/pi. Identity is explicit
+ * (`session_v2` row), not “empty `event` table.”
+ */
+async function runOpencodeV2MessagePipeline(
+	sessionId: string,
+): Promise<ClinePipelineResult | null> {
+	const record = readOpencodeV2Session(sessionId);
+	if (!record) return null;
+
+	const sessionTitle = record.meta.title || "OpenCode V2 session";
+	const sessionSlug = record.meta.slug || "";
+	const workingDirectory = record.meta.directory ?? "";
+
+	const rawEvents = sessionMessagesToUniversalEvents(sessionId, record.messages, {
+		workingDirectory,
+	});
+	if (rawEvents.length === 0) return null;
+
+	const alexandriaRepos = loadAlexandriaRepos();
+	const knownRoots = new Map<string, RepositoryInfo>();
+	for (const [path, repo] of alexandriaRepos) {
+		knownRoots.set(path, {
+			root: repo.root,
+			remoteUrl: repo.remoteUrl,
+			owner: repo.owner,
+			repo: repo.repo,
+		});
+	}
+	const adapter = new BunNormalizationAdapter(knownRoots);
+	const normalizationService = new PathNormalizationService(adapter);
+
+	const normalizedEvents = await normalizationService.normalizePathsBatch(
+		rawEvents,
+		workingDirectory,
+	);
+
+	for (const discovered of adapter.newlyDiscovered) {
+		registerProjectInAlexandria(discovered.root, discovered.remoteUrl);
+	}
+
+	const accState = createAccumulatedState(sessionTitle);
+	const events: SessionEventRow[] = [];
+	const repoSet = new Map<string, { root: string; fileCount: number }>();
+
+	for (let i = 0; i < normalizedEvents.length; i++) {
+		const normalizedEvent = normalizedEvents[i];
+		const accResult = eventOp(accState, normalizedEvent);
+		events.push({
+			seq: i,
+			type: normalizedEvent.eventType,
+			raw: INCLUDE_RAW_EVENT_PAYLOADS ? normalizedEvent.raw : undefined,
+			normalized: INCLUDE_RAW_EVENT_PAYLOADS
+				? (normalizedEvent as unknown as Record<string, unknown>)
+				: { timestamp: normalizedEvent.timestamp },
+			accumulated: accResult,
+		});
+		if (normalizedEvent.files) {
+			for (const f of normalizedEvent.files) {
+				const root = f.repository?.gitRoot;
+				if (root) {
+					const entry = repoSet.get(root) ?? { root, fileCount: 0 };
+					entry.fileCount++;
+					repoSet.set(root, entry);
+				}
+			}
+		}
+	}
+
+	const lastEvent = events[events.length - 1];
+	if (lastEvent) {
+		const lastTimestamp =
+			((lastEvent.normalized as Record<string, unknown>)["timestamp"] as
+				| number
+				| undefined) ?? 0;
+		events.push({
+			seq: lastEvent.seq + 1,
+			type: "finished",
+			raw: null,
+			normalized: { timestamp: lastTimestamp },
+			accumulated: {
+				id: "",
+				timestamp: lastTimestamp,
+				sessionId: sessionSlug || sessionId,
+				sessionName: accState.sessionName,
+				sessionColor: accState.sessionColor,
+				operation: "finished",
+				files: [],
+				dependencies: [],
+				description: `${accState.sessionName} finished`,
+				layers: [],
+				contextTokens: accState.contextTokens,
+			},
+		});
+	}
+
+	const repos = Array.from(repoSet.values())
+		.sort((a, b) => b.fileCount - a.fileCount)
+		.map((r) => {
+			const parts = r.root.replace(/\/+$/, "").split("/");
+			const known = knownRoots.get(r.root);
+			return {
+				root: r.root,
+				fileCount: r.fileCount,
+				owner: known?.owner ?? null,
+				name: parts[parts.length - 1] ?? null,
+				editing: false,
+			};
+		});
+	const repoRoot = repos.length > 0 ? repos[0].root : undefined;
+
+	return {
+		rawEvents,
+		normalizedEvents,
+		accState,
+		events,
+		repos,
+		repoRoot,
+		sessionTitle,
+		sessionSlug,
+	};
 }
 
 // Shared Cline pipeline: reader → normalizePathsBatch → eventOp loop.
@@ -833,6 +963,7 @@ export async function buildSessionIndex({ days }: { days?: number }): Promise<{
 			let title = row.aggregate_id.slice(0, 12);
 			let slug = "";
 			let createdAtStr = "";
+			let agentFromInfo: string | undefined;
 			const durationMs = 0;
 			try {
 				const parsed = JSON.parse(row.data) as Record<string, unknown>;
@@ -845,6 +976,10 @@ export async function buildSessionIndex({ days }: { days?: number }): Promise<{
 				if (typeof rawSlug === "string") {
 					slug = rawSlug;
 				}
+				const rawAgent = info?.["agent"];
+				if (typeof rawAgent === "string") {
+					agentFromInfo = rawAgent;
+				}
 				const rawTime = info?.["time"] as Record<string, unknown> | undefined;
 				const rawCreated = rawTime?.["created"];
 				if (typeof rawCreated === "number") {
@@ -853,6 +988,8 @@ export async function buildSessionIndex({ days }: { days?: number }): Promise<{
 			} catch {
 				// best-effort parse
 			}
+			// Maintain runs have their own overview tab — keep them out of Agent Sessions.
+			if (isMaintainSession({ title, agent: agentFromInfo })) continue;
 			// Sessions the old SQL cutoff would have dropped (no date, or
 			// predating the window) never enter the list; predating ones
 			// still count as "more exists".
@@ -1263,8 +1400,21 @@ export async function processSessionEvents(
 			return { ok: false, error: (err as Error).message };
 		}
 	}
-	// opencode sessions: raw V1 rows in sqlite. The full event set is built
-	// once (normalize + accumulate need the whole session for correct
+	// OpenCode V2: identity is a `session_v2` row; transcript is `session_message`.
+	// Do not fall through to the V1 `event` path (which is empty for these).
+	if (isOpencodeV2Session(sessionId)) {
+		try {
+			const result = await runOpencodeV2MessagePipeline(sessionId);
+			if (!result) {
+				return { ok: false, error: "OpenCode V2 session not found or empty" };
+			}
+			return respondWithCachedPipeline(sessionId, "opencode-v2", result);
+		} catch (err) {
+			return { ok: false, error: (err as Error).message };
+		}
+	}
+	// OpenCode V1 sessions: raw rows in the `event` table. The full event set is
+	// built once (normalize + accumulate need the whole session for correct
 	// accumulated rows), cached, and served in pages so the webview never
 	// receives the session's whole raw payload in one RPC message.
 	const cacheKey = `opencode:${sessionId}:${includeRaw ? "raw" : "min"}`;
@@ -1393,14 +1543,18 @@ export async function processSessionEvents(
 			events = built;
 			// Write-through the freshly processed timeline so cold starts serve
 			// it from disk instead of re-running the pipeline. Trimmed form only;
-			// `includeRaw` never hits this.
-			writeCachedSessionEvents(sessionId, {
-				agent: "opencode",
-				session: { slug: sessionSlug, title: sessionTitle, agent: "opencode" },
-				repoRoot,
-				repos,
-				events: trimSessionEventRows(built),
-			});
+			// `includeRaw` never hits this. Skip empty builds — caching a zero-
+			// event V1 miss used to poison V2 sessions that share the same id
+			// space once the adapter landed (disk cache is checked before kind).
+			if (built.length > 0) {
+				writeCachedSessionEvents(sessionId, {
+					agent: "opencode",
+					session: { slug: sessionSlug, title: sessionTitle, agent: "opencode" },
+					repoRoot,
+					repos,
+					events: trimSessionEventRows(built),
+				});
+			}
 			sessionEventsCache.set(cacheKey, events);
 			// Bounded cache — raw payloads are heavy; evict oldest
 			// entries once we hold more than a few sessions.

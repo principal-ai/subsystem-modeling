@@ -1,15 +1,15 @@
 /**
- * Infer a subsystem-style kind from a graphify node + edges.
+ * Infer a subsystem-style construct from a graphify node + edges.
  *
- * Graphify does not store `kind` on nodes (everything is `file_type: "code"`).
+ * Graphify does not store construct on nodes (everything is `file_type: "code"`).
  * Class vs function vs type is derived from structure — same rules as
  * `GraphifyComponentDetail` in consolidated.ts.
  */
 
 import type { GraphifyEdge, GraphifyNode } from './types';
 
-/** Kind inferred from graph structure (never read off the node). */
-export type InferredGraphifyKind =
+/** Construct inferred from graph structure (never read off the node). */
+export type InferredGraphifyConstruct =
 	| 'class'
 	| 'function'
 	| 'method'
@@ -17,8 +17,8 @@ export type InferredGraphifyKind =
 	| 'module'
 	| 'unknown';
 
-export interface InferGraphifyKindResult {
-	kind: InferredGraphifyKind;
+export interface InferConstructFromGraphifyResult {
+	construct: InferredGraphifyConstruct;
 	evidence: string[];
 }
 
@@ -42,14 +42,14 @@ function isFilenameLabel(label: string, sourceFile: string): boolean {
 }
 
 /**
- * Infer kind for a definition node from its label and incident edges.
+ * Infer construct for a definition node from its label and incident edges.
  *
  * Priority: class → method → function → type → module → unknown.
  */
-export function inferGraphifyKind(
+export function inferConstructFromGraphify(
 	node: GraphifyNode,
 	edges: readonly GraphifyEdge[],
-): InferGraphifyKindResult {
+): InferConstructFromGraphifyResult {
 	const id = String(node.id);
 	const label = String(node.label ?? '').trim();
 	const sourceFile =
@@ -61,7 +61,7 @@ export function inferGraphifyKind(
 	);
 	if (outgoingMethod.length > 0) {
 		evidence.push(`${outgoingMethod.length} outgoing method edge(s)`);
-		return { kind: 'class', evidence };
+		return { construct: 'class', evidence };
 	}
 
 	const incomingMethod = edges.filter(
@@ -72,12 +72,12 @@ export function inferGraphifyKind(
 			`incoming method edge from ${String(incomingMethod[0]!.source)}`,
 			`label ${label}`,
 		);
-		return { kind: 'method', evidence };
+		return { construct: 'method', evidence };
 	}
 
 	if (isCallStyleLabel(label)) {
 		evidence.push(`call-style label ${label}`);
-		return { kind: 'function', evidence };
+		return { construct: 'function', evidence };
 	}
 
 	const incomingImplements = edges.filter(
@@ -87,7 +87,7 @@ export function inferGraphifyKind(
 		evidence.push(
 			`${incomingImplements.length} incoming implements edge(s)`,
 		);
-		return { kind: 'type', evidence };
+		return { construct: 'type', evidence };
 	}
 
 	if (node.type === 'module' || isFilenameLabel(label, sourceFile)) {
@@ -96,12 +96,12 @@ export function inferGraphifyKind(
 				? 'node.type=module'
 				: `filename label ${label}`,
 		);
-		return { kind: 'module', evidence };
+		return { construct: 'module', evidence };
 	}
 
 	if (label) evidence.push(`unclassified label ${label}`);
 	else evidence.push('no classifying signals');
-	return { kind: 'unknown', evidence };
+	return { construct: 'unknown', evidence };
 }
 
 /** Type-family constructs all infer as the coarse 'type' — graph structure
@@ -110,9 +110,9 @@ export function inferGraphifyKind(
 const TYPE_FAMILY: ReadonlySet<string> = new Set(['interface', 'type_alias', 'enum']);
 
 /** Strict claimed-vs-inferred check, with type-family compatibility. */
-export function kindsMatch(
+export function constructsMatch(
 	claimed: string | undefined,
-	inferred: InferredGraphifyKind,
+	inferred: InferredGraphifyConstruct,
 ): boolean {
 	if (!claimed || claimed === 'external') return true;
 	if (TYPE_FAMILY.has(claimed)) return inferred === 'type';
