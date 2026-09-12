@@ -1,6 +1,6 @@
 ---
 name: create-subsystem-model
-description: Author a subsystem model (named components + typed relations + execution flows/walkthroughs describing one subsystem of a codebase) and create it with `npx -y @principal-ai/principal-studio-cli subsystem-model create`, which persists to disk and opens it in Subsystems Studio (launching Studio if it is not already running). Use when the user says "make a subsystem model", "make a subsystem graph", "diagram this subsystem", "post a component graph to the viewer", "visualize this architecture", "show the flows", or invokes /create-subsystem-model or /create-subsystem-graph. NOT for File City trails (use author-{investigation,informative}-trail), Excalidraw drawings (use excalidraw-drawings), or topics (use create-topic).
+description: Author a subsystem model (named components + typed topology relations + runtime walkthroughs describing one subsystem of a codebase) and create it with `npx -y @principal-ai/principal-studio-cli subsystem-model create`, which persists to disk and opens it in Subsystems Studio (launching Studio if it is not already running). Use when the user says "make a subsystem model", "make a subsystem graph", "diagram this subsystem", "post a component graph to the viewer", "visualize this architecture", "show the flows", or invokes /create-subsystem-model or /create-subsystem-graph. NOT for File City trails (use author-{investigation,informative}-trail), Excalidraw drawings (use excalidraw-drawings), or topics (use create-topic).
 ---
 
 # Create Subsystem Model
@@ -43,14 +43,15 @@ Analyze the target subsystem in the repo and produce:
   its own subsystem — give it its own model and reference it, or name the
   export inside it that matters. If you catch yourself posting a file as a
   component, stop and find the symbol.
-- **Relations** — topology only (structural / module / type). `relationType` is
-  a **closed set** (Set A below); pick the closest label and put specifics in
-  `refs` evidence. Runtime seams do **not** go here.
+- **Relations** — structural / module / type claims between components.
+  `relationType` is a **closed set** (see below); pick the closest label and
+  put specifics in `refs` evidence. Runtime seams (calls, feeds, writes, …)
+  belong on **walkthrough steps**, not relations.
 - **Walkthroughs** (required when the model explains *how something works*) —
-  ordered runtime hops with `from`/`to`/`mechanism`/`file`/`line`. The UI calls
-  these Walkthroughs; the wire field is `walkthroughs`. Graph edges for hops
-  are **derived** — do not author a parallel runtime edge list. One walkthrough
-  per named story (open, save, refresh, …). Skip only for pure topology models
+  ordered execution stories over components. The UI calls these Walkthroughs;
+  the wire field is `walkthroughs`. Graph edges for hops are **derived** —
+  do not author a parallel runtime edge list. One walkthrough per named
+  story (open, save, refresh, …). Skip only for pure topology models
   with no runtime story.
 
 ## 3. Create via the CLI
@@ -65,11 +66,9 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
 
 ```jsonc
 {
+  "$schema": "https://principal-ai.dev/schemas/subsystem-model.schema.json",   // optional
   "title": "Subsystems Studio session service",        // required
   "description": "Optional one-liner.",
-  "source": "agent:<your-name>",                   // optional provenance
-  "repo": { "owner": "principal-ai", "name": "subsystem-modeling" },
-  "repoRoot": "/abs/path/to/local/clone",         // see "repoRoot" below
   "components": [                                  // required
     {
       "id": "session-service",                     // stable, unique
@@ -77,6 +76,8 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
       "construct": "function",                     // see construct list below
       "role": "entry",                             // optional: entry | service
       "proposed": false,                           // optional: true = not in source yet
+      "framework": "bun",                          // optional: framework owning the stereotype
+      "stereotype": "controller",                  // optional: framework pattern the construct plays
       "file": "packages/subsystems-studio/src/bun/server-sessions.ts",  // repo-relative
       "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/server-sessions.ts",
       "symbol": "probeOpencodeServer",             // optional but strongly preferred
@@ -87,34 +88,34 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
         "kind": "function",                        // discriminator; match construct when possible
         "parameters": [{ "name": "root", "type": "string" }],
         "returnType": "Promise<SessionSummary[]>",
-        "callers": [],                             // leave empty — relations carry interactions
+        "callers": [],                             // leave empty — edges carry interactions
         "callees": []
       },
       "declarationProvenance": "authored"          // required when declaration is set by hand
     }
   ],
-  "relations": [
+  "relations": [                                   // required — may be empty []
     {
-      "id": "sessions-imports-warmup",
+      "id": "sessions-to-warmup",
       "from": "session-service",
-      "to": "warmup-worker",
-      "relationType": "imports",
-      "refs": ["pkg:github/owner/repo#path/to/glue.ts"]
+      "to": "warmup-worker",                       // component ids, not names
+      "relationType": "references",                // see relationType list below
+      "refs": ["pkg:github/owner/repo#path/to/glue.ts"]  // optional purl evidence
     }
   ],
-  "walkthroughs": [
+  "walkthroughs": [                                // flows — see section below
     {
       "id": "wt-list-sessions",
       "title": "List sessions",
       "steps": [
         {
-          "from": "session-service",
-          "to": "warmup-worker",
-          "mechanism": "calls",
+          "from": "session-service",               // source component id
+          "to": "warmup-worker",                   // target component id
+          "mechanism": "calls",                    // see mechanism list below
           "file": "packages/subsystems-studio/src/bun/server-sessions.ts",
-          "line": 42,
-          "symbol": "probeOpencodeServer",
-          "annotation": "Probe the server before listing sessions."
+          "line": 42,                              // 1-based site where the seam fires
+          "symbol": "probeOpencodeServer",         // optional frame label in Walkthroughs UI
+          "annotation": "Probe the server before listing sessions."  // optional codeview note
         }
       ]
     }
@@ -126,6 +127,12 @@ Rules:
 
 - `file` paths MUST be repo-root-relative (they join onto `repoRoot` for reads);
   `purl` subpaths carry the same path after `#`.
+- Portable documents carry only `$schema` / `title` / `description` /
+  `components` / `relations` / `walkthroughs`. Host-only fields — `source`,
+  `repo`, `repoRoot`, `repoRoots` — are **envelope binding** on the stored
+  record, not part of the portable standard; the CLI accepts them for
+  create/update, but drop them before writing a gist or any share surface. On
+  the wire, repo identity lives on each component's `purl`.
 - `purpose` is rendered as a doc comment under the node's declaration: one
   plain-text sentence, verb-first. No markdown (backticks render literally),
   no brace-dumps, no restating the signature — specifics belong in
@@ -141,7 +148,7 @@ Rules:
 - Relation `id`s are stable topology keys; walkthrough steps carry their own `from`/`to`/`mechanism`.
 
 Stdout is `{ ok: true, graph }` — capture `graph.id` (`sg-<ts>-<rand>`).
-Also read `verification.walkthroughsChecked` / `walkthroughsFailed` when flows
+Also read `verification.walkthroughsChecked` / `walkthroughsFailed` when walks
 were included and Studio verified them.
 
 Do **not** ask the user to start Studio first. The CLI opens or launches it.
@@ -151,7 +158,7 @@ Do **not** curl the HTTP bridge unless the user explicitly asks for the raw API.
 
 Walkthroughs are the point of a "how this works" model. Components + relations
 are the topology map; walkthroughs are the runtime stories. Display edges for
-hops are derived from steps.
+hops are **derived** from steps — you never author an `edges` array.
 
 **When to author them**
 
@@ -165,7 +172,9 @@ hops are derived from steps.
 
 | Field | Required | Meaning |
 |---|---|---|
-| `from` / `to` / `mechanism` | yes | Hop endpoints + Set B mechanism (`calls`, `uses`, …) |
+| `from` | yes | Source component `id` this hop starts from |
+| `to` | yes | Target component `id` this hop lands on |
+| `mechanism` | yes | Runtime seam label (closed set below) |
 | `file` | yes | Repo-root-relative path of the seam site |
 | `line` | yes | 1-based line in `file` where that relationship fires |
 | `symbol` | no | Frame name shown in the Walkthroughs list (function/method at the site) |
@@ -182,9 +191,9 @@ persist, but fix before considering the model done).
 1. Lay components (+ optional topology `relations`).
 2. Name the walkthroughs the user cares about (titles humans will click).
 3. For each hop, open the real glue file, pick the call/emit/register line,
-   and record `{ from, to, mechanism, file, line, symbol?, annotation? }`. Default **on** for
-   `annotation` when the hop needs a human-readable “what happens here” — the
-   site line alone is often opaque without it.
+   and record `{ from, to, mechanism, file, line, symbol?, annotation? }`.
+   Default **on** for `annotation` when the hop needs a human-readable
+   "what happens here" — the site line alone is often opaque without it.
 4. Create via CLI; if `walkthroughsFailed` is non-empty, correct the site lines
    and update (Studio HTTP PUT while Studio is running, or recreate).
 
@@ -192,8 +201,9 @@ Reference shape: `packages/subsystems-react/src/stories/Subsystem/ComponentGraph
 
 ## Closed vocabularies
 
-Validated against the published model (`subsystem/model.ts`) and the
-store validators. Off-list `relationType` / hop `mechanism` values are rejected;
+Validated against the published model (`subsystem/model.ts`), the JSON schema
+(`packages/subsystems-core/schemas/subsystem-model.schema.json`), and the
+store validators. Off-list `relationType`s and step `mechanism`s are rejected;
 off-list `construct` values are rejected naming the allowed set.
 
 **Component `construct`** (code shape — one of):
@@ -212,11 +222,12 @@ repo purl). Tag the actor kind with `entityKind` (badge text, e.g. `Person`,
 `agent`, `queue`); optionally override the node color with `color` (hex) and
 hand-author `declaration` (`kind: "custom_entity"` + `attributes` as ordered
 `{ key, value }` pairs — e.g. `level: L1`, `approvalLimit: $500`). Entities
-group by `process`/`layer` and flow through relations exactly like code nodes.
+group by `process`/`layer` and participate in relations and walkthrough steps
+exactly like code nodes.
 
 `store` is for retained state registries (e.g. a `Set`/`Map` module-scope
 subscriber bag), not conceptual "services". Pair with `writes` / `reads` /
-`watches` relations.
+`watches` walkthrough hops.
 
 `method` is for **standalone method components** selected from a class. Use it
 when a class method is important enough to be its own node. `symbol` should be
@@ -228,6 +239,13 @@ functions — use `function` for those.
 - `entry` — boundary / UI / RPC entry the story starts from
 - `service` — external system the process calls out to
 
+**Component `framework` / `stereotype`** (optional, orthogonal to `construct`):
+
+Pair them when the unit plays a framework pattern that isn't a language
+construct. Examples: `framework: "react"` + `stereotype: "component"` on a
+`construct: function`; `framework: "nestjs"` + `stereotype: "controller"`.
+Empty when the node is language-only.
+
 **Component `proposed`** (optional boolean):
 
 Set `proposed: true` for design / migration nodes that do not exist in
@@ -237,26 +255,36 @@ source yet. Keep a real `construct` for the intended shape (`function`,
 `construct: "external"` for planned in-repo code — that is for real outside
 systems.
 
-**Relation `relationType`** (topology — Set A):
+**Relation `relationType`** (how `from` relates to `to` — structural / module /
+type claims; runtime seams do NOT belong here):
 
 | Style | Labels |
 |---|---|
-| solid | `imports`, `method`, `contains` |
+| solid | `imports`, `contains`, `method` |
 | dashed | `extends`, `inherits`, `implements`, `mixes_in` |
 | dotted | `references` |
 
-**Walkthrough hop `mechanism`** (runtime — Set B):
+Semantics: `imports` = module-level import; `contains` = structural
+containment; `method` = target is a method of the source class;
+`extends`/`inherits`/`implements`/`mixes_in` = inheritance / interface /
+mixin claims; `references` = type/symbol reference that isn't a call.
+Evidence goes in `refs`.
+
+**Walkthrough hop `mechanism`** (how `from` relates to `to` at a runtime
+site — request/response and pushed data both live here):
 
 | Style | Labels |
 |---|---|
 | solid | `calls`, `uses`, `feeds`, `produces`, `writes`, `reads` |
-| dashed | `registers-into`, `watches` |
+| dashed | `watches`, `registers-into` |
 
-Semantics: `uses` = general dependency (prefer a tighter verb); `feeds` =
-data-flow output→input; `produces` = emits an output; `writes`/`reads`/`watches`
-= store access; `registers-into` = subscriber registration into a fan-out bag.
-For RPC / event-broadcast use the closest match (`calls` for request/response,
-`feeds` / `produces` for pushed data).
+Semantics: `calls` = direct invocation (request/response); `uses` = general
+runtime dependency; `feeds` = data-flow output→input; `produces` = emits an
+output; `writes`/`reads` = store access; `watches` = observes/subscribes;
+`registers-into` = subscriber registration into a fan-out bag. For RPC /
+event-broadcast use the closest match (`calls` for request/response,
+`feeds` / `produces` for pushed data). Structural labels (`imports`, `extends`,
+…) are **not** valid step mechanisms; put those in `relations`.
 
 **Declarations** (`component.declaration`) render params, return type, and
 members in the click panel — hand-author them when you want to highlight
@@ -264,7 +292,7 @@ specific inputs/outputs. Discriminated by `declaration.kind` (`function`,
 `class`, `method`, `type`, `store`, `external`, `custom_entity`, …). Don't
 bother filling
 `callers`/`callees`: relationship comments are intentionally not rendered
-(the model's relations carry interactions). Every hand-written `declaration`
+(the model's edges carry interactions). Every hand-written `declaration`
 must carry provenance:
 
 - `"declarationProvenance": "authored"` — written by you from reading the
@@ -281,13 +309,20 @@ as `authored`.
 npx -y @principal-ai/principal-studio-cli subsystem-model open <graph.id>
 ```
 
-## repoRoot
+## repoRoot / repoRoots
 
 Opt-in but strongly recommended when the repo exists locally: clicking a node
 then serves the file inline in the detail panel (sandboxed read — traversal is
-rejected). Without `repoRoot` the model still renders, but node clicks show
+rejected). Without a root the model still renders, but node clicks show
 only metadata (`graph has no repoRoot`). Needed for walkthrough site
 verification against real `file:line` contents.
+
+- `repoRoot` — single repo: component `file` paths join onto it.
+- `repoRoots` — multi-repo models: a map keyed by purl repo key
+  (`pkg:github/owner/name`, fragment stripped) → local root.
+
+Both are host-binding fields: accepted by the CLI and stored on the record,
+but not part of the portable document.
 
 ## Managing existing models
 
