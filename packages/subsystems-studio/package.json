@@ -1,6 +1,6 @@
 {
   "name": "@principal-ai/subsystems-studio",
-  "version": "0.6.9",
+  "version": "0.6.11",
   "description": "Subsystems Studio — desktop host for subsystem models, walkthroughs, trails, and agent sessions. Pairs with the principal-ai CLI.",
   "type": "module",
   "os": [
@@ -24,7 +24,8 @@
     "build:bundle": "bun run build:stable && bun scripts/stage-bundle.ts",
     "prepack": "bun run build:bundle",
     "graphify:smoke": "bun scripts/graphify-smoke.ts",
-    "graphify:ensure": "bun scripts/graphify-ensure-smoke.ts"
+    "graphify:ensure": "bun scripts/graphify-ensure-smoke.ts",
+    "package-layers:ensure": "bun scripts/package-layers-ensure-smoke.ts"
   },
   "publishConfig": {
     "access": "public",
@@ -44,8 +45,8 @@
     "@principal-ai/file-city-react": "^0.5.91",
     "@principal-ai/logo-component": "^0.1.23",
     "@principal-ai/repository-abstraction": "^0.5.7",
-    "@principal-ai/subsystems-core": "0.32.0",
-    "@principal-ai/subsystems-react": "0.21.1",
+    "@principal-ai/subsystems-core": "0.34.1",
+    "@principal-ai/subsystems-react": "0.23.4",
     "@types/bun": "latest",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
@@ -59,6 +60,9 @@
   },
   "dependencies": {
     "@principal-ai/agent-monitoring": "^0.3.43",
+    "@principal-ai/codebase-composition": "0.2.58",
+    "@principal-ai/subsystems-core": "0.34.1",
+    "@principal-ai/subsystems-react": "0.23.4",
     "@xyflow/react": "^12.11.3",
     "better-sqlite3": "^13.0.2"
   }

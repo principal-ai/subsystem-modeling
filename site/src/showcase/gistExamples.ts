@@ -1,4 +1,4 @@
-/** Curated public gists shown as clickable examples on /gist. */
+/** Curated public gists shown as clickable examples on Try it. */
 export interface GistExample {
   id: string
   title: string

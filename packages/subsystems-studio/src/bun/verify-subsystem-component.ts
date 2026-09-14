@@ -44,8 +44,15 @@ import {
 } from "./graphify-store";
 import {
 	findAcceptedConstructAugmentation,
+	findAcceptedModuleAugmentation,
+	findAcceptedRelationAugmentation,
 	findAcceptedSignatureAugmentation,
 } from "./augmentation-store";
+import {
+	auditTopologyRelations,
+	type GraphifyBundle,
+} from "./topology-audit";
+import { auditBoundaryFields } from "./boundary-audit";
 import {
 	buildAuditFingerprint,
 	saveSubsystemModelAudit,
@@ -849,11 +856,14 @@ export async function verifySubsystemModel(
 /**
  * Dry-run deterministic audit focused on component currency: files exist,
  * symbols declare, declaration freshness, and (when graphify is ready)
- * construct/signature/anchor checks. Walkthrough site affinity is intentionally
- * omitted — that seam check is heuristic and better suited to an agent pass.
+ * construct/signature/anchor checks — plus topology endpoint integrity and
+ * soft Graphify corroboration for `imports` relations. Walkthrough site
+ * affinity is intentionally omitted — that seam check is heuristic and better
+ * suited to an agent pass.
  *
  * Always returns a per-component `checks` checklist so a clean run still shows
- * what was inspected.
+ * what was inspected. Layer 2 topology: endpoint integrity + soft Graphify
+ * corroboration for `imports` relations.
  */
 export async function auditSubsystemModel(
 	graphId: string,
@@ -1159,6 +1169,93 @@ export async function auditSubsystemModel(
 		checks.push(check);
 	}
 
+	// --- Layer 2: topology relations ---
+	const topologyBundles = new Map<string, GraphifyBundle | null>();
+	const readiness = assessSubsystemGraphifyReadiness(graph);
+	for (const p of readiness.purls) {
+		if (p.status !== "ready") {
+			topologyBundles.set(p.purl, null);
+			continue;
+		}
+		const cached = await getCachedGraphifyGraph(p.purl, {
+			repoRoot: p.repoRoot,
+		});
+		if (!cached) {
+			topologyBundles.set(p.purl, null);
+			continue;
+		}
+		const smoke = loadGraphifyGraph(cached.path);
+		topologyBundles.set(p.purl, {
+			nodes: (smoke.nodes ?? []) as GraphifyNode[],
+			edges: graphEdges(smoke),
+		});
+	}
+
+	const byComponentId = new Map(graph.components.map((c) => [c.id, c]));
+	const augmentedRelationIds = new Set<string>();
+	for (const rel of graph.relations ?? []) {
+		const from = byComponentId.get(rel.from);
+		const to = byComponentId.get(rel.to);
+		if (!from?.file?.trim() || !from.symbol?.trim()) continue;
+		const purl = from.purl?.trim();
+		if (!purl || purl === "external") continue;
+		const hit = await findAcceptedRelationAugmentation({
+			purl,
+			fromFile: from.file,
+			fromSymbol: from.symbol,
+			relationType: rel.relationType,
+			toFile: to?.file,
+			toSymbol: to?.symbol,
+			toId: to?.id,
+			toName: to?.name,
+		});
+		if (hit) augmentedRelationIds.add(rel.id);
+	}
+
+	const topology = auditTopologyRelations(
+		graph.components,
+		graph.relations ?? [],
+		topologyBundles,
+		{ augmentedRelationIds },
+	);
+	for (const f of topology.findings) {
+		findings.push({
+			kind: f.kind,
+			severity: f.severity,
+			relationId: f.relationId,
+			message: f.message,
+		});
+	}
+
+	const augmentedModuleIds = new Set<string>();
+	for (const c of graph.components) {
+		const mod = c.module?.trim();
+		if (!mod || !c.file?.trim() || !c.symbol?.trim()) continue;
+		const purl = c.purl?.trim();
+		if (!purl || purl === "external") continue;
+		const hit = await findAcceptedModuleAugmentation({
+			purl,
+			file: c.file,
+			symbol: c.symbol,
+			module: mod,
+		});
+		if (hit) augmentedModuleIds.add(c.id);
+	}
+
+	const boundary = auditBoundaryFields(graph.components, {
+		augmentedModuleIds,
+	});
+	for (const f of boundary.findings) {
+		findings.push({
+			kind: f.kind,
+			severity: f.severity,
+			componentId: f.componentId,
+			componentName: f.componentName,
+			moduleKey: f.moduleKey,
+			message: f.message,
+		});
+	}
+
 	const summary = {
 		components: graph.components.length,
 		filesVerified,
@@ -1178,6 +1275,21 @@ export async function auditSubsystemModel(
 		weakAnchors,
 		unresolved,
 		ok: okComponents,
+		relations: topology.summary.relations,
+		softChecked: topology.summary.softChecked,
+		softConfirmed: topology.summary.softConfirmed,
+		softUnconfirmed: topology.summary.softUnconfirmed,
+		importsChecked: topology.summary.importsChecked,
+		importsConfirmed: topology.summary.importsConfirmed,
+		importsUnconfirmed: topology.summary.importsUnconfirmed,
+		brokenRelationEndpoints: topology.summary.brokenEndpoints,
+		modulesClaimed: boundary.summary.modulesClaimed,
+		moduleFileOk: boundary.summary.moduleFileOk,
+		moduleFileMismatch: boundary.summary.moduleFileMismatch,
+		moduleWithoutFile: boundary.summary.moduleWithoutFile,
+		processNestsChecked: boundary.summary.processNestsChecked,
+		processNestOk: boundary.summary.processNestOk,
+		processNestDisagree: boundary.summary.processNestDisagree,
 	};
 
 	const needsUpdate = findings.some((f) => f.severity === "error");
@@ -1189,6 +1301,8 @@ export async function auditSubsystemModel(
 		needsUpdate,
 		summary,
 		checks,
+		topologyChecks: topology.checks,
+		boundaryChecks: boundary.checks,
 		findings,
 	};
 

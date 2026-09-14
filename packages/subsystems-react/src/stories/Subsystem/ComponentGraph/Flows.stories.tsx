@@ -159,12 +159,13 @@ const drawingWalkthroughs: SubsystemWalkthrough[] = [
 
 function FlowsDemo() {
   const renderWalkthroughViewer = useCallback(
-    ({ walkthrough, stepIndex }: WalkthroughViewerContext) => (
+    ({ walkthrough, stepIndex, onOpenFile }: WalkthroughViewerContext) => (
       <PierreWalkthroughCodeView
         walkthrough={walkthrough}
         stepIndex={stepIndex}
         readFile={readStoryFile}
         contextLines={4}
+        onOpenFile={onOpenFile}
       />
     ),
     [],
@@ -191,6 +192,7 @@ function FlowsDemo() {
           >
             {`// ${file}`}
             {opts?.startLine != null ? `\n  // → focus line ${opts.startLine}` : ''}
+            {opts?.fullFile ? '\n  // → full file' : ''}
             {'\n  …'}
           </div>
         )}

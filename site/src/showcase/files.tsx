@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import {
   PierreFileView,
   PierreWalkthroughCodeView,
+  type SubsystemOpenFileOptions,
   type WalkthroughViewerContext,
 } from '@principal-ai/subsystems-react';
 
@@ -40,7 +41,7 @@ export function makeShowcaseReadFile(caseDir: string) {
 }
 
 export interface ShowcaseRenderers {
-  renderFileViewer: (file: string) => ReactNode;
+  renderFileViewer: (file: string, opts?: SubsystemOpenFileOptions) => ReactNode;
   renderWalkthroughViewer: (ctx: WalkthroughViewerContext) => ReactNode;
 }
 
@@ -52,11 +53,12 @@ export interface ShowcaseRenderers {
 export function makeShowcaseRenderers(caseDir: string): ShowcaseRenderers {
   const readFile = makeShowcaseReadFile(caseDir);
   return {
-    renderFileViewer: (file) => (
+    renderFileViewer: (file, opts) => (
       <PierreFileView
         filePath={file}
         fileName={file.split('/').pop() ?? file}
         readFile={readFile}
+        focusLine={opts?.fullFile ? opts.startLine : undefined}
       />
     ),
     renderWalkthroughViewer: (ctx) => (
@@ -64,6 +66,7 @@ export function makeShowcaseRenderers(caseDir: string): ShowcaseRenderers {
         walkthrough={ctx.walkthrough}
         stepIndex={ctx.stepIndex}
         readFile={readFile}
+        onOpenFile={ctx.onOpenFile}
       />
     ),
   };

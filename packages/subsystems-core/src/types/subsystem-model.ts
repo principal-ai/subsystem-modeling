@@ -13,7 +13,10 @@
  *
  * Ontology: construct = what a node is, framework + stereotype = which
  * framework pattern it plays, role = where it sits, process = where it runs,
+ * module = which source file/module the export belongs to,
  * proposed = not yet in source (design / migration placeholder).
+ * Package (repo) frames are derived from component `purl` when a graph spans
+ * multiple repos — there is no separate `package` field.
  * `symbol` is the code identity; `name` is the display label.
  */
 
@@ -66,8 +69,7 @@ export type SubsystemRelationType =
   | 'implements'
   | 'mixes_in'
   | 'method'
-  | 'references'
-  | 'contains';
+  | 'references';
 
 /**
  * Walkthrough hop mechanism — runtime seams with a `file:line` site.
@@ -156,13 +158,6 @@ export interface SubsystemReferenceInfo {
   source_location?: string;
 }
 
-export interface SubsystemImportInfo {
-  nodeId: string;
-  name: string;
-  relation?: string;
-  source_location?: string;
-}
-
 export interface SubsystemClassDeclaration {
   kind: 'class';
   methods: SubsystemMethodInfo[];
@@ -234,13 +229,6 @@ export interface SubsystemTypeDeclaration {
   rhs?: string;
 }
 
-export interface SubsystemModuleDeclaration {
-  kind: 'module';
-  exports: string[];
-  imports: SubsystemImportInfo[];
-  symbols: string[];
-}
-
 export interface SubsystemExternalDeclaration {
   kind: 'external';
   label: string;
@@ -278,7 +266,6 @@ export type SubsystemConstructDeclaration =
   | SubsystemFunctionDeclaration
   | SubsystemMethodDeclaration
   | SubsystemTypeDeclaration
-  | SubsystemModuleDeclaration
   | SubsystemExternalDeclaration
   | SubsystemStoreDeclaration
   | SubsystemCustomEntityDeclaration;
@@ -291,7 +278,7 @@ export interface SubsystemComponent {
   construct: SubsystemConstruct;
   /** Repo-root-relative source path. */
   file: string;
-  /** PURL for repo/package grouping. */
+  /** PURL for repo/package grouping. Multi-repo graphs draw package frames from distinct purl repo keys. */
   purl: string;
   purpose?: string;
   role?: SubsystemComponentRole;
@@ -313,6 +300,15 @@ export interface SubsystemComponent {
    */
   stereotype?: SubsystemStereotype;
   process?: string;
+  /**
+   * Source-module membership — which file/module this export belongs to
+   * (e.g. `src/session/transcript.ts`). Nodes sharing a `module` are drawn
+   * inside one boundary frame. Prefer this over inventing a module construct:
+   * anchor each export as its real construct (`function` / `class` / …) and
+   * set `module` so the file reads as a frame, not a node. Orthogonal to
+   * `process` (runtime deployment unit).
+   */
+  module?: string;
   /** Code identity — real declaration in `file` when set. */
   symbol?: string;
   /**

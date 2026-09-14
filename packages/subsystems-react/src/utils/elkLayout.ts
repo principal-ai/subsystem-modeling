@@ -73,12 +73,13 @@ export interface ElkLayoutOptions {
   direction?: 'RIGHT' | 'LEFT' | 'DOWN' | 'UP';
 
   /**
-   * Compound groups — each becomes a nested ELK parent whose `memberIds`
-   * are laid out inside it. Members reference the group via React Flow
-   * `parentId`; ELK returns parent-relative child positions which this
-   * module flattens back to absolute flow coordinates.
+   * Compound groups — each becomes an ELK parent whose `memberIds` are laid
+   * out inside it. `memberIds` may be leaf node ids or other group ids
+   * (for nesting, e.g. process → module → leaves). Optional `parentId`
+   * nests this group under another group; omit for a root-level frame.
+   * Members reference their immediate parent via React Flow `parentId`.
    */
-  groups?: Array<{ id: string; memberIds: string[] }>;
+  groups?: Array<{ id: string; memberIds: string[]; parentId?: string }>;
 }
 
 /** Result of ELK layout computation */
@@ -502,51 +503,134 @@ export async function computeElkLayout(
 
   // Partition leaf nodes into compound parents when groups are given.
   // Group shells themselves are NOT part of `nodes` — they are reconstructed
-  // by the caller from `groupBounds`. Only leaf ids in `memberIds` nest.
+  // by the caller from `groupBounds`. `memberIds` may reference leaves or
+  // other group ids (process → module → leaves).
   const groupDefs = (options.groups ?? []).filter((g) => g.memberIds.length > 0);
-  const memberToGroup = new Map<string, string>();
-  const groupedLeafIds = new Set<string>();
-  for (const g of groupDefs) {
-    for (const mid of g.memberIds) {
-      if (!memberToGroup.has(mid)) {
-        memberToGroup.set(mid, g.id);
-        groupedLeafIds.add(mid);
+  const groupById = new Map(groupDefs.map((g) => [g.id, g]));
+  const elkById = new Map(elkNodes.map((n) => [n.id, n]));
+
+  const compoundLayoutOptions: LayoutOptions = {
+    'elk.algorithm': 'layered',
+    'elk.direction': direction,
+    'elk.padding': '[top=48,left=24,bottom=24,right=24]',
+    'elk.spacing.nodeNode': '40',
+  };
+
+  /** Descendant leaf count for singleton checks (nested groups count through). */
+  const leafDescendantCount = (memberIds: string[]): number => {
+    let n = 0;
+    for (const mid of memberIds) {
+      if (elkById.has(mid)) n += 1;
+      else {
+        const g = groupById.get(mid);
+        if (g) n += leafDescendantCount(g.memberIds);
       }
     }
+    return n;
+  };
+
+  const builtGroups = new Map<string, ElkNode>();
+  const skippedGroups = new Set<string>();
+  const pending = [...groupDefs];
+  // Build bottom-up: a group is ready when every member is a leaf or an
+  // already-built / skipped group. Skipped groups promote their members.
+  while (pending.length > 0) {
+    let progress = false;
+    for (let i = pending.length - 1; i >= 0; i--) {
+      const g = pending[i]!;
+      const childNodes: ElkNode[] = [];
+      let ready = true;
+      for (const mid of g.memberIds) {
+        if (elkById.has(mid)) {
+          childNodes.push(elkById.get(mid)!);
+          continue;
+        }
+        if (skippedGroups.has(mid)) {
+          // Promote skipped group's members into this parent.
+          const skipped = groupById.get(mid);
+          if (!skipped) {
+            ready = false;
+            break;
+          }
+          for (const sm of skipped.memberIds) {
+            if (elkById.has(sm)) childNodes.push(elkById.get(sm)!);
+            else if (builtGroups.has(sm)) childNodes.push(builtGroups.get(sm)!);
+            else if (!skippedGroups.has(sm)) {
+              ready = false;
+              break;
+            }
+          }
+          if (!ready) break;
+          continue;
+        }
+        if (builtGroups.has(mid)) {
+          childNodes.push(builtGroups.get(mid)!);
+          continue;
+        }
+        if (groupById.has(mid)) {
+          ready = false;
+          break;
+        }
+        // Unknown id — ignore (external stubs etc. may be absent).
+      }
+      if (!ready) continue;
+
+      pending.splice(i, 1);
+      progress = true;
+
+      // Skip frames with fewer than 2 leaf descendants — promote children up.
+      if (leafDescendantCount(g.memberIds) < 2 || childNodes.length < 1) {
+        skippedGroups.add(g.id);
+        continue;
+      }
+
+      builtGroups.set(g.id, {
+        id: g.id,
+        children: childNodes,
+        layoutOptions: compoundLayoutOptions,
+      });
+    }
+    if (!progress) {
+      // Cycle or unresolved refs — leave remaining groups unbuilt.
+      for (const g of pending) skippedGroups.add(g.id);
+      break;
+    }
   }
-  const elkById = new Map(elkNodes.map((n) => [n.id, n]));
+
+  const groupedLeafIds = new Set<string>();
+  const markLeaves = (memberIds: string[]) => {
+    for (const mid of memberIds) {
+      if (elkById.has(mid)) groupedLeafIds.add(mid);
+      else {
+        const g = groupById.get(mid);
+        if (g && builtGroups.has(g.id)) markLeaves(g.memberIds);
+        else if (g && skippedGroups.has(g.id)) markLeaves(g.memberIds);
+      }
+    }
+  };
+  for (const [id] of builtGroups) {
+    const g = groupById.get(id);
+    if (g) markLeaves(g.memberIds);
+  }
+
   const ungroupedElkNodes: ElkNode[] = [];
   for (const n of elkNodes) {
     if (!groupedLeafIds.has(n.id)) ungroupedElkNodes.push(n);
   }
+
+  // Root-level compound parents: built groups with no parent, or whose parent
+  // was skipped / never built.
   const elkParents: ElkNode[] = [];
-  for (const g of groupDefs) {
-    const children = g.memberIds
-      .map((mid) => elkById.get(mid))
-      .filter((n): n is ElkNode => !!n);
-    // Skip groups with <2 real members — a single-child frame adds noise;
-    // the caller drops the shell and leaves the node top-level.
-    if (children.length < 2) {
-      for (const c of children) ungroupedElkNodes.push(c);
-      memberToGroup.delete(g.memberIds[0]);
-      groupedLeafIds.delete(g.memberIds[0]);
-      continue;
-    }
-    elkParents.push({
-      id: g.id,
-      children,
-      layoutOptions: {
-        'elk.algorithm': 'layered',
-        'elk.direction': direction,
-        'elk.padding': '[top=48,left=24,bottom=24,right=24]',
-        'elk.spacing.nodeNode': '40',
-      },
-    });
+  for (const [id, node] of builtGroups) {
+    const g = groupById.get(id);
+    const parentId = g?.parentId;
+    if (parentId && builtGroups.has(parentId)) continue; // nested inside parent
+    elkParents.push(node);
   }
 
   // Create ELK graph
   const rootOptions = getElkOptions(options);
-  if (elkParents.length > 0) {
+  if (elkParents.length > 0 || builtGroups.size > 0) {
     rootOptions['elk.hierarchyHandling'] = 'INCLUDE_CHILDREN';
   }
   const elkGraph: ElkNode = {
@@ -562,9 +646,6 @@ export async function computeElkLayout(
   // Build maps of ELK-computed positions. Nested children report
   // parent-relative coords — flatten to absolute for edges, and keep the
   // relative form for React Flow children (whose position is parent-relative).
-  // Absolute offset of every ELK node (parents included), accumulated down
-  // the ancestor chain — edge sections/labels are relative to their
-  // `container`, so each edge needs its container's absolute offset.
   const elkAbsOffsets = new Map<string, { x: number; y: number }>();
   const elkPositions = new Map<string, { x: number; y: number }>();
   const elkRelativePositions = new Map<string, { x: number; y: number }>();
@@ -576,27 +657,36 @@ export async function computeElkLayout(
     for (const c of n.children ?? []) walkElk(c, ax, ay);
   };
   walkElk(layoutedGraph, 0, 0);
+
+  const collectGroupResults = (n: ElkNode, isRootChild: boolean) => {
+    const isGroup = builtGroups.has(n.id);
+    if (isGroup) {
+      // Nested group positions are parent-relative (RF child semantics);
+      // root-level groups use absolute coords.
+      groupBounds.set(n.id, {
+        x: n.x ?? 0,
+        y: n.y ?? 0,
+        width: n.width ?? 0,
+        height: n.height ?? 0,
+      });
+      for (const c of n.children ?? []) {
+        const rx = c.x ?? 0;
+        const ry = c.y ?? 0;
+        elkRelativePositions.set(c.id, { x: rx, y: ry });
+        const abs = elkAbsOffsets.get(c.id) ?? { x: rx, y: ry };
+        elkPositions.set(c.id, abs);
+        if (builtGroups.has(c.id)) collectGroupResults(c, false);
+      }
+      return;
+    }
+    if (isRootChild) {
+      elkPositions.set(n.id, { x: n.x ?? 0, y: n.y ?? 0 });
+      elkRelativePositions.set(n.id, { x: n.x ?? 0, y: n.y ?? 0 });
+    }
+  };
   if (layoutedGraph.children) {
     for (const child of layoutedGraph.children) {
-      if (child.children && child.children.length > 0 && groupDefs.some((g) => g.id === child.id)) {
-        const gx = child.x ?? 0;
-        const gy = child.y ?? 0;
-        groupBounds.set(child.id, {
-          x: gx,
-          y: gy,
-          width: child.width ?? 0,
-          height: child.height ?? 0,
-        });
-        for (const grand of child.children) {
-          const rx = grand.x ?? 0;
-          const ry = grand.y ?? 0;
-          elkRelativePositions.set(grand.id, { x: rx, y: ry });
-          elkPositions.set(grand.id, { x: gx + rx, y: gy + ry });
-        }
-      } else {
-        elkPositions.set(child.id, { x: child.x ?? 0, y: child.y ?? 0 });
-        elkRelativePositions.set(child.id, { x: child.x ?? 0, y: child.y ?? 0 });
-      }
+      collectGroupResults(child, true);
     }
   }
 

@@ -92,7 +92,44 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const relations = [] as SubsystemRelation[];
+export const relations = [
+  {
+    id: 'activity-vm',
+    from: 'main-activity',
+    to: 'notes-view-model',
+    relationType: 'references',
+  },
+  {
+    id: 'vm-repo',
+    from: 'notes-view-model',
+    to: 'notes-repository',
+    relationType: 'references',
+  },
+  {
+    id: 'repo-dao',
+    from: 'notes-repository',
+    to: 'note-dao',
+    relationType: 'references',
+  },
+  {
+    id: 'repo-api',
+    from: 'notes-repository',
+    to: 'notes-api',
+    relationType: 'references',
+  },
+  {
+    id: 'dao-room',
+    from: 'note-dao',
+    to: 'Room',
+    relationType: 'imports',
+  },
+  {
+    id: 'api-backend',
+    from: 'notes-api',
+    to: 'NotesBackend',
+    relationType: 'imports',
+  },
+] as SubsystemRelation[];
 
 export const walkthroughs = [
   {

@@ -35,7 +35,6 @@ const RELATION_TYPES = new Set<string>([
   'mixes_in',
   'method',
   'references',
-  'contains',
 ]);
 
 export function relations(

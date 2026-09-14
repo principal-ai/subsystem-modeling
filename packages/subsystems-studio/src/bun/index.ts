@@ -92,6 +92,7 @@ import {
 	subscribeOpencodeLiveFeeds,
 } from "./opencode-v2-live";
 import { ensureGraphifyGraph, listGraphifyGraphs, listGraphifyRepos, assessSubsystemGraphifyReadiness } from "./graphify-store";
+import { ensurePackageLayers, listPackageLayers, listPackageLayerRepos } from "./package-layer-store";
 import {
 	walkLibrary,
 	walkTours,
@@ -288,6 +289,7 @@ const AGENT_SESSIONS_TAB_ID = "agent-sessions";
 const MAINTENANCE_SESSIONS_TAB_ID = "maintenance-sessions";
 const SUBSYSTEMS_TAB_ID = "subsystems";
 const GRAPHIFY_TAB_ID = "graphify";
+const PACKAGE_LAYERS_TAB_ID = "package-layers";
 const OPENCODE_V2_TAB_ID = "opencode-v2";
 
 /** Permanent tabs controlled by `ViewerSettings.defaultTabs`. Order here is
@@ -299,6 +301,7 @@ const PERMANENT_TAB_DEFS: Array<{
 		| "maintenance-sessions"
 		| "subsystems"
 		| "graphify"
+		| "package-layers"
 		| "library"
 		| "opencode-v2";
 	title: string;
@@ -327,6 +330,12 @@ const PERMANENT_TAB_DEFS: Array<{
 		kind: "graphify",
 		title: "Graphify",
 		flag: "graphify",
+	},
+	{
+		id: PACKAGE_LAYERS_TAB_ID,
+		kind: "package-layers",
+		title: "Package Layers",
+		flag: "packageLayers",
 	},
 	{
 		id: OPENCODE_V2_TAB_ID,
@@ -446,6 +455,12 @@ interface GraphifyTabState {
 	title: "Graphify";
 }
 
+interface PackageLayersTabState {
+	id: typeof PACKAGE_LAYERS_TAB_ID;
+	kind: "package-layers";
+	title: "Package Layers";
+}
+
 interface OpencodeV2TabState {
 	id: typeof OPENCODE_V2_TAB_ID;
 	kind: "opencode-v2";
@@ -495,6 +510,7 @@ type TabState =
 	| MaintenanceSessionsTabState
 	| SubsystemsTabState
 	| GraphifyTabState
+	| PackageLayersTabState
 	| OpencodeV2TabState
 	| AnalysisTabState
 	| SessionEventsTabState
@@ -510,6 +526,7 @@ function permanentTabState(
 	| MaintenanceSessionsTabState
 	| SubsystemsTabState
 	| GraphifyTabState
+	| PackageLayersTabState
 	| OpencodeV2TabState
 	| LibraryTabState {
 	if (def.kind === "agent-sessions") {
@@ -527,6 +544,13 @@ function permanentTabState(
 	}
 	if (def.kind === "graphify") {
 		return { id: GRAPHIFY_TAB_ID, kind: "graphify", title: "Graphify" };
+	}
+	if (def.kind === "package-layers") {
+		return {
+			id: PACKAGE_LAYERS_TAB_ID,
+			kind: "package-layers",
+			title: "Package Layers",
+		};
 	}
 	if (def.kind === "opencode-v2") {
 		return { id: OPENCODE_V2_TAB_ID, kind: "opencode-v2", title: "OpenCode V2" };
@@ -573,6 +597,8 @@ function ensurePermanentTab(id: string): void {
 				viewerSettings.defaultTabs.maintenanceSessions,
 			trails: id === LIBRARY_TAB_ID || viewerSettings.defaultTabs.trails,
 			graphify: id === GRAPHIFY_TAB_ID || viewerSettings.defaultTabs.graphify,
+			packageLayers:
+				id === PACKAGE_LAYERS_TAB_ID || viewerSettings.defaultTabs.packageLayers,
 			subsystems:
 				id === SUBSYSTEMS_TAB_ID || viewerSettings.defaultTabs.subsystems,
 			opencodeV2:
@@ -1236,6 +1262,7 @@ function isStaticTab(
 	| MaintenanceSessionsTabState
 	| SubsystemsTabState
 	| GraphifyTabState
+	| PackageLayersTabState
 	| OpencodeV2TabState {
 	return (
 		tab.kind === "library" ||
@@ -1243,6 +1270,7 @@ function isStaticTab(
 		tab.kind === "maintenance-sessions" ||
 		tab.kind === "subsystems" ||
 		tab.kind === "graphify" ||
+		tab.kind === "package-layers" ||
 		tab.kind === "opencode-v2"
 	);
 }
@@ -2325,6 +2353,133 @@ const requests: RequestHandlers = {
 			installGraphify: async () => startGraphifyCliJob("install"),
 			updateGraphify: async () => startGraphifyCliJob("update"),
 			uninstallGraphify: async () => startGraphifyCliJob("uninstall"),
+			listPackageLayers: async () => {
+				const entries = await listPackageLayers();
+				return {
+					layers: entries.map((e) => ({
+						purl: e.purl,
+						purlKey: e.purlKey,
+						headSha: e.headSha,
+						dirtyHash: e.dirtyHash,
+						slotKey: e.slotKey,
+						repoRoot: e.repoRoot,
+						builtAt: e.builtAt,
+						packageCount: e.packageCount,
+						isMonorepo: e.isMonorepo,
+						rootPackageName: e.rootPackageName,
+						packagesJsonPath: e.packagesJsonPath,
+					})),
+				};
+			},
+			listPackageLayerRepos: async () => ({
+				repos: await listPackageLayerRepos(undefined, packageLayersBuildingPurls),
+			}),
+			ensurePackageLayers: async ({ purl, repoRoot, force }) => {
+				const key = purl.trim();
+				if (packageLayersBuildingPurls.has(key)) {
+					return { ok: true, status: "building", purl: key };
+				}
+
+				packageLayersBuildingPurls.add(key);
+				broadcastPackageLayersChanged({ kind: "repos" });
+
+				const work = ensurePackageLayers({
+					purl: key,
+					repoRoot,
+					force,
+				});
+				const raced = await Promise.race([
+					work.then((r) => ({ done: true as const, r })),
+					sleepMs(250).then(() => ({ done: false as const })),
+				]);
+
+				if (raced.done) {
+					packageLayersBuildingPurls.delete(key);
+					const result = raced.r;
+					if (!result.ok) {
+						broadcastPackageLayersChanged({
+							kind: "ensure",
+							purl: key,
+							ensure: {
+								ok: false,
+								error: result.error,
+								durationMs: result.durationMs,
+							},
+						});
+						return {
+							ok: false,
+							error: result.error,
+							purl: result.purl,
+							durationMs: result.durationMs,
+						};
+					}
+					broadcastPackageLayersChanged({
+						kind: "ensure",
+						purl: key,
+						ensure: {
+							ok: true,
+							status: result.status,
+							packageCount: result.packageCount,
+							isMonorepo: result.isMonorepo,
+							durationMs: result.durationMs,
+						},
+					});
+					return {
+						ok: true,
+						status: result.status,
+						purl: result.purl,
+						headSha: result.headSha,
+						dirtyHash: result.dirtyHash,
+						slotKey: result.slotKey,
+						repoRoot: result.repoRoot,
+						packagesJsonPath: result.packagesJsonPath,
+						packageCount: result.packageCount,
+						isMonorepo: result.isMonorepo,
+						durationMs: result.durationMs,
+					};
+				}
+
+				void work
+					.then((result) => {
+						packageLayersBuildingPurls.delete(key);
+						if (!result.ok) {
+							broadcastPackageLayersChanged({
+								kind: "ensure",
+								purl: key,
+								ensure: {
+									ok: false,
+									error: result.error,
+									durationMs: result.durationMs,
+								},
+							});
+							return;
+						}
+						broadcastPackageLayersChanged({
+							kind: "ensure",
+							purl: key,
+							ensure: {
+								ok: true,
+								status: result.status,
+								packageCount: result.packageCount,
+								isMonorepo: result.isMonorepo,
+								durationMs: result.durationMs,
+							},
+						});
+					})
+					.catch((err) => {
+						packageLayersBuildingPurls.delete(key);
+						broadcastPackageLayersChanged({
+							kind: "ensure",
+							purl: key,
+							ensure: {
+								ok: false,
+								error: err instanceof Error ? err.message : String(err),
+							},
+						});
+					});
+
+				return { ok: true, status: "building", purl: key };
+			},
 			openSessionEventsTab: async ({ sessionId, title, agent }) => {
 				const agentName = (agent ?? "").toLowerCase();
 				const rawFeedAgents = new Set(["opencode", "cursor"]);
@@ -2392,6 +2547,7 @@ const requests: RequestHandlers = {
  * finish in the background, push `graphifyChanged`.
  */
 const graphifyBuildingPurls = new Set<string>();
+const packageLayersBuildingPurls = new Set<string>();
 let graphifyCliBusy: "install" | "update" | "uninstall" | null = null;
 let cachedDetailedGraphifyStatus: GraphifyCliStatus | null = null;
 let detailedRefreshInflight: Promise<void> | null = null;
@@ -2423,6 +2579,20 @@ function broadcastGraphifyChanged(
 	} catch (err) {
 		console.warn(
 			`[principal-studio] could not notify renderer (graphifyChanged): ${(err as Error).message}`,
+		);
+	}
+}
+
+function broadcastPackageLayersChanged(
+	payload: StudioMessages["packageLayersChanged"],
+): void {
+	try {
+		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
+			"packageLayersChanged"
+		](payload);
+	} catch (err) {
+		console.warn(
+			`[principal-studio] could not notify renderer (packageLayersChanged): ${(err as Error).message}`,
 		);
 	}
 }

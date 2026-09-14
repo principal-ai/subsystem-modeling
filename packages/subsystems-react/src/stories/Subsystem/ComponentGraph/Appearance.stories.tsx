@@ -109,7 +109,7 @@ export const NamingConventions: Story = {
 };
 
 // ---------------------------------------------------------------------------
-// Kind variations — one column per kind (class / function / type / module /
+// Kind variations — one column per kind (class / function / type / external —
 // external), rows going bare → detailed. Click a node to see its declaration
 // panel; type names inside it are clickable when they match another node here.
 // ---------------------------------------------------------------------------
@@ -269,50 +269,6 @@ const kindVariationComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
 
-  // --- module: bare → exports only → exports + imports
-  {
-    id: 'mod-bare',
-    name: 'transcript',
-    construct: 'module',
-    file: 'src/session/transcript.ts',
-    purl: variationPurl,
-    purpose: 'no drill-down — symbol-less module named from its file basename',
-    symbol: '',
-    layer: 4,
-  },
-  {
-    id: 'mod-exports',
-    name: 'paths',
-    construct: 'module',
-    file: 'src/session/paths.ts',
-    purl: variationPurl,
-    purpose: 'exports only — export statement + defines comment',
-    symbol: '',
-    layer: 4,
-    declaration: {
-      kind: 'module',
-      exports: ['extractToolName', 'extractFilePath'],
-      imports: [],
-      symbols: ['extractToolName', 'extractFilePath'],
-    } satisfies GraphifyComponentDetail,
-  },
-  {
-    id: 'mod-full',
-    name: 'index',
-    construct: 'module',
-    file: 'src/index.ts',
-    purl: variationPurl,
-    purpose: 'full — import statements + re-export statement + defines comment',
-    symbol: '',
-    layer: 4,
-    declaration: {
-      kind: 'module',
-      exports: ['SessionReader', 'SessionStore'],
-      imports: [{ nodeId: 'i1', name: 'transcript', relation: 'imports' }],
-      symbols: ['SessionReader', 'SessionStore'],
-    } satisfies GraphifyComponentDetail,
-  },
-
   // --- external: bare → labeled
   {
     id: 'ext-bare',
@@ -351,7 +307,7 @@ function KindVariationsDemo() {
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
-        columns: class · function · type · module · external — each goes bare → detailed
+        columns: class · function · type · external — each goes bare → detailed
         {selected ? ` · selected: ${selected}` : ''}
       </div>
     </div>

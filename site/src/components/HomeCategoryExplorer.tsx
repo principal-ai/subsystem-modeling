@@ -1,0 +1,226 @@
+/**
+ * Homepage: left nav of standard layers + one live subsystem model per layer.
+ * Auto-advances with a progress indicator; pauses while the graph is in use.
+ */
+import { useEffect, useMemo, useRef, useState } from 'react';
+import '@xyflow/react/dist/style.css';
+import { ThemeProvider, defaultEditorTheme, useTheme } from '@principal-ade/industry-theme';
+import { SubsystemComponentGraph } from '@principal-ai/subsystems-react/dist/subsystem/SubsystemComponentGraph.js';
+import {
+  activeHomeExample,
+  homeCategories,
+  type HomeCategoryId,
+} from '../showcase/homeCategories';
+import { makeShowcaseRenderers } from '../showcase/files';
+
+const LAYER_DWELL_MS = 10_000;
+const WALKTHROUGH_STEP_MS = 4_500;
+/** Resume auto-advance this long after the last graph interaction. */
+const INTERACTION_RESUME_MS = 4_000;
+
+function walkthroughCycleMs(
+  walkthroughs: { steps: unknown[] }[] | undefined,
+): number {
+  if (!walkthroughs?.length) return LAYER_DWELL_MS;
+  const steps = walkthroughs.reduce((n, w) => n + w.steps.length, 0);
+  if (steps === 0) return LAYER_DWELL_MS;
+  // Autoplay shows the first step immediately, then waits interval between steps;
+  // one full pass through all steps takes steps * interval before it would loop.
+  return steps * WALKTHROUGH_STEP_MS;
+}
+
+function ExplorerInner() {
+  const { theme } = useTheme();
+  const [selectedId, setSelectedId] = useState<HomeCategoryId>('constructs');
+  const [paused, setPaused] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const remainingRef = useRef(LAYER_DWELL_MS);
+  const resumeTimerRef = useRef<number | null>(null);
+  const fileRenderers = useMemo(
+    () => makeShowcaseRenderers(activeHomeExample.caseDir),
+    [],
+  );
+
+  const selectedIndex = Math.max(
+    0,
+    homeCategories.findIndex((c) => c.id === selectedId),
+  );
+  const selected = homeCategories[selectedIndex] ?? homeCategories[0]!;
+
+  const dwellMs = useMemo(() => {
+    if (selected.id === 'walkthrough') {
+      return walkthroughCycleMs(selected.model.walkthroughs);
+    }
+    return LAYER_DWELL_MS;
+  }, [selected]);
+
+  // Reset countdown whenever the active layer or its dwell changes.
+  useEffect(() => {
+    remainingRef.current = dwellMs;
+    setProgress(0);
+  }, [selectedId, dwellMs]);
+
+  // Drive progress + advance; freeze while paused (e.g. graph interaction).
+  useEffect(() => {
+    if (paused) return;
+
+    const start = Date.now();
+    const startRemaining = remainingRef.current;
+    let raf = 0;
+
+    const tick = () => {
+      const elapsed = Date.now() - start;
+      const left = Math.max(0, startRemaining - elapsed);
+      remainingRef.current = left;
+      setProgress(dwellMs <= 0 ? 1 : 1 - left / dwellMs);
+      if (left <= 0) {
+        const next = homeCategories[(selectedIndex + 1) % homeCategories.length]!;
+        setSelectedId(next.id);
+        return;
+      }
+      raf = window.requestAnimationFrame(tick);
+    };
+
+    raf = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(raf);
+  }, [paused, selectedId, dwellMs, selectedIndex]);
+
+  useEffect(() => {
+    return () => {
+      if (resumeTimerRef.current != null) {
+        window.clearTimeout(resumeTimerRef.current);
+      }
+    };
+  }, []);
+
+  const pauseForInteraction = () => {
+    setPaused(true);
+    if (resumeTimerRef.current != null) {
+      window.clearTimeout(resumeTimerRef.current);
+    }
+    resumeTimerRef.current = window.setTimeout(() => {
+      setPaused(false);
+      resumeTimerRef.current = null;
+    }, INTERACTION_RESUME_MS);
+  };
+
+  const border = theme.colors.border ?? 'rgba(127,127,127,0.3)';
+
+  return (
+    <div className="home-explorer">
+      <nav className="home-explorer-nav" aria-label="Subsystem model layers">
+        <p className="home-explorer-nav-label">Building a model</p>
+        <ul className="home-explorer-nav-list">
+          {homeCategories.map((cat) => {
+            const active = cat.id === selected.id;
+            return (
+              <li
+                key={cat.id}
+                className={
+                  active
+                    ? 'home-explorer-nav-row home-explorer-nav-row--active'
+                    : 'home-explorer-nav-row'
+                }
+              >
+                <button
+                  type="button"
+                  className={
+                    active
+                      ? 'home-explorer-nav-item home-explorer-nav-item--active'
+                      : 'home-explorer-nav-item'
+                  }
+                  aria-current={active ? 'true' : undefined}
+                  aria-expanded={active}
+                  onClick={() => {
+                    setPaused(false);
+                    if (resumeTimerRef.current != null) {
+                      window.clearTimeout(resumeTimerRef.current);
+                      resumeTimerRef.current = null;
+                    }
+                    setSelectedId(cat.id);
+                  }}
+                >
+                  {cat.label}
+                </button>
+                <div
+                  className={
+                    active
+                      ? 'home-explorer-blurb-slot home-explorer-blurb-slot--open'
+                      : 'home-explorer-blurb-slot'
+                  }
+                >
+                  <div className="home-explorer-blurb-slot-inner">
+                    <p className="home-explorer-blurb">{cat.blurb}</p>
+                  </div>
+                </div>
+                {active ? (
+                  <div
+                    className={
+                      paused
+                        ? 'home-explorer-progress home-explorer-progress--paused'
+                        : 'home-explorer-progress'
+                    }
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(progress * 100)}
+                    aria-label={
+                      paused
+                        ? 'Auto-advance paused while you explore the graph'
+                        : 'Progress toward next layer'
+                    }
+                  >
+                    <div
+                      className="home-explorer-progress-bar"
+                      style={{ transform: `scaleX(${progress})` }}
+                    />
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+
+      <div
+        className="home-explorer-stage"
+        style={{ borderColor: border, background: theme.colors.background }}
+      >
+        <div className="home-explorer-stage-header">
+          <h2 className="home-explorer-stage-title">{selected.model.title}</h2>
+        </div>
+        <div
+          className="home-explorer-graph"
+          onPointerDown={pauseForInteraction}
+          onWheel={pauseForInteraction}
+        >
+          <SubsystemComponentGraph
+            key={selected.id}
+            components={selected.model.components}
+            relations={selected.model.relations}
+            walkthroughs={selected.model.walkthroughs}
+            title={selected.model.title}
+            hideSidebar
+            showEdgeLabels={selected.graph.showEdgeLabels}
+            edgeView={selected.graph.edgeView}
+            autoPlayWalkthroughs={selected.graph.autoPlayWalkthroughs}
+            walkthroughAutoPlayIntervalMs={WALKTHROUGH_STEP_MS}
+            walkthroughStepMode="dim"
+            zoomOnWalkthroughFocus={false}
+            showWalkthroughTitle={selected.graph.showWalkthroughTitle}
+            renderFileViewer={fileRenderers.renderFileViewer}
+            renderWalkthroughViewer={fileRenderers.renderWalkthroughViewer}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function HomeCategoryExplorer() {
+  return (
+    <ThemeProvider theme={defaultEditorTheme}>
+      <ExplorerInner />
+    </ThemeProvider>
+  );
+}

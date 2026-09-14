@@ -5,45 +5,49 @@ import type {
 } from '@principal-ai/subsystems-react';
 
 const PURL = 'pkg:github/you/traced-api';
+const PAYMENTS_PURL = 'pkg:github/you/payments-api';
 
 export const components: SubsystemComponent[] = [
   {
     id: 'create-app',
-    process: 'traced-api',
+    process: 'orders-api',
     name: 'create_app',
     construct: 'function',
     symbol: 'create_app',
     role: 'entry',
     purl: PURL,
     file: 'app/main.py',
+    module: 'app/main.py',
     purpose: 'Process entry — boot tracing, then wire FastAPI routes.',
     layer: 1,
   },
   {
     id: 'setup-tracing',
-    process: 'traced-api',
+    process: 'orders-api',
     name: 'setup_tracing',
     construct: 'function',
     symbol: 'setup_tracing',
     purl: PURL,
     file: 'app/telemetry.py',
+    module: 'app/telemetry.py',
     purpose: 'Boot only — installs TracerProvider + OTLP BatchSpanProcessor.',
     layer: 2,
   },
   {
     id: 'tracer-provider',
-    process: 'traced-api',
+    process: 'orders-api',
     name: 'TracerProvider',
     construct: 'store',
     symbol: 'provider',
     purl: PURL,
     file: 'app/telemetry.py',
+    module: 'app/telemetry.py',
     purpose: 'In-process span/event sink — every start_as_current_span records here.',
     layer: 2,
   },
   {
     id: 'post-order',
-    process: 'traced-api',
+    process: 'orders-api',
     name: 'post_order',
     construct: 'function',
     symbol: 'post_order',
@@ -52,12 +56,13 @@ export const components: SubsystemComponent[] = [
     stereotype: 'route',
     purl: PURL,
     file: 'app/routes/orders.py',
+    module: 'app/routes/orders.py',
     purpose: 'HTTP POST /orders — opens orders.create span + events.',
     layer: 2,
   },
   {
     id: 'read-order',
-    process: 'traced-api',
+    process: 'orders-api',
     name: 'read_order',
     construct: 'function',
     symbol: 'read_order',
@@ -66,51 +71,71 @@ export const components: SubsystemComponent[] = [
     stereotype: 'route',
     purl: PURL,
     file: 'app/routes/orders.py',
+    module: 'app/routes/orders.py',
     purpose: 'HTTP GET /orders/{id} — opens orders.read span + events.',
     layer: 2,
   },
   {
     id: 'create-order',
-    process: 'traced-api',
+    process: 'orders-api',
     name: 'create_order',
     construct: 'function',
     symbol: 'create_order',
     purl: PURL,
     file: 'app/services/order_service.py',
+    module: 'app/services/order_service.py',
     purpose: 'Create path — child span, payment, persist.',
     layer: 3,
   },
   {
     id: 'get-order',
-    process: 'traced-api',
+    process: 'orders-api',
     name: 'get_order',
     construct: 'function',
     symbol: 'get_order',
     purl: PURL,
     file: 'app/services/order_service.py',
+    module: 'app/services/order_service.py',
     purpose: 'Read path — child span around the DB load.',
     layer: 3,
   },
   {
     id: 'orders-repo',
-    process: 'traced-api',
+    process: 'orders-api',
     name: 'orders_repo',
     construct: 'class',
     symbol: 'orders_repo',
     purl: PURL,
     file: 'app/db.py',
+    module: 'app/db.py',
     purpose: 'DB access — query spans + db.query.* events.',
     layer: 3,
   },
   {
     id: 'capture-payment',
-    process: 'traced-api',
+    process: 'orders-api',
     name: 'capture_payment',
     construct: 'function',
     symbol: 'capture_payment',
     purl: PURL,
     file: 'app/clients/payments.py',
-    purpose: 'Outbound call — span, events, W3C inject.',
+    module: 'app/clients/payments.py',
+    purpose: 'Outbound call — span, events, W3C inject into payments-api.',
+    layer: 3,
+  },
+  {
+    id: 'handle-capture',
+    process: 'payments-api',
+    name: 'handle_capture',
+    construct: 'function',
+    symbol: 'handle_capture',
+    role: 'entry',
+    framework: 'fastapi',
+    stereotype: 'route',
+    purl: PAYMENTS_PURL,
+    file: 'payments/handle_capture.py',
+    module: 'payments/handle_capture.py',
+    purpose: 'Downstream capture endpoint — continues the W3C trace.',
     layer: 3,
   },
   {
@@ -121,16 +146,6 @@ export const components: SubsystemComponent[] = [
     file: '',
     purl: 'external',
     purpose: 'Order rows.',
-    layer: 4,
-  },
-  {
-    id: 'PaymentsAPI',
-    name: 'Payments API',
-    construct: 'external',
-    role: 'service',
-    file: '',
-    purl: 'external',
-    purpose: 'Downstream service that continues the same trace.',
     layer: 4,
   },
   {
@@ -145,7 +160,80 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const relations = [] as SubsystemRelation[];
+export const relations = [
+  {
+    id: 'app-setup',
+    from: 'create-app',
+    to: 'setup-tracing',
+    relationType: 'references',
+  },
+  {
+    id: 'app-post',
+    from: 'create-app',
+    to: 'post-order',
+    relationType: 'references',
+  },
+  {
+    id: 'app-read',
+    from: 'create-app',
+    to: 'read-order',
+    relationType: 'references',
+  },
+  {
+    id: 'setup-provider',
+    from: 'setup-tracing',
+    to: 'tracer-provider',
+    relationType: 'references',
+  },
+  {
+    id: 'post-create',
+    from: 'post-order',
+    to: 'create-order',
+    relationType: 'references',
+  },
+  {
+    id: 'read-get',
+    from: 'read-order',
+    to: 'get-order',
+    relationType: 'references',
+  },
+  {
+    id: 'create-pay',
+    from: 'create-order',
+    to: 'capture-payment',
+    relationType: 'references',
+  },
+  {
+    id: 'create-repo',
+    from: 'create-order',
+    to: 'orders-repo',
+    relationType: 'references',
+  },
+  {
+    id: 'get-repo',
+    from: 'get-order',
+    to: 'orders-repo',
+    relationType: 'references',
+  },
+  {
+    id: 'pay-downstream',
+    from: 'capture-payment',
+    to: 'handle-capture',
+    relationType: 'references',
+  },
+  {
+    id: 'repo-pg',
+    from: 'orders-repo',
+    to: 'Postgres',
+    relationType: 'imports',
+  },
+  {
+    id: 'provider-otlp',
+    from: 'tracer-provider',
+    to: 'OTLPCollector',
+    relationType: 'imports',
+  },
+] as SubsystemRelation[];
 
 export const walkthroughs = [
   {
@@ -286,12 +374,21 @@ export const walkthroughs = [
       },
       {
         "from": "capture-payment",
-        "to": "PaymentsAPI",
+        "to": "handle-capture",
         "mechanism": "calls",
         "file": "app/clients/payments.py",
         "line": 16,
         "symbol": "inject",
-        "annotation": "W3C traceparent so Payments API continues this trace."
+        "annotation": "Cross into payments-api — W3C traceparent continues the trace."
+      },
+      {
+        "from": "handle-capture",
+        "to": "OTLPCollector",
+        "mechanism": "produces",
+        "file": "payments/handle_capture.py",
+        "line": 14,
+        "symbol": "start_as_current_span(\"payments.handle\")",
+        "annotation": "Downstream span in the payments-api process."
       },
       {
         "from": "create-order",
@@ -336,7 +433,7 @@ export const walkthroughs = [
         "file": "app/telemetry.py",
         "line": 22,
         "symbol": "BatchSpanProcessor",
-        "annotation": "Finished span tree (route → service → payment → db) exports to OTLP."
+        "annotation": "Finished span tree exports to OTLP."
       }
     ]
   },
@@ -378,4 +475,4 @@ export const walkthroughs = [
 export const title = 'Traced HTTP API';
 
 export const description =
-  'Python FastAPI orders service with **OpenTelemetry on the request path**: each handler/service/DB/payment hop opens a span and records events into an in-process TracerProvider, which exports finished spans to an OTLP collector. Open **Walkthroughs** — read and create interleave business calls with instrumentation; boot is separate.';
+  'Python FastAPI orders service with **OpenTelemetry on the request path**: handlers/services/DB open spans into an in-process TracerProvider; capture crosses into **payments-api** with W3C context; finished spans export to OTLP. Open **Walkthroughs** for read, create, and boot.';

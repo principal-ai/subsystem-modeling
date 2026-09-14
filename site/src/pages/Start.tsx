@@ -1,4 +1,6 @@
-import { Link } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { GistPicker } from '../components/GistPicker'
 
 const SKILL_PAGE =
   'https://skills.sh/principal-ai/subsystem-modeling/create-subsystem-model'
@@ -6,6 +8,13 @@ const PROMPT_EXAMPLE =
   'Diagram the checkout subsystem in this repo as a Subsystem Model, then open it in Subsystems Studio.'
 
 export function Start() {
+  const { hash } = useLocation()
+
+  useEffect(() => {
+    if (hash !== '#gist') return
+    document.getElementById('gist')?.scrollIntoView()
+  }, [hash])
+
   return (
     <section className="start-page">
       <header className="start-header">
@@ -39,13 +48,17 @@ export function Start() {
         </li>
       </ol>
 
+      <section className="start-gist" id="gist">
+        <p className="start-or">or</p>
+        <h2>Look at an example</h2>
+        <GistPicker />
+      </section>
+
       <p className="start-next">
         Not sure what a good model looks like?{' '}
         <a href={`${import.meta.env.BASE_URL}gallery/`}>Browse the gallery</a>
         {' · '}
-        <Link to="/schema">Read the schema</Link>
-        {' · '}
-        <Link to="/maintainer">Model Maintainer</Link>
+        <Link to="/maintainer">Docs</Link>
         {' · '}
         <Link to="/about">Mission</Link>
       </p>

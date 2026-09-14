@@ -7,7 +7,14 @@
  * `PierreSnippetView`).
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+} from 'react';
 import {
   CodeView,
   type CodeViewHandle,
@@ -16,6 +23,7 @@ import {
   type DiffLineAnnotation,
   type LineAnnotation,
 } from '@pierre/diffs/react';
+import { Maximize2 } from 'lucide-react';
 
 /** Mirrors Pierre's CodeViewLineSelection (not re-exported from the React entry). */
 type CodeViewLineSelection = {
@@ -26,13 +34,18 @@ type CodeViewLineSelection = {
 type WalkthroughStepAnnotation = { text: string };
 import { useTheme } from '@principal-ade/industry-theme';
 import type { SubsystemWalkthrough } from '../subsystem/model';
+import type { SubsystemOpenFileOptions } from '../subsystem/declarationRef';
 import { buildPierreOptions, PIERRE_FILE_STYLE } from './pierreBackground';
 import {
   pierreCodeViewFileName,
   pierreLangForPath,
 } from './pierreFileLang';
 import { resolvePierreSyntaxThemeName } from './pierreSyntaxTheme';
-import { sliceSnippetWindow, type SnippetSlice } from './sliceSnippet';
+import {
+  remapSnippetLineNumbers,
+  sliceSnippetWindow,
+  type SnippetSlice,
+} from './sliceSnippet';
 
 export interface PierreWalkthroughCodeViewProps {
   walkthrough: SubsystemWalkthrough;
@@ -43,6 +56,8 @@ export interface PierreWalkthroughCodeViewProps {
   contextLines?: number;
   /** Override Pierre's container background. */
   background?: string;
+  /** Open the step's full source file (header button or double-click snippet body). */
+  onOpenFile?: (path: string, opts?: SubsystemOpenFileOptions) => void;
 }
 
 type FileLoadState =
@@ -54,12 +69,56 @@ function stepItemId(walkthroughId: string, index: number): string {
   return `${walkthroughId}:${index}`;
 }
 
+function OpenFileHeaderButton({
+  file,
+  line,
+  onOpenFile,
+}: {
+  file: string;
+  line: number;
+  onOpenFile: (path: string, opts?: SubsystemOpenFileOptions) => void;
+}) {
+  const { theme } = useTheme();
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpenFile(file, { startLine: line, fullFile: true });
+      }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={`Open ${file}`}
+      aria-label={`Open full file ${file}`}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '1px 6px',
+        border: `1px solid ${theme.colors.border}`,
+        borderRadius: 4,
+        background: hover ? theme.colors.border : 'transparent',
+        color: hover ? theme.colors.text : theme.colors.textSecondary,
+        cursor: 'pointer',
+        fontFamily: theme.fonts.monospace,
+        fontSize: theme.fontSizes[0],
+        transition: 'background 120ms ease, color 120ms ease',
+      }}
+    >
+      <Maximize2 size={11} />
+      Open file
+    </button>
+  );
+}
+
 export function PierreWalkthroughCodeView({
   walkthrough,
   stepIndex,
   readFile,
   contextLines = 8,
   background,
+  onOpenFile,
 }: PierreWalkthroughCodeViewProps) {
   const { theme, mode } = useTheme();
   const viewRef = useRef<CodeViewHandle<undefined>>(null);
@@ -154,6 +213,30 @@ const items = useMemo((): CodeViewItem<WalkthroughStepAnnotation>[] => {
     };
   }, [stepIndex, slices, walkthrough.id]);
 
+  const sliceStartByItemId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (let i = 0; i < slices.length; i++) {
+      map.set(stepItemId(walkthrough.id, i), slices[i]!.sliceStart);
+    }
+    return map;
+  }, [slices, walkthrough.id]);
+
+  const onPostRender = useCallback(
+    (
+      node: HTMLElement,
+      _instance: unknown,
+      _phase: unknown,
+      context?: { item?: { id?: string } },
+    ) => {
+      const id = context?.item?.id;
+      if (id == null) return;
+      const sliceStart = sliceStartByItemId.get(id);
+      if (sliceStart == null) return;
+      remapSnippetLineNumbers(node, sliceStart);
+    },
+    [sliceStartByItemId],
+  );
+
   const renderHeaderPrefix = useMemo(() => {
     return (item: CodeViewItem) => {
       const index = Number.parseInt(item.id.split(':').pop() ?? '', 10);
@@ -186,17 +269,27 @@ const items = useMemo((): CodeViewItem<WalkthroughStepAnnotation>[] => {
       return (
         <span
           style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            marginLeft: 8,
             fontFamily: theme.fonts.monospace,
             fontSize: theme.fontSizes[0],
             color: theme.colors.textSecondary,
-            marginLeft: 8,
           }}
         >
           L{step.line}
+          {onOpenFile && (
+            <OpenFileHeaderButton
+              file={step.file}
+              line={step.line}
+              onOpenFile={onOpenFile}
+            />
+          )}
         </span>
       );
     };
-  }, [walkthrough.steps, theme]);
+  }, [walkthrough.steps, theme, onOpenFile]);
 
   const renderAnnotation = useMemo(() => {
     return (
@@ -226,6 +319,23 @@ const items = useMemo((): CodeViewItem<WalkthroughStepAnnotation>[] => {
     };
   }, [walkthrough.steps, theme]);
 
+  const onLineClick = useCallback(
+    (
+      props: { event?: { detail?: number } },
+      context?: { item?: { id?: string } },
+    ) => {
+      if (!onOpenFile) return;
+      if (props.event?.detail !== 2) return;
+      const id = context?.item?.id;
+      if (id == null) return;
+      const index = Number.parseInt(id.split(':').pop() ?? '', 10);
+      const step = walkthrough.steps[index];
+      if (!step) return;
+      onOpenFile(step.file, { startLine: step.line, fullFile: true });
+    },
+    [onOpenFile, walkthrough.steps],
+  );
+
   const options = useMemo((): CodeViewReactOptions => {
     return {
       theme: {
@@ -235,10 +345,12 @@ const items = useMemo((): CodeViewItem<WalkthroughStepAnnotation>[] => {
       stickyHeaders: true,
       disableFileHeader: false,
       layout: { paddingTop: 8, paddingBottom: 16, gap: 12 },
+      onPostRender,
+      ...(onOpenFile ? { onLineClick } : {}),
       ...(background ? buildPierreOptions(background) : {}),
       ...(mode === 'light' || mode === 'dark' ? { themeType: mode } : {}),
     };
-  }, [background, mode]);
+  }, [background, mode, onPostRender, onOpenFile, onLineClick]);
 
   useEffect(() => {
     if (load.status !== 'ready' || stepIndex == null) return;

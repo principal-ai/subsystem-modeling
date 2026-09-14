@@ -9,9 +9,8 @@
  *
  * Syntax themes deliberately reuse one hue across related scopes (class and
  * type share `entity.name.class`); the node taxonomy needs distinguishable
- * colors, so colliding constructs take a shade of the scope color — derived
- * from the theme itself, toward white in dark themes and toward black in
- * light themes.
+ * colors, so colliding constructs remap to distinct theme scopes (or a shade
+ * of one) rather than sharing the syntax color verbatim.
  */
 
 import type { SubsystemComponentConstruct } from '../subsystem/model';
@@ -84,42 +83,56 @@ export function constructColorsFromPierreTheme(
   // still all-Pierre, never a hand-picked value.
   const editorFg = theme.colors['editor.foreground'] ?? '#fafafa';
   const pick = (scope: string) => scopeColor(theme, scope) ?? editorFg;
-  const towardBackground = theme.type === 'dark' ? lighten : darken;
 
-  const classColor = pick('entity.name.class');
-  const functionColor = pick('entity.name.function');
-  const typeColor = pick('support.type');
-  const moduleColor = pick('entity.name.namespace');
+  // Classes: keyword's warm red/pink, pulled toward black for a crimson
+  // border (syntax paints class names purple; the taxonomy wants red).
+  // Darken lightly so it stays brighter than a muted wine, but still
+  // distinguishable from method (hot pink / magenta).
+  const classColor = mix(
+    pick('keyword'),
+    '#000000',
+    theme.type === 'dark' ? 0.18 : 0.08,
+  );
+  // Syntax themes paint function names purple; the node taxonomy wants
+  // standalone functions in the theme's string green, while methods take a
+  // hot pink (keyword + type magenta) so they don't collapse into class crimson.
+  const functionColor = pick('string');
+  const methodColor = mix(
+    pick('keyword'),
+    pick('support.type'),
+    theme.type === 'dark' ? 0.5 : 0.4,
+  );
+  // Cool white-silver: punctuation gray iced with numeric cyan, then lifted
+  // toward pure white (dark) / pure black (light). Higher cyan mix so the
+  // metallic cool cast survives the lift.
+  const coolMetal = mix(pick('punctuation'), pick('constant.numeric'), 0.45);
+  const interfaceColor =
+    theme.type === 'dark'
+      ? mix('#ffffff', coolMetal, 0.16)
+      : mix('#000000', coolMetal, 0.3);
 
   return {
     class: classColor,
-    // interface/type are the type-name scope, shaded to separate them from
-    // class (whose declaration name shares the same hue in syntax themes)
-    interface: towardBackground(typeColor, 0.14),
-    type_alias: towardBackground(typeColor, 0.28),
+    // Interfaces are contracts / shapes — a near-white cool silver, not typed purple.
+    interface: interfaceColor,
+    // Type aliases: decorator blue (distinct from class crimson / enum purple).
+    type_alias: pick('meta.decorator'),
     function: functionColor,
-    method: towardBackground(functionColor, 0.14),
-    // enum members are constants — the generic constant hue
-    enum: pick('constant'),
-    // module and store share the constant hue — the module holds the store,
-    // and the store IS the retained value, so the store keeps the pure
-    // `variable.other.constant` color and the module takes the shade
-    module: towardBackground(moduleColor, 0.18),
+    method: methodColor,
+    // Enums: function-name purple from the syntax theme.
+    enum: pick('entity.name.function'),
     store: pick('variable.other.constant'),
-    external: pick('comment'),
+    // Externals: comment gray, lifted slightly so they read as muted but
+    // not sunk into the canvas.
+    external:
+      theme.type === 'dark'
+        ? mix(pick('comment'), '#ffffff', 0.22)
+        : mix(pick('comment'), '#000000', 0.08),
     // custom entities are actors, not code — the heading/emphasis coral reads
     // as a highlight against the code-construct hues. Distinct from entry role
     // orange (#ff6b35) which stays a badge, not a border.
     custom_entity: pick('markup.heading'),
   };
-}
-
-function lighten(hex: string, amount: number): string {
-  return mix(hex, '#ffffff', amount);
-}
-
-function darken(hex: string, amount: number): string {
-  return mix(hex, '#000000', amount);
 }
 
 /**

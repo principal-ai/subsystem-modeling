@@ -22,9 +22,8 @@ see here opens its source file; every claim is verifiable against the code.
   client→server-action→DB split and PostHog on pick / book / cancel.
 - **TypeScript / Multiplayer whiteboard** — Excalidraw-style board on Convex:
   draw, remote sync, and presence walkthroughs.
-- **Python / Traced HTTP API** — FastAPI orders service with OpenTelemetry on
-  the request path: spans + events into a TracerProvider, OTLP export, and
-  downstream context propagation.
+- **Python / Traced HTTP API** — FastAPI orders-api with OpenTelemetry on
+  the request path; capture crosses into payments-api; OTLP export.
 - **Java / Android notes screen** — Activity → ViewModel → Repository → Room/API,
   with open / save / refresh flows.
 - **Rust / Tokio job worker** — dequeue → handle → ack/nack against Redis.
@@ -33,8 +32,8 @@ see here opens its source file; every claim is verifiable against the code.
 - **Elixir / GenServer cache** — OTP Application → Supervisor → GenServer call/cast.
 - **SQL / dbt orders models** — raw → staging → mart with schema tests.
 - **Terraform / Static site** — root module → S3 website module → AWS.
-- **WASM / Host ↔ guest pipeline** — browser/host orchestrates; wasm/guest
-  normalize + checksum with guest→host `host_trace` callbacks.
+- **WASM / Browser main ↔ WASM worker** — browser/main orchestrates; wasm/worker
+  normalize + checksum with worker→main `host_trace` callbacks.
 - **C / Lua embed** — host embeds Lua; guest calls back into native code.
 - **CUDA / Vector add** — HtoD → device kernel → DtoH.
 - **TypeScript / Orders API** — a typical Express service: router boundary, service

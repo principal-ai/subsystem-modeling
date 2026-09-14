@@ -36,6 +36,11 @@ const TAB_TOGGLES: Array<{
 		description: "Alexandria repos with Graphify graphs",
 	},
 	{
+		key: "packageLayers",
+		label: "Package Layers",
+		description: "Alexandria repos with package discovery caches",
+	},
+	{
 		key: "subsystems",
 		label: "Subsystems",
 		description: "Saved subsystem component graphs",
@@ -63,6 +68,7 @@ const FALLBACK_SETTINGS: ViewerSettings = {
 		maintenanceSessions: true,
 		trails: true,
 		graphify: true,
+		packageLayers: true,
 		subsystems: true,
 		opencodeV2: true,
 	},

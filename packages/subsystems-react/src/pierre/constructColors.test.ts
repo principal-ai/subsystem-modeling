@@ -13,7 +13,6 @@ const CONSTRUCTS: SubsystemComponentConstruct[] = [
   'interface',
   'type_alias',
   'enum',
-  'module',
   'store',
   'external',
   'custom_entity',
@@ -31,7 +30,7 @@ describe('constructColorsFromPierreTheme', () => {
     }
   });
 
-  test('all ten constructs are distinguishable within a theme', () => {
+  test('all nine constructs are distinguishable within a theme', () => {
     for (const themeName of ['pierre-dark', 'pierre-light'] as const) {
       const colors = constructColorsFromPierreTheme(themeName);
       const values = CONSTRUCTS.map((c) => colors[c]);
@@ -39,9 +38,9 @@ describe('constructColorsFromPierreTheme', () => {
     }
   });
 
-  test('colliding scope pairs are shaded apart (class/type, function/method)', () => {
+  test('colliding scope pairs are shaded apart (class/type); function and method differ', () => {
     const dark = constructColorsFromPierreTheme('pierre-dark');
-    expect(dark.class).not.toBe(dark.type);
+    expect(dark.class).not.toBe(dark.type_alias);
     expect(dark.function).not.toBe(dark.method);
   });
 

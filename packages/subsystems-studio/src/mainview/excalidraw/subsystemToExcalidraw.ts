@@ -56,15 +56,18 @@ function asConstruct(construct: string): SubsystemComponentConstruct {
 		construct === "class" ||
 		construct === "function" ||
 		construct === "method" ||
-		construct === "type" ||
-		construct === "module" ||
+		construct === "interface" ||
+		construct === "type_alias" ||
+		construct === "enum" ||
 		construct === "store" ||
 		construct === "external" ||
 		construct === "custom_entity"
 	) {
 		return construct;
 	}
-	return "module";
+	// Legacy `type` / `module` round-trips map to the closest authored construct.
+	if (construct === "type") return "interface";
+	return "function";
 }
 
 function asMechanism(mechanism: string): SubsystemEdgeMechanism {
@@ -74,11 +77,6 @@ function asMechanism(mechanism: string): SubsystemEdgeMechanism {
 
 function displayName(c: SubsystemComponent): string {
 	if (c.symbol && c.symbol.trim()) return c.symbol;
-	if (c.construct === "module" && c.file) {
-		const base = c.file.split("/").pop() ?? "";
-		const clean = base.replace(/\.[^.]+$/, "");
-		if (clean) return clean;
-	}
 	return c.name || "untitled";
 }
 
@@ -127,6 +125,8 @@ export type PrincipalComponentMeta = {
 	purpose?: string;
 	role?: SubsystemComponentRole;
 	proposed?: boolean;
+	process?: string;
+	module?: string;
 	layer?: number;
 };
 
@@ -161,6 +161,8 @@ export function principalMetaForComponent(c: SubsystemComponent): PrincipalCompo
 		purpose: c.purpose,
 		role: c.role,
 		proposed: c.proposed === true ? true : undefined,
+		process: c.process,
+		module: c.module,
 		layer: c.layer,
 	});
 }

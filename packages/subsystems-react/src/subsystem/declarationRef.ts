@@ -58,6 +58,11 @@ export function extractDeclarationLine(content: string, lineNumber: number): str
 
 /** Options when opening a file in the subsystem graph drawer. */
 export interface SubsystemOpenFileOptions {
-  /** Scroll/highlight this 1-based line (declaration start). */
+  /** Scroll/highlight this 1-based line (declaration start or walkthrough site). */
   startLine?: number;
+  /**
+   * When true with `startLine`, show the whole file scrolled to that line
+   * instead of a focused snippet window.
+   */
+  fullFile?: boolean;
 }

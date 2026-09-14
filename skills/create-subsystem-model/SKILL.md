@@ -39,10 +39,10 @@ Analyze the target subsystem in the repo and produce:
   `symbol`, tagged with `construct`. The `file` field is each
   unit's location anchor. Hand-author a `declaration` (params, return type,
   members) when the click panel should show signature shape — pair with
-  `declarationProvenance: "authored"`. **`module` is rejected**: a module is
-  its own subsystem — give it its own model and reference it, or name the
-  export inside it that matters. If you catch yourself posting a file as a
-  component, stop and find the symbol.
+  `declarationProvenance: "authored"`. **`construct: "module"` is rejected** —
+  a file is not a node. Anchor each export as its real construct and set
+  optional `module` (source path) so the file draws as a frame. If you catch
+  yourself posting a file as a component, stop and find the symbol.
 - **Relations** — structural / module / type claims between components.
   `relationType` is a **closed set** (see below); pick the closest label and
   put specifics in `refs` evidence. Runtime seams (calls, feeds, writes, …)
@@ -83,6 +83,7 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
       "symbol": "probeOpencodeServer",             // optional but strongly preferred
       "purpose": "Lists and watches opencode sessions.",  // optional, one line
       "process": "subsystems-studio/host",               // optional deployment unit / boundary
+      "module": "packages/subsystems-studio/src/bun/server-sessions.ts", // optional source-file frame
       "layer": 1,                                  // optional int, lower = closer to entry
       "declaration": {                             // optional — click-panel signature shape
         "kind": "function",                        // discriminator; match construct when possible
@@ -141,8 +142,16 @@ Rules:
   code graph). File existence is checked on create/update; symbol presence is
   confirmed later by audit against graphify — not by a text regex. Prefer real
   exported / declared names, not invented labels.
-- `process` groups nodes into boundary regions (e.g. `subsystems-studio/host` vs
-  `principal-studio/renderer`). Nodes without one sit outside every boundary.
+- `process` groups nodes into a runtime deployment boundary (e.g.
+  `subsystems-studio/host` vs `principal-studio/renderer`). Nodes without one
+  sit outside every process frame.
+- `module` groups nodes into a source-file frame (usually the same path as
+  `file`). Prefer this over inventing a module construct: each export keeps
+  its real `construct`, and multi-member modules draw a dashed
+  `module · path` frame. When every member of a module also shares the same
+  `process`, the module frame nests inside that process frame
+  (process → module → export). Singleton modules (one export) stay unframed —
+  same 2+ member rule as process.
 - Keep models to one subsystem, roughly 4–15 components. Split sprawling ones.
 - Component `id`s are referenced by relation / walkthrough `from`/`to`; never rename on update.
 - Relation `id`s are stable topology keys; walkthrough steps carry their own `from`/`to`/`mechanism`.
@@ -211,9 +220,10 @@ off-list `construct` values are rejected naming the allowed set.
 - `class`, `function`, `method`, `interface`, `type_alias`, `enum`, `store`, `external`
 - `custom_entity` — an **authored actor** (Person / agent / queue), not code
 
-`module` is **rejected**: a module is its own subsystem — anchor to
-a concrete export inside it (`symbol` + `file`), or publish the module as a
-separate model and reference it from `purpose`/`description`.
+`construct: "module"` is **rejected**: a source file is not a node — anchor to
+a concrete export inside it (`symbol` + `file`), and set optional `module` to
+that path when you want a file frame. Or publish the file as its own
+subsystem model and reference it from `purpose`/`description`.
 
 `custom_entity` is for actors that participate in the flow but have no source
 declaration — a Person, an agent, a queue (e.g. `NudgeQueue`). There is no
@@ -222,8 +232,8 @@ repo purl). Tag the actor kind with `entityKind` (badge text, e.g. `Person`,
 `agent`, `queue`); optionally override the node color with `color` (hex) and
 hand-author `declaration` (`kind: "custom_entity"` + `attributes` as ordered
 `{ key, value }` pairs — e.g. `level: L1`, `approvalLimit: $500`). Entities
-group by `process`/`layer` and participate in relations and walkthrough steps
-exactly like code nodes.
+group by `process` / `module` / `layer` and participate in relations and
+walkthrough steps exactly like code nodes.
 
 `store` is for retained state registries (e.g. a `Set`/`Map` module-scope
 subscriber bag), not conceptual "services". Pair with `writes` / `reads` /
@@ -255,20 +265,31 @@ source yet. Keep a real `construct` for the intended shape (`function`,
 `construct: "external"` for planned in-repo code — that is for real outside
 systems.
 
+**Component `process` / `module`** (optional boundary frames):
+
+- `process` — runtime deployment unit (e.g. `principal-studio/host`). Multi-
+  member values draw a dashed process frame.
+- `module` — source-file membership (usually equals `file`). Multi-member
+  values draw a `module · path` frame. When all members share one `process`,
+  the module frame nests inside that process (process → module → export).
+  Never use `construct: "module"` for this.
+
 **Relation `relationType`** (how `from` relates to `to` — structural / module /
 type claims; runtime seams do NOT belong here):
 
 | Style | Labels |
 |---|---|
-| solid | `imports`, `contains`, `method` |
+| solid | `imports`, `method` |
 | dashed | `extends`, `inherits`, `implements`, `mixes_in` |
 | dotted | `references` |
 
-Semantics: `imports` = module-level import; `contains` = structural
-containment; `method` = target is a method of the source class;
+Semantics: `imports` = module-level import (often an external package);
+`method` = target is a method of the source class;
 `extends`/`inherits`/`implements`/`mixes_in` = inheritance / interface /
 mixin claims; `references` = type/symbol reference that isn't a call.
-Evidence goes in `refs`.
+File membership frames use `module` (not a topology relation). Evidence
+goes in `refs`. Do not use Graphify's `contains` verb on model relations —
+that name is reserved for Graphify's file→symbol edges.
 
 **Walkthrough hop `mechanism`** (how `from` relates to `to` at a runtime
 site — request/response and pushed data both live here):

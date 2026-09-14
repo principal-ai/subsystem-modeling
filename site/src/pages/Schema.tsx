@@ -3,6 +3,7 @@ import { Provider as MosaicProvider } from '@stoplight/mosaic'
 import type { JSONSchema7 } from 'json-schema'
 import { useEffect, useState } from 'react'
 import subsystemModelSchema from '@schemas/subsystem-model.schema.json'
+import { DocsLayout } from '../components/DocsToc'
 import '@stoplight/mosaic/styles.css'
 
 const schema = subsystemModelSchema as unknown as JSONSchema7
@@ -58,6 +59,7 @@ export function Schema() {
   }
 
   return (
+    <DocsLayout page="schema">
     <section className="schema-page">
       <header className="schema-header">
         <div className="schema-heading">
@@ -95,5 +97,6 @@ export function Schema() {
         </MosaicProvider>
       </div>
     </section>
+    </DocsLayout>
   )
 }

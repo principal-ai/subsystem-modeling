@@ -5,11 +5,12 @@
  * Storybook can render source without that panel package.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { File } from '@pierre/diffs/react';
 import { useTheme } from '@principal-ade/industry-theme';
 import { buildPierreOptions, PIERRE_FILE_STYLE } from './pierreBackground';
 import { pierreLangForPath } from './pierreFileLang';
+import { scrollFocusLineIntoView } from './scrollAnchor';
 
 export interface PierreFileViewProps {
   filePath: string;
@@ -18,6 +19,8 @@ export interface PierreFileViewProps {
   readFile: (path: string) => Promise<string>;
   /** Override Pierre's container background. Any CSS color string. */
   background?: string;
+  /** 1-based line to highlight and scroll into view after load. */
+  focusLine?: number;
 }
 
 export function PierreFileView({
@@ -25,6 +28,7 @@ export function PierreFileView({
   fileName,
   readFile,
   background,
+  focusLine,
 }: PierreFileViewProps) {
   const { theme } = useTheme();
   const [contents, setContents] = useState<string | null>(null);
@@ -56,6 +60,22 @@ export function PierreFileView({
     };
   }, [filePath, readFile]);
 
+  const onPostRender = useCallback(
+    (fileContainer: HTMLElement) => {
+      if (focusLine == null) return;
+      scrollFocusLineIntoView(fileContainer, focusLine);
+    },
+    [focusLine],
+  );
+
+  const options = useMemo(
+    () => ({
+      ...buildPierreOptions(background),
+      ...(focusLine != null ? { onPostRender } : {}),
+    }),
+    [background, focusLine, onPostRender],
+  );
+
   if (error) {
     return (
       <div style={{ padding: 16, color: theme.colors.error ?? '#e5534b' }}>
@@ -74,7 +94,10 @@ export function PierreFileView({
   return (
     <File
       file={fileObject}
-      options={buildPierreOptions(background)}
+      options={options}
+      selectedLines={
+        focusLine != null ? { start: focusLine, end: focusLine } : undefined
+      }
       style={PIERRE_FILE_STYLE}
     />
   );

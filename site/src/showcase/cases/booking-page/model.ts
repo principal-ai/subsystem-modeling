@@ -18,8 +18,17 @@ export const components: SubsystemComponent[] = [
     stereotype: 'component',
     purl: PURL,
     file: 'app/book/page.tsx',
+    module: 'app/book/page.tsx',
     purpose: 'Browser UI — calls server actions only; never touches the DB.',
     layer: 1,
+    declaration: {
+      kind: 'function',
+      parameters: [],
+      returnType: 'JSX.Element',
+      callers: [],
+      callees: [],
+    },
+    declarationProvenance: 'authored',
   },
   {
     id: 'capture-event',
@@ -29,8 +38,20 @@ export const components: SubsystemComponent[] = [
     symbol: 'captureEvent',
     purl: PURL,
     file: 'lib/captureEvent.ts',
+    module: 'lib/captureEvent.ts',
     purpose: 'Client-side PostHog wrapper for product moments.',
     layer: 2,
+    declaration: {
+      kind: 'function',
+      parameters: [
+        { name: 'event', type: 'string' },
+        { name: 'properties', type: 'Props' },
+      ],
+      returnType: 'void',
+      callers: [],
+      callees: [],
+    },
+    declarationProvenance: 'authored',
   },
   {
     id: 'list-open-slots',
@@ -43,8 +64,17 @@ export const components: SubsystemComponent[] = [
     stereotype: 'server-action',
     purl: PURL,
     file: 'app/book/actions.ts',
+    module: 'app/book/actions.ts',
     purpose: 'Server action — wire boundary for loading availability.',
     layer: 2,
+    declaration: {
+      kind: 'function',
+      parameters: [{ name: 'host', type: 'string' }],
+      returnType: 'Promise<Slot[]>',
+      callers: [],
+      callees: [],
+    },
+    declarationProvenance: 'authored',
   },
   {
     id: 'book-slot',
@@ -57,8 +87,22 @@ export const components: SubsystemComponent[] = [
     stereotype: 'server-action',
     purl: PURL,
     file: 'app/book/actions.ts',
+    module: 'app/book/actions.ts',
     purpose: 'Server action — wire boundary for confirming a booking.',
     layer: 2,
+    declaration: {
+      kind: 'function',
+      parameters: [
+        {
+          name: 'input',
+          type: '{ host: string; slotId: string; guestEmail: string }',
+        },
+      ],
+      returnType: 'Promise<{ id: string; host: string; slotId: string; guestEmail: string; status: string }>',
+      callers: [],
+      callees: [],
+    },
+    declarationProvenance: 'authored',
   },
   {
     id: 'cancel-slot',
@@ -71,8 +115,17 @@ export const components: SubsystemComponent[] = [
     stereotype: 'server-action',
     purl: PURL,
     file: 'app/book/actions.ts',
+    module: 'app/book/actions.ts',
     purpose: 'Server action — wire boundary for releasing a booking.',
     layer: 2,
+    declaration: {
+      kind: 'function',
+      parameters: [{ name: 'bookingId', type: 'string' }],
+      returnType: 'Promise<void>',
+      callers: [],
+      callees: [],
+    },
+    declarationProvenance: 'authored',
   },
   {
     id: 'list-slots',
@@ -82,8 +135,17 @@ export const components: SubsystemComponent[] = [
     symbol: 'listSlots',
     purl: PURL,
     file: 'lib/listSlots.ts',
+    module: 'lib/listSlots.ts',
     purpose: 'Server lib — read open slots from the store.',
     layer: 3,
+    declaration: {
+      kind: 'function',
+      parameters: [{ name: 'host', type: 'string' }],
+      returnType: 'Promise<Slot[]>',
+      callers: [],
+      callees: [],
+    },
+    declarationProvenance: 'authored',
   },
   {
     id: 'create-booking',
@@ -93,8 +155,17 @@ export const components: SubsystemComponent[] = [
     symbol: 'createBooking',
     purl: PURL,
     file: 'lib/createBooking.ts',
+    module: 'lib/createBooking.ts',
     purpose: 'Server lib — persist a reservation.',
     layer: 3,
+    declaration: {
+      kind: 'function',
+      parameters: [{ name: 'input', type: 'CreateBookingInput' }],
+      returnType: 'Promise<{ id: string; host: string; slotId: string; guestEmail: string; status: string }>',
+      callers: [],
+      callees: [],
+    },
+    declarationProvenance: 'authored',
   },
   {
     id: 'cancel-booking',
@@ -104,8 +175,17 @@ export const components: SubsystemComponent[] = [
     symbol: 'cancelBooking',
     purl: PURL,
     file: 'lib/cancelBooking.ts',
+    module: 'lib/cancelBooking.ts',
     purpose: 'Server lib — mark a booking cancelled.',
     layer: 3,
+    declaration: {
+      kind: 'function',
+      parameters: [{ name: 'bookingId', type: 'string' }],
+      returnType: 'Promise<void>',
+      callers: [],
+      callees: [],
+    },
+    declarationProvenance: 'authored',
   },
   {
     id: 'Database',
@@ -116,6 +196,11 @@ export const components: SubsystemComponent[] = [
     purl: 'external',
     purpose: 'Slots and bookings (source of truth) — server-only.',
     layer: 4,
+    declaration: {
+      kind: 'external',
+      label: 'Database',
+    },
+    declarationProvenance: 'authored',
   },
   {
     id: 'PostHog',
@@ -126,10 +211,82 @@ export const components: SubsystemComponent[] = [
     purl: 'external',
     purpose: 'Product analytics from the browser — booking_created, …',
     layer: 4,
+    declaration: {
+      kind: 'external',
+      label: 'PostHog',
+    },
+    declarationProvenance: 'authored',
   },
 ];
 
-export const relations = [] as SubsystemRelation[];
+export const relations = [
+  {
+    id: 'page-list-action',
+    from: 'booking-page',
+    to: 'list-open-slots',
+    relationType: 'references',
+  },
+  {
+    id: 'page-book-action',
+    from: 'booking-page',
+    to: 'book-slot',
+    relationType: 'references',
+  },
+  {
+    id: 'page-cancel-action',
+    from: 'booking-page',
+    to: 'cancel-slot',
+    relationType: 'references',
+  },
+  {
+    id: 'page-capture',
+    from: 'booking-page',
+    to: 'capture-event',
+    relationType: 'references',
+  },
+  {
+    id: 'list-action-lib',
+    from: 'list-open-slots',
+    to: 'list-slots',
+    relationType: 'references',
+  },
+  {
+    id: 'book-action-lib',
+    from: 'book-slot',
+    to: 'create-booking',
+    relationType: 'references',
+  },
+  {
+    id: 'cancel-action-lib',
+    from: 'cancel-slot',
+    to: 'cancel-booking',
+    relationType: 'references',
+  },
+  {
+    id: 'capture-posthog',
+    from: 'capture-event',
+    to: 'PostHog',
+    relationType: 'imports',
+  },
+  {
+    id: 'list-db',
+    from: 'list-slots',
+    to: 'Database',
+    relationType: 'imports',
+  },
+  {
+    id: 'create-db',
+    from: 'create-booking',
+    to: 'Database',
+    relationType: 'imports',
+  },
+  {
+    id: 'cancel-db',
+    from: 'cancel-booking',
+    to: 'Database',
+    relationType: 'imports',
+  },
+] as SubsystemRelation[];
 
 export const walkthroughs = [
   {

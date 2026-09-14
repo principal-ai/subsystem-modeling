@@ -31,10 +31,10 @@ type Story = StoryObj<typeof meta>;
 // ---------------------------------------------------------------------------
 const v2ReaderComponents = components([
   ['capture', 'capture script', 'function', 'scripts/capture-session.ts', 'pkg:github/principal-ai/agent-monitoring', 'captures a real session for fixtures'],
-  ['transcript', 'transcript', 'module', 'transcript.ts', 'pkg:github/principal-ai/agent-monitoring', 'parses session records + type guards'],
-  ['paths', 'paths', 'module', 'paths.ts', 'pkg:github/principal-ai/agent-monitoring', 'extracts tool names + file paths'],
+  ['transcript', 'transcript', 'function', 'transcript.ts', 'pkg:github/principal-ai/agent-monitoring', 'parses session records + type guards'],
+  ['paths', 'paths', 'function', 'paths.ts', 'pkg:github/principal-ai/agent-monitoring', 'extracts tool names + file paths'],
   ['reader', 'SessionReader', 'class', 'SessionReader.ts', 'pkg:github/principal-ai/agent-monitoring', 'normalizes a session into universal events', 'SessionReader.normalize', readerDetail],
-  ['registry', 'supported-agents', 'module', 'supported-agents.ts', 'pkg:github/principal-ai/agent-monitoring', 'registry of supported agents (the shared seam)', 'registerAgent'],
+  ['registry', 'supported-agents', 'function', 'supported-agents.ts', 'pkg:github/principal-ai/agent-monitoring', 'registry of supported agents (the shared seam)', 'registerAgent'],
 ]);
 
 const v2ReaderEdges = graphSpecFromEdges([
@@ -95,11 +95,11 @@ const minimalComponents = components([
   ['reader', 'SessionReader', 'class', 'SessionReader.ts', 'pkg:github/principal-ai/agent-monitoring', 'normalizes a session into universal events', 'SessionReader'],
   ['normalize', 'normalize', 'function', 'SessionReader.ts', 'pkg:github/principal-ai/agent-monitoring', 'maps a session into universal events', 'SessionReader.normalize'],
   ['record', 'SessionRecord', 'type', 'transcript.ts', 'pkg:github/principal-ai/agent-monitoring', 'the parsed codex session record', 'SessionRecord'],
-  ['transcript', 'transcript', 'module', 'transcript.ts', 'pkg:github/principal-ai/agent-monitoring', 'parses session records + type guards', 'transcript'],
+  ['transcript', 'transcript', 'function', 'transcript.ts', 'pkg:github/principal-ai/agent-monitoring', 'parses session records + type guards', 'transcript'],
 ]);
 
 const sharedEdges = graphSpecFromEdges([
-  ['transcript', 'record', 'contains'],
+  ['transcript', 'record', 'references'],
   ['reader', 'normalize', 'method'],
   ['normalize', 'record', 'references'],
 ]);
@@ -127,15 +127,6 @@ const resolvedComponents: SubsystemComponent[] = [
       ],
       usedBy: [{ nodeId: 'u1', name: 'normalize', context: 'type' }],
       implementors: ['SessionReaderLike'],
-    } satisfies GraphifyComponentDetail,
-  },
-  {
-    ...minimalComponents[3],
-    declaration: {
-      kind: 'module',
-      exports: ['CodexRolloutRecord', 'CodexSessionMeta'],
-      imports: [{ nodeId: 'i1', name: 'paths', relation: 'imports' }],
-      symbols: ['CodexRolloutRecord', 'CodexSessionMeta'],
     } satisfies GraphifyComponentDetail,
   },
 ];
@@ -174,22 +165,16 @@ const investigationComponents: SubsystemComponent[] = [
   {
     id: 'adapter',
     name: 'OpenCodeAdapter',
-    construct: 'module',
+    construct: 'function',
     file: 'apps/server/src/provider/Layers/OpenCodeAdapter.ts',
     purl: 'pkg:github/t3code/t3code',
     purpose: 'adapts opencode session/threads + events to the t3 runtime',
     symbol: 'makeOpenCodeAdapter',
-    declaration: {
-      kind: 'module',
-      exports: ['makeOpenCodeAdapter', 'OpenCodeAdapterLiveOptions'],
-      imports: [{ nodeId: 'i1', name: 'orchestration', relation: 'imports' }],
-      symbols: ['makeOpenCodeAdapter', 'isOpenCodeNotFound', 'OpenCodeSessionContext'],
-    } satisfies GraphifyComponentDetail,
   },
   {
     id: 'ingestion',
     name: 'ProviderRuntimeIngestion',
-    construct: 'module',
+    construct: 'function',
     file: 'apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts',
     purl: 'pkg:github/t3code/t3code',
     purpose: 'ingests provider events into the runtime',
@@ -198,7 +183,7 @@ const investigationComponents: SubsystemComponent[] = [
   {
     id: 'contracts',
     name: 'orchestration',
-    construct: 'module',
+    construct: 'function',
     file: 'packages/contracts/src/orchestration.ts',
     purl: 'pkg:github/t3code/t3code',
     purpose: 'contracts for orchestration/providers',

@@ -198,37 +198,6 @@ const cases: { label: string; component: SubsystemComponent }[] = [
     },
   },
   {
-    label: 'module — imports + exports',
-    component: {
-      id: 'mod-full',
-      name: 'index',
-      construct: 'module',
-      file: 'src/index.ts',
-      purl: 'pkg:github/principal-ai/agent-monitoring',
-      symbol: 'index',
-      declaration: {
-        kind: 'module',
-        imports: [
-          { name: './session/SessionReader' },
-          { name: './event-processing/EventProcessor' },
-        ],
-        exports: ['SessionReader', 'EventProcessor'],
-        symbols: ['SessionReader', 'EventProcessor', 'normalizeSession'],
-      } satisfies GraphifyComponentDetail,
-    },
-  },
-  {
-    label: 'module — no detail (fallback)',
-    component: {
-      id: 'mod-plain',
-      name: 'utils',
-      construct: 'module',
-      file: 'src/utils.ts',
-      purl: 'pkg:github/principal-ai/agent-monitoring',
-      symbol: 'utils',
-    },
-  },
-  {
     label: 'external',
     component: {
       id: 'ext',

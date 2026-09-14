@@ -113,18 +113,6 @@ export interface GraphifyReferenceInfo {
   source_location?: string;
 }
 
-/** An import relationship (Graphify may emit `imports` / `imports_from` / `re_exports`). */
-export interface GraphifyImportInfo {
-  /** The imported module/file node id. */
-  nodeId: string;
-  /** The imported module/file label. */
-  name: string;
-  /** Which relation carried the import. */
-  relation?: GraphifyRelation;
-  /** `L<line>` of the import statement. */
-  source_location?: string;
-}
-
 // ---------------------------------------------------------------------------
 // Discriminated union — the drill-down payload
 // ---------------------------------------------------------------------------
@@ -207,17 +195,6 @@ export interface GraphifyTypeDetail {
   rhs?: string;
 }
 
-/** A module/file-like node: a `contains` target with a filename label. */
-export interface GraphifyModuleDetail {
-  kind: 'module';
-  /** `re_exports` targets / contained public symbols. */
-  exports: string[];
-  /** `imports` / `imports_from` relationships. */
-  imports: GraphifyImportInfo[];
-  /** Symbols contained in the module (`contains` targets). */
-  symbols: string[];
-}
-
 /** A facet-only component with no graphify node (external consumer stub). */
 export interface GraphifyExternalDetail {
   kind: 'external';
@@ -281,15 +258,16 @@ export interface GraphifyMethodDetail {
  *
  * The discriminant is derived from graph structure, not read off the node:
  * method edges → class; `()` label + no method edges → function; incoming
- * `implements` → type; else module. `external` covers consumer stubs.
- * `method` covers standalone method components selected from a class.
+ * `implements` → type. File/module Graphify nodes are not subsystem
+ * declaration kinds — anchor to a concrete export instead. `external`
+ * covers consumer stubs. `method` covers standalone method components
+ * selected from a class.
  */
 export type GraphifyComponentDetail =
   | GraphifyClassDetail
   | GraphifyFunctionDetail
   | GraphifyMethodDetail
   | GraphifyTypeDetail
-  | GraphifyModuleDetail
   | GraphifyExternalDetail
   | GraphifyCustomEntityDetail
   | GraphifyStoreDetail;

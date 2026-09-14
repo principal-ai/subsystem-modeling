@@ -37,12 +37,15 @@ import { IndustryMarkdownSlide } from 'themed-markdown';
 import {
   buildSubsystemGraph,
   deriveGraphEdges,
+  isRelationMechanism,
+  isWalkthroughMechanism,
   MECHANISM_COLOR,
   MECHANISM_DESCRIPTIONS,
   subsystemGraphLayoutKey,
   walkthroughStepGraphEdgeId,
   type SubsystemComponentEdge,
   type SubsystemComponent,
+  type SubsystemEdgeView,
   type SubsystemEdgeMechanism,
   type SubsystemRelation,
   type SubsystemWalkthrough,
@@ -69,6 +72,8 @@ export interface WalkthroughViewerContext {
   walkthrough: SubsystemWalkthrough;
   /** Focused step index; `null` means the whole flow (no specific step). */
   stepIndex: number | null;
+  /** Open a step's full source file over the walkthrough drawer (keeps snippets mounted). */
+  onOpenFile: (path: string, opts?: SubsystemOpenFileOptions) => void;
 }
 
 type DrawerTarget =
@@ -97,6 +102,17 @@ export interface SubsystemComponentGraphProps {
   maxNodeWidth?: number;
   /** Show edge labels (mechanism names) on the graph. @default true */
   showEdgeLabels?: boolean;
+  /**
+   * Which edge vocabulary the canvas draws. The relation and walkthrough
+   * vocabularies are disjoint, so a graph carrying both shows one or the
+   * other — never both. Edges outside the view are hidden (labels go too).
+   * - `relations`: topology relation edges (`imports`, `extends`, …)
+   * - `walkthroughs`: walkthrough hop edges (`calls`, `feeds`, …), including
+   *   step numbers when a flow is focused/hovered
+   * Defaults to `walkthroughs` when the model has walkthroughs but no
+   * relations (e.g. flow-only models), otherwise `relations`.
+   */
+  edgeView?: SubsystemEdgeView;
   /** Subsystem title displayed in the sidebar. */
   title?: string;
   /**
@@ -190,31 +206,75 @@ const FileDrawerContent = memo(function FileDrawerContent({
   render,
   file,
   startLine,
+  fullFile,
 }: {
   render: (file: string, opts?: SubsystemOpenFileOptions) => ReactNode;
   file: string;
   startLine?: number;
+  fullFile?: boolean;
 }) {
-  return <>{render(file, startLine != null ? { startLine } : undefined)}</>;
+  return (
+    <>
+      {render(
+        file,
+        startLine != null
+          ? { startLine, ...(fullFile ? { fullFile: true } : {}) }
+          : undefined,
+      )}
+    </>
+  );
 });
+
+function FileOverlayCloseButton({ onClose }: { onClose: () => void }) {
+  const { theme } = useTheme();
+  const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      aria-label="Close file"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 22,
+        height: 22,
+        padding: 0,
+        border: 'none',
+        borderRadius: 4,
+        background: hover ? theme.colors.border : 'transparent',
+        color: hover ? theme.colors.text : muted,
+        cursor: 'pointer',
+        transition: 'background 120ms ease, color 120ms ease',
+      }}
+    >
+      <X size={14} />
+    </button>
+  );
+}
 
 const WalkthroughDrawerContent = memo(function WalkthroughDrawerContent({
   render,
   walkthrough,
   stepIndex,
+  onOpenFile,
 }: {
   render: (ctx: WalkthroughViewerContext) => ReactNode;
   walkthrough: SubsystemWalkthrough;
   stepIndex: number | null;
+  onOpenFile: (path: string, opts?: SubsystemOpenFileOptions) => void;
 }) {
-  return <>{render({ walkthrough, stepIndex })}</>;
+  return <>{render({ walkthrough, stepIndex, onOpenFile })}</>;
 });
 
 interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, onVerifyComponent, componentVerification }: InnerProps) {
+function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, onVerifyComponent, componentVerification }: InnerProps) {
   const { theme } = useTheme();
   const { fitView } = useReactFlow();
   const viewport = useViewport();
@@ -222,6 +282,13 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
     () => deriveGraphEdges({ relations, walkthroughs }),
     [relations, walkthroughs],
   );
+  // One edge vocabulary at a time. When the caller doesn't pick, follow the
+  // model: a flow-only graph defaults to walkthrough edges rather than empty.
+  const resolvedEdgeView: SubsystemEdgeView =
+    edgeView ??
+    (relations.length === 0 && (walkthroughs?.length ?? 0) > 0
+      ? 'walkthroughs'
+      : 'relations');
   const [built, setBuilt] = useState<{ nodes: Node[]; edges: Edge[] }>({
     nodes: [],
     edges: [],
@@ -230,6 +297,11 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
   const [selected, setSelected] = useState<SubsystemComponent | null>(null);
   /** Bottom drawer: single file or walkthrough multi-snippet mode. */
   const [drawerTarget, setDrawerTarget] = useState<DrawerTarget | null>(null);
+  /** Full-file layer over an open walkthrough drawer — walkthrough stays mounted. */
+  const [fileOverlay, setFileOverlay] = useState<{
+    file: string;
+    startLine?: number;
+  } | null>(null);
   // Mirror so step-focus can decide whether to wait for the drawer open
   // transition before fitView (avoids framing against full-height canvas).
   const drawerOpenRef = useRef(false);
@@ -316,9 +388,11 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
   // Ref mirror of the open file drawer target for tree-click toggle.
   const openFileRef = useRef<{ file: string; startLine?: number } | null>(null);
   const openFile =
-    drawerTarget?.kind === 'file' ? drawerTarget.file : null;
-  openFileRef.current =
-    drawerTarget?.kind === 'file'
+    fileOverlay?.file ??
+    (drawerTarget?.kind === 'file' ? drawerTarget.file : null);
+  openFileRef.current = fileOverlay
+    ? { file: fileOverlay.file, startLine: fileOverlay.startLine }
+    : drawerTarget?.kind === 'file'
       ? { file: drawerTarget.file, startLine: drawerTarget.startLine }
       : null;
 
@@ -755,6 +829,13 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
         markerEnd: nextMarker,
       };
     };
+    // Edges outside the selected view are hidden entirely (labels included).
+    const edgeInView = (e: Edge): boolean => {
+      const mechanism = (e.data as { mechanism?: string } | undefined)?.mechanism ?? 'imports';
+      return resolvedEdgeView === 'relations'
+        ? isRelationMechanism(mechanism)
+        : isWalkthroughMechanism(mechanism);
+    };
     if (openedEdgeIds || focusEdgeIds || previewEdgeIds) {
       return baseEdges.map((e) => {
         const vis = flowElementVisibility({
@@ -764,13 +845,18 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
           anySelected: focusEdgeIds != null,
         });
         const dimmed = previewEdgeIds ? vis.hidden || !previewEdgeIds.has(e.id) : vis.dimmed;
-        const hidden = vis.hidden;
+        const hidden = vis.hidden || !edgeInView(e);
         return { ...paint(e, dimmed), hidden };
       });
     }
-    if (!selectedEdgeId) return baseEdges;
-    return baseEdges.map((e) => paint(e, e.id !== selectedEdgeId));
-  }, [baseEdges, selectedEdgeId, openedEdgeIds, focusEdgeIds, previewEdgeIds]);
+    if (selectedEdgeId) {
+      return baseEdges.map((e) => ({
+        ...paint(e, e.id !== selectedEdgeId),
+        hidden: !edgeInView(e),
+      }));
+    }
+    return baseEdges.map((e) => ({ ...e, hidden: !edgeInView(e) }));
+  }, [baseEdges, selectedEdgeId, openedEdgeIds, focusEdgeIds, previewEdgeIds, resolvedEdgeView]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -864,6 +950,7 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
   );
   const onTreeSelectFile = useCallback(
     (file: string) => {
+      setFileOverlay(null);
       if (openFileRef.current?.file === file && openFileRef.current.startLine == null) {
         setDrawerTarget(null);
         return;
@@ -876,6 +963,7 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
 
   const onOpenDeclarationFile = useCallback(
     (file: string, opts?: SubsystemOpenFileOptions) => {
+      setFileOverlay(null);
       const startLine = opts?.startLine;
       if (
         openFileRef.current?.file === file &&
@@ -889,6 +977,47 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
     },
     [onFileSelect],
   );
+
+  const onOpenFileFromWalkthrough = useCallback(
+    (file: string, opts?: SubsystemOpenFileOptions) => {
+      setFileOverlay({ file, startLine: opts?.startLine });
+      onFileSelect?.(file);
+    },
+    [onFileSelect],
+  );
+
+  const closeFileOverlay = useCallback(() => {
+    setFileOverlay(null);
+  }, []);
+
+  const closeDrawer = useCallback(() => {
+    setFileOverlay(null);
+    setDrawerTarget(null);
+  }, []);
+
+  const drawerFillHeight =
+    drawerTarget?.kind === 'file' && drawerTarget.startLine == null;
+  const fileOverlayOpen = fileOverlay != null;
+  const collapseCanvas = drawerFillHeight || fileOverlayOpen;
+
+  // Drop the full-file overlay when the underlying walkthrough drawer changes
+  // or closes — open-file keeps the same drawerTarget so the snippets stay mounted.
+  const walkthroughDrawerKey =
+    drawerTarget?.kind === 'walkthrough'
+      ? `${drawerTarget.walkthroughId}:${drawerTarget.stepIndex}`
+      : null;
+  useEffect(() => {
+    setFileOverlay(null);
+  }, [walkthroughDrawerKey]);
+
+  useEffect(() => {
+    if (!fileOverlayOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeFileOverlay();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fileOverlayOpen, closeFileOverlay]);
 
   // Camera helper shared by the walkthrough interactions: frames the focused
   // edges' endpoint nodes via `fitView({ nodes })`, which uses the store's
@@ -1226,7 +1355,11 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
   // the actual edge path (not node-center approximations).
   const edgeLabels = useMemo(() => {
     return dispEdges
-      .filter((e) => !e.hidden)
+      .filter((e) => {
+        if (e.hidden) return false;
+        const d = e?.data as { dimmed?: boolean } | undefined;
+        return !d?.dimmed;
+      })
       .map((e) => {
         const d = e.data as {
           mechanism?: string;
@@ -1532,8 +1665,19 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
       {/* Graph area */}
       <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {/* Canvas box — the edge-label overlay and legend anchor here, so
-            overlays shift with the canvas, not the labels. */}
-        <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            overlays shift with the canvas, not the labels. Collapses when the
+            file drawer fills the column (whole-file reading). */}
+        <div
+          style={{
+            position: 'relative',
+            flex: collapseCanvas ? 0 : 1,
+            minHeight: 0,
+            height: collapseCanvas ? 0 : undefined,
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
         {/* Edge-label overlay — sits above the ReactFlow pane so clicks land. */}
         {showEdgeLabels !== false && (
         <div
@@ -1796,7 +1940,12 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
           </div>
         )}
         </div>
-      <FileDrawer title={drawerTitle} onClose={() => setDrawerTarget(null)}>
+      <FileDrawer
+        title={drawerTitle}
+        onClose={closeDrawer}
+        fillHeight={drawerFillHeight}
+        suppressEscape={fileOverlayOpen}
+      >
         {drawerTarget?.kind === 'walkthrough' &&
         focusedWalkthrough &&
         renderWalkthroughViewer ? (
@@ -1804,6 +1953,7 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
             render={renderWalkthroughDrawerContent}
             walkthrough={focusedWalkthrough}
             stepIndex={drawerTarget.stepIndex}
+            onOpenFile={onOpenFileFromWalkthrough}
           />
         ) : drawerTarget?.kind === 'file' ? (
           <FileDrawerContent
@@ -1813,6 +1963,55 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
           />
         ) : null}
       </FileDrawer>
+      {fileOverlay && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 8,
+            display: 'flex',
+            flexDirection: 'column',
+            background: theme.colors.background,
+            borderLeft: `1px solid ${theme.colors.border}`,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '6px 10px',
+              borderBottom: `1px solid ${theme.colors.border}`,
+              flexShrink: 0,
+            }}
+          >
+            <span
+              title={fileOverlay.file}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                fontFamily: theme.fonts.monospace,
+                fontSize: theme.fontSizes[0],
+                color: theme.colors.textMuted ?? theme.colors.textSecondary,
+              }}
+            >
+              {fileOverlay.file}
+            </span>
+            <FileOverlayCloseButton onClose={closeFileOverlay} />
+          </div>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+            <FileDrawerContent
+              render={renderDrawerContent}
+              file={fileOverlay.file}
+              startLine={fileOverlay.startLine}
+              fullFile
+            />
+          </div>
+        </div>
+      )}
       {/* Startup cover — hides measurement, layout swap, and camera settle. */}
       <GraphLayoutCover revealed={layoutReady} />
       {canvasOverlay}

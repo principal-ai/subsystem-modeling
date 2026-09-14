@@ -57,6 +57,11 @@ export const graphifyChangeSubscribers = new Set<
 	(payload: StudioMessages["graphifyChanged"]) => void
 >();
 
+/** Package-layer ensure jobs push `packageLayersChanged`. */
+export const packageLayersChangeSubscribers = new Set<
+	(payload: StudioMessages["packageLayersChanged"]) => void
+>();
+
 /** Studio npm version check push (`studioVersionChanged`). */
 export const studioVersionChangeSubscribers = new Set<
 	(payload: StudioMessages["studioVersionChanged"]) => void
@@ -117,6 +122,9 @@ const rpc = Electroview.defineRPC<StudioRPC>({
 			},
 			graphifyChanged: (payload) => {
 				for (const fn of graphifyChangeSubscribers) fn(payload);
+			},
+			packageLayersChanged: (payload) => {
+				for (const fn of packageLayersChangeSubscribers) fn(payload);
 			},
 			studioVersionChanged: (payload) => {
 				for (const fn of studioVersionChangeSubscribers) fn(payload);

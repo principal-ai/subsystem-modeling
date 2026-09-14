@@ -70,6 +70,7 @@ export function TabStrip({
 					tab.kind === "maintenance-sessions" ||
 					tab.kind === "subsystems" ||
 					tab.kind === "graphify" ||
+					tab.kind === "package-layers" ||
 					tab.kind === "opencode-v2";
 				const canCopyPath =
 					tab.kind === "subsystem-model" && typeof tab.path === "string";

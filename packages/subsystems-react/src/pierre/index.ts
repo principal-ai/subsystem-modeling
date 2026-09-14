@@ -4,7 +4,7 @@ export { PierreSnippetView } from './PierreSnippetView';
 export type { PierreSnippetViewProps } from './PierreSnippetView';
 export { PierreWalkthroughCodeView } from './PierreWalkthroughCodeView';
 export type { PierreWalkthroughCodeViewProps } from './PierreWalkthroughCodeView';
-export { sliceSnippetWindow } from './sliceSnippet';
+export { remapSnippetLineNumbers, sliceSnippetWindow } from './sliceSnippet';
 export type { SnippetSlice } from './sliceSnippet';
 export {
   isPierreCFamilyPath,

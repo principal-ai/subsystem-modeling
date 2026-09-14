@@ -234,7 +234,7 @@ const declarationOpenComponents: SubsystemComponent[] = [
   {
     id: 'detail',
     name: 'ComponentDeclaration',
-    construct: 'module',
+    construct: 'function',
     file: 'packages/subsystems-react/src/subsystem/ComponentDeclaration.tsx',
     purl: 'pkg:github/principal-ai/principal-view-core-library',
     purpose: 'declaration panel — click file or L251 to open the drawer at the export line',
@@ -249,7 +249,7 @@ const declarationOpenComponents: SubsystemComponent[] = [
   {
     id: 'resolver',
     name: 'resolve.ts',
-    construct: 'module',
+    construct: 'function',
     file: 'packages/subsystems-react/src/graphify/resolve.ts',
     purl: 'pkg:github/principal-ai/principal-view-core-library',
     purpose: 'graphify type-ref resolver (second file for tree navigation)',
@@ -274,7 +274,7 @@ function readStoryFile(path: string): Promise<string> {
 function DeclarationLineOpenDemo() {
   const renderFileViewer = (file: string, opts?: SubsystemOpenFileOptions) => {
     const startLine = opts?.startLine;
-    if (startLine != null) {
+    if (startLine != null && !opts?.fullFile) {
       return (
         <PierreSnippetView
           filePath={file}
@@ -292,6 +292,7 @@ function DeclarationLineOpenDemo() {
         filePath={file}
         fileName={file.split('/').pop() ?? file}
         readFile={readStoryFile}
+        focusLine={opts?.fullFile ? startLine : undefined}
       />
     );
   };

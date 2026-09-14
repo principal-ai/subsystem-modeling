@@ -26,7 +26,6 @@ export const SUBSYSTEM_EDGE_MECHANISMS = [
   'uses',
   'method',
   'references',
-  'contains',
   'feeds',
   'produces',
   'writes',
@@ -121,7 +120,7 @@ async function ensureDir(): Promise<void> {
 
 const SUBSYSTEM_RELATION_TYPES = [
   'imports', 'extends', 'inherits',
-  'implements', 'mixes_in', 'method', 'references', 'contains',
+  'implements', 'mixes_in', 'method', 'references',
 ] as const;
 
 const SUBSYSTEM_WALKTHROUGH_MECHANISMS = [
@@ -261,7 +260,6 @@ export function normalizeDeclarationProvenance(components: unknown): void {
       method: ['parameters'],
       class: ['methods', 'properties', 'extends', 'implements', 'instantiations', 'references'],
       type: ['properties', 'usedBy', 'implementors'],
-      module: ['imports', 'exports', 'symbols'],
       custom_entity: ['attributes'],
       store: ['properties'],
     };

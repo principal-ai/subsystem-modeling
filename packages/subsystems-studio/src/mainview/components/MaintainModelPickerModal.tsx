@@ -39,7 +39,10 @@ export function MaintainModelPickerModal({
 	const [remember, setRemember] = useState(true);
 	const [starting, setStarting] = useState(false);
 
-	const agentLabel = mode === "issues" ? "issue-fixer" : "gap-filler";
+	const agentLabel =
+		mode === "issues"
+			? "issue-fixer / boundary-fixer / topology-fixer"
+			: "gap-filler / boundary-gap-filler / topology-gap-filler";
 	const actionLabel = "Run maintenance";
 
 	const load = useCallback(async (refresh?: boolean) => {

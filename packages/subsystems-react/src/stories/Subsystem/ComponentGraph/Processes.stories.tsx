@@ -28,7 +28,7 @@ const processComponents = [
     ['main', 'main', 'function', 'src/host/main.ts', 'pkg:github/principal-ai/principal-studio', 'boots the host process', 'main'],
     ['store', 'SessionStore', 'store', 'src/host/store.ts', 'pkg:github/principal-ai/principal-studio', 'retained host state', 'SessionStore'],
     ['view', 'TrailView', 'function', 'src/renderer/view.tsx', 'pkg:github/principal-ai/principal-studio', 'renders the trail', 'TrailView'],
-    ['bridge', 'bridge', 'module', 'src/renderer/bridge.ts', 'pkg:github/principal-ai/principal-studio', 'IPC bridge to the host', 'bridge'],
+    ['bridge', 'bridge', 'function', 'src/renderer/bridge.ts', 'pkg:github/principal-ai/principal-studio', 'IPC bridge to the host', 'bridge'],
   ]),
   {
     id: 'svc',

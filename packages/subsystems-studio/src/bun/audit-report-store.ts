@@ -79,10 +79,19 @@ export function auditHasIssues(report: SubsystemModelAuditReport): boolean {
 export function auditHasPartialGaps(report: SubsystemModelAuditReport): boolean {
 	if (report.findings.some((f) => f.kind === "construct_unconfirmed")) return true;
 	if (report.findings.some((f) => f.kind === "signature_unconfirmed")) return true;
+	if (
+		report.findings.some(
+			(f) =>
+				f.kind === "topology_relation_unconfirmed" ||
+				f.kind === "topology_import_unconfirmed",
+		)
+	)
+		return true;
 	for (const c of report.checks) {
 		if (c.constructInferred === "unknown" && c.constructMatch !== true) return true;
 		if (c.signature === "skipped") return true;
 	}
+	if (report.topologyChecks?.some((c) => c.verdict === "gap")) return true;
 	return false;
 }
 

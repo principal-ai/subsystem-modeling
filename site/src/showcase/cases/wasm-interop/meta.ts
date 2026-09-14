@@ -2,10 +2,10 @@ import type { ShowcaseCaseMeta } from '../types';
 
 export const meta: ShowcaseCaseMeta = {
   id: 'wasm-interop',
-  shortTitle: 'Host ↔ WASM pipeline',
-  blurb: 'browser/host orchestrates; wasm/guest normalize+checksum with host_trace callbacks.',
+  shortTitle: 'Browser main ↔ WASM worker',
+  blurb: 'browser/main orchestrates; wasm/worker normalize+checksum with host_trace callbacks.',
   stack: 'TS + Rust/WASM',
   axes: ['stack', 'insight', 'shape'],
   complexity: 'medium',
-  storyTitle: 'WASM/Host guest pipeline',
+  storyTitle: 'WASM/Browser main worker pipeline',
 };

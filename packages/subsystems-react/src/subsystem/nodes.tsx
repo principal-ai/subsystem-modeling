@@ -20,6 +20,7 @@ import {
   MECHANISM_COLOR,
   MECHANISM_STYLE,
   PROPOSED_COLOR,
+  constructBadgeColor,
   constructBadgeLabel,
   rightBadgeLabel,
   rightBadgeColor,
@@ -43,7 +44,6 @@ export const CONSTRUCT_LABEL: Record<string, string> = {
   interface: 'interface',
   type_alias: 'type alias',
   enum: 'enum',
-  module: 'module',
   store: 'store',
   external: 'external',
   custom_entity: 'entity',
@@ -89,6 +89,9 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
   // shows as the hover badge, not as color — for now; a role glyph/accent may
   // come later. A component-authored `color` override wins over the construct.
   const color = componentColor(c, resolvePierreSyntaxThemeName(mode));
+  // Left badge: framework brand (e.g. React cyan) when the label is a
+  // framework stereotype; otherwise the same construct color as the border.
+  const badgeColor = constructBadgeColor(c) ?? color;
   const [hover, setHover] = useState(false);
   const configuredMax = SUBSYSTEM_CALLBACKS.maxNodeWidth;
   const maxWidth = configuredMax ?? 300;
@@ -115,6 +118,10 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
   // Selection is stamped into data by the graph component — React Flow's own
   // `selected` never updates because the node stops click propagation.
   const isSelected = selected || (data.isSelected as boolean | undefined) === true;
+  // Externals are "outside" the system — square corners on the node + badges.
+  const isExternal = c.construct === 'external';
+  const nodeRadius = isExternal ? 0 : 8;
+  const badgeRadius = isExternal ? 0 : 4;
 
   return (
     <div
@@ -142,7 +149,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
         minWidth: badgeMinWidth,
         maxWidth,
         padding: '6px 10px',
-        borderRadius: 8,
+        borderRadius: nodeRadius,
         background: theme.colors.backgroundSecondary ?? theme.colors.background,
         // Selected / file-matched nodes get a thicker border. Proposed nodes
         // use a dashed goldenrod border; left construct badge keeps construct color.
@@ -158,11 +165,12 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
     >
       {/* Construct / stereotype badge — prefers framework stereotype so a
           React UI unit reads as "react · component" instead of "function".
-          Persistent; pointer-events none so clicks pass through to the node. */}
+          Persistent; pointer-events none so clicks pass through to the node.
+          Framework badges use brand color; border stays construct-colored. */}
       <div
         style={{
           position: 'absolute',
-          top: -9,
+          top: -11,
           left: BADGE_EDGE_INSET,
           zIndex: 1,
           fontFamily: theme.fonts.monospace,
@@ -171,11 +179,11 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
           textTransform: 'uppercase',
           lineHeight: '17px',
           whiteSpace: 'nowrap',
-          color,
+          color: badgeColor,
           background: theme.colors.backgroundSecondary ?? theme.colors.background,
-          border: `1px solid ${color}`,
-          borderRadius: 4,
-          padding: '0 5px',
+          border: `2px solid ${badgeColor}`,
+          borderRadius: badgeRadius,
+          padding: '2px 8px',
         }}
       >
         {constructBadgeLabel(c)}
@@ -188,7 +196,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
         <div
           style={{
             position: 'absolute',
-            top: -9,
+            top: -11,
             right: BADGE_EDGE_INSET,
             zIndex: 1,
             display: 'flex',
@@ -206,9 +214,9 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
                 lineHeight: '17px',
                 color: storageColor,
                 background: theme.colors.backgroundSecondary ?? theme.colors.background,
-                border: `1px solid ${storageColor}`,
-                borderRadius: 4,
-                padding: '0 5px',
+                border: `2px solid ${storageColor}`,
+                borderRadius: badgeRadius,
+                padding: '2px 8px',
               }}
             >
               {storageLabel}
@@ -224,9 +232,9 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
                 lineHeight: '17px',
                 color: topRightColor,
                 background: theme.colors.backgroundSecondary ?? theme.colors.background,
-                border: `1px solid ${topRightColor}`,
-                borderRadius: 4,
-                padding: '0 5px',
+                border: `2px solid ${topRightColor}`,
+                borderRadius: badgeRadius,
+                padding: '2px 8px',
               }}
             >
               {topRightLabel}
@@ -242,7 +250,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
         <div
           style={{
             position: 'absolute',
-            bottom: -13,
+            bottom: -14,
             left: '50%',
             transform: 'translateX(-50%)',
             zIndex: 1,
@@ -255,9 +263,9 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
             // borders and badges, not the file name
             color: theme.colors.text ?? theme.colors.textSecondary,
             background: theme.colors.backgroundSecondary ?? theme.colors.background,
-            border: `1px solid ${color}`,
-            borderRadius: 4,
-            padding: '0 5px',
+            border: `2px solid ${color}`,
+            borderRadius: badgeRadius,
+            padding: '2px 8px',
             cursor: 'pointer',
           }}
           onClick={(e) => {
@@ -326,10 +334,9 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
 }
 
 /**
- * Process boundary frame — a React Flow parent node. Members render inside
- * via `parentId`; this draws the labeled container only (no handles, no
- * selection). The border color derives deterministically from the process key
- * so each deployment unit reads as its own region.
+ * Boundary frame — a React Flow parent node for a process or module region.
+ * Members render inside via `parentId`; this draws the labeled container only
+ * (no handles, no selection). Border color derives from the region key.
  */
 export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData, 'subsystem-group'>>) {
   const { theme } = useTheme();
@@ -343,6 +350,21 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
   const color = packageColor(region?.key ?? 'process');
   const dimmed = data.dimmed === true;
   const hidden = (data as { hidden?: boolean }).hidden === true;
+  // Label is the region identity alone (path / process key / owner/name).
+  // Kind is carried by frame chrome (square = process; rounded = module/package)
+  // — don't prefix `module ·` / `package ·` or the path reads twice.
+  const label = region?.label ?? '';
+  // Process frames match external nodes — square corners (outside the soft
+  // component language). Module / package frames keep the rounded look.
+  const isProcess = region?.kind === 'process';
+  const frameRadius = isProcess ? 0 : 12;
+  const badgeRadius = isProcess ? 0 : 4;
+  // Processes are deployment units — solid frame. Modules/packages stay dashed
+  // until selected.
+  const frameStyle = isProcess || selected ? 'solid' : 'dashed';
+  // Process keeps a tinted fill; module / package bodies stay transparent so
+  // nested frames don't stack washes.
+  const frameFill = isProcess ? `${color}14` : 'transparent';
 
   if (!region) return null;
 
@@ -353,9 +375,9 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
         width: width ?? 400,
         height: height ?? 300,
         boxSizing: 'border-box',
-        borderRadius: 12,
-        border: `2px ${selected ? 'solid' : 'dashed'} ${color}`,
-        background: `${color}14`,
+        borderRadius: frameRadius,
+        border: `2px ${frameStyle} ${color}`,
+        background: frameFill,
         opacity: hidden ? 0 : dimmed ? 0.35 : 1,
         transition: 'opacity 150ms ease',
         pointerEvents: 'none',
@@ -364,8 +386,14 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
       <div
         style={{
           position: 'absolute',
-          top: -19,
-          left: 12,
+          // Process: badge fill starts with the process fill (inside the
+          // frame border); no top badge border so widths don't fight.
+          // Module/package sit astride the top edge like component badges.
+          // Always set left/transform/borderTop explicitly — React Flow reuses
+          // group DOM nodes and `undefined` does not clear a prior value.
+          top: isProcess ? 0 : -19,
+          left: isProcess ? '50%' : 12,
+          transform: isProcess ? 'translateX(-50%)' : 'none',
           fontFamily: theme.fonts.monospace,
           fontSize: theme.fontSizes[3],
           fontWeight: 700,
@@ -373,12 +401,13 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
           color,
           background: theme.colors.backgroundSecondary ?? theme.colors.background,
           border: `1px solid ${color}`,
-          borderRadius: 4,
+          borderTopWidth: isProcess ? 0 : 1,
+          borderRadius: badgeRadius,
           padding: '1px 7px',
           whiteSpace: 'nowrap',
         }}
       >
-        {region.label}
+        {label}
       </div>
     </div>
   );

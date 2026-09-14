@@ -653,6 +653,14 @@ function AuditDoneBody({
 		workBits.push(`${s.anchorsExact} exact anchor${s.anchorsExact === 1 ? "" : "s"}`);
 	if (s.graphifyConfirmed)
 		workBits.push(`${s.graphifyConfirmed} matched in graphify`);
+	if (s.softConfirmed)
+		workBits.push(
+			`${s.softConfirmed} relation${s.softConfirmed === 1 ? "" : "s"} corroborated`,
+		);
+	else if (s.importsConfirmed)
+		workBits.push(
+			`${s.importsConfirmed} import${s.importsConfirmed === 1 ? "" : "s"} corroborated`,
+		);
 	if (s.externalsSkipped)
 		workBits.push(`${s.externalsSkipped} external skipped`);
 
@@ -660,6 +668,10 @@ function AuditDoneBody({
 	if (s.missingFiles)
 		issueBits.push(
 			`${s.missingFiles} missing file${s.missingFiles === 1 ? "" : "s"}`,
+		);
+	if (s.brokenRelationEndpoints)
+		issueBits.push(
+			`${s.brokenRelationEndpoints} broken relation endpoint${s.brokenRelationEndpoints === 1 ? "" : "s"}`,
 		);
 	if (s.staleDeclarations)
 		issueBits.push(
@@ -672,6 +684,14 @@ function AuditDoneBody({
 	if (s.weakAnchors)
 		issueBits.push(
 			`${s.weakAnchors} weak anchor${s.weakAnchors === 1 ? "" : "s"}`,
+		);
+	if (s.softUnconfirmed)
+		issueBits.push(
+			`${s.softUnconfirmed} relation${s.softUnconfirmed === 1 ? "" : "s"} unconfirmed`,
+		);
+	else if (s.importsUnconfirmed)
+		issueBits.push(
+			`${s.importsUnconfirmed} import${s.importsUnconfirmed === 1 ? "" : "s"} unconfirmed`,
 		);
 	if (s.unresolved) issueBits.push(`${s.unresolved} unresolved`);
 
@@ -1333,11 +1353,17 @@ export function AuditResultsModal({
 								const verdict = doneReport.needsUpdate
 									? "verification failed"
 									: doneReport.findings.some((f) => f.kind === "construct_unconfirmed") ||
+										  doneReport.findings.some(
+												(f) =>
+													f.kind === "topology_relation_unconfirmed" ||
+													f.kind === "topology_import_unconfirmed",
+										  ) ||
 										  doneReport.checks.some(
 												(c) =>
 													c.constructInferred === "unknown" ||
 													c.signature === "skipped",
-										  )
+										  ) ||
+										  doneReport.topologyChecks?.some((c) => c.verdict === "gap")
 										? "partially verified"
 										: "fully verified";
 								const accent =

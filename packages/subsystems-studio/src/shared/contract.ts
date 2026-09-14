@@ -56,6 +56,8 @@ export interface DefaultTabFlags {
 	trails: boolean;
 	/** Graphify repos tab. */
 	graphify: boolean;
+	/** Package layers (codebase-composition) repos tab. */
+	packageLayers: boolean;
 	/** Subsystems list tab. */
 	subsystems: boolean;
 	/** OpenCode V2 debug / runtime tab. */
@@ -471,7 +473,13 @@ export type SubsystemModelAuditFindingKind =
 	| "signature_mismatch"
 	| "signature_unconfirmed"
 	| "anchor"
-	| "unresolved";
+	| "unresolved"
+	| "topology_broken_endpoint"
+	| "topology_import_unconfirmed"
+	| "topology_relation_unconfirmed"
+	| "boundary_module_without_file"
+	| "boundary_module_file_mismatch"
+	| "boundary_process_nest_disagree";
 
 export type SubsystemModelAuditSeverity = "error" | "warn" | "info";
 
@@ -505,6 +513,10 @@ export interface SubsystemModelAuditFinding {
 	severity: SubsystemModelAuditSeverity;
 	componentId?: string;
 	componentName?: string;
+	/** Topology relation id when the finding is about relations[]. */
+	relationId?: string;
+	/** Module frame key when the finding is about boundary membership. */
+	moduleKey?: string;
 	walkthroughId?: string;
 	step?: number;
 	message: string;
@@ -549,6 +561,29 @@ export interface SubsystemModelAuditCheck {
 	note?: string;
 }
 
+/** Per-relation checklist from the topology audit pass. */
+export interface SubsystemModelAuditTopologyCheck {
+	relationId: string;
+	relationType: string;
+	from: string;
+	to: string;
+	graphify: "confirmed" | "unconfirmed" | "unavailable" | "skipped" | "n/a";
+	verdict: "ok" | "issue" | "gap" | "skipped";
+	note?: string;
+}
+
+/** Per-component / per-module boundary membership check (process / module). */
+export interface SubsystemModelAuditBoundaryCheck {
+	componentId: string;
+	componentName?: string;
+	kind: "module_file" | "process_nest" | "skipped";
+	module?: string;
+	file?: string;
+	process?: string;
+	verdict: "ok" | "issue" | "gap" | "skipped";
+	note?: string;
+}
+
 /** Aggregated dry-run audit report (also persisted under ~/.principal/subsystem-model-audits). */
 export interface SubsystemModelAuditReport {
 	graphId: string;
@@ -575,9 +610,32 @@ export interface SubsystemModelAuditReport {
 		weakAnchors: number;
 		unresolved: number;
 		ok: number;
+		/** Topology relations inspected. */
+		relations: number;
+		/** Soft Graphify corroboration attempts (imports + method/inherits/…). */
+		softChecked: number;
+		softConfirmed: number;
+		softUnconfirmed: number;
+		/** Imports subset of soft checks (legacy summary bits). */
+		importsChecked: number;
+		importsConfirmed: number;
+		importsUnconfirmed: number;
+		brokenRelationEndpoints: number;
+		/** Boundary (process/module) membership. */
+		modulesClaimed: number;
+		moduleFileOk: number;
+		moduleFileMismatch: number;
+		moduleWithoutFile: number;
+		processNestsChecked: number;
+		processNestOk: number;
+		processNestDisagree: number;
 	};
 	/** What was inspected, one row per component — shown even when clean. */
 	checks: SubsystemModelAuditCheck[];
+	/** Topology relation checks (Layer 2). */
+	topologyChecks?: SubsystemModelAuditTopologyCheck[];
+	/** Boundary membership checks (process / module). */
+	boundaryChecks?: SubsystemModelAuditBoundaryCheck[];
 	findings: SubsystemModelAuditFinding[];
 }
 
@@ -586,7 +644,7 @@ export type SubsystemModelProposalChange =
 	| {
 			target: "component";
 			componentId: string;
-			field: "file" | "symbol" | "construct" | "name" | "purl";
+			field: "file" | "symbol" | "construct" | "name" | "purl" | "process" | "module";
 			/** `null` clears an optional field (e.g. symbol). */
 			value: string | null;
 	  }
@@ -630,6 +688,45 @@ export type SubsystemModelProposalChange =
 			file?: string;
 			symbol?: string;
 			purl?: string;
+	  }
+	| {
+			/**
+			 * Confirm an intentional module≠file grouping. Accept writes the
+			 * augmentation store — does not change model JSON.
+			 */
+			target: "augmentation";
+			componentId: string;
+			field: "module";
+			/** Claimed module frame key (defaults from component.module). */
+			value: string;
+			file?: string;
+			symbol?: string;
+			purl?: string;
+	  }
+	| {
+			/**
+			 * Confirm a topology relation claim when Graphify left the edge thin.
+			 * Accept writes the augmentation store — does not change model JSON.
+			 * Defaults (from/to file#symbol, relationType) come from the relation.
+			 */
+			target: "augmentation";
+			field: "relation";
+			relationId: string;
+			value: true;
+	  }
+	| {
+			/** Retarget a topology relation endpoint or type. */
+			target: "relation";
+			relationId: string;
+			field: "from" | "to" | "relationType";
+			value: string;
+	  }
+	| {
+			/** Drop a topology relation (e.g. broken endpoints). */
+			target: "relation";
+			relationId: string;
+			field: "delete";
+			value: true;
 	  };
 
 export type SubsystemModelProposalStatus = "pending" | "accepted" | "rejected";
@@ -659,6 +756,7 @@ export interface SubsystemModelProposal {
 		severity?: string;
 		componentId?: string;
 		componentName?: string;
+		relationId?: string;
 		walkthroughId?: string;
 		step?: number;
 		message?: string;
@@ -681,6 +779,21 @@ export interface GraphifyGraphSummary {
 	nodeCount: number;
 	edgeCount: number;
 	graphJsonPath: string;
+}
+
+/** Cached package-layer slot under ~/.principal/package-layers. */
+export interface PackageLayerSummary {
+	purl: string;
+	purlKey: string;
+	headSha: string;
+	dirtyHash: string | null;
+	slotKey: string;
+	repoRoot: string;
+	builtAt: string;
+	packageCount: number;
+	isMonorepo: boolean;
+	rootPackageName?: string;
+	packagesJsonPath: string;
 }
 
 export interface GraphifyCliStatus {
@@ -755,6 +868,28 @@ export interface GraphifyRepoEntry {
 	} | null;
 }
 
+/** Alexandria repo crossed with package-layer cache status for the Package Layers tab. */
+export interface PackageLayerRepoEntry {
+	path: string;
+	owner: string;
+	name: string;
+	purl: string;
+	headSha: string;
+	dirtyHash: string | null;
+	slotKey: string;
+	/** ready = cache matches HEAD(+dirty); building = ensure in flight; missing = needs a run. */
+	status: "ready" | "missing" | "building";
+	cached: {
+		slotKey: string;
+		packageCount: number;
+		isMonorepo: boolean;
+		rootPackageName?: string;
+		builtAt: string;
+		packagesJsonPath: string;
+		matchesCurrent: boolean;
+	} | null;
+}
+
 /** A concept card deliberately saved out of an analysis. Carries the full card
  *  (a copy — safe from later re-extraction) plus provenance. What the Concepts
  *  tab renders. */
@@ -820,7 +955,7 @@ export interface AnalysisSummary {
 
 export interface TabSummary {
 	id: string;
-	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "analysis" | "session-events" | "prompt" | "subsystem-model" | "subsystems" | "graphify" | "opencode-v2" | "maintain-events";
+	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "analysis" | "session-events" | "prompt" | "subsystem-model" | "subsystems" | "graphify" | "package-layers" | "opencode-v2" | "maintain-events";
 	title: string;
 	mode?: ViewerMode;
 	payloadKind?: PayloadKind;
@@ -832,7 +967,7 @@ export interface TabFullState {
 	ok: boolean;
 	error?: string;
 	id: string;
-	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "analysis" | "session-events" | "prompt" | "subsystem-model" | "subsystems" | "graphify" | "opencode-v2" | "maintain-events";
+	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "analysis" | "session-events" | "prompt" | "subsystem-model" | "subsystems" | "graphify" | "package-layers" | "opencode-v2" | "maintain-events";
 	title: string;
 	mode?: ViewerMode;
 	payloadKind?: PayloadKind;
@@ -1234,9 +1369,11 @@ export type StudioRequests = {
 	};
 	/**
 	 * Start a background Maintain OpenCode run for this model.
-	 * Host re-audits and routes: issues → issue-fixer, partially_verified →
-	 * gap-filler, fully_verified → no-op. Progress via
-	 * `subsystemModelMaintainChanged`. Does not auto-accept proposals.
+	 * Host re-audits and routes: construct issues → issue-fixer, topology
+	 * broken endpoints → topology-fixer, construct gaps → gap-filler,
+	 * topology soft gaps → topology-gap-filler, fully_verified → no-op.
+	 * Progress via `subsystemModelMaintainChanged`. Does not auto-accept
+	 * proposals.
 	 */
 	maintainSubsystemModel: {
 		params: {
@@ -1400,6 +1537,40 @@ export type StudioRequests = {
 			graphJsonPath?: string;
 			nodeCount?: number;
 			edgeCount?: number;
+			durationMs?: number;
+		};
+	};
+	listPackageLayers: {
+		params: Record<string, never>;
+		response: { layers: PackageLayerSummary[] };
+	};
+	listPackageLayerRepos: {
+		params: Record<string, never>;
+		response: { repos: PackageLayerRepoEntry[] };
+	};
+	/**
+	 * Ensure codebase-composition package layers for a repo at the current
+	 * HEAD(+dirty). Cache hits return immediately; long discovers may return
+	 * `status: "building"` and finish via `packageLayersChanged`.
+	 */
+	ensurePackageLayers: {
+		params: {
+			purl: string;
+			repoRoot?: string;
+			force?: boolean;
+		};
+		response: {
+			ok: boolean;
+			error?: string;
+			status?: "hit" | "built" | "building";
+			purl?: string;
+			headSha?: string;
+			dirtyHash?: string | null;
+			slotKey?: string;
+			repoRoot?: string;
+			packagesJsonPath?: string;
+			packageCount?: number;
+			isMonorepo?: boolean;
 			durationMs?: number;
 		};
 	};
@@ -1581,6 +1752,23 @@ export type StudioMessages = {
 		};
 	};
 	/**
+	 * Package-layer ensure finished. Renderer should refresh the Package Layers
+	 * tab from this instead of awaiting long RPCs.
+	 */
+	packageLayersChanged: {
+		kind: "ensure" | "repos";
+		error?: string;
+		purl?: string;
+		ensure?: {
+			ok: boolean;
+			error?: string;
+			status?: "hit" | "built" | "building";
+			packageCount?: number;
+			isMonorepo?: boolean;
+			durationMs?: number;
+		};
+	};
+	/**
 	 * A subsystem graph was created/updated/deleted via the store API, or its
 	 * on-disk file changed under ~/.principal/subsystem-models (external edit).
 	 * List tab should re-fetch; an open graph tab should reload when `graphId`
@@ -1604,8 +1792,12 @@ export type StudioMessages = {
 		summary?: string;
 		/** OpenCode model used for the run. */
 		model?: string;
-		/** issue-fixer | gap-filler when an agent ran (or was selected). */
-		agent?: "issue-fixer" | "gap-filler";
+		/** Which Maintain agent ran (or was selected). */
+		agent?:
+			| "issue-fixer"
+			| "gap-filler"
+			| "topology-fixer"
+			| "topology-gap-filler";
 		/** True when audit was fully verified and no agent ran. */
 		skipped?: boolean;
 	};

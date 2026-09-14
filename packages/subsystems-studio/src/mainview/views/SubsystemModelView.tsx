@@ -97,7 +97,7 @@ export function SubsystemModelView({
 	const renderFileViewer = useCallback(
 		(file: string, opts?: SubsystemOpenFileOptions) => {
 			const startLine = opts?.startLine;
-			if (startLine != null) {
+			if (startLine != null && !opts?.fullFile) {
 				return (
 					<PierreSnippetView
 						filePath={file}
@@ -115,6 +115,7 @@ export function SubsystemModelView({
 					filePath={file}
 					fileName={file.split("/").pop() ?? file}
 					readFile={readFile}
+					focusLine={opts?.fullFile ? startLine : undefined}
 				/>
 			);
 		},
@@ -122,12 +123,13 @@ export function SubsystemModelView({
 	);
 
 	const renderWalkthroughViewer = useCallback(
-		({ walkthrough, stepIndex }: WalkthroughViewerContext) => (
+		({ walkthrough, stepIndex, onOpenFile }: WalkthroughViewerContext) => (
 			<PierreWalkthroughCodeView
 				walkthrough={walkthrough}
 				stepIndex={stepIndex}
 				readFile={readFile}
 				contextLines={8}
+				onOpenFile={onOpenFile}
 			/>
 		),
 		[readFile],

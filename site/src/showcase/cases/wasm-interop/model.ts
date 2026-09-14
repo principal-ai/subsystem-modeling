@@ -7,87 +7,87 @@ import type {
 const PURL = 'pkg:github/you/wasm-interop';
 
 export const components: SubsystemComponent[] = [
-  // —— browser/host process ——
+  // —— browser/main process ——
   {
     id: 'run-pipeline',
-    process: 'browser/host',
+    process: 'browser/main',
     name: 'runPipeline',
     construct: 'function',
     symbol: 'runPipeline',
     role: 'entry',
     purl: PURL,
     file: 'host/runPipeline.ts',
-    purpose: 'Host entry — orchestrates load → write → guest steps → read.',
+    purpose: 'Main-thread entry — orchestrates load → write → worker steps → read.',
     layer: 1,
   },
   {
     id: 'load-guest',
-    process: 'browser/host',
+    process: 'browser/main',
     name: 'loadGuest',
     construct: 'function',
     symbol: 'loadGuest',
     purl: PURL,
     file: 'host/loadGuest.ts',
-    purpose: 'Instantiate WASM and wire guest→host imports (host_trace).',
+    purpose: 'Instantiate WASM and wire worker→main imports (host_trace).',
     layer: 2,
   },
   {
     id: 'write-bytes',
-    process: 'browser/host',
+    process: 'browser/main',
     name: 'writeBytes',
     construct: 'function',
     symbol: 'writeBytes',
     purl: PURL,
     file: 'host/memory.ts',
-    purpose: 'Host copies input into linear memory (still host process).',
+    purpose: 'Main thread copies input into linear memory (still browser/main).',
     layer: 2,
   },
   {
     id: 'read-u32',
-    process: 'browser/host',
+    process: 'browser/main',
     name: 'readU32',
     construct: 'function',
     symbol: 'readU32',
     purl: PURL,
     file: 'host/memory.ts',
-    purpose: 'Host reads a result the guest wrote into shared memory.',
+    purpose: 'Main thread reads a result the worker wrote into shared memory.',
     layer: 2,
   },
   {
     id: 'host-trace',
-    process: 'browser/host',
+    process: 'browser/main',
     name: 'host_trace',
     construct: 'function',
     symbol: 'host_trace',
     purl: PURL,
     file: 'host/loadGuest.ts',
-    purpose: 'Import the guest calls — guest→host boundary.',
+    purpose: 'Import the worker calls — wasm/worker → browser/main boundary.',
     layer: 2,
   },
 
-  // —— wasm/guest process ——
+  // —— wasm/worker process ——
   {
     id: 'normalize',
-    process: 'wasm/guest',
+    process: 'wasm/worker',
     name: 'normalize',
     construct: 'function',
     symbol: 'normalize',
     role: 'entry',
     purl: PURL,
     file: 'guest/src/lib.rs',
-    purpose: 'Guest entry — in-place normalize; calls host_trace.',
+    purpose: 'WASM worker entry — in-place normalize; calls host_trace.',
     layer: 3,
   },
   {
     id: 'checksum',
-    process: 'wasm/guest',
+    process: 'wasm/worker',
     name: 'checksum',
     construct: 'function',
     symbol: 'checksum',
     role: 'entry',
     purl: PURL,
     file: 'guest/src/lib.rs',
-    purpose: 'Guest entry — hash normalized bytes; stash OUT_CHECKSUM.',
+    purpose: 'WASM worker entry — hash normalized bytes; stash OUT_CHECKSUM.',
     layer: 3,
   },
 
@@ -99,7 +99,7 @@ export const components: SubsystemComponent[] = [
     role: 'service',
     file: '',
     purl: 'external',
-    purpose: 'Browser engine that hosts the guest module.',
+    purpose: 'Browser engine that runs the wasm/worker module.',
     layer: 4,
   },
 ];
@@ -109,7 +109,7 @@ export const relations = [] as SubsystemRelation[];
 export const walkthroughs = [
   {
     "id": "tl-pipeline",
-    "title": "Full pipeline (host ↔ guest ↔ host)",
+    "title": "Full pipeline (browser/main ↔ wasm/worker)",
     "steps": [
       {
         "from": "run-pipeline",
@@ -118,7 +118,7 @@ export const walkthroughs = [
         "file": "host/runPipeline.ts",
         "line": 14,
         "symbol": "loadGuest",
-        "annotation": "Stay in browser/host — load the guest module."
+        "annotation": "Stay on browser/main — load the wasm/worker module."
       },
       {
         "from": "load-guest",
@@ -127,7 +127,7 @@ export const walkthroughs = [
         "file": "host/loadGuest.ts",
         "line": 13,
         "symbol": "instantiateStreaming",
-        "annotation": "Runtime brings up the wasm/guest process."
+        "annotation": "Runtime brings up the wasm/worker process."
       },
       {
         "from": "load-guest",
@@ -136,7 +136,7 @@ export const walkthroughs = [
         "file": "host/loadGuest.ts",
         "line": 16,
         "symbol": "host_trace",
-        "annotation": "Register the guest→host callback before any guest code runs."
+        "annotation": "Register the worker→main callback before any worker code runs."
       },
       {
         "from": "run-pipeline",
@@ -145,7 +145,7 @@ export const walkthroughs = [
         "file": "host/runPipeline.ts",
         "line": 17,
         "symbol": "writeBytes",
-        "annotation": "Host writes input into shared memory (still browser/host)."
+        "annotation": "Main thread writes input into shared memory (still browser/main)."
       },
       {
         "from": "run-pipeline",
@@ -154,7 +154,7 @@ export const walkthroughs = [
         "file": "host/runPipeline.ts",
         "line": 20,
         "symbol": "guest.normalize",
-        "annotation": "Cross into wasm/guest."
+        "annotation": "Cross into wasm/worker."
       },
       {
         "from": "normalize",
@@ -163,7 +163,7 @@ export const walkthroughs = [
         "file": "guest/src/lib.rs",
         "line": 22,
         "symbol": "host_trace",
-        "annotation": "Guest calls back into browser/host (trace normalize)."
+        "annotation": "Worker calls back into browser/main (trace normalize)."
       },
       {
         "from": "run-pipeline",
@@ -172,7 +172,7 @@ export const walkthroughs = [
         "file": "host/runPipeline.ts",
         "line": 21,
         "symbol": "guest.checksum",
-        "annotation": "Host calls the second guest entry (still crossing the boundary)."
+        "annotation": "Main thread calls the second worker entry (still crossing the boundary)."
       },
       {
         "from": "checksum",
@@ -181,7 +181,7 @@ export const walkthroughs = [
         "file": "guest/src/lib.rs",
         "line": 41,
         "symbol": "host_trace",
-        "annotation": "Guest→host again for checksum progress."
+        "annotation": "Worker→main again for checksum progress."
       },
       {
         "from": "run-pipeline",
@@ -190,13 +190,13 @@ export const walkthroughs = [
         "file": "host/runPipeline.ts",
         "line": 24,
         "symbol": "readU32",
-        "annotation": "Back in browser/host — read the value the guest stashed."
+        "annotation": "Back on browser/main — read the value the worker stashed."
       }
     ]
   },
   {
     "id": "tl-guest-only",
-    "title": "Inside wasm/guest: normalize → checksum",
+    "title": "Inside wasm/worker: normalize → checksum",
     "steps": [
       {
         "from": "normalize",
@@ -205,7 +205,7 @@ export const walkthroughs = [
         "file": "guest/src/lib.rs",
         "line": 20,
         "symbol": "normalize",
-        "annotation": "Guest entry — mutate the shared buffer in place."
+        "annotation": "Worker entry — mutate the shared buffer in place."
       },
       {
         "from": "checksum",
@@ -214,13 +214,13 @@ export const walkthroughs = [
         "file": "guest/src/lib.rs",
         "line": 39,
         "symbol": "checksum",
-        "annotation": "Second guest entry — hash the normalized slice."
+        "annotation": "Second worker entry — hash the normalized slice."
       }
     ]
   }
 ] as SubsystemWalkthrough[];
 
-export const title = 'Host ↔ WASM pipeline';
+export const title = 'Browser main ↔ WASM worker';
 
 export const description =
-  'Two clear process regions: **browser/host** (load, memory I/O, orchestrate) and **wasm/guest** (`normalize` → `checksum`). The host calls into the guest; the guest calls back via `host_trace`. Open **Walkthroughs** for the full cross-boundary pipeline.';
+  'Two clear process regions: **browser/main** (load, memory I/O, orchestrate) and **wasm/worker** (`normalize` → `checksum`). Main calls into the worker; the worker calls back via `host_trace`. Open **Walkthroughs** for the full cross-boundary pipeline.';

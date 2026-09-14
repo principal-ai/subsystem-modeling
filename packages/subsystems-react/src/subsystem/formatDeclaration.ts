@@ -39,8 +39,6 @@ export function generateDeclarationString(component: SubsystemComponent): string
     case 'type_alias':
     case 'enum':
       return generateType(name, component.construct, declaration);
-    case 'module':
-      return generateModule(declaration);
     case 'store':
       return generateStore(name, declaration);
     case 'external':
@@ -173,23 +171,6 @@ function generateType(
       }
       return `interface ${header} {}`;
   }
-}
-
-function generateModule(declaration?: GraphifyComponentDetail): string {
-  const mod = declaration?.kind === 'module' ? declaration : undefined;
-  if (!mod) return 'module {}';
-
-  const parts: string[] = [];
-
-  for (const imp of mod.imports ?? []) {
-    parts.push(`import '${imp.name}';`);
-  }
-
-  if ((mod.exports ?? []).length > 0) {
-    parts.push(`export { ${mod.exports!.join(', ')} };`);
-  }
-
-  return parts.join('\n') || `module {}`;
 }
 
 /**

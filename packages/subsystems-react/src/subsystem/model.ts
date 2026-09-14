@@ -20,6 +20,7 @@ import {
 import { computeElkLayout, calculatePathLength } from '../utils/elkLayout';
 import type { GraphifyComponentDetail } from '../graphify';
 import type { SubsystemDeclarationRef } from './declarationRef';
+import { purlOwnerName, purlRepoKey } from './paths';
 
 /** Structured declaration shape — same union as graphify drill-down payloads. */
 export type SubsystemConstructDeclaration = GraphifyComponentDetail;
@@ -32,7 +33,6 @@ export type SubsystemComponentConstruct =
   | 'interface'
   | 'type_alias'
   | 'enum'
-  | 'module'
   | 'store'
   | 'external'
   | 'custom_entity';
@@ -97,8 +97,7 @@ export type SubsystemRelationType =
   | 'implements'
   | 'mixes_in'
   | 'method'
-  | 'references'
-  | 'contains';
+  | 'references';
 
 /**
  * Walkthrough hop mechanism — runtime seams with a `file:line` site.
@@ -117,6 +116,14 @@ export type SubsystemWalkthroughMechanism =
 export type SubsystemEdgeMechanism =
   | SubsystemRelationType
   | SubsystemWalkthroughMechanism;
+
+/**
+ * Which edge vocabulary the canvas draws. The two vocabularies are disjoint;
+ * a view shows only edges (and their labels) from the selected source.
+ * - `relations`: only topology relation edges (`imports`, `extends`, …)
+ * - `walkthroughs`: only walkthrough hop edges (`calls`, `feeds`, …)
+ */
+export type SubsystemEdgeView = 'relations' | 'walkthroughs';
 
 /** A component node — the named unit, construct-tagged; `file` is its location. */
 export interface SubsystemComponent {
@@ -187,11 +194,21 @@ export interface SubsystemComponent {
   /**
    * Runtime process membership — which deployment unit this node is a
    * member of (e.g. `principal-studio/host`, `principal-studio/renderer`). Nodes
-   * sharing a `process` are drawn inside one boundary region (grouping is
-   * `process ?? purl`); nodes without one sit outside every boundary
-   * (external actors, services, libraries).
+   * sharing a `process` are drawn inside one boundary region; nodes without
+   * one sit outside every process boundary (external actors, services,
+   * libraries). Orthogonal to `module` (source-file frame).
    */
   process?: string;
+  /**
+   * Source-module membership — which file/module this export belongs to
+   * (e.g. `src/session/transcript.ts`). Nodes sharing a `module` are drawn
+   * inside one boundary frame. Prefer this over inventing a module construct:
+   * each export keeps its real construct (`function` / `class` / …) and the
+   * file reads as a frame. Orthogonal to `process` (runtime deployment).
+   * When both are set, the module frame is the component's parent (finer
+   * grain); process framing still groups siblings that share a process.
+   */
+  module?: string;
   /** A symbol this component exposes / is (the node's identity). */
   symbol?: string;
   /**
@@ -351,26 +368,20 @@ export function deriveGraphEdges(doc: {
  *
  * `symbol` is the source of truth (fully-qualified code identity). The name
  * is the symbol itself:
- *  - class/type/module/function/script/...  symbol → symbol (e.g. `SessionReader`)
- *  - method                               `Owner.method` → last segment (e.g. `SessionReader.normalize` → `normalize`)
- *  - module, no symbol → basename of `file` (e.g. `transcript.ts` → `transcript`) —
- *    a common-sense convention for whole-file modules, not a real TS name
- *  - otherwise                          no symbol → fall back to an existing name
+ *  - class/type/function/...  symbol → symbol (e.g. `SessionReader`)
+ *  - method                   `Owner.method` → last segment (e.g. `SessionReader.normalize` → `normalize`)
+ *  - otherwise                no symbol → fall back to an existing name
  */
 export function deriveNameFromSymbol(
   symbol: string | undefined,
   construct: SubsystemComponentConstruct,
   existingName?: string,
-  file?: string,
+  _file?: string,
   stereotype?: string,
 ): string {
   let name: string | undefined;
   if (symbol && symbol.trim()) {
     name = symbol;
-  } else if (construct === 'module' && file) {
-    const base = file.split('/').pop() ?? '';
-    const clean = base.replace(/\.[^.]+$/, ''); // strip extension
-    if (clean) name = clean;
   }
   if (!name) name = existingName ?? 'untitled';
 
@@ -379,7 +390,7 @@ export function deriveNameFromSymbol(
   // Executable constructs wear `()`; brace-bodied constructs (interface,
   // type_alias, enum) wear ` {}`. Classes render bare — the construct badge
   // already says "class".
-  // Everything else (class, store, module, external) renders bare.
+  // Everything else (class, store, external) renders bare.
   if (stereotype === 'component' && !name.startsWith('<')) {
     return `<${name}>`;
   }
@@ -428,11 +439,15 @@ export function formatPurl(purl: string): string {
 export type SubsystemGraphNodeType = 'subsystem-component' | 'subsystem-group';
 
 /**
- * One process boundary region — all components sharing a `process` value.
- * Nodes without a `process` sit outside every boundary (no region).
+ * One boundary region — process (runtime), module (source file), or package
+ * (repo identity from `purl`). Nodes without that membership sit outside
+ * those frames. Package frames are derived from `purl` (no separate field);
+ * they only appear when the graph spans multiple repos (by default).
  */
 export interface SubsystemProcessRegion {
-  /** The `process` value (e.g. `principal-studio/host`). */
+  /** Discriminator — which field / identity produced this region. */
+  kind: 'process' | 'module' | 'package';
+  /** The `process` / `module` value, or purl repo key for packages. */
   key: string;
   /** Display label for the boundary frame. */
   label: string;
@@ -440,14 +455,64 @@ export interface SubsystemProcessRegion {
   memberIds: string[];
 }
 
+/** Options for which boundary frames are kept. */
+export interface BoundaryFrameOptions {
+  /**
+   * Keep 1-member process / module / package frames. Default false
+   * (singleton rule — frames need 2+ members).
+   */
+  showSingletonFrames?: boolean;
+  /**
+   * When package frames are drawn from component `purl`s.
+   * - `multi-repo` (default): only when 2+ distinct repo purls
+   * - `always`: frame every multi-member package even in a single-repo graph
+   * - `never`: no package frames
+   */
+  packageFrames?: 'multi-repo' | 'always' | 'never';
+}
+
 /** React Flow id for a process boundary group node. */
 export function processGroupNodeId(processKey: string): string {
   return `process:${processKey}`;
 }
 
+/** React Flow id for a module boundary group node. */
+export function moduleGroupNodeId(moduleKey: string): string {
+  return `module:${moduleKey}`;
+}
+
+/** React Flow id for a package (repo) boundary group node. */
+export function packageGroupNodeId(packageKey: string): string {
+  return `package:${packageKey}`;
+}
+
+/** React Flow id for a boundary group of any kind. */
+export function boundaryGroupNodeId(region: Pick<SubsystemProcessRegion, 'kind' | 'key'>): string {
+  if (region.kind === 'module') return moduleGroupNodeId(region.key);
+  if (region.kind === 'package') return packageGroupNodeId(region.key);
+  return processGroupNodeId(region.key);
+}
+
 /**
- * Derive boundary regions from a document — one per distinct non-empty
- * `process` value, in first-appearance order.
+ * Repo/package key used for package frames — `purl` with fragment stripped.
+ * Externals and custom entities are not package-frame members.
+ */
+export function componentPackageKey(
+  c: Pick<SubsystemComponent, 'purl' | 'construct'>,
+): string | undefined {
+  if (c.construct === 'external' || c.construct === 'custom_entity') return undefined;
+  const key = purlRepoKey(c.purl);
+  if (!key || key === 'external') return undefined;
+  return key;
+}
+
+function packageRegionLabel(packageKey: string): string {
+  return purlOwnerName(packageKey) ?? formatPurl(packageKey);
+}
+
+/**
+ * Derive process boundary regions — one per distinct non-empty `process`
+ * value, in first-appearance order.
  */
 export function getSubsystemRegions(
   doc: Pick<SubsystemModelDocument, 'components'>,
@@ -461,10 +526,196 @@ export function getSubsystemRegions(
     byProcess.set(p, list);
   }
   return [...byProcess.entries()].map(([key, memberIds]) => ({
+    kind: 'process' as const,
     key,
     label: key,
     memberIds,
   }));
+}
+
+/**
+ * Derive module boundary regions — one per distinct non-empty `module`
+ * value, in first-appearance order. Label is the module path (file).
+ */
+export function getSubsystemModuleRegions(
+  doc: Pick<SubsystemModelDocument, 'components'>,
+): SubsystemProcessRegion[] {
+  const byModule = new Map<string, string[]>();
+  for (const c of doc.components) {
+    const m = c.module?.trim();
+    if (!m) continue;
+    const list = byModule.get(m) ?? [];
+    list.push(c.id);
+    byModule.set(m, list);
+  }
+  return [...byModule.entries()].map(([key, memberIds]) => ({
+    kind: 'module' as const,
+    key,
+    label: key,
+    memberIds,
+  }));
+}
+
+/**
+ * Derive package (repo) boundary regions from component `purl`s — one per
+ * distinct repo key. Does not apply multi-repo / singleton filters; callers
+ * decide via {@link buildBoundaryLayoutGroups}.
+ */
+export function getSubsystemPackageRegions(
+  doc: Pick<SubsystemModelDocument, 'components'>,
+): SubsystemProcessRegion[] {
+  const byPackage = new Map<string, string[]>();
+  for (const c of doc.components) {
+    const key = componentPackageKey(c);
+    if (!key) continue;
+    const list = byPackage.get(key) ?? [];
+    list.push(c.id);
+    byPackage.set(key, list);
+  }
+  return [...byPackage.entries()].map(([key, memberIds]) => ({
+    kind: 'package' as const,
+    key,
+    label: packageRegionLabel(key),
+    memberIds,
+  }));
+}
+
+/**
+ * One compound frame for ELK / React Flow — modules nest under processes,
+ * processes under packages, when membership is shared.
+ */
+export interface BoundaryLayoutGroup {
+  id: string;
+  memberIds: string[];
+  /** When set, this group is a child of another boundary group. */
+  parentId?: string;
+  region: SubsystemProcessRegion;
+}
+
+function keepRegion(
+  r: SubsystemProcessRegion,
+  showSingletons: boolean,
+): boolean {
+  return showSingletons || r.memberIds.length >= 2;
+}
+
+/**
+ * Build the package → process → module → leaf group tree for layout.
+ *
+ * Package frames come from `purl` (no separate component field). By default
+ * they only appear when the graph spans 2+ distinct repos. Multi-member
+ * modules nest under a process when every member shares that process;
+ * processes nest under a package the same way.
+ */
+export function buildBoundaryLayoutGroups(
+  doc: Pick<SubsystemModelDocument, 'components'>,
+  opts: BoundaryFrameOptions = {},
+): BoundaryLayoutGroup[] {
+  const showSingletons = opts.showSingletonFrames === true;
+  const packageMode = opts.packageFrames ?? 'multi-repo';
+  const byId = new Map(doc.components.map((c) => [c.id, c]));
+
+  const allPackages = getSubsystemPackageRegions(doc);
+  const packageEligible =
+    packageMode === 'always'
+      ? true
+      : packageMode === 'never'
+        ? false
+        : allPackages.length >= 2;
+  const packages = packageEligible
+    ? allPackages.filter((r) => keepRegion(r, showSingletons))
+    : [];
+  const keptPackageKeys = new Set(packages.map((r) => r.key));
+
+  const modules = getSubsystemModuleRegions(doc).filter((r) =>
+    keepRegion(r, showSingletons),
+  );
+  const processes = getSubsystemRegions(doc).filter((r) =>
+    keepRegion(r, showSingletons),
+  );
+  const keptProcessKeys = new Set(processes.map((r) => r.key));
+
+  const moduleGroups: BoundaryLayoutGroup[] = modules.map((r) => {
+    const processesOfMembers = new Set<string>();
+    const packagesOfMembers = new Set<string>();
+    for (const id of r.memberIds) {
+      const c = byId.get(id);
+      const p = c?.process?.trim();
+      if (p) processesOfMembers.add(p);
+      const pkg = c ? componentPackageKey(c) : undefined;
+      if (pkg) packagesOfMembers.add(pkg);
+    }
+    let parentId: string | undefined;
+    if (processesOfMembers.size === 1) {
+      const p = [...processesOfMembers][0]!;
+      if (keptProcessKeys.has(p)) parentId = processGroupNodeId(p);
+    }
+    if (!parentId && packagesOfMembers.size === 1) {
+      const pkg = [...packagesOfMembers][0]!;
+      if (keptPackageKeys.has(pkg)) parentId = packageGroupNodeId(pkg);
+    }
+    return {
+      id: moduleGroupNodeId(r.key),
+      memberIds: [...r.memberIds],
+      parentId,
+      region: r,
+    };
+  });
+
+  const processGroups: BoundaryLayoutGroup[] = processes.map((r) => {
+    const processId = processGroupNodeId(r.key);
+    const nestedModules = moduleGroups.filter((m) => m.parentId === processId);
+    const nestedModuleKeys = new Set(nestedModules.map((m) => m.region.key));
+    const directLeaves = r.memberIds.filter((id) => {
+      const mod = byId.get(id)?.module?.trim();
+      if (!mod) return true;
+      return !nestedModuleKeys.has(mod);
+    });
+
+    const packagesOfMembers = new Set<string>();
+    for (const id of r.memberIds) {
+      const c = byId.get(id);
+      const pkg = c ? componentPackageKey(c) : undefined;
+      if (pkg) packagesOfMembers.add(pkg);
+    }
+    let parentId: string | undefined;
+    if (packagesOfMembers.size === 1) {
+      const pkg = [...packagesOfMembers][0]!;
+      if (keptPackageKeys.has(pkg)) parentId = packageGroupNodeId(pkg);
+    }
+
+    return {
+      id: processId,
+      memberIds: [...nestedModules.map((m) => m.id), ...directLeaves],
+      parentId,
+      region: r,
+    };
+  });
+
+  const packageGroups: BoundaryLayoutGroup[] = packages.map((r) => {
+    const packageId = packageGroupNodeId(r.key);
+    const nestedProcesses = processGroups.filter((p) => p.parentId === packageId);
+    const nestedModules = moduleGroups.filter((m) => m.parentId === packageId);
+    const claimed = new Set<string>();
+    for (const p of nestedProcesses) {
+      for (const id of p.region.memberIds) claimed.add(id);
+    }
+    for (const m of nestedModules) {
+      for (const id of m.region.memberIds) claimed.add(id);
+    }
+    const directLeaves = r.memberIds.filter((id) => !claimed.has(id));
+    return {
+      id: packageId,
+      memberIds: [
+        ...nestedProcesses.map((p) => p.id),
+        ...nestedModules.map((m) => m.id),
+        ...directLeaves,
+      ],
+      region: r,
+    };
+  });
+
+  return [...moduleGroups, ...processGroups, ...packageGroups];
 }
 
 export interface SubsystemGraphNodeData extends Record<string, unknown> {
@@ -504,6 +755,52 @@ export interface SubsystemGraphEdgeData extends Record<string, unknown> {
 
 export type SubsystemGraphEdge = Edge<SubsystemGraphEdgeData>;
 
+/**
+ * Runtime vocabulary of relation types — mirrors `SubsystemRelationType`.
+ * Used to split derived display edges into their relation vs walkthrough
+ * source (the two unions are disjoint).
+ */
+export const SUBSYSTEM_RELATION_TYPES = [
+  'imports',
+  'extends',
+  'inherits',
+  'implements',
+  'mixes_in',
+  'method',
+  'references',
+] as const satisfies readonly SubsystemRelationType[];
+
+/** Runtime vocabulary of walkthrough hop mechanisms — mirrors `SubsystemWalkthroughMechanism`. */
+export const SUBSYSTEM_WALKTHROUGH_MECHANISMS = [
+  'calls',
+  'uses',
+  'feeds',
+  'produces',
+  'writes',
+  'reads',
+  'watches',
+  'registers-into',
+] as const satisfies readonly SubsystemWalkthroughMechanism[];
+
+const RELATION_TYPE_SET: ReadonlySet<string> = new Set(SUBSYSTEM_RELATION_TYPES);
+const WALKTHROUGH_MECHANISM_SET: ReadonlySet<string> = new Set(
+  SUBSYSTEM_WALKTHROUGH_MECHANISMS,
+);
+
+/** True when a mechanism belongs to the topology relation vocabulary. */
+export function isRelationMechanism(
+  mechanism: string,
+): mechanism is SubsystemRelationType {
+  return RELATION_TYPE_SET.has(mechanism);
+}
+
+/** True when a mechanism belongs to the walkthrough hop vocabulary. */
+export function isWalkthroughMechanism(
+  mechanism: string,
+): mechanism is SubsystemWalkthroughMechanism {
+  return WALKTHROUGH_MECHANISM_SET.has(mechanism);
+}
+
 export const MECHANISM_COLOR: Record<SubsystemEdgeMechanism, string> = {
   imports: '#0893d2', // blue
   calls: '#4ec9b0', // teal
@@ -514,7 +811,6 @@ export const MECHANISM_COLOR: Record<SubsystemEdgeMechanism, string> = {
   uses: '#e3b341', // gold
   method: '#c586c0', // magenta
   references: '#e07a5f', // terracotta
-  contains: '#6c5ce7', // indigo
   feeds: '#22c55e', // green — data-flow into a processor
   produces: '#e07a5f', // terracotta — emits an output type
   writes: '#2f9e44', // deep green — mutates retained state
@@ -533,7 +829,6 @@ export const MECHANISM_STYLE: Record<SubsystemEdgeMechanism, 'solid' | 'dashed' 
   uses: 'solid',
   method: 'solid',
   references: 'dotted',
-  contains: 'solid',
   feeds: 'solid',
   produces: 'solid',
   writes: 'solid',
@@ -554,7 +849,6 @@ export const MECHANISM_DESCRIPTIONS: [SubsystemEdgeMechanism, string, boolean][]
   ['uses', 'general dependency (import, call, or reference)', false],
   ['method', 'structural: has method / member', true],
   ['references', 'type / symbol reference (not a call)', true],
-  ['contains', 'structural: contains / encapsulates', true],
   ['feeds', 'data flow: output feeds into input', false],
   ['produces', 'data flow: produces / outputs', false],
   ['writes', 'state access: mutates retained state', true],
@@ -586,6 +880,14 @@ export function packageColor(name: string): string {
 export const ROLE_COLOR: Record<SubsystemComponentRole, string> = {
   entry: '#ff6b35', // orange — boundary element
   service: '#0893d2', // blue — external system
+};
+
+/**
+ * Brand color for the left construct/stereotype badge when a framework owns
+ * the label (e.g. `react · component`). Node border stays construct-colored.
+ */
+export const FRAMEWORK_BADGE_COLOR: Record<string, string> = {
+  react: '#61dafb', // React cyan
 };
 
 export const ROLE_LABEL: Record<SubsystemComponentRole, string> = {
@@ -689,16 +991,41 @@ export function constructBadgeLabel(component: {
   return constructLabel ?? '';
 }
 
+/**
+ * Left-badge accent: framework brand when the badge shows a framework
+ * stereotype (e.g. React cyan for `react · component`); otherwise null so
+ * the caller falls back to construct color. Border stays construct-colored.
+ */
+export function constructBadgeColor(component: {
+  framework?: string;
+  stereotype?: string;
+}): string | null {
+  if (component.framework == null || component.stereotype == null) return null;
+  return FRAMEWORK_BADGE_COLOR[component.framework] ?? null;
+}
+
 /** Default CSS floor for component nodes (padding aside). */
 export const NODE_CSS_MIN_WIDTH = 150;
 /** Inset of each top badge from the node edge (`left` / `right` style). */
 export const BADGE_EDGE_INSET = 5;
 /** Minimum gap between left construct badge and right role badge. */
 const BADGE_PAIR_GAP = 8;
-/** Badge box chrome: padding 5+5 + border 1+1. */
-const BADGE_BOX_CHROME = 12;
-/** Approx monospace uppercase width incl. letter-spacing (~0.5px). */
-const BADGE_CHAR_WIDTH = 8;
+/**
+ * Node border thickness reserved on each side of the badge span. Top badges are
+ * positioned from the padding edge (inside the border), so a `left: 5px` badge
+ * starts `border + inset` from the border-box edge. Reserve the widest border
+ * (4px when selected / file-matched) so the pair gap survives selection.
+ */
+const BADGE_NODE_BORDER = 4;
+/** Badge box chrome: padding 8+8 + border 2+2. */
+const BADGE_BOX_CHROME = 20;
+/**
+ * Approx monospace uppercase advance incl. letter-spacing. Badge font is
+ * 13.2px; Fira Code / SF Mono / Courier all sit at ~0.6em (7.9px) plus 0.5px
+ * tracking ≈ 8.4px. Rounded up so estimates never undershoot — an undershoot
+ * eats into BADGE_PAIR_GAP and lets the left/right badges touch.
+ */
+const BADGE_CHAR_WIDTH = 8.5;
 
 /** Estimated rendered width of a top tab badge label. */
 export function estimateBadgeLabelWidth(label: string): number {
@@ -725,36 +1052,45 @@ export function nodeMinWidthForBadges(component: {
     rightBadgeLabel(component),
   ].filter((l): l is string => l != null);
   if (rightBadges.length === 0) {
-    return Math.max(NODE_CSS_MIN_WIDTH, BADGE_EDGE_INSET + left + BADGE_EDGE_INSET);
+    return Math.max(
+      NODE_CSS_MIN_WIDTH,
+      BADGE_NODE_BORDER + BADGE_EDGE_INSET + left + BADGE_EDGE_INSET + BADGE_NODE_BORDER,
+    );
   }
   const right = rightBadges
     .map(estimateBadgeLabelWidth)
     .reduce((acc, w) => acc + BADGE_PAIR_GAP + w);
   return Math.max(
     NODE_CSS_MIN_WIDTH,
-    BADGE_EDGE_INSET + left + BADGE_PAIR_GAP + right + BADGE_EDGE_INSET,
+    BADGE_NODE_BORDER +
+      BADGE_EDGE_INSET +
+      left +
+      BADGE_PAIR_GAP +
+      right +
+      BADGE_EDGE_INSET +
+      BADGE_NODE_BORDER,
   );
 }
 
 /**
  * Convert a subsystem graph document into React Flow nodes. Components that
- * carry a `process` get a `parentId` pointing at their boundary group node
- * (`process:<process>`); nodes without one stay top-level (outside every
- * boundary). The initial grid groups by `process ?? purl` so the pre-ELK
- * positions are already clustered; ELK then refines with compound layout.
+ * carry a `module` get a `parentId` pointing at their module frame
+ * (`module:<path>`); otherwise a `process` stamps `process:<process>`.
+ * Package (`purl`) parents are stamped later in `buildSubsystemGraph` only
+ * when package frames are kept. Module frames may nest under process →
+ * package. The initial grid clusters by `module ?? process ?? purl`; ELK
+ * then refines with compound layout.
  */
 export function convertSubsystemToNodes(
   doc: SubsystemModelDocument,
   opts: { maxNodeWidth?: number } = {},
 ): SubsystemGraphNode[] {
   const { maxNodeWidth } = opts;
-  // Group components into boundary regions by process when authored, else by
-  // package. Process is runtime membership (drawn as one boundary region);
-  // purl is code identity — nodes without a process (external actors,
-  // services, libraries) fall back to purl and sit outside every boundary.
+  // Cluster for the pre-ELK grid: module (source file) → process (runtime)
+  // → purl (package identity).
   const byPkg = new Map<string, SubsystemComponent[]>();
   for (const c of doc.components) {
-    const regionKey = c.process ?? c.purl;
+    const regionKey = c.module ?? c.process ?? c.purl;
     const list = byPkg.get(regionKey) ?? [];
     list.push(c);
     byPkg.set(regionKey, list);
@@ -789,11 +1125,17 @@ export function convertSubsystemToNodes(
       const cssBorder = 4; // 2px border each side
       const rawWidth = Math.max(cssMinWidth, textWidth + cssPadding + cssBorder);
       const nodeWidth = Math.max(cssMinWidth, Math.min(cap, rawWidth));
+      const moduleKey = c.module?.trim();
       const processKey = c.process?.trim();
+      const parentId = moduleKey
+        ? moduleGroupNodeId(moduleKey)
+        : processKey
+          ? processGroupNodeId(processKey)
+          : undefined;
       nodes.push({
         id: c.id,
         type: 'subsystem-component',
-        ...(processKey ? { parentId: processGroupNodeId(processKey) } : {}),
+        ...(parentId ? { parentId } : {}),
         position: { x: PAD + col * COL_W, y: cursorY + row * ROW_H },
         width: nodeWidth,
         height: 84,
@@ -806,20 +1148,22 @@ export function convertSubsystemToNodes(
 }
 
 /**
- * Convert boundary regions into React Flow parent (group) nodes. One per
- * distinct `process` value; member components point at these via `parentId`.
+ * Convert boundary regions into React Flow parent (group) nodes. Nesting
+ * (package → process → module) is stamped via `parentId` on groups.
  * Positions/sizes are placeholders — ELK compound layout overwrites them.
  */
 export function convertSubsystemToGroups(
   doc: Pick<SubsystemModelDocument, 'components'>,
+  opts: BoundaryFrameOptions = {},
 ): SubsystemGraphNode[] {
-  return getSubsystemRegions(doc).map((region) => ({
-    id: processGroupNodeId(region.key),
-    type: 'subsystem-group',
+  return buildBoundaryLayoutGroups(doc, opts).map((g) => ({
+    id: g.id,
+    type: 'subsystem-group' as const,
     position: { x: 0, y: 0 },
     width: 400,
     height: 300,
-    data: { region },
+    ...(g.parentId ? { parentId: g.parentId } : {}),
+    data: { region: g.region },
   }));
 }
 
@@ -862,8 +1206,8 @@ export function subsystemGraphLayoutKey(
   doc: Pick<SubsystemModelDocument, 'components' | 'relations' | 'walkthroughs'>,
 ): string {
   const components = doc.components
-    .map(({ id, purl, name, symbol, construct, file, purpose, process }) =>
-      [id, purl, name, symbol ?? '', construct, file, purpose ?? '', process ?? ''].join('\0'))
+    .map(({ id, purl, name, symbol, construct, file, purpose, process, module }) =>
+      [id, purl, name, symbol ?? '', construct, file, purpose ?? '', process ?? '', module ?? ''].join('\0'))
     .sort()
     .join('\n');
   const edgeKey = deriveGraphEdges(doc)
@@ -880,26 +1224,55 @@ export function subsystemGraphLayoutKey(
  */
 export async function buildSubsystemGraph(
   doc: SubsystemModelDocument,
-  opts: { maxNodeWidth?: number; showEdgeLabels?: boolean; measuredWidths?: Map<string, number>; measuredHeights?: Map<string, number> } = {},
+  opts: {
+    maxNodeWidth?: number;
+    showEdgeLabels?: boolean;
+    measuredWidths?: Map<string, number>;
+    measuredHeights?: Map<string, number>;
+  } & BoundaryFrameOptions = {},
 ): Promise<{
   nodes: SubsystemGraphNode[];
   edges: SubsystemGraphEdge[];
   regions: SubsystemProcessRegion[];
 }> {
-  const { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights } = opts;
+  const {
+    maxNodeWidth,
+    showEdgeLabels,
+    measuredWidths,
+    measuredHeights,
+    showSingletonFrames,
+    packageFrames,
+  } = opts;
+  const frameOpts: BoundaryFrameOptions = { showSingletonFrames, packageFrames };
   const nodes = convertSubsystemToNodes(doc, { maxNodeWidth });
   const edges = convertSubsystemToEdges(doc);
-  // Boundary regions: one per multi-member process. Singletons get no frame —
-  // strip the parentId convertSubsystemToNodes stamped so React Flow never
-  // points at a non-existent parent.
-  const regions = getSubsystemRegions(doc).filter((r) => r.memberIds.length >= 2);
-  const regionKeys = new Set(regions.map((r) => r.key));
+  // Nested boundary tree: package → process → module → leaves.
+  const layoutGroups = buildBoundaryLayoutGroups(doc, frameOpts);
+  const regions = layoutGroups.map((g) => g.region);
+  const regionIds = new Set(layoutGroups.map((g) => g.id));
+  const byId = new Map(doc.components.map((c) => [c.id, c]));
+
+  // Resolve leaf parentIds against kept frames: module → process → package.
+  // Stamp package parents here (not in convertSubsystemToNodes) so single-repo
+  // graphs never provisionally parent under a package that will be dropped.
   for (const n of nodes) {
     if (n.type !== 'subsystem-component') continue;
-    const proc = (n.data as SubsystemGraphNodeData).component?.process?.trim();
-    if (proc && !regionKeys.has(proc)) {
-      delete (n as { parentId?: string }).parentId;
+    const parentId = (n as { parentId?: string }).parentId;
+    if (parentId && regionIds.has(parentId)) continue;
+    const comp = (n.data as SubsystemGraphNodeData).component ?? byId.get(n.id);
+    const processKey = comp?.process?.trim();
+    const processId = processKey ? processGroupNodeId(processKey) : undefined;
+    if (processId && regionIds.has(processId)) {
+      (n as { parentId?: string }).parentId = processId;
+      continue;
     }
+    const packageKey = comp ? componentPackageKey(comp) : undefined;
+    const packageId = packageKey ? packageGroupNodeId(packageKey) : undefined;
+    if (packageId && regionIds.has(packageId)) {
+      (n as { parentId?: string }).parentId = packageId;
+      continue;
+    }
+    if (parentId) delete (n as { parentId?: string }).parentId;
   }
 
   // External edge targets that aren't real components → create stub nodes so
@@ -949,8 +1322,7 @@ export async function buildSubsystemGraph(
     }
   }
 
-  // ELK auto-layout: position nodes (layered, minimized crossings) with
-  // process partitions as compound parents so boundaries shape the layout.
+  // ELK auto-layout: nested compound parents (process → module → leaves).
   let placedNodes = nodes;
   let labelPositions = new Map<string, { x: number; y: number }>();
   let elkPathStrings = new Map<string, string>();
@@ -966,32 +1338,79 @@ export async function buildSubsystemGraph(
         interLayerSpacing: 120,
         preserveNodePositions: false,
         edgeLabels: showEdgeLabels === false ? { enabled: false } : { enabled: true, placement: 'CENTER' },
-        groups: regions.map((r) => ({
-          id: processGroupNodeId(r.key),
-          memberIds: r.memberIds,
+        groups: layoutGroups.map((g) => ({
+          id: g.id,
+          memberIds: g.memberIds,
+          parentId: g.parentId,
         })),
       });
-      const groupNodes: SubsystemGraphNode[] = regions.flatMap((region) => {
-        const bounds = result.groupBounds.get(processGroupNodeId(region.key));
-        if (!bounds) return [];
+      const builtGroupIds = new Set(result.groupBounds.keys());
+      // Parents before children — package, then process, then module frames.
+      const packageGroupNodes: SubsystemGraphNode[] = [];
+      const processGroupNodes: SubsystemGraphNode[] = [];
+      const moduleGroupNodes: SubsystemGraphNode[] = [];
+      for (const g of layoutGroups) {
+        const bounds = result.groupBounds.get(g.id);
+        if (!bounds) continue;
+        const parentId =
+          g.parentId && builtGroupIds.has(g.parentId) ? g.parentId : undefined;
         const group: SubsystemGraphNode = {
-          id: processGroupNodeId(region.key),
+          id: g.id,
           type: 'subsystem-group',
           position: { x: bounds.x, y: bounds.y },
           width: Math.max(200, bounds.width),
           height: Math.max(160, bounds.height),
-          data: { region },
+          ...(parentId ? { parentId } : {}),
+          data: { region: g.region },
         };
-        return [group];
-      });
-      // Parents first — React Flow resolves children via parentId.
-      placedNodes = [...groupNodes, ...(result.nodes as SubsystemGraphNode[])];
+        if (g.region.kind === 'package') packageGroupNodes.push(group);
+        else if (g.region.kind === 'process') processGroupNodes.push(group);
+        else moduleGroupNodes.push(group);
+      }
+      // Clear leaf parentIds that point at groups ELK dropped.
+      for (const n of result.nodes as SubsystemGraphNode[]) {
+        if (n.type !== 'subsystem-component') continue;
+        const parentId = (n as { parentId?: string }).parentId;
+        if (parentId && !builtGroupIds.has(parentId)) {
+          delete (n as { parentId?: string }).parentId;
+        }
+      }
+      placedNodes = [
+        ...packageGroupNodes,
+        ...processGroupNodes,
+        ...moduleGroupNodes,
+        ...(result.nodes as SubsystemGraphNode[]),
+      ];
       labelPositions = result.edgeLabelPositions;
       elkPathStrings = result.edgePaths;
       elkPathPoints = result.edgePathPoints;
     } catch (err) {
-      // Fall back to the (unpositioned) grid if ELK is unavailable.
+      // Fall back to the (unpositioned) grid if ELK is unavailable — still
+      // emit multi-member frames so parentId targets exist.
       console.warn('[subsystem-graph] ELK layout failed, using manual positions:', err);
+      const packageGroupNodes: SubsystemGraphNode[] = [];
+      const processGroupNodes: SubsystemGraphNode[] = [];
+      const moduleGroupNodes: SubsystemGraphNode[] = [];
+      for (const g of layoutGroups) {
+        const group: SubsystemGraphNode = {
+          id: g.id,
+          type: 'subsystem-group',
+          position: { x: 0, y: 0 },
+          width: 400,
+          height: 300,
+          ...(g.parentId ? { parentId: g.parentId } : {}),
+          data: { region: g.region },
+        };
+        if (g.region.kind === 'package') packageGroupNodes.push(group);
+        else if (g.region.kind === 'process') processGroupNodes.push(group);
+        else moduleGroupNodes.push(group);
+      }
+      placedNodes = [
+        ...packageGroupNodes,
+        ...processGroupNodes,
+        ...moduleGroupNodes,
+        ...nodes,
+      ];
     }
   }
 

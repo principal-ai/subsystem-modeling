@@ -148,15 +148,17 @@ function maintainButtonCopy(mode: "issues" | "gaps" | null): {
 	if (mode === "issues") {
 		return {
 			label: "Run maintenance",
-			title: "Run maintenance — issue-fixer proposes corrections for verification failures",
-			agentName: "Issue fixer",
+			title:
+				"Run maintenance — host picks construct / boundary / topology fixer by layer",
+			agentName: "Maintainer",
 		};
 	}
 	if (mode === "gaps") {
 		return {
 			label: "Run maintenance",
-			title: "Run maintenance — gap-filler proposes fills for partial verification gaps",
-			agentName: "Gap filler",
+			title:
+				"Run maintenance — host picks construct / boundary / topology gap-filler by layer",
+			agentName: "Maintainer",
 		};
 	}
 	return {
@@ -167,10 +169,21 @@ function maintainButtonCopy(mode: "issues" | "gaps" | null): {
 }
 
 function agentDisplayName(
-	agent: "issue-fixer" | "gap-filler" | undefined,
+	agent:
+		| "issue-fixer"
+		| "gap-filler"
+		| "topology-fixer"
+		| "topology-gap-filler"
+		| "boundary-fixer"
+		| "boundary-gap-filler"
+		| undefined,
 ): string {
 	if (agent === "issue-fixer") return "Issue fixer";
 	if (agent === "gap-filler") return "Gap filler";
+	if (agent === "topology-fixer") return "Topology fixer";
+	if (agent === "topology-gap-filler") return "Topology gap filler";
+	if (agent === "boundary-fixer") return "Boundary fixer";
+	if (agent === "boundary-gap-filler") return "Boundary gap filler";
 	return "Maintainer";
 }
 

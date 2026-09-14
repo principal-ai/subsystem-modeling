@@ -54,6 +54,10 @@ export function AgentLogo({ agent, size = 14 }: { agent: string; size?: number }
 	const logoKey =
 		key === "issue-fixer" ||
 		key === "gap-filler" ||
+		key === "topology-fixer" ||
+		key === "topology-gap-filler" ||
+		key === "boundary-fixer" ||
+		key === "boundary-gap-filler" ||
 		key === "maintain" ||
 		key === "opencode-v2" ||
 		key === "opencode2"

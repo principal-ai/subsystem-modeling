@@ -13,21 +13,9 @@ import { File } from '@pierre/diffs/react';
 import { useTheme } from '@principal-ade/industry-theme';
 import { buildPierreOptions, PIERRE_FILE_STYLE } from './pierreBackground';
 import { pierreLangForPath } from './pierreFileLang';
-import { sliceSnippetWindow } from './sliceSnippet';
+import { remapSnippetLineNumbers, sliceSnippetWindow } from './sliceSnippet';
 
-import { scrollAnchorLine } from './scrollAnchor';
-
-function scrollFocusLineIntoView(
-  fileContainer: HTMLElement,
-  focusOffset: number,
-): void {
-  const root = fileContainer.shadowRoot ?? fileContainer;
-  const anchorLine = scrollAnchorLine(focusOffset);
-  const lineEl = root.querySelector(
-    `[data-line="${anchorLine}"]`,
-  ) as HTMLElement | null;
-  lineEl?.scrollIntoView({ block: 'start', behavior: 'auto' });
-}
+import { scrollFocusLineIntoView } from './scrollAnchor';
 
 export interface PierreSnippetViewProps {
   filePath: string;
@@ -101,30 +89,16 @@ export function PierreSnippetView({
     [fileName, filePath, slice],
   );
 
-  const lineNumberOffset = slice ? slice.sliceStart - 1 : 0;
-
   const onPostRender = useCallback(
     (fileContainer: HTMLElement) => {
-      if (lineNumberOffset !== 0) {
-        const root = fileContainer.shadowRoot ?? fileContainer;
-        const items = root.querySelectorAll('[data-column-number][data-line-index]');
-        items.forEach((el) => {
-          const idxStr = (el as HTMLElement).dataset.lineIndex;
-          if (idxStr == null) return;
-          const idx = Number.parseInt(idxStr, 10);
-          if (Number.isNaN(idx)) return;
-          const display = String(idx + 1 + lineNumberOffset);
-          const span = el.querySelector('[data-line-number-content]');
-          if (span && span.textContent !== display) {
-            span.textContent = display;
-          }
-        });
+      if (slice != null) {
+        remapSnippetLineNumbers(fileContainer, slice.sliceStart);
       }
       if (slice?.focusOffset != null) {
         scrollFocusLineIntoView(fileContainer, slice.focusOffset);
       }
     },
-    [lineNumberOffset, slice?.focusOffset],
+    [slice],
   );
 
   const options = useMemo(

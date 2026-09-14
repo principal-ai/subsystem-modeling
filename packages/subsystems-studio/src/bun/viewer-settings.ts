@@ -25,6 +25,7 @@ const DEFAULT_TAB_FLAGS: DefaultTabFlags = {
 	maintenanceSessions: true,
 	trails: true,
 	graphify: true,
+	packageLayers: true,
 	subsystems: true,
 	opencodeV2: true,
 };
@@ -83,6 +84,10 @@ function normalize(raw: unknown): ViewerSettings {
 			),
 			trails: coerceBool(tabs["trails"], defaults.defaultTabs.trails),
 			graphify: coerceBool(tabs["graphify"], defaults.defaultTabs.graphify),
+			packageLayers: coerceBool(
+				tabs["packageLayers"],
+				defaults.defaultTabs.packageLayers,
+			),
 			subsystems: coerceBool(tabs["subsystems"], defaults.defaultTabs.subsystems),
 			opencodeV2: coerceBool(tabs["opencodeV2"], defaults.defaultTabs.opencodeV2),
 		},

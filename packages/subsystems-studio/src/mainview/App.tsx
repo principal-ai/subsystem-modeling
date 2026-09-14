@@ -28,6 +28,7 @@ import { AgentSessionsOverviewView } from "./views/AgentSessions";
 import { LibraryView } from "./views/LibraryView";
 import { SubsystemModelsView } from "./views/SubsystemModelsView";
 import { GraphifyReposView } from "./views/GraphifyReposView";
+import { PackageLayersReposView } from "./views/PackageLayersReposView";
 import { OpencodeV2DebugView } from "./views/OpencodeV2DebugView";
 import { MaintainEventsView } from "./views/MaintainEventsView";
 import { AnalysisView } from "./views/AnalysisView";
@@ -89,6 +90,7 @@ const STATIC_TAB_IDS = new Set([
 	"maintenance-sessions",
 	"subsystems",
 	"graphify",
+	"package-layers",
 	"opencode-v2",
 ]);
 
@@ -102,6 +104,7 @@ function staticTabState(tabId: string): TabState | null {
 	if (tabId === "maintenance-sessions") return { kind: "maintenance-sessions" };
 	if (tabId === "subsystems") return { kind: "subsystems" };
 	if (tabId === "graphify") return { kind: "graphify" };
+	if (tabId === "package-layers") return { kind: "package-layers" };
 	if (tabId === "opencode-v2") return { kind: "opencode-v2" };
 	return null;
 }
@@ -119,6 +122,7 @@ function renderStaticView(tabId: string, active: boolean): ReactNode | null {
 		return <AgentSessionsOverviewView scope="maintain" active={active} />;
 	if (state.kind === "subsystems") return <SubsystemModelsView />;
 	if (state.kind === "graphify") return <GraphifyReposView />;
+	if (state.kind === "package-layers") return <PackageLayersReposView />;
 	if (state.kind === "opencode-v2") return <OpencodeV2DebugView />;
 	return null;
 }

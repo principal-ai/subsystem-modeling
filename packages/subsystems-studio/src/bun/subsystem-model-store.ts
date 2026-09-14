@@ -300,7 +300,6 @@ export const SUBSYSTEM_RELATION_TYPES = [
 	"mixes_in",
 	"method",
 	"references",
-	"contains",
 ] as const satisfies readonly SubsystemRelationType[];
 
 export const SUBSYSTEM_WALKTHROUGH_MECHANISMS = [
@@ -517,7 +516,6 @@ export function normalizeDeclarationProvenance(components: unknown): void {
 			method: ["parameters"],
 			class: ["methods", "properties", "extends", "implements", "instantiations", "references"],
 			type: ["properties", "usedBy", "implementors"],
-			module: ["imports", "exports", "symbols"],
 			custom_entity: ["attributes"],
 			store: ["properties"],
 		};

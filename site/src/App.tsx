@@ -17,35 +17,50 @@ const Gist = lazy(() =>
 const ModelMaintainer = lazy(() =>
   import('./pages/ModelMaintainer').then((m) => ({ default: m.ModelMaintainer })),
 )
+const MaintainerOverview = lazy(() =>
+  import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerOverview })),
+)
+const MaintainerConstruct = lazy(() =>
+  import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerConstruct })),
+)
+const MaintainerStaticTopology = lazy(() =>
+  import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerStaticTopology })),
+)
+const MaintainerRuntimeTopology = lazy(() =>
+  import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerRuntimeTopology })),
+)
+const MaintainerWalkthrough = lazy(() =>
+  import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerWalkthrough })),
+)
+const MaintainerReference = lazy(() =>
+  import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerReference })),
+)
 
 const HeroGraphic = lazy(() =>
   import('./components/HeroGraphic').then((m) => ({ default: m.HeroGraphic })),
 )
 
-const HomeCarousel = lazy(() =>
-  import('./components/HomeCarousel').then((m) => ({ default: m.HomeCarousel })),
+const HomeCategoryExplorer = lazy(() =>
+  import('./components/HomeCategoryExplorer').then((m) => ({
+    default: m.HomeCategoryExplorer,
+  })),
 )
 
 const GALLERY_HREF = `${import.meta.env.BASE_URL}gallery/`
 
 function Home() {
   return (
-    <section className="hero hero--with-gallery">
+    <section className="hero hero--with-gallery hero--teach">
       <div className="hero-copy">
-        <h1>Your Mental Model — Visualized</h1>
+        <h1>
+          Your Mental Model:
+          <span className="hero-title-badge">Visualized</span>
+        </h1>
       </div>
-      <div className="hero-gallery">
+      <div className="hero-gallery hero-gallery--teach">
         <Suspense fallback={<div className="hero-gallery-fallback">Loading examples…</div>}>
-          <HomeCarousel />
+          <HomeCategoryExplorer />
         </Suspense>
-      </div>
-      <div className="hero-actions">
-        <Link to="/start" className="button primary">
-          Try it yourself
-        </Link>
-        <a href={GALLERY_HREF} className="button ghost">
-          Browse gallery
-        </a>
       </div>
     </section>
   )
@@ -156,11 +171,11 @@ function App() {
           ? 'shell shell--schema'
           : pathname === '/start'
             ? 'shell shell--start'
-            : pathname === '/gist'
-              ? 'shell shell--gist'
-              : pathname === '/maintainer'
-                ? 'shell shell--maintainer'
-                : 'shell'
+              : pathname === '/gist'
+                ? 'shell shell--gist'
+                : pathname === '/maintainer' || pathname.startsWith('/maintainer/')
+                  ? 'shell shell--maintainer'
+                  : 'shell'
 
   return (
     <div className={shellClass}>
@@ -222,10 +237,8 @@ function App() {
         </Link>
         <div className="nav-links">
           <Link to="/start">Try it</Link>
-          <Link to="/gist">Gist</Link>
-          <Link to="/maintainer">Maintainer</Link>
           <Link to="/about">Mission</Link>
-          <Link to="/schema">Schema</Link>
+          <Link to="/maintainer">Docs</Link>
           <a href={GALLERY_HREF}>Gallery</a>
           <a
             href="https://github.com/principal-ai/subsystem-modeling"
@@ -247,8 +260,14 @@ function App() {
             aria-label="Discord"
             title="Discord"
           >
-            <svg aria-hidden="true" viewBox="0 0 16 16" width="18" height="18" fill="currentColor">
-              <path d="M13.545 2.907a13.2 13.2 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.2 12.2 0 0 0-3.658 0 8 8 0 0 0-.412-.833.05.05 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.04.04 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032q.001.022.021.037a13.3 13.3 0 0 0 3.995 2.02.05.05 0 0 0 .056-.019q.463-.63.818-1.329a.05.05 0 0 0-.01-.059l-.018-.011a9 9 0 0 1-1.288-.599.05.05 0 0 1-.02-.066l.004-.01a.05.05 0 0 1 .015-.019l.012-.01a11.1 11.1 0 0 0 9.55 0l.012.01a.05.05 0 0 1 .032.027.05.05 0 0 1-.01.056c-.41.246-.842.44-1.287.598a.05.05 0 0 0-.03.03.05.05 0 0 0 .003.041c.24.465.515.909.817 1.329a.05.05 0 0 0 .056.019 13.2 13.2 0 0 0 4.001-2.02.05.05 0 0 0 .021-.037c.334-3.451-.559-6.449-2.378-9.106a.03.03 0 0 0-.02-.019m-8.198 7.307c-.789 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.45.73 1.438 1.613 0 .888-.637 1.612-1.438 1.612m5.316 0c-.788 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.451.73 1.438 1.613 0 .888-.631 1.612-1.438 1.612" />
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 127.14 96.36"
+              width="21"
+              height="16"
+              fill="currentColor"
+            >
+              <path d="M107.7 8.07A105.15 105.15 0 0 0 81.47 0a72.06 72.06 0 0 0-3.36 6.83 97.68 97.68 0 0 0-29.11 0A72.37 72.37 0 0 0 45.64 0 105.89 105.89 0 0 0 19.39 8.07 115.86 115.86 0 0 0 .31 80.8a106.62 106.62 0 0 0 32.25 16.09 77.7 77.7 0 0 0 6.89-11.11 68.42 68.42 0 0 1-10.85-5.18c.91-.66 1.8-1.34 2.66-2a75.57 75.57 0 0 0 64.32 0c.87.71 1.76 1.39 2.66 2a68.68 68.68 0 0 1-10.87 5.19 77 77 0 0 0 6.89 11.1 106.64 106.64 0 0 0 32.32-16.1 115.49 115.49 0 0 0-19.88-72.75ZM42.45 65.69C36.18 65.69 31 60 31 53s5-12.74 11.43-12.74S54 46 53.89 53 48.84 65.69 42.45 65.69Zm42.24 0C78.41 65.69 73.25 60 73.25 53s5-12.74 11.44-12.74S96.23 46 96.12 53 91.08 65.69 84.69 65.69Z" />
             </svg>
           </a>
         </div>
@@ -287,7 +306,56 @@ function App() {
                 <ModelMaintainer />
               </Suspense>
             }
-          />
+          >
+            <Route
+              index
+              element={
+                <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
+                  <MaintainerOverview />
+                </Suspense>
+              }
+            />
+            <Route
+              path="construct"
+              element={
+                <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
+                  <MaintainerConstruct />
+                </Suspense>
+              }
+            />
+            <Route
+              path="static-topology"
+              element={
+                <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
+                  <MaintainerStaticTopology />
+                </Suspense>
+              }
+            />
+            <Route
+              path="runtime-topology"
+              element={
+                <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
+                  <MaintainerRuntimeTopology />
+                </Suspense>
+              }
+            />
+            <Route
+              path="walkthrough"
+              element={
+                <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
+                  <MaintainerWalkthrough />
+                </Suspense>
+              }
+            />
+            <Route
+              path="reference"
+              element={
+                <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
+                  <MaintainerReference />
+                </Suspense>
+              }
+            />
+          </Route>
           <Route path="/about" element={<About />} />
         </Routes>
       </main>

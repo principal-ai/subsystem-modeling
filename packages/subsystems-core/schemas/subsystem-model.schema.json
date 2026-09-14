@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://principal-ai.dev/schemas/subsystem-model.schema.json",
   "title": "Subsystem Model",
-  "description": "Portable subsystem model — the shareable standard. Construct-tagged components (nodes) plus topology relations and/or runtime walkthroughs describing one subsystem of a codebase. Ontology: construct = what a node is, framework + stereotype = which framework pattern it plays, role = where it sits, process = where it runs. Symbol is the code identity; name is the display label (often derived from symbol). Host-only fields (local path binding, provenance, store ids, verification) are NOT part of this document; they belong on a hydrated envelope around it.",
+  "description": "Portable subsystem model — the shareable standard. Construct-tagged components (nodes) plus topology relations and/or runtime walkthroughs describing one subsystem of a codebase. Ontology: construct = what a node is, framework + stereotype = which framework pattern it plays, role = where it sits, process = where it runs, module = which source file/module the export belongs to. Symbol is the code identity; name is the display label (often derived from symbol). Host-only fields (local path binding, provenance, store ids, verification) are NOT part of this document; they belong on a hydrated envelope around it.",
   "type": "object",
   "required": [
     "title",
@@ -102,8 +102,7 @@
         "implements",
         "mixes_in",
         "method",
-        "references",
-        "contains"
+        "references"
       ]
     },
     "mechanism": {
@@ -151,7 +150,7 @@
         "purl": {
           "type": "string",
           "minLength": 1,
-          "description": "PURL identifying the repo or package (for subgraph grouping), e.g. `pkg:github/owner/name#path/to/file.ts`."
+          "description": "PURL identifying the repo or package (for subgraph grouping), e.g. `pkg:github/owner/name#path/to/file.ts`. When a graph spans multiple repos, distinct purl repo keys become package boundary frames (package → process → module nesting). Single-repo graphs do not draw package frames by default."
         },
         "symbol": {
           "type": "string",
@@ -183,7 +182,11 @@
         },
         "process": {
           "type": "string",
-          "description": "Runtime process / deployment unit membership (e.g. `principal-studio/host`). Nodes sharing a process are drawn in one boundary region; nodes without one sit outside every boundary."
+          "description": "Runtime process / deployment unit membership (e.g. `principal-studio/host`). Nodes sharing a process are drawn in one boundary region; nodes without one sit outside every process boundary. Nests inside a package frame when the graph is multi-repo."
+        },
+        "module": {
+          "type": "string",
+          "description": "Source-module membership — which file/module this export belongs to (e.g. `src/session/transcript.ts`). Nodes sharing a module are drawn in one boundary frame. Prefer anchoring each export as its real construct and setting module, rather than a module construct. Nests under process (and package when multi-repo)."
         },
         "layer": {
           "type": "integer",
@@ -509,28 +512,6 @@
         }
       }
     },
-    "importInfo": {
-      "type": "object",
-      "required": [
-        "nodeId",
-        "name"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "nodeId": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "relation": {
-          "type": "string"
-        },
-        "source_location": {
-          "type": "string"
-        }
-      }
-    },
     "constructDeclaration": {
       "description": "Discriminated structured declaration of a construct (`kind`). Hand-authored declarations should set component.declarationProvenance to authored.",
       "oneOf": [
@@ -545,9 +526,6 @@
         },
         {
           "$ref": "#/$defs/typeDeclaration"
-        },
-        {
-          "$ref": "#/$defs/moduleDeclaration"
         },
         {
           "$ref": "#/$defs/externalDeclaration"
@@ -757,40 +735,6 @@
         "rhs": {
           "type": "string",
           "description": "Verbatim RHS escape hatch; wins over structured buckets when set."
-        }
-      }
-    },
-    "moduleDeclaration": {
-      "type": "object",
-      "required": [
-        "kind",
-        "exports",
-        "imports",
-        "symbols"
-      ],
-      "additionalProperties": false,
-      "description": "Declaration shape for module-like drill-down. Prefer not authoring module *components*; this payload may still appear from tooling.",
-      "properties": {
-        "kind": {
-          "const": "module"
-        },
-        "exports": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "imports": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/importInfo"
-          }
-        },
-        "symbols": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
         }
       }
     },

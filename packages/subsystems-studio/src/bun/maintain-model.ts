@@ -2,10 +2,14 @@
  * Subsystem model Maintain — OpenCode agents that review a deterministic
  * audit and submit correction proposals via Studio HTTP (human confirms).
  *
- * Routes by audit verdict:
- * - issues → issue-fixer
- * - partially_verified → gap-filler
- * - fully_verified → no-op
+ * Routes by layer then severity (construct → boundary → topology):
+ * - construct issues → issue-fixer
+ * - boundary issues → boundary-fixer
+ * - topology broken endpoints → topology-fixer
+ * - construct gaps → gap-filler
+ * - boundary soft gaps → boundary-gap-filler
+ * - topology soft gaps → topology-gap-filler
+ * - fully verified → no-op
  *
  * Same host pattern as concept extraction: RPC returns immediately, the
  * OpenCode V2 session continues in the background (live SSE tab), then a push
@@ -33,34 +37,58 @@ import { runOpencodeV2AgentSession } from "./opencode-v2-live";
 
 export const ISSUE_FIXER_AGENT = "issue-fixer";
 export const GAP_FILLER_AGENT = "gap-filler";
+export const TOPOLOGY_FIXER_AGENT = "topology-fixer";
+export const TOPOLOGY_GAP_FILLER_AGENT = "topology-gap-filler";
+export const BOUNDARY_FIXER_AGENT = "boundary-fixer";
+export const BOUNDARY_GAP_FILLER_AGENT = "boundary-gap-filler";
 
-export type MaintainAgentId = typeof ISSUE_FIXER_AGENT | typeof GAP_FILLER_AGENT;
+export type MaintainAgentId =
+	| typeof ISSUE_FIXER_AGENT
+	| typeof GAP_FILLER_AGENT
+	| typeof TOPOLOGY_FIXER_AGENT
+	| typeof TOPOLOGY_GAP_FILLER_AGENT
+	| typeof BOUNDARY_FIXER_AGENT
+	| typeof BOUNDARY_GAP_FILLER_AGENT;
+
+export type MaintainLayer = "construct" | "topology" | "boundary";
 export type MaintainMode = "issues" | "gaps";
+
+export type MaintainRoute = {
+	agent: MaintainAgentId;
+	layer: MaintainLayer;
+	mode: MaintainMode;
+};
 
 const AGENT_INSTALL_DIR = join(homedir(), ".config", "opencode", "agents");
 
-const ISSUE_FIXER_PACKAGE_PATH = join(
-	import.meta.dir,
-	"..",
-	"..",
-	"agents",
-	`${ISSUE_FIXER_AGENT}.md`,
+function agentPackagePath(agent: MaintainAgentId): string {
+	return join(import.meta.dir, "..", "..", "agents", `${agent}.md`);
+}
+
+function agentInstallPath(agent: MaintainAgentId): string {
+	return join(AGENT_INSTALL_DIR, `${agent}.md`);
+}
+
+export const ISSUE_FIXER_AGENT_PATH = agentInstallPath(ISSUE_FIXER_AGENT);
+export const GAP_FILLER_AGENT_PATH = agentInstallPath(GAP_FILLER_AGENT);
+export const TOPOLOGY_FIXER_AGENT_PATH = agentInstallPath(TOPOLOGY_FIXER_AGENT);
+export const TOPOLOGY_GAP_FILLER_AGENT_PATH = agentInstallPath(
+	TOPOLOGY_GAP_FILLER_AGENT,
 );
-const GAP_FILLER_PACKAGE_PATH = join(
-	import.meta.dir,
-	"..",
-	"..",
-	"agents",
-	`${GAP_FILLER_AGENT}.md`,
+export const BOUNDARY_FIXER_AGENT_PATH = agentInstallPath(BOUNDARY_FIXER_AGENT);
+export const BOUNDARY_GAP_FILLER_AGENT_PATH = agentInstallPath(
+	BOUNDARY_GAP_FILLER_AGENT,
 );
 
-export const ISSUE_FIXER_AGENT_PATH = join(
-	AGENT_INSTALL_DIR,
-	`${ISSUE_FIXER_AGENT}.md`,
+const ISSUE_FIXER_PACKAGE_PATH = agentPackagePath(ISSUE_FIXER_AGENT);
+const GAP_FILLER_PACKAGE_PATH = agentPackagePath(GAP_FILLER_AGENT);
+const TOPOLOGY_FIXER_PACKAGE_PATH = agentPackagePath(TOPOLOGY_FIXER_AGENT);
+const TOPOLOGY_GAP_FILLER_PACKAGE_PATH = agentPackagePath(
+	TOPOLOGY_GAP_FILLER_AGENT,
 );
-export const GAP_FILLER_AGENT_PATH = join(
-	AGENT_INSTALL_DIR,
-	`${GAP_FILLER_AGENT}.md`,
+const BOUNDARY_FIXER_PACKAGE_PATH = agentPackagePath(BOUNDARY_FIXER_AGENT);
+const BOUNDARY_GAP_FILLER_PACKAGE_PATH = agentPackagePath(
+	BOUNDARY_GAP_FILLER_AGENT,
 );
 
 /** Keep in sync with `agents/issue-fixer.md`. */
@@ -77,6 +105,8 @@ export interface MaintainModelResult {
 	model?: string;
 	/** Which OpenCode agent ran (or would have run). */
 	agent?: MaintainAgentId;
+	layer?: MaintainLayer;
+	mode?: MaintainMode;
 	/** Audit verdict used for routing. */
 	verdict?: SubsystemModelAuditVerdict;
 	pendingCount?: number;
@@ -88,6 +118,156 @@ export interface MaintainModelResult {
 	sessionId?: string;
 }
 
+function isTopologyFindingKind(kind: string | undefined): boolean {
+	return (
+		kind === "topology_broken_endpoint" ||
+		kind === "topology_relation_unconfirmed" ||
+		kind === "topology_import_unconfirmed"
+	);
+}
+
+function isBoundaryFindingKind(kind: string | undefined): boolean {
+	return (
+		kind === "boundary_module_without_file" ||
+		kind === "boundary_module_file_mismatch" ||
+		kind === "boundary_process_nest_disagree"
+	);
+}
+
+function isTopologyIssueFinding(
+	f: SubsystemModelAuditReport["findings"][number],
+): boolean {
+	return f.kind === "topology_broken_endpoint";
+}
+
+function isTopologyGapFinding(
+	f: SubsystemModelAuditReport["findings"][number],
+): boolean {
+	return (
+		f.kind === "topology_relation_unconfirmed" ||
+		f.kind === "topology_import_unconfirmed"
+	);
+}
+
+function isBoundaryIssueFinding(
+	f: SubsystemModelAuditReport["findings"][number],
+): boolean {
+	return f.kind === "boundary_module_without_file";
+}
+
+function isBoundaryGapFinding(
+	f: SubsystemModelAuditReport["findings"][number],
+): boolean {
+	return (
+		f.kind === "boundary_module_file_mismatch" ||
+		f.kind === "boundary_process_nest_disagree"
+	);
+}
+
+function isConstructIssueFinding(
+	f: SubsystemModelAuditReport["findings"][number],
+): boolean {
+	if (isTopologyFindingKind(f.kind) || isBoundaryFindingKind(f.kind))
+		return false;
+	return f.severity === "error" || f.severity === "warn";
+}
+
+function isConstructGapFinding(
+	f: SubsystemModelAuditReport["findings"][number],
+): boolean {
+	if (isTopologyFindingKind(f.kind) || isBoundaryFindingKind(f.kind))
+		return false;
+	if (f.severity === "error" || f.severity === "warn") return false;
+	return (
+		f.kind === "construct_unconfirmed" ||
+		f.kind === "signature_unconfirmed" ||
+		f.kind === "unresolved" ||
+		f.severity === "info"
+	);
+}
+
+function hasConstructCheckIssues(report: SubsystemModelAuditReport): boolean {
+	return report.checks.some((c) => c.verdict === "issue");
+}
+
+function hasConstructCheckGaps(report: SubsystemModelAuditReport): boolean {
+	for (const c of report.checks) {
+		if (c.verdict === "issue") continue;
+		if (c.constructInferred === "unknown" && c.constructMatch !== true)
+			return true;
+		if (c.signature === "skipped") return true;
+	}
+	return false;
+}
+
+/**
+ * Pick the next Maintain agent. Construct → boundary → topology so
+ * membership and relation retargets run against a stable component set.
+ */
+export function selectMaintainRoute(
+	report: SubsystemModelAuditReport,
+): MaintainRoute | null {
+	if (
+		report.findings.some(isConstructIssueFinding) ||
+		hasConstructCheckIssues(report)
+	) {
+		return {
+			agent: ISSUE_FIXER_AGENT,
+			layer: "construct",
+			mode: "issues",
+		};
+	}
+	if (
+		report.findings.some(isBoundaryIssueFinding) ||
+		report.boundaryChecks?.some((c) => c.verdict === "issue")
+	) {
+		return {
+			agent: BOUNDARY_FIXER_AGENT,
+			layer: "boundary",
+			mode: "issues",
+		};
+	}
+	if (report.findings.some(isTopologyIssueFinding)) {
+		return {
+			agent: TOPOLOGY_FIXER_AGENT,
+			layer: "topology",
+			mode: "issues",
+		};
+	}
+	if (
+		report.findings.some(isConstructGapFinding) ||
+		hasConstructCheckGaps(report)
+	) {
+		return {
+			agent: GAP_FILLER_AGENT,
+			layer: "construct",
+			mode: "gaps",
+		};
+	}
+	if (
+		report.findings.some(isBoundaryGapFinding) ||
+		report.boundaryChecks?.some((c) => c.verdict === "gap")
+	) {
+		return {
+			agent: BOUNDARY_GAP_FILLER_AGENT,
+			layer: "boundary",
+			mode: "gaps",
+		};
+	}
+	if (
+		report.findings.some(isTopologyGapFinding) ||
+		report.topologyChecks?.some((c) => c.verdict === "gap")
+	) {
+		return {
+			agent: TOPOLOGY_GAP_FILLER_AGENT,
+			layer: "topology",
+			mode: "gaps",
+		};
+	}
+	return null;
+}
+
+/** @deprecated Prefer selectMaintainRoute — coarse issues/gaps only. */
 export function maintainModeForVerdict(
 	verdict: SubsystemModelAuditVerdict,
 ): MaintainMode | null {
@@ -96,6 +276,7 @@ export function maintainModeForVerdict(
 	return null;
 }
 
+/** @deprecated Prefer selectMaintainRoute. */
 export function agentForMaintainMode(mode: MaintainMode): MaintainAgentId {
 	return mode === "issues" ? ISSUE_FIXER_AGENT : GAP_FILLER_AGENT;
 }
@@ -104,10 +285,7 @@ export function maintainActionLabel(_mode: MaintainMode | null): string {
 	return "Run maintenance";
 }
 
-function loadAgentSource(
-	packagePath: string,
-	embedded: string,
-): string {
+function loadAgentSource(packagePath: string, embedded: string): string {
 	try {
 		if (existsSync(packagePath)) {
 			return readFileSync(packagePath, "utf8");
@@ -118,7 +296,15 @@ function loadAgentSource(
 	return embedded;
 }
 
-/** Ensure both Maintain agents are installed under ~/.config/opencode/agents/. */
+function loadTopologyAgentSource(packagePath: string): string {
+	try {
+		return readFileSync(packagePath, "utf8");
+	} catch (err) {
+		return `---\ndescription: topology agent unavailable\n---\nFailed to load ${packagePath}: ${(err as Error).message}\n`;
+	}
+}
+
+/** Ensure Maintain agents are installed under ~/.config/opencode/agents/. */
 export function ensureMaintainAgentsInstalled(): {
 	ok: boolean;
 	paths: string[];
@@ -136,14 +322,60 @@ export function ensureMaintainAgentsInstalled(): {
 			loadAgentSource(GAP_FILLER_PACKAGE_PATH, EMBEDDED_GAP_FILLER),
 			"utf8",
 		);
+		writeFileSync(
+			TOPOLOGY_FIXER_AGENT_PATH,
+			loadAgentSource(
+				TOPOLOGY_FIXER_PACKAGE_PATH,
+				loadTopologyAgentSource(TOPOLOGY_FIXER_PACKAGE_PATH),
+			),
+			"utf8",
+		);
+		writeFileSync(
+			TOPOLOGY_GAP_FILLER_AGENT_PATH,
+			loadAgentSource(
+				TOPOLOGY_GAP_FILLER_PACKAGE_PATH,
+				loadTopologyAgentSource(TOPOLOGY_GAP_FILLER_PACKAGE_PATH),
+			),
+			"utf8",
+		);
+		writeFileSync(
+			BOUNDARY_FIXER_AGENT_PATH,
+			loadAgentSource(
+				BOUNDARY_FIXER_PACKAGE_PATH,
+				loadTopologyAgentSource(BOUNDARY_FIXER_PACKAGE_PATH),
+			),
+			"utf8",
+		);
+		writeFileSync(
+			BOUNDARY_GAP_FILLER_AGENT_PATH,
+			loadAgentSource(
+				BOUNDARY_GAP_FILLER_PACKAGE_PATH,
+				loadTopologyAgentSource(BOUNDARY_GAP_FILLER_PACKAGE_PATH),
+			),
+			"utf8",
+		);
 		return {
 			ok: true,
-			paths: [ISSUE_FIXER_AGENT_PATH, GAP_FILLER_AGENT_PATH],
+			paths: [
+				ISSUE_FIXER_AGENT_PATH,
+				GAP_FILLER_AGENT_PATH,
+				TOPOLOGY_FIXER_AGENT_PATH,
+				TOPOLOGY_GAP_FILLER_AGENT_PATH,
+				BOUNDARY_FIXER_AGENT_PATH,
+				BOUNDARY_GAP_FILLER_AGENT_PATH,
+			],
 		};
 	} catch (err) {
 		return {
 			ok: false,
-			paths: [ISSUE_FIXER_AGENT_PATH, GAP_FILLER_AGENT_PATH],
+			paths: [
+				ISSUE_FIXER_AGENT_PATH,
+				GAP_FILLER_AGENT_PATH,
+				TOPOLOGY_FIXER_AGENT_PATH,
+				TOPOLOGY_GAP_FILLER_AGENT_PATH,
+				BOUNDARY_FIXER_AGENT_PATH,
+				BOUNDARY_GAP_FILLER_AGENT_PATH,
+			],
 			error: (err as Error).message,
 		};
 	}
@@ -177,28 +409,12 @@ function primaryRepoRoot(graph: StoredSubsystemModel): string | undefined {
 	return undefined;
 }
 
-function isIssueFinding(
-	f: SubsystemModelAuditReport["findings"][number],
-): boolean {
-	return f.severity === "error" || f.severity === "warn";
-}
-
-function isGapFinding(
-	f: SubsystemModelAuditReport["findings"][number],
-): boolean {
-	if (f.severity === "error" || f.severity === "warn") return false;
-	return (
-		f.kind === "construct_unconfirmed" ||
-		f.kind === "signature_unconfirmed" ||
-		f.kind === "unresolved" ||
-		f.severity === "info"
-	);
-}
-
 function formatFinding(f: SubsystemModelAuditReport["findings"][number]): string {
 	const where = [
 		f.componentId ? `component=${f.componentId}` : null,
 		f.componentName ? `name=${f.componentName}` : null,
+		f.relationId ? `relation=${f.relationId}` : null,
+		f.moduleKey ? `module=${f.moduleKey}` : null,
 		f.walkthroughId ? `walkthrough=${f.walkthroughId}` : null,
 		f.step != null ? `step=${f.step}` : null,
 	]
@@ -245,6 +461,30 @@ function formatGapCheck(
 	return `- ${c.componentName ?? c.componentId} (${c.componentId}): ${bits.join("; ")}`;
 }
 
+function formatTopologyCheck(
+	c: NonNullable<SubsystemModelAuditReport["topologyChecks"]>[number],
+	mode: MaintainMode,
+): string | null {
+	if (mode === "issues" && c.verdict !== "issue") return null;
+	if (mode === "gaps" && c.verdict !== "gap") return null;
+	return `- ${c.relationId} (${c.relationType} ${c.from}→${c.to}): ${c.verdict}${c.note ? ` — ${c.note}` : ""}`;
+}
+
+function formatBoundaryCheck(
+	c: NonNullable<SubsystemModelAuditReport["boundaryChecks"]>[number],
+	mode: MaintainMode,
+): string | null {
+	if (mode === "issues" && c.verdict !== "issue") return null;
+	if (mode === "gaps" && c.verdict !== "gap") return null;
+	const bits = [
+		c.kind,
+		c.module ? `module=${c.module}` : null,
+		c.file ? `file=${c.file}` : null,
+		c.process ? `process=${c.process}` : null,
+	].filter(Boolean);
+	return `- ${c.componentName ?? c.componentId} (${c.componentId}): ${c.verdict} · ${bits.join(" · ")}${c.note ? ` — ${c.note}` : ""}`;
+}
+
 function studioHttpBase(): string {
 	const port = process.env["PRINCIPAL_STUDIO_HTTP_PORT"] ?? "3045";
 	return `http://127.0.0.1:${port}`;
@@ -276,26 +516,73 @@ function resolveStudioCliInvoker(): string | null {
 	return null;
 }
 
+function briefTitle(route: MaintainRoute): string {
+	switch (route.agent) {
+		case ISSUE_FIXER_AGENT:
+			return "# Subsystem model issue-fixer brief";
+		case GAP_FILLER_AGENT:
+			return "# Subsystem model gap-filler brief";
+		case TOPOLOGY_FIXER_AGENT:
+			return "# Subsystem model topology-fixer brief";
+		case TOPOLOGY_GAP_FILLER_AGENT:
+			return "# Subsystem model topology-gap-filler brief";
+		case BOUNDARY_FIXER_AGENT:
+			return "# Subsystem model boundary-fixer brief";
+		case BOUNDARY_GAP_FILLER_AGENT:
+			return "# Subsystem model boundary-gap-filler brief";
+	}
+}
+
+function proposeShapeHint(agent: MaintainAgentId): string {
+	if (agent === TOPOLOGY_GAP_FILLER_AGENT) {
+		return `Propose body shape: \`{ "rationale": "…", "author": "topology-gap-filler", "finding": { "kind", "relationId", "message" }, "changes": […] }\`. When the claim is intentional but Graphify is thin, use \`{ "target": "augmentation", "field": "relation", "relationId", "value": true }\`. When the claim is wrong, use \`{ "target": "relation", "relationId", "field": "delete"|"from"|"to"|"relationType", "value": … }\`. Do **not** call accept/reject.`;
+	}
+	if (agent === TOPOLOGY_FIXER_AGENT) {
+		return `Propose body shape: \`{ "rationale": "…", "author": "topology-fixer", "finding": { "kind", "relationId", "message" }, "changes": [{ "target": "relation", "relationId", "field": "delete"|"from"|"to"|"relationType", "value": … }] }\`. Do **not** call accept/reject.`;
+	}
+	if (agent === BOUNDARY_FIXER_AGENT) {
+		return `Propose body shape: \`{ "rationale": "…", "author": "boundary-fixer", "finding": { "kind", "componentId", "message" }, "changes": [{ "target": "component", "componentId", "field": "file"|"module", "value": … }] }\`. Do **not** call accept/reject.`;
+	}
+	if (agent === BOUNDARY_GAP_FILLER_AGENT) {
+		return `Propose body shape: \`{ "rationale": "…", "author": "boundary-gap-filler", "finding": {…}, "changes": […] }\`. For intentional module≠file use \`{ "target": "augmentation", "componentId", "field": "module", "value": "<module key>" }\`. For slips / process nest, use \`{ "target": "component", "field": "module"|"process", "value" }\`. Do **not** call accept/reject.`;
+	}
+	return `Propose body shape: \`{ "rationale": "…", "author": "${agent}", "finding": {…}, "changes": […] }\`. For construct_unconfirmed when the claim is already correct, use \`{ "target": "augmentation", "componentId", "field": "construct", "value" }\`. For signature_unconfirmed, use \`{ "target": "augmentation", "componentId", "field": "signature", "value": { "parameterTypes": […], "returnTypes": […] } }\`. Do **not** call accept/reject.`;
+}
+
+function taskBlurb(route: MaintainRoute): string {
+	switch (route.agent) {
+		case ISSUE_FIXER_AGENT:
+			return "Review each **construct issue** finding, investigate the code, and submit proposals via the Access curl commands (Studio HTTP). For construct ≠ inferred / signature mismatch: Graphify is a weak hint — read source; do not auto-adopt inferred; skip when the model claim is intentional. Ignore gaps, boundary, and topology findings. Prefer small proposals. Finish with a short plain-text summary of proposals created and skips.";
+		case GAP_FILLER_AGENT:
+			return "Review each **construct gap**, investigate the code, propose safe fills (e.g. construct classification) via the Access curl commands (Studio HTTP). Do not chase hard failures, boundary, or topology findings. Prefer small proposals. Skip anything you cannot safely fill. Finish with a short plain-text summary of proposals created and skips.";
+		case BOUNDARY_FIXER_AGENT:
+			return "Review each **boundary_module_without_file**. Propose file and/or module corrections via Access curl. Ignore soft boundary gaps and construct/topology findings. Finish with a short plain-text summary.";
+		case BOUNDARY_GAP_FILLER_AGENT:
+			return "Review each **boundary soft gap**. For intentional module≠file, propose a **module augmentation**. For authoring slips or process nest disagree, propose module/process field fixes. Skip only when unsure. Ignore hard boundary issues and construct/topology findings. Finish with a short plain-text summary.";
+		case TOPOLOGY_FIXER_AGENT:
+			return "Review each **topology_broken_endpoint**, decide drop vs retarget against surviving component ids, and submit relation proposals via Access curl. Ignore construct/boundary findings and topology soft gaps. Prefer delete when retarget is unclear. Finish with a short plain-text summary.";
+		case TOPOLOGY_GAP_FILLER_AGENT:
+			return "Review each **topology soft gap**. When source supports the claim (or it is a deliberate external Graphify rarely emits), propose a **relation augmentation**. Propose drop/retarget only when source shows the claim is wrong. Skip only when unsure. Ignore construct/boundary findings and hard topology issues. Finish with a short plain-text summary.";
+	}
+}
+
 export function buildMaintainBrief(opts: {
 	graph: StoredSubsystemModel;
 	report: SubsystemModelAuditReport;
-	mode: MaintainMode;
+	route: MaintainRoute;
 }): string {
-	const { graph, report, mode } = opts;
-	const agent = agentForMaintainMode(mode);
+	const { graph, report, route } = opts;
+	const { agent, mode, layer } = route;
 	const id = graph.id;
 	const enc = encodeURIComponent(id);
 	const base = studioHttpBase();
 	const lines: string[] = [];
-	lines.push(
-		mode === "issues"
-			? "# Subsystem model issue-fixer brief"
-			: "# Subsystem model gap-filler brief",
-	);
+	lines.push(briefTitle(route));
 	lines.push("");
 	lines.push(`- **Title**: ${graph.title}`);
 	lines.push(`- **Model id**: ${id}`);
 	lines.push(`- **Agent**: ${agent}`);
+	lines.push(`- **Layer**: ${layer}`);
 	lines.push(`- **Mode**: ${mode}`);
 	lines.push(`- **Audited at**: ${report.checkedAt}`);
 	lines.push(
@@ -315,9 +602,7 @@ export function buildMaintainBrief(opts: {
 		`    curl -sS -X POST ${base}/api/subsystem-model/${enc}/proposals -H 'Content-Type: application/json' -d '<proposal-json>'`,
 	);
 	lines.push("");
-	lines.push(
-		`Propose body shape: \`{ "rationale": "…", "author": "${agent}", "finding": {…}, "changes": […] }\`. For construct_unconfirmed when the claim is already correct, use \`{ "target": "augmentation", "componentId", "field": "construct", "value" }\`. For signature_unconfirmed, use \`{ "target": "augmentation", "componentId", "field": "signature", "value": { "parameterTypes": […], "returnTypes": […] } }\`. Do **not** call accept/reject.`,
-	);
+	lines.push(proposeShapeHint(agent));
 
 	const cli = resolveStudioCliInvoker();
 	if (cli) {
@@ -349,10 +634,26 @@ export function buildMaintainBrief(opts: {
 		for (const r of roots) lines.push(`- ${r}`);
 	}
 
+	if (layer === "topology") {
+		lines.push("");
+		lines.push("**Surviving component ids** (retarget targets):");
+		for (const c of graph.components) {
+			lines.push(`- ${c.id} (${c.name}${c.symbol ? ` · ${c.symbol}` : ""})`);
+		}
+	}
+
 	const findings =
-		mode === "issues"
-			? report.findings.filter(isIssueFinding)
-			: report.findings.filter(isGapFinding);
+		agent === ISSUE_FIXER_AGENT
+			? report.findings.filter(isConstructIssueFinding)
+			: agent === GAP_FILLER_AGENT
+				? report.findings.filter(isConstructGapFinding)
+				: agent === BOUNDARY_FIXER_AGENT
+					? report.findings.filter(isBoundaryIssueFinding)
+					: agent === BOUNDARY_GAP_FILLER_AGENT
+						? report.findings.filter(isBoundaryGapFinding)
+						: agent === TOPOLOGY_FIXER_AGENT
+							? report.findings.filter(isTopologyIssueFinding)
+							: report.findings.filter(isTopologyGapFinding);
 
 	lines.push("");
 	lines.push(
@@ -367,43 +668,61 @@ export function buildMaintainBrief(opts: {
 		for (const f of findings) lines.push(formatFinding(f));
 	}
 
-	lines.push("");
-	lines.push(
-		mode === "issues"
-			? "## Current audit — failing checks"
-			: "## Current audit — gap checks",
-	);
-	lines.push("");
-	const checkLines = (
-		mode === "issues"
-			? report.checks.map(formatIssueCheck)
-			: report.checks.map(formatGapCheck)
-	).filter(Boolean) as string[];
-	if (checkLines.length === 0) {
-		lines.push("(nothing flagged in this mode)");
+	if (layer === "construct") {
+		lines.push("");
+		lines.push(
+			mode === "issues"
+				? "## Current audit — failing checks"
+				: "## Current audit — gap checks",
+		);
+		lines.push("");
+		const checkLines = (
+			mode === "issues"
+				? report.checks.map(formatIssueCheck)
+				: report.checks.map(formatGapCheck)
+		).filter(Boolean) as string[];
+		if (checkLines.length === 0) {
+			lines.push("(nothing flagged in this mode)");
+		} else {
+			for (const row of checkLines) lines.push(row);
+		}
+	} else if (layer === "boundary") {
+		lines.push("");
+		lines.push("## Current audit — boundary checks");
+		lines.push("");
+		const boundaryLines = (report.boundaryChecks ?? [])
+			.map((c) => formatBoundaryCheck(c, mode))
+			.filter(Boolean) as string[];
+		if (boundaryLines.length === 0) {
+			lines.push("(nothing flagged in this mode)");
+		} else {
+			for (const row of boundaryLines) lines.push(row);
+		}
 	} else {
-		for (const row of checkLines) lines.push(row);
+		lines.push("");
+		lines.push("## Current audit — topology checks");
+		lines.push("");
+		const topoLines = (report.topologyChecks ?? [])
+			.map((c) => formatTopologyCheck(c, mode))
+			.filter(Boolean) as string[];
+		if (topoLines.length === 0) {
+			lines.push("(nothing flagged in this mode)");
+		} else {
+			for (const row of topoLines) lines.push(row);
+		}
 	}
 
 	lines.push("");
 	lines.push("## Task");
 	lines.push("");
-	if (mode === "issues") {
-		lines.push(
-			"Review each **issue** finding, investigate the code, and submit proposals via the Access curl commands (Studio HTTP). For construct ≠ inferred / signature mismatch: Graphify is a weak hint — read source; do not auto-adopt inferred; skip when the model claim is intentional. Ignore gaps. Prefer small proposals. Finish with a short plain-text summary of proposals created and skips.",
-		);
-	} else {
-		lines.push(
-			"Review each **gap**, investigate the code, propose safe fills (e.g. construct classification) via the Access curl commands (Studio HTTP). Do not chase hard failures. Prefer small proposals. Skip anything you cannot safely fill. Finish with a short plain-text summary of proposals created and skips.",
-		);
-	}
+	lines.push(taskBlurb(route));
 	return lines.join("\n");
 }
 
 export function writeMaintainBrief(opts: {
 	graph: StoredSubsystemModel;
 	report: SubsystemModelAuditReport;
-	mode: MaintainMode;
+	route: MaintainRoute;
 }): string {
 	mkdirSync(BRIEF_DIR, { recursive: true });
 	const path = join(BRIEF_DIR, `${opts.graph.id}.brief.md`);
@@ -496,10 +815,10 @@ export async function maintainSubsystemModel(
 	if (!audit.ok) return { ok: false, error: audit.error };
 
 	const verdict = classifyAuditReport(audit.report);
-	const mode = maintainModeForVerdict(verdict);
+	const route = selectMaintainRoute(audit.report);
 	const pendingCount = await pendingProposalCount(graphId);
 
-	if (!mode) {
+	if (!route) {
 		return {
 			ok: true,
 			skipped: true,
@@ -510,9 +829,9 @@ export async function maintainSubsystemModel(
 		};
 	}
 
-	const agent = agentForMaintainMode(mode);
-	writeMaintainBrief({ graph, report: audit.report, mode });
-	const task = buildMaintainBrief({ graph, report: audit.report, mode });
+	const { agent, mode, layer } = route;
+	writeMaintainBrief({ graph, report: audit.report, route });
+	const task = buildMaintainBrief({ graph, report: audit.report, route });
 	const run = await runMaintainAgent({
 		agent,
 		primaryRepoRoot: primaryRepoRoot(graph),
@@ -529,6 +848,8 @@ export async function maintainSubsystemModel(
 			error: run.error,
 			model: run.model,
 			agent,
+			layer,
+			mode,
 			verdict,
 			pendingCount: pendingAfter,
 			summary: run.summary,
@@ -539,6 +860,8 @@ export async function maintainSubsystemModel(
 		ok: true,
 		model: run.model,
 		agent,
+		layer,
+		mode,
 		verdict,
 		pendingCount: pendingAfter,
 		summary: run.summary,
@@ -549,10 +872,7 @@ export async function maintainSubsystemModel(
 export function readMaintainAgentSystemPrompt(agent: MaintainAgentId): string {
 	try {
 		ensureMaintainAgentsInstalled();
-		const path =
-			agent === ISSUE_FIXER_AGENT
-				? ISSUE_FIXER_AGENT_PATH
-				: GAP_FILLER_AGENT_PATH;
+		const path = agentInstallPath(agent);
 		return readFileSync(path, "utf8");
 	} catch (err) {
 		return `(system prompt unavailable — ${(err as Error).message})`;

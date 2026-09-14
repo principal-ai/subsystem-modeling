@@ -84,7 +84,7 @@ const mermaidComponents: SubsystemComponent[] = [
   {
     id: 'helpers',
     name: 'beautifulMermaid',
-    construct: 'module',
+    construct: 'function',
     file: 'industryMarkdown/utils/beautifulMermaid.ts',
     purl: mermaidPurl,
     purpose: 'engine detection, theme\u2192options mapping, SVG post-processing',
@@ -130,11 +130,11 @@ const coreLibPurl = 'pkg:github/principal-ai/principal-view-core-library';
 const graphifyPurl = 'pkg:github/Graphify-Labs/graphify';
 
 const multiRepoComponents = components([
-  ['resolver', 'resolve.ts', 'module', 'packages/subsystems-react/src/graphify/resolve.ts', coreLibPurl, 'consumer-side resolution mirroring graphify rewire tiers', 'createGraphifyTypeResolver'],
-  ['reftypes', 'consolidated.ts', 'module', 'packages/subsystems-react/src/graphify/consolidated.ts', coreLibPurl, 'drill-down payload types carrying ref.nodeId', 'GraphifyParamInfo'],
-  ['detail', 'ComponentDeclaration.tsx', 'module', 'packages/subsystems-react/src/subsystem/ComponentDeclaration.tsx', coreLibPurl, 'declaration panel rendering the selected component as code, with clickable type tokens', 'ComponentDeclaration'],
-  ['engine', 'engine.py', 'module', 'graphify/extractors/engine.py', graphifyPurl, 'tree-sitter walk emitting references[parameter_type] edges + sourceless stubs', 'ensure_named_node'],
-  ['rewire', 'extract.py', 'module', 'graphify/extract.py', graphifyPurl, 'corpus pass folding unique-label stubs onto definitions', '_rewire_unique_stub_nodes'],
+  ['resolver', 'resolve.ts', 'function', 'packages/subsystems-react/src/graphify/resolve.ts', coreLibPurl, 'consumer-side resolution mirroring graphify rewire tiers', 'createGraphifyTypeResolver'],
+  ['reftypes', 'consolidated.ts', 'function', 'packages/subsystems-react/src/graphify/consolidated.ts', coreLibPurl, 'drill-down payload types carrying ref.nodeId', 'GraphifyParamInfo'],
+  ['detail', 'ComponentDeclaration.tsx', 'function', 'packages/subsystems-react/src/subsystem/ComponentDeclaration.tsx', coreLibPurl, 'declaration panel rendering the selected component as code, with clickable type tokens', 'ComponentDeclaration'],
+  ['engine', 'engine.py', 'function', 'graphify/extractors/engine.py', graphifyPurl, 'tree-sitter walk emitting references[parameter_type] edges + sourceless stubs', 'ensure_named_node'],
+  ['rewire', 'extract.py', 'function', 'graphify/extract.py', graphifyPurl, 'corpus pass folding unique-label stubs onto definitions', '_rewire_unique_stub_nodes'],
 ]);
 
 const multiRepoEdges = graphSpecFromEdges([

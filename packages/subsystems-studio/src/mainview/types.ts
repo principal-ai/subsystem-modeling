@@ -16,6 +16,7 @@ export type TabState =
 	| { kind: "maintenance-sessions" }
 	| { kind: "subsystems" }
 	| { kind: "graphify" }
+	| { kind: "package-layers" }
 	| { kind: "opencode-v2" }
 	| { kind: "maintain-events"; id: string; sessionId: string; agent?: string; title?: string }
 	| { kind: "analysis"; id: string; analysisId: string }

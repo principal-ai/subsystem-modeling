@@ -166,11 +166,11 @@ describe("findRelationTypeProblems", () => {
 describe("verifyModelFiles", () => {
 	test("buckets components into verified / missing / unresolved", async () => {		const result = await verifyModelFiles({
 			components: [
-				{ id: "a1", name: "A", construct: "module", file: "exists.ts", purl: "pkg:github/a/repo-a" },
-				{ id: "b1", name: "B", construct: "module", file: "deep/other.py", purl: "pkg:github/a/repo-b" },
-				{ id: "m1", name: "M", construct: "module", file: "nope.ts", purl: "pkg:github/a/repo-a" },
-				{ id: "u1", name: "U", construct: "module", file: "somewhere.ts", purl: "pkg:github/a/repo-remote" },
-				{ id: "f1", name: "F", construct: "module", file: "", purl: "pkg:github/a/repo-a" },
+				{ id: "a1", name: "A", construct: "function", file: "exists.ts", purl: "pkg:github/a/repo-a" },
+				{ id: "b1", name: "B", construct: "function", file: "deep/other.py", purl: "pkg:github/a/repo-b" },
+				{ id: "m1", name: "M", construct: "function", file: "nope.ts", purl: "pkg:github/a/repo-a" },
+				{ id: "u1", name: "U", construct: "function", file: "somewhere.ts", purl: "pkg:github/a/repo-remote" },
+				{ id: "f1", name: "F", construct: "function", file: "", purl: "pkg:github/a/repo-a" },
 			],
 			relations: [],
 			repoRoot: repoA,
@@ -224,7 +224,7 @@ describe("verifyModelFiles symbol pass", () => {
 				{ id: "ok-qualified", name: "C", construct: "class", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "ns.Widget" },
 				{ id: "bad-symbol", name: "D", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "notDeclaredAnywhere" },
 				{ id: "mention-only", name: "E", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "buildAgentSessionsView" },
-				{ id: "no-symbol", name: "F", construct: "module", file: "exists.ts", purl: "pkg:github/a/repo-a" },
+				{ id: "no-symbol", name: "F", construct: "function", file: "exists.ts", purl: "pkg:github/a/repo-a" },
 			],
 			relations: [],
 			repoRoots: { "pkg:github/a/repo-a": repoA },
@@ -276,7 +276,6 @@ describe("declaration provenance", () => {
 			{ id: "f", declaration: { kind: "function", parameters: [{ name: "id", type: "string" }] } },
 			{ id: "c", declaration: { kind: "class", methods: [] } },
 			{ id: "t", declaration: { kind: "type" } },
-			{ id: "m", declaration: { kind: "module" } },
 			{ id: "e", declaration: { kind: "custom_entity" } },
 		];
 		normalizeDeclarationProvenance(components);
@@ -287,7 +286,6 @@ describe("declaration provenance", () => {
 		expect(d("c")["extends"]).toEqual([]);
 		expect(d("c")["references"]).toEqual([]);
 		expect(d("t")["usedBy"]).toEqual([]);
-		expect(d("m")["imports"]).toEqual([]);
 		expect(d("e")["attributes"]).toEqual([]);
 		// existing arrays are never overwritten
 		expect(d("f")["parameters"]).toEqual([{ name: "id", type: "string" }]);
@@ -321,7 +319,6 @@ describe("relation and walkthrough mechanism sets", () => {
 			"mixes_in",
 			"method",
 			"references",
-			"contains",
 			"calls",
 			"uses",
 			"feeds",
