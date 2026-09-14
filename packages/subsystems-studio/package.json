@@ -46,7 +46,7 @@
     "@principal-ai/logo-component": "^0.1.23",
     "@principal-ai/repository-abstraction": "^0.5.7",
     "@principal-ai/subsystems-core": "0.34.1",
-    "@principal-ai/subsystems-react": "0.23.4",
+    "@principal-ai/subsystems-react": "0.24.0",
     "@types/bun": "latest",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
@@ -62,7 +62,7 @@
     "@principal-ai/agent-monitoring": "^0.3.43",
     "@principal-ai/codebase-composition": "0.2.58",
     "@principal-ai/subsystems-core": "0.34.1",
-    "@principal-ai/subsystems-react": "0.23.4",
+    "@principal-ai/subsystems-react": "0.24.0",
     "@xyflow/react": "^12.11.3",
     "better-sqlite3": "^13.0.2"
   }
