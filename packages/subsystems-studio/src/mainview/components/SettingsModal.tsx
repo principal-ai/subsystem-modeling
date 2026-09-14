@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { ScrollText } from "lucide-react";
+import { Gauge, ScrollText, SlidersHorizontal, Wrench } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import type { DefaultTabFlags, ViewerSettings } from "../../shared/contract";
 import { electrobun } from "../rpc";
@@ -84,6 +84,31 @@ type SavingKey =
 	| "regularAudit"
 	| "regularAuditInterval";
 
+const SETTINGS_TABS = [
+	{
+		id: "tabs",
+		label: "Default tabs",
+		icon: SlidersHorizontal,
+		description:
+			"Choose which tabs appear in the strip by default. Changes apply immediately and persist across launches.",
+	},
+	{
+		id: "auditing",
+		label: "Auditing",
+		icon: Gauge,
+		description:
+			"Control how subsystem models are audited and how correction proposals are applied.",
+	},
+	{
+		id: "tools",
+		label: "Tools",
+		icon: Wrench,
+		description: "Utilities that pair with the audit workflow.",
+	},
+] as const;
+
+type SettingsTab = (typeof SETTINGS_TABS)[number]["id"];
+
 export function SettingsModal({ onClose }: { onClose: () => void }) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -94,6 +119,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 		source: string;
 		freeCount: number;
 	} | null>(null);
+	const [activeTab, setActiveTab] = useState<SettingsTab>("tabs");
+	const activeTabMeta =
+		SETTINGS_TABS.find((tab) => tab.id === activeTab) ?? SETTINGS_TABS[0];
 
 	useEffect(() => {
 		let alive = true;
@@ -122,6 +150,17 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 			alive = false;
 		};
 	}, []);
+
+	useEffect(() => {
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (e.key === "Escape") {
+				e.preventDefault();
+				onClose();
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [onClose]);
 
 	const toggle = useCallback(async (key: keyof DefaultTabFlags) => {
 		if (!settings) return;
@@ -257,86 +296,413 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 			<div
 				onClick={(e) => e.stopPropagation()}
 				style={{
-					width: "min(440px, calc(100vw - 48px))",
-					maxHeight: "calc(100vh - 48px)",
-					overflowY: "auto",
+					width: "min(760px, calc(100vw - 48px))",
+					height: "min(640px, calc(100vh - 48px))",
+					display: "flex",
+					flexDirection: "column",
+					overflow: "hidden",
 					background: theme.colors.surface,
 					border: `1px solid ${theme.colors.border}`,
 					borderRadius: 12,
-					padding: 24,
 					boxShadow: "0 12px 48px rgba(0,0,0,0.4)",
 					color: theme.colors.text,
 				}}
 			>
-				<div style={{ marginBottom: 4 }}>
+				<div
+					style={{
+						padding: "18px 24px 14px",
+						borderBottom: `1px solid ${theme.colors.border}`,
+						background: theme.colors.background,
+					}}
+				>
 					<span style={{ fontSize: theme.fontSizes[3], fontWeight: 600 }}>
 						Settings
 					</span>
-				</div>
-				<p
-					style={{
-						margin: "0 0 16px",
-						fontSize: theme.fontSizes[0],
-						color: muted,
-						lineHeight: 1.5,
-					}}
-				>
-					Choose which tabs appear in the strip by default. Changes apply
-					immediately and persist across launches.
-				</p>
-
-				<div
-					style={{
-						fontSize: theme.fontSizes[0],
-						fontWeight: 600,
-						color: muted,
-						textTransform: "uppercase",
-						letterSpacing: "0.04em",
-						marginBottom: 8,
-					}}
-				>
-					Default tabs
+					<p
+						style={{
+							margin: "4px 0 0",
+							fontSize: theme.fontSizes[0],
+							color: muted,
+							lineHeight: 1.5,
+						}}
+					>
+						{activeTabMeta.description}
+					</p>
 				</div>
 
 				<div
 					style={{
 						display: "flex",
-						flexDirection: "column",
-						gap: 8,
-						marginBottom: 20,
+						flex: 1,
+						minHeight: 0,
+						overflow: "hidden",
 					}}
 				>
-					{TAB_TOGGLES.map((row) => {
-						const on = settings?.defaultTabs[row.key] ?? true;
-						const busy = savingKey === row.key;
-						return (
-							<label
-								key={row.key}
+					<nav
+						style={{
+							width: 184,
+							flexShrink: 0,
+							display: "flex",
+							flexDirection: "column",
+							gap: 4,
+							padding: 12,
+							borderRight: `1px solid ${theme.colors.border}`,
+							background: theme.colors.background,
+							overflowY: "auto",
+						}}
+					>
+						{SETTINGS_TABS.map((tab) => {
+							const Icon = tab.icon;
+							const active = activeTab === tab.id;
+							return (
+								<button
+									key={tab.id}
+									type="button"
+									onClick={() => setActiveTab(tab.id)}
+									style={{
+										display: "flex",
+										alignItems: "center",
+										gap: 10,
+										width: "100%",
+										padding: "8px 10px",
+										borderRadius: 8,
+										border: `1px solid ${active ? theme.colors.border : "transparent"}`,
+										background: active ? theme.colors.surface : "transparent",
+										color: active ? theme.colors.text : muted,
+										fontFamily: theme.fonts.body,
+										fontSize: theme.fontSizes[1],
+										fontWeight: active ? 600 : 500,
+										textAlign: "left",
+										cursor: "pointer",
+									}}
+								>
+									<span
+										style={{
+											display: "flex",
+											flexShrink: 0,
+											color: active ? theme.colors.primary : muted,
+										}}
+									>
+										<Icon size={16} />
+									</span>
+									<span style={{ minWidth: 0 }}>{tab.label}</span>
+								</button>
+							);
+						})}
+					</nav>
+
+					<div
+						style={{
+							flex: 1,
+							minWidth: 0,
+							overflowY: "auto",
+							padding: "20px 24px",
+						}}
+					>
+						{activeTab === "tabs" && (
+							<div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+								{TAB_TOGGLES.map((row) => {
+									const on = settings?.defaultTabs[row.key] ?? true;
+									const busy = savingKey === row.key;
+									return (
+										<label
+											key={row.key}
+											style={{
+												display: "flex",
+												alignItems: "center",
+												gap: 12,
+												padding: "10px 12px",
+												borderRadius: 8,
+												background: theme.colors.background,
+												border: `1px solid ${theme.colors.border}`,
+												cursor: settings && !busy ? "pointer" : "default",
+												opacity: settings ? 1 : 0.6,
+											}}
+										>
+											<input
+												type="checkbox"
+												checked={on}
+												disabled={!settings || busy}
+												onChange={() => void toggle(row.key)}
+												style={{
+													width: 16,
+													height: 16,
+													accentColor: theme.colors.primary,
+													cursor:
+														settings && !busy ? "pointer" : "default",
+													flexShrink: 0,
+												}}
+											/>
+											<span style={{ minWidth: 0, flex: 1 }}>
+												<span
+													style={{
+														display: "block",
+														fontSize: theme.fontSizes[1],
+														fontWeight: 600,
+														lineHeight: 1.3,
+													}}
+												>
+													{row.label}
+												</span>
+												<span
+													style={{
+														display: "block",
+														fontSize: theme.fontSizes[0],
+														color: muted,
+														lineHeight: 1.4,
+														marginTop: 2,
+													}}
+												>
+													{row.description}
+												</span>
+											</span>
+										</label>
+									);
+								})}
+							</div>
+						)}
+
+						{activeTab === "auditing" && (
+							<>
+								<label
+									style={{
+										display: "flex",
+										alignItems: "center",
+										gap: 12,
+										padding: "10px 12px",
+										marginBottom: 8,
+										borderRadius: 8,
+										background: theme.colors.background,
+										border: `1px solid ${theme.colors.border}`,
+										cursor:
+											settings && savingKey !== "autoAccept"
+												? "pointer"
+												: "default",
+										opacity: settings ? 1 : 0.6,
+									}}
+								>
+									<input
+										type="checkbox"
+										checked={
+											settings?.autoAcceptSubsystemModelProposals ?? false
+										}
+										disabled={!settings || savingKey === "autoAccept"}
+										onChange={() => void toggleAutoAccept()}
+										style={{
+											width: 16,
+											height: 16,
+											accentColor: theme.colors.primary,
+											cursor:
+												settings && savingKey !== "autoAccept"
+													? "pointer"
+													: "default",
+											flexShrink: 0,
+										}}
+									/>
+									<span style={{ minWidth: 0, flex: 1 }}>
+										<span
+											style={{
+												display: "block",
+												fontSize: theme.fontSizes[1],
+												fontWeight: 600,
+												lineHeight: 1.3,
+											}}
+										>
+											Auto-accept correction proposals
+										</span>
+										<span
+											style={{
+												display: "block",
+												fontSize: theme.fontSizes[0],
+												color: muted,
+												lineHeight: 1.4,
+												marginTop: 2,
+											}}
+										>
+											Apply agent patches immediately. Leave off until you
+											trust the proposals — default is confirm each change.
+										</span>
+									</span>
+								</label>
+
+								<label
+									style={{
+										display: "flex",
+										alignItems: "center",
+										gap: 12,
+										padding: "10px 12px",
+										marginBottom: 8,
+										borderRadius: 8,
+										background: theme.colors.background,
+										border: `1px solid ${theme.colors.border}`,
+										cursor:
+											settings && savingKey !== "regularAudit"
+												? "pointer"
+												: "default",
+										opacity: settings ? 1 : 0.6,
+									}}
+								>
+									<input
+										type="checkbox"
+										checked={settings?.regularAuditEnabled ?? true}
+										disabled={!settings || savingKey === "regularAudit"}
+										onChange={() => void toggleRegularAudit()}
+										style={{
+											width: 16,
+											height: 16,
+											accentColor: theme.colors.primary,
+											cursor:
+												settings && savingKey !== "regularAudit"
+													? "pointer"
+													: "default",
+											flexShrink: 0,
+										}}
+									/>
+									<span style={{ minWidth: 0, flex: 1 }}>
+										<span
+											style={{
+												display: "block",
+												fontSize: theme.fontSizes[1],
+												fontWeight: 600,
+												lineHeight: 1.3,
+											}}
+										>
+											Regular subsystem audit
+										</span>
+										<span
+											style={{
+												display: "block",
+												fontSize: theme.fontSizes[0],
+												color: muted,
+												lineHeight: 1.4,
+												marginTop: 2,
+											}}
+										>
+											While Studio is open, dry-run audit all stored subsystem
+											models on a schedule so list badges stay current.
+										</span>
+									</span>
+								</label>
+
+								<div
+									style={{
+										padding: "10px 12px",
+										marginBottom: 8,
+										borderRadius: 8,
+										background: theme.colors.background,
+										border: `1px solid ${theme.colors.border}`,
+										opacity:
+											settings?.regularAuditEnabled === false ? 0.55 : 1,
+									}}
+								>
+									<label
+										htmlFor="regular-audit-interval"
+										style={{
+											display: "block",
+											fontSize: theme.fontSizes[1],
+											fontWeight: 600,
+											lineHeight: 1.3,
+											marginBottom: 6,
+										}}
+									>
+										Audit interval
+									</label>
+									<select
+										id="regular-audit-interval"
+										value={settings?.regularAuditIntervalMinutes ?? 5}
+										disabled={
+											!settings ||
+											settings.regularAuditEnabled === false ||
+											savingKey === "regularAuditInterval"
+										}
+										onChange={(e) =>
+											void setRegularAuditInterval(Number(e.target.value))
+										}
+										style={{
+											width: "100%",
+											padding: "6px 8px",
+											borderRadius: 6,
+											border: `1px solid ${theme.colors.border}`,
+											background: theme.colors.surface,
+											color: theme.colors.text,
+											fontFamily: theme.fonts.body,
+											fontSize: theme.fontSizes[1],
+											cursor:
+												settings && settings.regularAuditEnabled !== false
+													? "pointer"
+													: "default",
+										}}
+									>
+										{intervalOptions.map((opt) => (
+											<option key={opt.value} value={opt.value}>
+												{opt.label}
+											</option>
+										))}
+									</select>
+								</div>
+
+								<div
+									style={{
+										padding: "10px 12px",
+										borderRadius: 8,
+										background: theme.colors.background,
+										border: `1px solid ${theme.colors.border}`,
+										textAlign: "left",
+									}}
+								>
+									<span
+										style={{
+											display: "block",
+											fontSize: theme.fontSizes[1],
+											fontWeight: 600,
+											lineHeight: 1.3,
+										}}
+									>
+										Maintainer model
+									</span>
+									<span
+										style={{
+											display: "block",
+											fontSize: theme.fontSizes[0],
+											color: muted,
+											lineHeight: 1.45,
+											marginTop: 4,
+										}}
+									>
+										{maintainerModels
+											? `Auto free-tier → ${maintainerModels.resolved} (${maintainerModels.source}${
+													maintainerModels.freeCount > 0
+														? ` · ${maintainerModels.freeCount} free found`
+														: ""
+												}). Manual picker coming later.`
+											: "Discovering free OpenCode models…"}
+									</span>
+								</div>
+							</>
+						)}
+
+						{activeTab === "tools" && (
+							<button
+								type="button"
+								onClick={openPrompt}
 								style={{
 									display: "flex",
 									alignItems: "center",
 									gap: 12,
+									width: "100%",
 									padding: "10px 12px",
 									borderRadius: 8,
 									background: theme.colors.background,
 									border: `1px solid ${theme.colors.border}`,
-									cursor: settings && !busy ? "pointer" : "default",
-									opacity: settings ? 1 : 0.6,
+									color: theme.colors.text,
+									fontFamily: theme.fonts.body,
+									textAlign: "left",
+									cursor: "pointer",
 								}}
 							>
-								<input
-									type="checkbox"
-									checked={on}
-									disabled={!settings || busy}
-									onChange={() => void toggle(row.key)}
-									style={{
-										width: 16,
-										height: 16,
-										accentColor: theme.colors.primary,
-										cursor: settings && !busy ? "pointer" : "default",
-										flexShrink: 0,
-									}}
-								/>
+								<span style={{ color: theme.colors.primary, flexShrink: 0 }}>
+									<ScrollText size={18} />
+								</span>
 								<span style={{ minWidth: 0, flex: 1 }}>
 									<span
 										style={{
@@ -346,7 +712,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 											lineHeight: 1.3,
 										}}
 									>
-										{row.label}
+										Concept-extractor prompt
 									</span>
 									<span
 										style={{
@@ -357,292 +723,23 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 											marginTop: 2,
 										}}
 									>
-										{row.description}
+										Open the prompt used for concept extraction
 									</span>
 								</span>
-							</label>
-						);
-					})}
+							</button>
+						)}
+					</div>
 				</div>
 
 				<div
-					style={{
-						fontSize: theme.fontSizes[0],
-						fontWeight: 600,
-						color: muted,
-						textTransform: "uppercase",
-						letterSpacing: "0.04em",
-						marginBottom: 8,
-					}}
-				>
-					Model maintainer
-				</div>
-				<label
 					style={{
 						display: "flex",
-						alignItems: "center",
-						gap: 12,
-						padding: "10px 12px",
-						marginBottom: 8,
-						borderRadius: 8,
+						justifyContent: "flex-end",
+						padding: "14px 24px",
+						borderTop: `1px solid ${theme.colors.border}`,
 						background: theme.colors.background,
-						border: `1px solid ${theme.colors.border}`,
-						cursor: settings && savingKey !== "autoAccept" ? "pointer" : "default",
-						opacity: settings ? 1 : 0.6,
 					}}
 				>
-					<input
-						type="checkbox"
-						checked={settings?.autoAcceptSubsystemModelProposals ?? false}
-						disabled={!settings || savingKey === "autoAccept"}
-						onChange={() => void toggleAutoAccept()}
-						style={{
-							width: 16,
-							height: 16,
-							accentColor: theme.colors.primary,
-							cursor:
-								settings && savingKey !== "autoAccept" ? "pointer" : "default",
-							flexShrink: 0,
-						}}
-					/>
-					<span style={{ minWidth: 0, flex: 1 }}>
-						<span
-							style={{
-								display: "block",
-								fontSize: theme.fontSizes[1],
-								fontWeight: 600,
-								lineHeight: 1.3,
-							}}
-						>
-							Auto-accept correction proposals
-						</span>
-						<span
-							style={{
-								display: "block",
-								fontSize: theme.fontSizes[0],
-								color: muted,
-								lineHeight: 1.4,
-								marginTop: 2,
-							}}
-						>
-							Apply agent patches immediately. Leave off until you trust the
-							proposals — default is confirm each change.
-						</span>
-					</span>
-				</label>
-
-				<label
-					style={{
-						display: "flex",
-						alignItems: "center",
-						gap: 12,
-						padding: "10px 12px",
-						marginBottom: 8,
-						borderRadius: 8,
-						background: theme.colors.background,
-						border: `1px solid ${theme.colors.border}`,
-						cursor:
-							settings && savingKey !== "regularAudit" ? "pointer" : "default",
-						opacity: settings ? 1 : 0.6,
-					}}
-				>
-					<input
-						type="checkbox"
-						checked={settings?.regularAuditEnabled ?? true}
-						disabled={!settings || savingKey === "regularAudit"}
-						onChange={() => void toggleRegularAudit()}
-						style={{
-							width: 16,
-							height: 16,
-							accentColor: theme.colors.primary,
-							cursor:
-								settings && savingKey !== "regularAudit"
-									? "pointer"
-									: "default",
-							flexShrink: 0,
-						}}
-					/>
-					<span style={{ minWidth: 0, flex: 1 }}>
-						<span
-							style={{
-								display: "block",
-								fontSize: theme.fontSizes[1],
-								fontWeight: 600,
-								lineHeight: 1.3,
-							}}
-						>
-							Regular subsystem audit
-						</span>
-						<span
-							style={{
-								display: "block",
-								fontSize: theme.fontSizes[0],
-								color: muted,
-								lineHeight: 1.4,
-								marginTop: 2,
-							}}
-						>
-							While Studio is open, dry-run audit all stored subsystem models
-							on a schedule so list badges stay current.
-						</span>
-					</span>
-				</label>
-
-				<div
-					style={{
-						padding: "10px 12px",
-						marginBottom: 8,
-						borderRadius: 8,
-						background: theme.colors.background,
-						border: `1px solid ${theme.colors.border}`,
-						opacity: settings?.regularAuditEnabled === false ? 0.55 : 1,
-					}}
-				>
-					<label
-						htmlFor="regular-audit-interval"
-						style={{
-							display: "block",
-							fontSize: theme.fontSizes[1],
-							fontWeight: 600,
-							lineHeight: 1.3,
-							marginBottom: 6,
-						}}
-					>
-						Audit interval
-					</label>
-					<select
-						id="regular-audit-interval"
-						value={settings?.regularAuditIntervalMinutes ?? 5}
-						disabled={
-							!settings ||
-							settings.regularAuditEnabled === false ||
-							savingKey === "regularAuditInterval"
-						}
-						onChange={(e) =>
-							void setRegularAuditInterval(Number(e.target.value))
-						}
-						style={{
-							width: "100%",
-							padding: "6px 8px",
-							borderRadius: 6,
-							border: `1px solid ${theme.colors.border}`,
-							background: theme.colors.surface,
-							color: theme.colors.text,
-							fontFamily: theme.fonts.body,
-							fontSize: theme.fontSizes[1],
-							cursor:
-								settings && settings.regularAuditEnabled !== false
-									? "pointer"
-									: "default",
-						}}
-					>
-						{intervalOptions.map((opt) => (
-							<option key={opt.value} value={opt.value}>
-								{opt.label}
-							</option>
-						))}
-					</select>
-				</div>
-
-				<div
-					style={{
-						padding: "10px 12px",
-						marginBottom: 20,
-						borderRadius: 8,
-						background: theme.colors.background,
-						border: `1px solid ${theme.colors.border}`,
-						textAlign: "left",
-					}}
-				>
-					<span
-						style={{
-							display: "block",
-							fontSize: theme.fontSizes[1],
-							fontWeight: 600,
-							lineHeight: 1.3,
-						}}
-					>
-						Maintainer model
-					</span>
-					<span
-						style={{
-							display: "block",
-							fontSize: theme.fontSizes[0],
-							color: muted,
-							lineHeight: 1.45,
-							marginTop: 4,
-						}}
-					>
-						{maintainerModels
-							? `Auto free-tier → ${maintainerModels.resolved} (${maintainerModels.source}${
-									maintainerModels.freeCount > 0
-										? ` · ${maintainerModels.freeCount} free found`
-										: ""
-								}). Manual picker coming later.`
-							: "Discovering free OpenCode models…"}
-					</span>
-				</div>
-
-				<div
-					style={{
-						fontSize: theme.fontSizes[0],
-						fontWeight: 600,
-						color: muted,
-						textTransform: "uppercase",
-						letterSpacing: "0.04em",
-						marginBottom: 8,
-					}}
-				>
-					Tools
-				</div>
-				<button
-					type="button"
-					onClick={openPrompt}
-					style={{
-						display: "flex",
-						alignItems: "center",
-						gap: 12,
-						width: "100%",
-						padding: "10px 12px",
-						marginBottom: 20,
-						borderRadius: 8,
-						background: theme.colors.background,
-						border: `1px solid ${theme.colors.border}`,
-						color: theme.colors.text,
-						fontFamily: theme.fonts.body,
-						textAlign: "left",
-						cursor: "pointer",
-					}}
-				>
-					<span style={{ color: theme.colors.primary, flexShrink: 0 }}>
-						<ScrollText size={18} />
-					</span>
-					<span style={{ minWidth: 0, flex: 1 }}>
-						<span
-							style={{
-								display: "block",
-								fontSize: theme.fontSizes[1],
-								fontWeight: 600,
-								lineHeight: 1.3,
-							}}
-						>
-							Concept-extractor prompt
-						</span>
-						<span
-							style={{
-								display: "block",
-								fontSize: theme.fontSizes[0],
-								color: muted,
-								lineHeight: 1.4,
-								marginTop: 2,
-							}}
-						>
-							Open the prompt used for concept extraction
-						</span>
-					</span>
-				</button>
-
-				<div style={{ display: "flex", justifyContent: "flex-end" }}>
 					<button
 						type="button"
 						onClick={onClose}

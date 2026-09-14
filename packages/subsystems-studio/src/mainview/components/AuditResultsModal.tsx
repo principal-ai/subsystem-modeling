@@ -1241,6 +1241,18 @@ export function AuditResultsModal({
 		setApplying(null);
 	}, [reportKey]);
 
+	useEffect(() => {
+		if (!canDismiss) return;
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (e.key === "Escape") {
+				e.preventDefault();
+				onClose();
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [canDismiss, onClose]);
+
 	const doneReport =
 		state.phase === "done" ? (localReport ?? state.report) : null;
 
