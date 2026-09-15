@@ -10,7 +10,8 @@
  * repo-normalized form, and `accumulated` the AgentSessionEvent the File City
  * UI actually renders (null when the accumulator drops the event).
  *
- * Dark diagnostic palette — intentionally self-contained rather than themed.
+ * Surfaces and typography come from the theme; the categorical event-hue palette
+ * (kind/operation/todo colors) stays self-contained.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -420,9 +421,9 @@ function RawEventCard({
           minWidth: 0,
           overflow: 'hidden',
           border: '1px dashed #1f2937',
-          backgroundColor: '#0d1117',
+          backgroundColor: theme.colors.background,
           fontFamily: theme.fonts.body,
-          fontSize: 12,
+          fontSize: theme.fontSizes[0],
         }}
       >
         <span style={{ color: '#4b5563', fontStyle: 'italic' }}>no raw payload</span>
@@ -483,7 +484,7 @@ function RawEventCard({
                 const todos = (state?.input as AnyRecord | undefined)?.['todos'];
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ fontSize: 12, color: '#9ca3af' }}>
+                    <div style={{ fontSize: theme.fontSizes[0], color: '#9ca3af' }}>
                       callID {String(part?.callID ?? '')} · {String(state?.status ?? '')}
                     </div>
                     {Array.isArray(todos) ? <TodosView todos={todos} /> : null}
@@ -545,9 +546,9 @@ function RawEventCard({
         borderRadius: 0,
         minWidth: 0,
         overflow: 'hidden',
-        backgroundColor: expanded ? '#111827' : '#161b26',
+        backgroundColor: expanded ? theme.colors.backgroundSecondary : theme.colors.surface,
         fontFamily: theme.fonts.body,
-        fontSize: 13,
+        fontSize: theme.fontSizes[0],
       }}
     >
       <button
@@ -566,10 +567,10 @@ function RawEventCard({
           textAlign: 'left',
         }}
       >
-        <span style={{ color: '#6b7280', fontSize: 11, whiteSpace: 'nowrap' }}>#{event.seq}</span>
+        <span style={{ color: '#6b7280', fontSize: theme.fontSizes[0], whiteSpace: 'nowrap' }}>#{event.seq}</span>
         <span
           style={{
-            fontSize: 11,
+            fontSize: theme.fontSizes[0],
             fontWeight: 600,
             textTransform: 'uppercase',
             letterSpacing: 0.5,
@@ -583,7 +584,7 @@ function RawEventCard({
           <span
             title={`${runCount} separate runs of this command`}
             style={{
-              fontSize: 11,
+              fontSize: theme.fontSizes[0],
               fontWeight: 700,
               color: '#f59e0b',
               whiteSpace: 'nowrap',
@@ -596,7 +597,7 @@ function RawEventCard({
           <span
             title={`${snapshotCount} raw event snapshots collapsed into this row`}
             style={{
-              fontSize: 11,
+              fontSize: theme.fontSizes[0],
               fontWeight: 600,
               color: '#60a5fa',
               whiteSpace: 'nowrap',
@@ -616,7 +617,7 @@ function RawEventCard({
         >
           {describe(event)}
         </span>
-        <span style={{ color: '#6b7280', fontSize: 11, whiteSpace: 'nowrap' }}>
+        <span style={{ color: '#6b7280', fontSize: theme.fontSizes[0], whiteSpace: 'nowrap' }}>
           {formatTime(eventTimestamp(event))}
         </span>
       </button>
@@ -673,7 +674,7 @@ function NormalizedEventCard({
         overflow: 'hidden',
         backgroundColor: expanded ? '#0d1520' : '#101722',
         fontFamily: theme.fonts.body,
-        fontSize: 13,
+        fontSize: theme.fontSizes[0],
       }}
     >
       <button
@@ -692,10 +693,10 @@ function NormalizedEventCard({
           textAlign: 'left',
         }}
       >
-        <span style={{ color: '#6b7280', fontSize: 11, whiteSpace: 'nowrap' }}>#{seq}</span>
+        <span style={{ color: '#6b7280', fontSize: theme.fontSizes[0], whiteSpace: 'nowrap' }}>#{seq}</span>
         <span
           style={{
-            fontSize: 11,
+            fontSize: theme.fontSizes[0],
             fontWeight: 600,
             textTransform: 'uppercase',
             letterSpacing: 0.5,
@@ -716,7 +717,7 @@ function NormalizedEventCard({
         >
           {normalizedDescribe(event)}
         </span>
-        <span style={{ color: '#6b7280', fontSize: 11, whiteSpace: 'nowrap' }}>
+        <span style={{ color: '#6b7280', fontSize: theme.fontSizes[0], whiteSpace: 'nowrap' }}>
           {formatTime(event.timestamp)}
         </span>
       </button>
@@ -734,7 +735,7 @@ function NormalizedEventCard({
           />
           {event.files && event.files.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              <div style={{ fontSize: 11, color: '#6b7280' }}>files ({event.files.length})</div>
+              <div style={{ fontSize: theme.fontSizes[0], color: '#6b7280' }}>files ({event.files.length})</div>
               {event.files.map((file, i) => (
                 <FileRow key={i} file={file} />
               ))}
@@ -756,14 +757,14 @@ function FileRow({ file }: { file: NormalizedPathInfo }) {
       <div
         style={{
           color: '#93c5fd',
-          fontSize: 12,
+          fontSize: theme.fontSizes[0],
           wordBreak: 'break-word',
           fontFamily: theme.fonts.monospace,
         }}
       >
         {file.displayPath}
       </div>
-      <div style={{ color: '#6b7280', fontSize: 11, wordBreak: 'break-word' }}>
+      <div style={{ color: '#6b7280', fontSize: theme.fontSizes[0], wordBreak: 'break-word' }}>
         {file.context}
         {file.repository
           ? ` · ${file.repository.gitRoot} → ${file.repository.relativePath}`
@@ -815,9 +816,9 @@ function AccumulatedEventCard({
           minWidth: 0,
           overflow: 'hidden',
           border: '1px dashed #1f2937',
-          backgroundColor: '#0d1117',
+          backgroundColor: theme.colors.background,
           fontFamily: theme.fonts.body,
-          fontSize: 12,
+          fontSize: theme.fontSizes[0],
         }}
       >
         <span style={{ color: '#374151', whiteSpace: 'nowrap' }}>#{seq}</span>
@@ -842,7 +843,7 @@ function AccumulatedEventCard({
         overflow: 'hidden',
         backgroundColor: expanded ? '#121a13' : '#141b16',
         fontFamily: theme.fonts.body,
-        fontSize: 13,
+        fontSize: theme.fontSizes[0],
       }}
     >
       <button
@@ -870,10 +871,10 @@ function AccumulatedEventCard({
             backgroundColor: event.sessionColor,
           }}
         />
-        <span style={{ color: '#6b7280', fontSize: 11, whiteSpace: 'nowrap' }}>#{seq}</span>
+        <span style={{ color: '#6b7280', fontSize: theme.fontSizes[0], whiteSpace: 'nowrap' }}>#{seq}</span>
         <span
           style={{
-            fontSize: 11,
+            fontSize: theme.fontSizes[0],
             fontWeight: 600,
             textTransform: 'uppercase',
             letterSpacing: 0.5,
@@ -894,7 +895,7 @@ function AccumulatedEventCard({
         >
           {event.description}
         </span>
-        <span style={{ color: '#6b7280', fontSize: 11, whiteSpace: 'nowrap' }}>
+        <span style={{ color: '#6b7280', fontSize: theme.fontSizes[0], whiteSpace: 'nowrap' }}>
           {formatTime(event.timestamp)}
         </span>
       </button>
@@ -910,18 +911,18 @@ function AccumulatedEventCard({
               ['childSessionId', event.childSessionId],
             ]}
           />
-          <div style={{ fontSize: 12, color: '#6b7280' }}>{event.description}</div>
+          <div style={{ fontSize: theme.fontSizes[0], color: '#6b7280' }}>{event.description}</div>
           {event.files.length > 0 ? <PathList label="files" paths={event.files} /> : null}
           {event.dependencies.length > 0 ? (
             <PathList label="dependencies" paths={event.dependencies} />
           ) : null}
           {event.layers.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <div style={{ fontSize: 11, color: '#6b7280' }}>layers</div>
+              <div style={{ fontSize: theme.fontSizes[0], color: '#6b7280' }}>layers</div>
               {event.layers.map((layer) => (
                 <div
                   key={layer.id}
-                  style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12 }}
+                  style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: theme.fontSizes[0] }}
                 >
                   <span
                     style={{
@@ -949,11 +950,11 @@ function PathList({ label, paths }: { label: string; paths: NormalizedPathInfo[]
   const { theme } = useTheme();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <div style={{ fontSize: 11, color: '#6b7280' }}>{label}</div>
+      <div style={{ fontSize: theme.fontSizes[0], color: '#6b7280' }}>{label}</div>
       {paths.map((p, i) => (
         <div
           key={i}
-          style={{ color: '#93c5fd', fontSize: 11.5, fontFamily: theme.fonts.monospace, wordBreak: 'break-word' }}
+          style={{ color: '#93c5fd', fontSize: theme.fontSizes[0], fontFamily: theme.fonts.monospace, wordBreak: 'break-word' }}
         >
           {p.displayPath}
         </div>
@@ -963,12 +964,13 @@ function PathList({ label, paths }: { label: string; paths: NormalizedPathInfo[]
 }
 
 function TextView({ text }: { text?: string }) {
-  if (!text) return <div style={{ color: '#6b7280', fontSize: 12 }}>(empty)</div>;
+  const { theme } = useTheme();
+  if (!text) return <div style={{ color: '#6b7280', fontSize: theme.fontSizes[0] }}>(empty)</div>;
   return (
     <div
       style={{
         color: '#d1d5db',
-        fontSize: 12.5,
+        fontSize: theme.fontSizes[0],
         lineHeight: 1.5,
         maxHeight: 120,
         overflowY: 'auto',
@@ -988,11 +990,12 @@ const TODO_STATUS_COLORS: Record<string, string> = {
 };
 
 function TodosView({ todos }: { todos: Array<Record<string, unknown>> }) {
+  const { theme } = useTheme();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <div style={{ fontSize: 11, color: '#6b7280' }}>todos ({todos.length})</div>
+      <div style={{ fontSize: theme.fontSizes[0], color: '#6b7280' }}>todos ({todos.length})</div>
       {todos.map((t, i) => (
-        <div key={i} style={{ display: 'flex', gap: 8, fontSize: 12, alignItems: 'baseline' }}>
+        <div key={i} style={{ display: 'flex', gap: 8, fontSize: theme.fontSizes[0], alignItems: 'baseline' }}>
           <span
             style={{
               color: TODO_STATUS_COLORS[String(t.status ?? '')] ?? '#6b7280',
@@ -1013,13 +1016,15 @@ function TodosView({ todos }: { todos: Array<Record<string, unknown>> }) {
   );
 }
 
-function ToolIO({ input, output }: { input?: unknown; output?: unknown }) {  const summary = toolSummary(input);
+function ToolIO({ input, output }: { input?: unknown; output?: unknown }) {
+  const { theme } = useTheme();
+  const summary = toolSummary(input);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {summary ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11, color: '#60a5fa', fontWeight: 600 }}>IN</span>
-          <code style={{ color: '#93c5fd', fontSize: 12, wordBreak: 'break-word' }}>{summary}</code>
+          <span style={{ fontSize: theme.fontSizes[0], color: '#60a5fa', fontWeight: 600 }}>IN</span>
+          <code style={{ color: '#93c5fd', fontSize: theme.fontSizes[0], wordBreak: 'break-word' }}>{summary}</code>
         </div>
       ) : null}
       {input !== undefined && input !== null && typeof input === 'object' ? (
@@ -1028,8 +1033,8 @@ function ToolIO({ input, output }: { input?: unknown; output?: unknown }) {  con
       {output !== undefined && output !== null ? (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 11, color: '#34d399', fontWeight: 600 }}>OUT</span>
-            <span style={{ fontSize: 11, color: '#6b7280' }}>
+            <span style={{ fontSize: theme.fontSizes[0], color: '#34d399', fontWeight: 600 }}>OUT</span>
+            <span style={{ fontSize: theme.fontSizes[0], color: '#6b7280' }}>
               {typeof output === 'string' ? `${output.length.toLocaleString()} chars` : 'object'}
             </span>
           </div>
@@ -1041,15 +1046,16 @@ function ToolIO({ input, output }: { input?: unknown; output?: unknown }) {  con
 }
 
 function CodeBlock({ value }: { value: string }) {
+  const { theme } = useTheme();
   return (
     <pre
       style={{
         margin: 0,
         padding: 8,
         borderRadius: 6,
-        backgroundColor: '#0b1220',
+        backgroundColor: theme.colors.background,
         color: '#9ca3af',
-        fontSize: 11.5,
+        fontSize: theme.fontSizes[0],
         lineHeight: 1.45,
         maxHeight: 180,
         overflow: 'auto',
@@ -1063,12 +1069,13 @@ function CodeBlock({ value }: { value: string }) {
 }
 
 function MetaRows({ rows }: { rows: Array<[string, unknown]> }) {
+  const { theme } = useTheme();
   const present = rows.filter(([, v]) => v !== undefined && v !== null && v !== '');
   if (present.length === 0) return null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
       {present.map(([label, value]) => (
-        <div key={label} style={{ display: 'flex', gap: 8, fontSize: 12 }}>
+        <div key={label} style={{ display: 'flex', gap: 8, fontSize: theme.fontSizes[0] }}>
           <span style={{ color: '#6b7280', minWidth: 76, whiteSpace: 'nowrap' }}>{label}</span>
           <span
             style={{
@@ -1372,7 +1379,7 @@ export function SessionEventFeed({ title, rows }: SessionEventFeedProps) {
   const expandedCount = visibleEvents.filter((r) => !collapsed.has(r.seq)).length;
 
   return (
-    <div style={{ padding: 24, backgroundColor: '#0d1117', minHeight: '100vh' }}>
+    <div style={{ padding: 24, backgroundColor: theme.colors.background, minHeight: '100vh' }}>
       <div
         style={{
           display: 'flex',
@@ -1382,8 +1389,8 @@ export function SessionEventFeed({ title, rows }: SessionEventFeedProps) {
           fontFamily: theme.fonts.body,
         }}
       >
-        <h1 style={{ margin: 0, color: '#f3f4f6', fontSize: 18, fontWeight: 600 }}>{title}</h1>
-        <span style={{ color: '#6b7280', fontSize: 12 }}>
+        <h1 style={{ margin: 0, color: '#f3f4f6', fontSize: theme.fontSizes[3], fontWeight: 600 }}>{title}</h1>
+        <span style={{ color: '#6b7280', fontSize: theme.fontSizes[0] }}>
           {items.length} raw events · {visibleEvents.length} visible · {expandedCount} expanded
         </span>
       </div>
@@ -1454,9 +1461,9 @@ export function SessionEventFeedGrouped({ title, rows }: SessionEventFeedGrouped
   }, [items]);
 
   return (
-    <div style={{ padding: 24, backgroundColor: '#0d1117', minHeight: '100vh' }}>
+    <div style={{ padding: 24, backgroundColor: theme.colors.background, minHeight: '100vh' }}>
       {title ? (
-        <h1 style={{ margin: '0 0 12px', color: '#f3f4f6', fontSize: 18, fontWeight: 600, fontFamily: theme.fonts.body }}>
+        <h1 style={{ margin: '0 0 12px', color: '#f3f4f6', fontSize: theme.fontSizes[3], fontWeight: 600, fontFamily: theme.fonts.body }}>
           {title}
         </h1>
       ) : null}
@@ -1494,10 +1501,10 @@ function GroupSection({
           fontFamily: theme.fonts.body,
         }}
       >
-        <span style={{ color: kindColor(kind), fontWeight: 600, fontSize: 13 }}>
+        <span style={{ color: kindColor(kind), fontWeight: 600, fontSize: theme.fontSizes[0] }}>
           {kindLabel(kind)}
         </span>
-        <span style={{ color: '#6b7280', fontSize: 12 }}>{group.length}</span>
+        <span style={{ color: '#6b7280', fontSize: theme.fontSizes[0] }}>{group.length}</span>
         <span style={{ flex: 1 }} />
         <FilterChip label="Expand all" active={false} onClick={() => setAll(false)} />
         <FilterChip label="Collapse all" active={false} onClick={() => setAll(true)} />
@@ -1531,7 +1538,7 @@ function ColumnHeaders() {
         gap: 8,
         padding: '8px 14px',
         marginBottom: 8,
-        backgroundColor: '#0d1117',
+        backgroundColor: theme.colors.background,
         borderBottom: '1px solid #1f2937',
         fontFamily: theme.fonts.body,
       }}
@@ -1546,10 +1553,11 @@ function ColumnHeaders() {
 }
 
 function HeaderLabel({ children }: { children: React.ReactNode }) {
+  const { theme } = useTheme();
   return (
     <span
       style={{
-        fontSize: 11,
+        fontSize: theme.fontSizes[0],
         fontWeight: 600,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
@@ -1742,7 +1750,7 @@ function EventRow({
           cursor: 'pointer',
           background: copied ? 'rgba(16,185,129,0.12)' : 'transparent',
           color: copied ? '#10b981' : theme.colors.textTertiary,
-          fontSize: 12,
+          fontSize: theme.fontSizes[0],
         }}
       >
         {copied ? <Check size={13} /> : <Copy size={13} />}
@@ -1777,6 +1785,7 @@ function FilterChip({
   color?: string;
   onClick: () => void;
 }) {
+  const { theme } = useTheme();
   return (
     <button
       onClick={onClick}
@@ -1786,7 +1795,7 @@ function FilterChip({
         border: `1px solid ${active ? color ?? '#3b82f6' : '#1f2937'}`,
         backgroundColor: active ? (color ?? '#3b82f6') + '22' : 'transparent',
         color: active ? '#f3f4f6' : '#9ca3af',
-        fontSize: 11.5,
+        fontSize: theme.fontSizes[0],
         cursor: 'pointer',
         fontFamily: 'inherit',
       }}

@@ -174,7 +174,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
           left: BADGE_EDGE_INSET,
           zIndex: 1,
           fontFamily: theme.fonts.monospace,
-          fontSize: theme.fontSizes[0] * 1.1,
+          fontSize: theme.fontSizes[1],
           letterSpacing: 0.5,
           textTransform: 'uppercase',
           lineHeight: '17px',
@@ -208,7 +208,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
             <span
               style={{
                 fontFamily: theme.fonts.monospace,
-                fontSize: theme.fontSizes[0] * 1.1,
+                fontSize: theme.fontSizes[1],
                 letterSpacing: 0.5,
                 textTransform: 'uppercase',
                 lineHeight: '17px',
@@ -226,7 +226,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
             <span
               style={{
                 fontFamily: theme.fonts.monospace,
-                fontSize: theme.fontSizes[0] * 1.1,
+                fontSize: theme.fontSizes[1],
                 letterSpacing: 0.5,
                 textTransform: 'uppercase',
                 lineHeight: '17px',
@@ -255,7 +255,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
             transform: 'translateX(-50%)',
             zIndex: 1,
             fontFamily: theme.fonts.monospace,
-            fontSize: theme.fontSizes[0] * 1.1,
+            fontSize: theme.fontSizes[1],
             letterSpacing: 0.5,
             lineHeight: '17px',
             whiteSpace: 'nowrap',
@@ -311,7 +311,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
             .replace(/\(\)$/, '') && (
         <div
           style={{
-            fontSize: theme.fontSizes[0] * 0.82,
+            fontSize: theme.fontSizes[0],
             fontFamily: theme.fonts.monospace,
             color: color,
             marginTop: 1,

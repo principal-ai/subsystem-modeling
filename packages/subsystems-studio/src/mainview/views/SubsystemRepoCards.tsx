@@ -279,7 +279,7 @@ export function SubsystemRepoCards({
 										title={gfBadge.title}
 										style={{
 											flexShrink: 0,
-											fontSize: 10,
+											fontSize: theme.fontSizes[0],
 											fontWeight: 600,
 											letterSpacing: 0.3,
 											textTransform: "uppercase",

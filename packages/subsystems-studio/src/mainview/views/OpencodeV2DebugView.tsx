@@ -208,7 +208,7 @@ export function OpencodeV2DebugView() {
 	};
 
 	const label: CSSProperties = {
-		fontSize: 12,
+		fontSize: theme.fontSizes[0],
 		letterSpacing: "0.04em",
 		textTransform: "uppercase",
 		color: muted,
@@ -227,7 +227,7 @@ export function OpencodeV2DebugView() {
 		cursor: busy || probeBusy ? "default" : "pointer",
 		opacity: busy ? 0.7 : 1,
 		fontWeight: 600,
-		fontSize: 13,
+		fontSize: theme.fontSizes[0],
 	};
 
 	const formatTime = (at: number) =>
@@ -240,10 +240,10 @@ export function OpencodeV2DebugView() {
 	return (
 		<div style={{ height: "100%", overflow: "auto", padding: 24 }}>
 			<div style={card}>
-				<h1 style={{ fontSize: 22, margin: "0 0 8px", fontWeight: 650 }}>
+				<h1 style={{ fontSize: theme.fontSizes[4], margin: "0 0 8px", fontWeight: 650 }}>
 					OpenCode V2
 				</h1>
-				<p style={{ margin: "0 0 24px", color: muted, fontSize: 14, lineHeight: 1.45 }}>
+				<p style={{ margin: "0 0 24px", color: muted, fontSize: theme.fontSizes[1], lineHeight: 1.45 }}>
 					Debug surface for the Maintain runtime: detect/install{" "}
 					<code>opencode2</code>, then run a probe session and watch live SSE
 					events.
@@ -255,12 +255,12 @@ export function OpencodeV2DebugView() {
 					</p>
 				) : null}
 				{message ? (
-					<p style={{ color: muted, marginBottom: 16, fontSize: 13 }}>{message}</p>
+					<p style={{ color: muted, marginBottom: 16, fontSize: theme.fontSizes[0] }}>{message}</p>
 				) : null}
 
 				<div style={row}>
 					<div style={label}>Status</div>
-					<div style={{ fontSize: 16, fontWeight: 600 }}>
+					<div style={{ fontSize: theme.fontSizes[2], fontWeight: 600 }}>
 						{installed ? "Installed" : "Not installed"}
 						{busy ? (
 							<span style={{ marginLeft: 10, color: muted, fontWeight: 500 }}>
@@ -272,19 +272,19 @@ export function OpencodeV2DebugView() {
 
 				<div style={row}>
 					<div style={label}>Binary</div>
-					<div style={{ fontSize: 13, wordBreak: "break-all" }}>
+					<div style={{ fontSize: theme.fontSizes[0], wordBreak: "break-all" }}>
 						{status?.bin ?? "—"}
 					</div>
 				</div>
 
 				<div style={row}>
 					<div style={label}>Installed version</div>
-					<div style={{ fontSize: 13 }}>{status?.installedVersion ?? "—"}</div>
+					<div style={{ fontSize: theme.fontSizes[0] }}>{status?.installedVersion ?? "—"}</div>
 				</div>
 
 				<div style={row}>
 					<div style={label}>Latest beta</div>
-					<div style={{ fontSize: 13 }}>
+					<div style={{ fontSize: theme.fontSizes[0] }}>
 						{status?.latestVersion ?? "…"}
 						{status?.updateAvailable ? (
 							<span style={{ marginLeft: 8, color: theme.colors.warning ?? "#c90" }}>
@@ -296,12 +296,12 @@ export function OpencodeV2DebugView() {
 
 				<div style={row}>
 					<div style={label}>Install command</div>
-					<code style={{ fontSize: 12 }}>{status?.installCommand}</code>
+					<code style={{ fontSize: theme.fontSizes[0] }}>{status?.installCommand}</code>
 				</div>
 
 				<div style={row}>
 					<div style={label}>Background server</div>
-					<div style={{ fontSize: 13 }}>
+					<div style={{ fontSize: theme.fontSizes[0] }}>
 						{server == null
 							? "…"
 							: server.running
@@ -317,9 +317,9 @@ export function OpencodeV2DebugView() {
 
 				<div style={row}>
 					<div style={label}>Recent sessions</div>
-					<div style={{ fontSize: 16, fontWeight: 600 }}>
+					<div style={{ fontSize: theme.fontSizes[2], fontWeight: 600 }}>
 						{server == null ? "…" : server.recentCount}
-						<span style={{ marginLeft: 8, fontSize: 13, fontWeight: 500, color: muted }}>
+						<span style={{ marginLeft: 8, fontSize: theme.fontSizes[0], fontWeight: 500, color: muted }}>
 							in the last 10 minutes
 						</span>
 					</div>
@@ -387,10 +387,10 @@ export function OpencodeV2DebugView() {
 					}}
 				/>
 
-				<h2 style={{ fontSize: 16, margin: "0 0 8px", fontWeight: 650 }}>
+				<h2 style={{ fontSize: theme.fontSizes[2], margin: "0 0 8px", fontWeight: 650 }}>
 					Event probe
 				</h2>
-				<p style={{ margin: "0 0 16px", color: muted, fontSize: 13, lineHeight: 1.45 }}>
+				<p style={{ margin: "0 0 16px", color: muted, fontSize: theme.fontSizes[0], lineHeight: 1.45 }}>
 					Starts (or reuses) the background service, opens{" "}
 					<code>/api/event</code>, creates a short session, prompts it, and
 					streams matching SSE events here.
@@ -398,10 +398,10 @@ export function OpencodeV2DebugView() {
 
 				<div style={row}>
 					<div style={label}>Probe status</div>
-					<div style={{ fontSize: 14, fontWeight: 600 }}>
+					<div style={{ fontSize: theme.fontSizes[1], fontWeight: 600 }}>
 						{probe?.status ?? "idle"}
 						{probe?.sessionId ? (
-							<span style={{ marginLeft: 10, fontWeight: 500, color: muted, fontSize: 12 }}>
+							<span style={{ marginLeft: 10, fontWeight: 500, color: muted, fontSize: theme.fontSizes[0] }}>
 								{probe.sessionId}
 							</span>
 						) : null}
@@ -409,7 +409,7 @@ export function OpencodeV2DebugView() {
 				</div>
 
 				{probe?.error ? (
-					<p style={{ color: theme.colors.danger ?? "#e55", marginBottom: 12, fontSize: 13 }}>
+					<p style={{ color: theme.colors.danger ?? "#e55", marginBottom: 12, fontSize: theme.fontSizes[0] }}>
 						{probe.error}
 					</p>
 				) : null}
@@ -459,7 +459,7 @@ export function OpencodeV2DebugView() {
 						background: "rgba(0,0,0,0.25)",
 						padding: "10px 12px",
 						fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-						fontSize: 11,
+						fontSize: theme.fontSizes[0],
 						lineHeight: 1.45,
 					}}
 				>

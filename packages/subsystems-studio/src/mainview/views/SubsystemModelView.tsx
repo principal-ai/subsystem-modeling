@@ -444,7 +444,7 @@ function SelectionInspector({ selection }: { selection: ExcalidrawSelectionInfo 
 		<div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
 			<span
 				style={{
-					fontSize: theme.fontSizes[0] * 0.8,
+					fontSize: theme.fontSizes[0],
 					fontFamily: theme.fonts.monospace,
 					textTransform: "uppercase",
 					color: muted,
@@ -472,7 +472,7 @@ function SelectionInspector({ selection }: { selection: ExcalidrawSelectionInfo 
 						</span>
 						<span
 							style={{
-								fontSize: theme.fontSizes[0] * 0.8,
+								fontSize: theme.fontSizes[0],
 								fontFamily: theme.fonts.monospace,
 								textTransform: "uppercase",
 								color: muted,
@@ -499,7 +499,7 @@ function SelectionInspector({ selection }: { selection: ExcalidrawSelectionInfo 
 									>
 										<span
 											style={{
-												fontSize: theme.fontSizes[0] * 0.8,
+												fontSize: theme.fontSizes[0],
 												fontFamily: theme.fonts.monospace,
 												textTransform: "uppercase",
 												color: muted,

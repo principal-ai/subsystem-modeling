@@ -153,7 +153,7 @@ export function SubsystemFileTree({ files, selectedFile, hoveredFile, onSelectFi
         >
           <span
             style={{
-              fontSize: theme.fontSizes[0] * 0.8,
+              fontSize: theme.fontSizes[0],
               fontFamily: theme.fonts.monospace,
               textTransform: 'uppercase',
               color: muted,
@@ -162,7 +162,7 @@ export function SubsystemFileTree({ files, selectedFile, hoveredFile, onSelectFi
           >
             Files
           </span>
-          <span style={{ fontSize: theme.fontSizes[0] * 0.8, fontFamily: theme.fonts.monospace, color: muted }}>
+          <span style={{ fontSize: theme.fontSizes[0], fontFamily: theme.fonts.monospace, color: muted }}>
             {paths.length}
           </span>
         </div>

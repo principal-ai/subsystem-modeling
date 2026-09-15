@@ -132,7 +132,7 @@ export function SubsystemCarousel({
         </button>
 
         <div style={{ textAlign: 'center', minWidth: 0, flex: 1 }}>
-          <div id={titleId} style={{ fontWeight: 600, fontSize: 22 }}>
+          <div id={titleId} style={{ fontWeight: 600, fontSize: theme.fontSizes[4] }}>
             {selected.title}
           </div>
         </div>

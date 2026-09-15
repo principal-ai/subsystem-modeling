@@ -85,10 +85,10 @@ export function MaintainEventsView({
 	return (
 		<div style={wrap}>
 			<div style={{ marginBottom: 12 }}>
-				<div style={{ fontSize: 18, fontWeight: 650 }}>
+				<div style={{ fontSize: theme.fontSizes[3], fontWeight: 650 }}>
 					{title ?? "Maintain events"}
 				</div>
-				<div style={{ marginTop: 4, fontSize: 12, color: muted }}>
+				<div style={{ marginTop: 4, fontSize: theme.fontSizes[0], color: muted }}>
 					{agent ? `${agent} · ` : null}
 					{sessionId}
 					{" · "}
@@ -97,7 +97,7 @@ export function MaintainEventsView({
 					{events.length} events
 				</div>
 				{error ? (
-					<div style={{ marginTop: 8, color: theme.colors.danger ?? "#e55", fontSize: 13 }}>
+					<div style={{ marginTop: 8, color: theme.colors.danger ?? "#e55", fontSize: theme.fontSizes[0] }}>
 						{error}
 					</div>
 				) : null}
@@ -113,7 +113,7 @@ export function MaintainEventsView({
 					background: "rgba(0,0,0,0.25)",
 					padding: "10px 12px",
 					fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-					fontSize: 11,
+					fontSize: theme.fontSizes[0],
 					lineHeight: 1.45,
 				}}
 			>

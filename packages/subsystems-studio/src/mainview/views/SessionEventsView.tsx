@@ -170,7 +170,7 @@ export function SessionEventsView({
 							: `Load more (${state.rows.length} / ${state.total})`}
 					</button>
 					{state.loadMoreError ? (
-						<span style={{ color: "#ef4444", fontSize: 12 }}>
+						<span style={{ color: "#ef4444", fontSize: theme.fontSizes[0] }}>
 							{state.loadMoreError}
 						</span>
 					) : null}
