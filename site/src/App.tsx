@@ -20,6 +20,9 @@ const ModelMaintainer = lazy(() =>
 const MaintainerOverview = lazy(() =>
   import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerOverview })),
 )
+const MaintainerIssues = lazy(() =>
+  import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerIssues })),
+)
 const MaintainerConstruct = lazy(() =>
   import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerConstruct })),
 )
@@ -312,6 +315,14 @@ function App() {
               element={
                 <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
                   <MaintainerOverview />
+                </Suspense>
+              }
+            />
+            <Route
+              path="issues"
+              element={
+                <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
+                  <MaintainerIssues />
                 </Suspense>
               }
             />

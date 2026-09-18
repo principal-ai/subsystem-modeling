@@ -60,7 +60,6 @@ import {
 import {
 	getSubsystemModel,
 	purlRepoKey,
-	resolveRepoRootForComponent,
 	updateSubsystemModel,
 	verifyModelFiles,
 } from "./subsystem-model-store";
@@ -224,9 +223,12 @@ function declarationFreshness(
 	liveHash: string | null,
 ): NonNullable<SubsystemComponentVerificationResult["declaration"]>["freshness"] {
 	if (liveHash == null) return "missing";
-	if (!stored) return "valid";
-	if (stored.startLine !== startLine || stored.lineHash !== liveHash) return "stale";
-	return "valid";
+	if (!stored) return "fresh";
+	// Drift is positional: has the declaration moved? Content changes are the
+	// signature check's job; `lineHash` stays stored for the re-pin but no
+	// longer trips staleness (a single line is a weak content fingerprint).
+	if (stored.startLine !== startLine) return "stale";
+	return "fresh";
 }
 
 async function captureDeclaration(
@@ -345,16 +347,8 @@ export async function verifySubsystemComponent(
 		};
 	}
 
-	const purlKey =
-		purlRepoKey(component.purl) ??
-		(graph.repo
-			? `pkg:github/${graph.repo.owner}/${graph.repo.name}`
-			: undefined);
-	const fromGraph = resolveRepoRootForComponent(graph, component.purl);
-	const repoRoot =
-		(fromGraph && existsSync(fromGraph) ? fromGraph : null) ||
-		(purlKey ? resolveRepoRootForPurl(purlKey) : null) ||
-		(graph.repoRoot && existsSync(graph.repoRoot) ? graph.repoRoot : null);
+	const purlKey = purlRepoKey(component.purl);
+	const repoRoot = purlKey ? resolveRepoRootForPurl(purlKey) : null;
 
 	const fileResult: SubsystemComponentVerificationResult["file"] = {
 		exists: false,
@@ -383,13 +377,9 @@ export async function verifySubsystemComponent(
 		};
 	}
 
-	const readiness = assessSubsystemGraphifyReadiness(
-		{
-			components: [{ purl: purlKey }],
-			repoRoot: repoRoot ?? undefined,
-			repoRoots: graph.repoRoots,
-		},
-	);
+	const readiness = assessSubsystemGraphifyReadiness({
+		components: [{ purl: purlKey }],
+	});
 	const purlStatus = readiness.purls[0]?.status ?? "unavailable";
 	const cacheStatus =
 		purlStatus === "ready"
@@ -892,7 +882,7 @@ export async function auditSubsystemModel(
 
 	// missing_file findings are attached in the per-component loop so we can
 	// include a deterministic Graphify file-relocate fix when available.
-	// Symbol presence is graphify-only (exact anchor). No text-regex missing_symbol.
+	// Symbol presence is graphify-only (exact anchor).
 
 	let unresolved = 0;
 	let staleDeclarations = 0;
@@ -902,7 +892,7 @@ export async function auditSubsystemModel(
 	let okComponents = 0;
 	let filesVerified = 0;
 	let symbolsVerified = 0;
-	let declarationsValid = 0;
+	let declarationsFresh = 0;
 	let constructsMatched = 0;
 	let signaturesMatched = 0;
 	let anchorsExact = 0;
@@ -910,6 +900,10 @@ export async function auditSubsystemModel(
 	let missingSymbols = 0;
 
 	const seenComponentIssue = new Set<string>([...missingFileIds]);
+	// Availability findings are per-repo (purl), not per-component: one finding
+	// per unavailable repo rather than one per node that lives in it.
+	const repoUnresolvedPurls = new Set<string>();
+	const cacheUnavailablePurls = new Set<string>();
 
 	for (const c of graph.components) {
 		if (
@@ -960,20 +954,20 @@ export async function auditSubsystemModel(
 		};
 
 		if (!r.file?.repoRoot) {
+			const purl = (c.purl || "").trim();
 			check.fileExists = null;
 			check.graphify = "unavailable";
 			check.note = `No local repoRoot for ${c.purl || c.file || c.id}`;
 			check.verdict = "skipped";
-			if (!seenComponentIssue.has(c.id)) {
+			if (purl && !repoUnresolvedPurls.has(purl)) {
+				repoUnresolvedPurls.add(purl);
 				findings.push({
-					kind: "unresolved",
+					kind: "repo_unresolved",
 					severity: "info",
-					componentId: c.id,
-					componentName: c.name,
-					message: check.note,
+					purl,
+					message: `Repo ${purl} is not available locally — clone it to verify its components`,
 				});
 				unresolved++;
-				seenComponentIssue.add(c.id);
 			}
 			checks.push(check);
 			continue;
@@ -1017,7 +1011,7 @@ export async function auditSubsystemModel(
 
 		if (r.declaration?.freshness) {
 			check.declarationFreshness = r.declaration.freshness;
-			if (r.declaration.freshness === "valid") declarationsValid++;
+			if (r.declaration.freshness === "fresh") declarationsFresh++;
 			if (r.declaration.freshness === "stale") {
 				issue = true;
 				const stored = c.declarationRef;
@@ -1032,12 +1026,10 @@ export async function auditSubsystemModel(
 					componentId: c.id,
 					componentName: c.name,
 					message: fix
-						? `Declaration drifted — Graphify pins L${fix.declarationRef.startLine}${
+						? `Declaration moved — Graphify pins L${fix.declarationRef.startLine}${
 								stored ? ` (model had L${stored.startLine})` : ""
 							}`
-						: `Declaration line hash stale${
-								stored ? ` (stored L${stored.startLine})` : ""
-							}`,
+						: `Declaration moved${stored ? ` (stored L${stored.startLine})` : ""}`,
 					fix,
 				});
 				staleDeclarations++;
@@ -1138,28 +1130,41 @@ export async function auditSubsystemModel(
 				check.graphify = "confirmed";
 			} else {
 				check.graphify = "weak";
-				issue = true;
-				findings.push({
-					kind: "anchor",
-					severity: "warn",
-					componentId: c.id,
-					componentName: c.name,
-					message: `Graphify anchor ${resolution}${r.anchor?.label ? `: ${r.anchor.label}` : ""}`,
-				});
+				const base = { componentId: c.id, componentName: c.name };
+				if (resolution === "ambiguous") {
+					issue = true;
+					findings.push({
+						...base,
+						kind: "symbol_ambiguous",
+						severity: "error",
+						message: `Multiple Graphify nodes match ${c.symbol} (${r.anchor?.candidates?.length ?? 0} candidates)`,
+					});
+					seenComponentIssue.add(c.id);
+				} else {
+					findings.push({
+						...base,
+						kind: "symbol_unmatched",
+						severity: "info",
+						message: `No Graphify node matches symbol ${c.symbol} in ${c.file}`,
+					});
+				}
 				weakAnchors++;
-				seenComponentIssue.add(c.id);
 			}
 		} else if (r.cache && r.cache.status !== "ready") {
 			check.anchor = "n/a";
 			check.graphify = "unavailable";
 			check.note = `Graphify cache ${r.cache.status}`;
-			findings.push({
-				kind: "unresolved",
-				severity: "info",
-				componentId: c.id,
-				componentName: c.name,
-				message: `Graphify cache ${r.cache.status} for ${r.cache.purl}`,
-			});
+			const purl = r.cache.purl;
+			if (purl && !cacheUnavailablePurls.has(purl)) {
+				cacheUnavailablePurls.add(purl);
+				findings.push({
+					kind: "graphify_unavailable",
+					severity: "info",
+					purl,
+					message: `Graphify cache ${r.cache.status} for ${purl} — build it to verify constructs and anchors`,
+				});
+				unresolved++;
+			}
 		} else {
 			check.graphify = "unavailable";
 		}
@@ -1260,7 +1265,7 @@ export async function auditSubsystemModel(
 		components: graph.components.length,
 		filesVerified,
 		symbolsVerified,
-		declarationsValid,
+		declarationsFresh,
 		constructsMatched,
 		signaturesMatched,
 		anchorsExact,
@@ -1286,7 +1291,6 @@ export async function auditSubsystemModel(
 		modulesClaimed: boundary.summary.modulesClaimed,
 		moduleFileOk: boundary.summary.moduleFileOk,
 		moduleFileMismatch: boundary.summary.moduleFileMismatch,
-		moduleWithoutFile: boundary.summary.moduleWithoutFile,
 		processNestsChecked: boundary.summary.processNestsChecked,
 		processNestOk: boundary.summary.processNestOk,
 		processNestDisagree: boundary.summary.processNestDisagree,

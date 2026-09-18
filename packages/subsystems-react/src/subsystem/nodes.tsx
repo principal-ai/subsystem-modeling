@@ -29,6 +29,10 @@ import {
   deriveNameFromSymbol,
   BADGE_EDGE_INSET,
   nodeMinWidthForBadges,
+  MODULE_BADGE_INSET,
+  moduleBadgeLabel,
+  moduleBadgeHoverLabel,
+  moduleBadgeWidth,
   packageColor,
   type SubsystemGraphNodeData,
   type SubsystemGroupNodeData,
@@ -300,13 +304,11 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
       </div>
 
       {/* Hide the identity line when the symbol is just the title without its
-          decoration (`()`, ` {}`, or `<>`) — only show it when it adds
-          information (e.g. the dotted host on methods, or a different code
-          identity). */}
+          decoration (`()` or ` {}`) — only show it when it adds information
+          (e.g. the dotted host on methods, or a different code identity). */}
       {c.symbol &&
         c.symbol !==
           displayName
-            .replace(/^<(.+)>$/, '$1')
             .replace(/ ?\{\}$/, '')
             .replace(/\(\)$/, '') && (
         <div
@@ -354,9 +356,20 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
   // Kind is carried by frame chrome (square = process; rounded = module/package)
   // — don't prefix `module ·` / `package ·` or the path reads twice.
   const label = region?.label ?? '';
-  // Process frames match external nodes — square corners (outside the soft
-  // component language). Module / package frames keep the rounded look.
+  const [expandedLabel, setExpandedLabel] = useState<string | null>(null);
+  const isModule = region?.kind === 'module';
   const isProcess = region?.kind === 'process';
+  const expanded = isModule && expandedLabel === label;
+  const availableBadgeWidth = Math.max(0, (width ?? 400) - MODULE_BADGE_INSET * 2 - 4);
+  const collapsedLabel = isModule ? moduleBadgeLabel(label, availableBadgeWidth) : label;
+  // A module badge is collapsible while something collapsed, and stays
+  // togglable while expanded (so the full path can collapse back).
+  const canToggle = isModule && (expanded || collapsedLabel !== label);
+  // Hover affords clickability by revealing more of the path — the badge
+  // widens to fit real text (never stretched), hinting before the click.
+  const [hover, setHover] = useState(false);
+  const hoveredLabel =
+    isModule && canToggle ? moduleBadgeHoverLabel(label, availableBadgeWidth) : label;
   const frameRadius = isProcess ? 0 : 12;
   const badgeRadius = isProcess ? 0 : 4;
   // Processes are deployment units — solid frame. Modules/packages stay dashed
@@ -384,6 +397,27 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
       }}
     >
       <div
+        className={isModule ? 'nodrag nopan' : undefined}
+        role={canToggle ? 'button' : undefined}
+        tabIndex={canToggle && !hidden ? 0 : undefined}
+        aria-expanded={canToggle ? expanded : undefined}
+        aria-label={canToggle ? `${expanded ? 'Collapse' : 'Expand'} module path: ${label}` : undefined}
+        onMouseEnter={canToggle ? () => setHover(true) : undefined}
+        onMouseLeave={canToggle ? () => setHover(false) : undefined}
+        onClick={canToggle ? (event) => {
+          event.stopPropagation();
+          setExpandedLabel(expanded ? null : label);
+        } : undefined}
+        onKeyDown={canToggle ? (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            event.stopPropagation();
+            setExpandedLabel(expanded ? null : label);
+          } else if (event.key === 'Escape' && expanded) {
+            event.stopPropagation();
+            setExpandedLabel(null);
+          }
+        } : undefined}
         style={{
           position: 'absolute',
           // Process: badge fill starts with the process fill (inside the
@@ -394,6 +428,18 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
           top: isProcess ? 0 : -19,
           left: isProcess ? '50%' : 12,
           transform: isProcess ? 'translateX(-50%)' : 'none',
+          zIndex: canToggle ? 10 : undefined,
+          // Width is explicit while collapsible so hover-reveal of more path
+          // text animates; the cap keeps both states inside the frame.
+          width:
+            isModule && canToggle && !expanded
+              ? hover
+                ? Math.min(availableBadgeWidth, moduleBadgeWidth(hoveredLabel))
+                : Math.min(availableBadgeWidth, moduleBadgeWidth(collapsedLabel))
+              : undefined,
+          transition: 'width 140ms ease, box-shadow 120ms ease',
+          cursor: canToggle ? 'pointer' : undefined,
+          boxShadow: canToggle && hover ? `0 2px 10px ${color}55` : undefined,
           fontFamily: theme.fonts.monospace,
           fontSize: theme.fontSizes[3],
           fontWeight: 700,
@@ -405,9 +451,28 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
           borderRadius: badgeRadius,
           padding: '1px 7px',
           whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          boxSizing: 'border-box',
+          pointerEvents: hidden ? 'none' : 'auto',
+          ...(isModule
+            ? {
+                // Cap the collapsed badge at the frame's inner width so it
+                // never spills past the module — it gets the `…`/click-to-
+                // expand treatment instead. Expanding lifts the cap so the
+                // full path grows the badge past the frame's edge.
+                maxWidth: expanded ? undefined : availableBadgeWidth,
+              }
+            : undefined),
         }}
       >
-        {label}
+        {canToggle ? (
+          <span style={{ whiteSpace: 'nowrap' }}>
+            {expanded ? label : hover ? hoveredLabel : collapsedLabel}
+          </span>
+        ) : (
+          label
+        )}
       </div>
     </div>
   );

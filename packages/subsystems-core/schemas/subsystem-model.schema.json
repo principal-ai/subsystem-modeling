@@ -145,7 +145,7 @@
         },
         "file": {
           "type": "string",
-          "description": "Repo-root-relative path of the source location this component lives in. Joins onto `repoRoot` / `repoRoots` for reads. Empty string allowed for pure externals."
+          "description": "Repo-root-relative path of the source location this component lives in. Resolved against the checkout of the repo named by this component's `purl` (via the Alexandria registry). Empty string allowed for pure externals."
         },
         "purl": {
           "type": "string",

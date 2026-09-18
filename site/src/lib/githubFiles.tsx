@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import {
   PierreFileView,
+  PierreSnippetView,
   PierreWalkthroughCodeView,
   type SubsystemOpenFileOptions,
   type WalkthroughViewerContext,
@@ -114,14 +115,31 @@ export function makeGithubRenderers(
   if (!readFile) return null
 
   return {
-    renderFileViewer: (file, opts) => (
-      <PierreFileView
-        filePath={file}
-        fileName={file.split('/').pop() ?? file}
-        readFile={readFile}
-        focusLine={opts?.fullFile ? opts.startLine : undefined}
-      />
-    ),
+    renderFileViewer: (file, opts) => {
+      const startLine = opts?.startLine
+      const fileName = file.split('/').pop() ?? file
+      if (startLine != null && !opts?.fullFile) {
+        return (
+          <PierreSnippetView
+            filePath={file}
+            fileName={fileName}
+            startLine={startLine}
+            endLine={startLine}
+            focusLine={startLine}
+            contextLines={12}
+            readFile={readFile}
+          />
+        )
+      }
+      return (
+        <PierreFileView
+          filePath={file}
+          fileName={fileName}
+          readFile={readFile}
+          focusLine={opts?.fullFile ? startLine : undefined}
+        />
+      )
+    },
     renderWalkthroughViewer: (ctx) => (
       <PierreWalkthroughCodeView
         walkthrough={ctx.walkthrough}

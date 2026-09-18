@@ -48,7 +48,7 @@ describe("auditBoundaryFields", () => {
 		expect(r.findings).toEqual([]);
 	});
 
-	test("module without file is an issue", () => {
+	test("grounded module without file is ignored (rejected at input)", () => {
 		const r = auditBoundaryFields([
 			comp({
 				id: "boot",
@@ -58,10 +58,8 @@ describe("auditBoundaryFields", () => {
 				module: "src/host/main.ts",
 			}),
 		]);
-		expect(r.summary.moduleWithoutFile).toBe(1);
-		expect(r.checks[0]?.verdict).toBe("issue");
-		expect(r.findings[0]?.kind).toBe("boundary_module_without_file");
-		expect(r.findings[0]?.severity).toBe("error");
+		expect(r.findings).toEqual([]);
+		expect(r.checks).toEqual([]);
 	});
 
 	test("module without file skipped for external", () => {
@@ -73,7 +71,6 @@ describe("auditBoundaryFields", () => {
 				module: "pkg:npm/@xyflow/react",
 			}),
 		]);
-		expect(r.summary.moduleWithoutFile).toBe(0);
 		expect(r.checks[0]?.verdict).toBe("skipped");
 		expect(r.findings).toEqual([]);
 	});

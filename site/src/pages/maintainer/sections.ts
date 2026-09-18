@@ -1,5 +1,6 @@
 export type MaintainerSectionId =
   | 'overview'
+  | 'issues'
   | 'construct'
   | 'static-topology'
   | 'runtime-topology'
@@ -20,6 +21,12 @@ export const MAINTAINER_SECTIONS: MaintainerSection[] = [
     id: 'overview',
     path: '/maintainer',
     label: 'Overview',
+  },
+  {
+    id: 'issues',
+    path: '/maintainer/issues',
+    label: 'Issues',
+    shortLabel: 'Issues & fixes',
   },
   {
     id: 'construct',

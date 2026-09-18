@@ -41,7 +41,7 @@ export function MaintainModelPickerModal({
 
 	const agentLabel =
 		mode === "issues"
-			? "issue-fixer / boundary-fixer / topology-fixer"
+			? "issue-fixer / topology-fixer"
 			: "gap-filler / boundary-gap-filler / topology-gap-filler";
 	const actionLabel = "Run maintenance";
 

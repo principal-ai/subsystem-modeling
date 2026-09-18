@@ -58,8 +58,6 @@ export interface SubsystemModelIndexEntry {
   updatedAt: string;
   lastOpenedAt?: string;
   fileName: string;
-  source?: string;
-  repo?: { owner: string; name: string };
   /** Host-only gist link mirrored from the record. */
   gist?: { id: string; fileName?: string };
 }
@@ -79,10 +77,6 @@ export interface StoredSubsystemModel {
   createdAt: string;
   updatedAt: string;
   lastOpenedAt?: string;
-  source?: string;
-  repo?: { owner: string; name: string };
-  repoRoot?: string;
-  repoRoots?: Record<string, string>;
   /** Host-only GitHub gist link (not portable). */
   gist?: { id: string; fileName?: string };
   verification?: unknown;
@@ -94,10 +88,6 @@ export interface CreateSubsystemModelInput {
   components: unknown[];
   relations: unknown[];
   walkthroughs?: unknown[];
-  source?: string;
-  repo?: { owner: string; name: string };
-  repoRoot?: string;
-  repoRoots?: Record<string, string>;
 }
 
 function graphId(): string {
@@ -116,129 +106,6 @@ export function subsystemModelFilePath(id: string): string {
 
 async function ensureDir(): Promise<void> {
   await fs.mkdir(ROOT, { recursive: true });
-}
-
-const SUBSYSTEM_RELATION_TYPES = [
-  'imports', 'extends', 'inherits',
-  'implements', 'mixes_in', 'method', 'references',
-] as const;
-
-const SUBSYSTEM_WALKTHROUGH_MECHANISMS = [
-  'calls', 'uses', 'feeds', 'produces', 'writes', 'reads', 'watches', 'registers-into',
-] as const;
-
-export function findRelationTypeProblems(relations: unknown): string[] {
-  if (!Array.isArray(relations)) return ['relations must be an array'];
-  const problems: string[] = [];
-  for (const rel of relations) {
-    const r = rel as { id?: unknown; from?: unknown; to?: unknown; relationType?: unknown } | null;
-    if (typeof r?.id !== 'string' || !r.id.trim()) {
-      problems.push(`relation ${JSON.stringify(r?.id ?? '<no id>')}: id is required`);
-    }
-    if (typeof r?.from !== 'string' || !r.from.trim()) {
-      problems.push(`relation ${JSON.stringify(r?.id ?? '<no id>')}: from is required`);
-    }
-    if (typeof r?.to !== 'string' || !r.to.trim()) {
-      problems.push(`relation ${JSON.stringify(r?.id ?? '<no id>')}: to is required`);
-    }
-    if (
-      typeof r?.relationType !== 'string' ||
-      !(SUBSYSTEM_RELATION_TYPES as readonly string[]).includes(r.relationType)
-    ) {
-      problems.push(
-        `relation ${JSON.stringify(r?.id ?? '<no id>')}: unknown relationType ${JSON.stringify(r?.relationType)}`,
-      );
-    }
-  }
-  return problems;
-}
-
-export function findWalkthroughProblems(walkthroughs: unknown): string[] {
-  if (walkthroughs === undefined) return [];
-  if (!Array.isArray(walkthroughs)) return ['walkthroughs must be an array'];
-  const problems: string[] = [];
-  for (const wt of walkthroughs) {
-    const w = wt as { id?: unknown; title?: unknown; steps?: unknown } | null;
-    const label = JSON.stringify(w?.id ?? '<no id>');
-    if (typeof w?.id !== 'string' || !w.id.trim()) {
-      problems.push(`walkthrough ${label}: id is required`);
-      continue;
-    }
-    if (typeof w?.title !== 'string' || !w.title.trim()) {
-      problems.push(`walkthrough ${label}: title is required`);
-    }
-    if (!Array.isArray(w.steps)) {
-      problems.push(`walkthrough ${label}: steps array is required`);
-      continue;
-    }
-    w.steps.forEach((step, i) => {
-      const s = step as {
-        from?: unknown;
-        to?: unknown;
-        mechanism?: unknown;
-        file?: unknown;
-        line?: unknown;
-      } | null;
-      if (typeof s?.from !== 'string' || !s.from.trim()) {
-        problems.push(`walkthrough ${label}: step ${i} from is required`);
-      }
-      if (typeof s?.to !== 'string' || !s.to.trim()) {
-        problems.push(`walkthrough ${label}: step ${i} to is required`);
-      }
-      if (
-        typeof s?.mechanism !== 'string' ||
-        !(SUBSYSTEM_WALKTHROUGH_MECHANISMS as readonly string[]).includes(s.mechanism)
-      ) {
-        problems.push(`walkthrough ${label}: step ${i} unknown mechanism ${JSON.stringify(s?.mechanism)}`);
-      }
-      if (typeof s?.file !== 'string' || !s.file.trim()) {
-        problems.push(`walkthrough ${label}: step ${i} file is required`);
-      } else if (typeof s?.line !== 'number' || !Number.isInteger(s.line) || s.line < 1) {
-        problems.push(`walkthrough ${label}: step ${i} line must be a positive 1-based integer`);
-      }
-    });
-  }
-  return problems;
-}
-
-export function findComponentConstructProblems(components: unknown): string[] {
-  if (!Array.isArray(components)) return [];
-  const problems: string[] = [];
-  for (const component of components) {
-    const c = component as { id?: unknown; construct?: unknown } | null;
-    if (
-      typeof c?.construct === 'string' &&
-      (SUBSYSTEM_COMPONENT_CONSTRUCTS as readonly string[]).includes(c.construct)
-    ) {
-      continue;
-    }
-    problems.push(
-      `component ${JSON.stringify(c?.id ?? '<no id>')}: invalid construct ${JSON.stringify(c?.construct)} — allowed: ${SUBSYSTEM_COMPONENT_CONSTRUCTS.join(', ')}. A module is its own subsystem: anchor to a concrete export (symbol + file), or publish it as a separate graph and reference it.`,
-    );
-  }
-  return problems;
-}
-
-export function findDeclarationProvenanceProblems(components: unknown): string[] {
-  if (!Array.isArray(components)) return [];
-  const problems: string[] = [];
-  for (const component of components) {
-    const c = component as Record<string, unknown> | null;
-    if (!c || typeof c !== 'object') continue;
-    if (!c['declaration']) continue;
-    const p = c['declarationProvenance'];
-    if (p === undefined) continue;
-    if (
-      typeof p === 'string' &&
-      (SUBSYSTEM_DECLARATION_PROVENANCES as readonly string[]).includes(p)
-    ) {
-      continue;
-    }
-    problems.push(
-      `component ${JSON.stringify(String(c['id'] ?? '<no id>'))}: invalid declarationProvenance ${JSON.stringify(p)} — allowed: ${SUBSYSTEM_DECLARATION_PROVENANCES.join(', ')}. Hand-authored declarations must be "authored"; "verified" is reserved for tool-extracted data.`,
-    );
-  }
-  return problems;
 }
 
 export function normalizeDeclarationProvenance(components: unknown): void {
@@ -269,32 +136,7 @@ export function normalizeDeclarationProvenance(components: unknown): void {
   }
 }
 
-export function isRepoRoots(value: unknown): value is Record<string, string> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  return Object.values(value).every((v) => typeof v === 'string');
-}
-
 /** Structural problems that would make Studio reject a POST (empty = valid). */
-export function findCreateProblems(body: Record<string, unknown>): string[] {
-  const problems: string[] = [];
-  if (!body['title'] || typeof body['title'] !== 'string') {
-    problems.push('title is required');
-  }
-  if (!Array.isArray(body['components'])) {
-    problems.push('components array is required');
-  }
-  if (!Array.isArray(body['relations'])) {
-    problems.push('relations array is required');
-  }
-  if (problems.length > 0) return problems;
-  return [
-    ...findComponentConstructProblems(body['components']),
-    ...findDeclarationProvenanceProblems(body['components']),
-    ...findRelationTypeProblems(body['relations']),
-    ...findWalkthroughProblems(body['walkthroughs']),
-  ];
-}
-
 function indexEntryFor(record: StoredSubsystemModel): SubsystemModelIndexEntry {
   return {
     id: record.id,
@@ -309,8 +151,6 @@ function indexEntryFor(record: StoredSubsystemModel): SubsystemModelIndexEntry {
     updatedAt: record.updatedAt,
     lastOpenedAt: record.lastOpenedAt,
     fileName: `${record.id}.json`,
-    source: record.source,
-    repo: record.repo,
     gist: record.gist,
   };
 }
@@ -405,10 +245,6 @@ export async function updateSubsystemModel(
       | 'components'
       | 'relations'
       | 'walkthroughs'
-      | 'source'
-      | 'repo'
-      | 'repoRoot'
-      | 'repoRoots'
       | 'gist'
     >
   >,

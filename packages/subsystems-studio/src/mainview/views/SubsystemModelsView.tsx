@@ -1,12 +1,9 @@
 /**
  * SubsystemModelsView — the "Subsystems" tab: a list of stored subsystem
- * graphs (~/.principal/subsystem-models). Clicking a row opens the graph in a
- * subsystem-model tab via the host.
- *
- * A strip of repo cards across the top (see `SubsystemRepoCards.tsx`)
- * aggregates unique GitHub repos from the visible graphs (component purls,
- * falling back to each graph's authored `repo`). Click cards to AND-filter
- * the list.
+ * graphs (~/.principal/subsystem-models) with an aggregate file tree on the
+ * left (union of `summary.files` across the listed graphs, grouped per repo).
+ * Clicking a row opens the graph in a subsystem-model tab via the host;
+ * clicking a file opens its owning graph.
  *
  * The list polls every 10s so graphs posted via the HTTP API appear without
  * reopening the viewer. Host-side regular audit (Settings) refreshes
@@ -14,11 +11,17 @@
  * proposals show a separate badge to review before/after + why.
  */
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Bot, Check, Copy, Loader2, Share2 } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
+import {
+	buildRepoGroups,
+	purlRepoKey,
+	repoAvatarUrl,
+	SubsystemFileTree,
+	type RepoGroup,
+} from "@principal-ai/subsystems-react";
 import type {
-	GraphifyRepoEntry,
 	RegularAuditStatus,
 	SubsystemModelAuditReport,
 	SubsystemModelSummary,
@@ -32,14 +35,6 @@ import {
 	subsystemModelMaintainChangeSubscribers,
 	subsystemModelProposalsChangeSubscribers,
 } from "../rpc";
-import {
-	EMPTY_REPO_FILTER,
-	parseGithubRepo,
-	repoKey,
-	SubsystemRepoCards,
-	type RepoCardGraphify,
-	type SubsystemRepoCard,
-} from "./SubsystemRepoCards";
 import {
 	AuditResultsModal,
 	type AuditModalState,
@@ -78,14 +73,6 @@ type ListAuditEntry =
 	  }
 	| { status: "error"; error: string; title?: string };
 
-function reportIssueCount(report: SubsystemModelAuditReport): number {
-	const fromFindings = report.findings.filter(
-		(f) => f.severity === "error" || f.severity === "warn",
-	).length;
-	if (fromFindings > 0) return fromFindings;
-	return report.checks.filter((c) => c.verdict === "issue").length;
-}
-
 function entryFromLastAudit(
 	lastAudit: NonNullable<SubsystemModelSummary["lastAudit"]>,
 	existing?: ListAuditEntry,
@@ -114,20 +101,6 @@ function entryFromLastAudit(
 		issueCount: lastAudit.issueCount,
 		report: keepReport,
 	};
-}
-
-/**
- * Sort key for issue count. Higher = more issues.
- * Unaudited → -1 (last). Audit failed → Infinity (first).
- * Fully verified → 0; partially verified → 0.25; issues by count.
- */
-function listAuditIssueSortValue(entry: ListAuditEntry | undefined): number {
-	if (!entry || entry.status === "auditing") return -1;
-	if (entry.status === "error") return Number.POSITIVE_INFINITY;
-	if (entry.status === "fully_verified") return entry.stale ? 0.1 : 0;
-	if (entry.status === "partially_verified") return entry.stale ? 0.35 : 0.25;
-	const n = entry.issueCount ?? (entry.report ? reportIssueCount(entry.report) : 0);
-	return entry.stale ? n + 0.5 : n;
 }
 
 /** Map list audit status → Maintain mode (null = disabled). */
@@ -174,7 +147,6 @@ function agentDisplayName(
 		| "gap-filler"
 		| "topology-fixer"
 		| "topology-gap-filler"
-		| "boundary-fixer"
 		| "boundary-gap-filler"
 		| undefined,
 ): string {
@@ -182,7 +154,6 @@ function agentDisplayName(
 	if (agent === "gap-filler") return "Gap filler";
 	if (agent === "topology-fixer") return "Topology fixer";
 	if (agent === "topology-gap-filler") return "Topology gap filler";
-	if (agent === "boundary-fixer") return "Boundary fixer";
 	if (agent === "boundary-gap-filler") return "Boundary gap filler";
 	return "Maintainer";
 }
@@ -255,130 +226,27 @@ function listAuditBadge(
 }
 
 /** Listing sort offered by the Subsystems tab header. */
-type SubsystemSortKey = "opened" | "edited" | "created" | "issues";
+type SubsystemSortKey = "opened" | "edited" | "created";
 
 const SUBSYSTEM_SORTS: ReadonlyArray<{ key: SubsystemSortKey; label: string }> = [
 	{ key: "opened", label: "Opened" },
 	{ key: "edited", label: "Edited" },
 	{ key: "created", label: "Created" },
-	{ key: "issues", label: "Issues" },
 ];
 
 /**
  * Sort timestamp for a summary row. Last-opened treats never-opened graphs as
  * oldest (stamp is absent), so existing graphs keep their current relative
- * order until opened once. `"issues"` is handled separately via audit results.
+ * order until opened once.
  */
 function subsystemModelSortTime(
 	graph: SubsystemModelSummary,
-	sortKey: Exclude<SubsystemSortKey, "issues">,
+	sortKey: SubsystemSortKey,
 ): number {
 	if (sortKey === "edited") return new Date(graph.updatedAt).getTime();
 	if (sortKey === "created") return new Date(graph.createdAt).getTime();
 	const opened = graph.lastOpenedAt ? Date.parse(graph.lastOpenedAt) : NaN;
 	return Number.isFinite(opened) ? opened : 0;
-}
-
-function asRepoFilterSet(value: unknown): ReadonlySet<string> {
-	if (value instanceof Set) return value;
-	if (typeof value === "string" && value.length > 0) return new Set([value]);
-	if (Array.isArray(value)) return new Set(value.filter((k) => typeof k === "string"));
-	return EMPTY_REPO_FILTER;
-}
-
-/** Whether a listed graph references the given GitHub repo. */
-function graphUsesRepo(
-	graph: SubsystemModelSummary,
-	owner: string,
-	name: string,
-): boolean {
-	const key = repoKey(owner, name);
-	for (const p of graph.graphify?.purls ?? []) {
-		const repo = parseGithubRepo(p.purl);
-		if (repo && repoKey(repo.owner, repo.name) === key) return true;
-	}
-	return graph.repo != null && repoKey(graph.repo.owner, graph.repo.name) === key;
-}
-
-/**
- * Unique repos across the visible subsystem list, with Alexandria Graphify
- * freshness joined on when the repo is registered (`listGraphifyRepos`).
- */
-function collectReposFromGraphs(
-	graphs: SubsystemModelSummary[],
-	graphifyRepos: GraphifyRepoEntry[] | null,
-	recentIds: ReadonlySet<string> | null,
-): SubsystemRepoCard[] {
-	const byKey = new Map<
-		string,
-		{ owner: string; name: string; graphIds: Set<string>; maxUpdatedAt: number }
-	>();
-
-	const add = (owner: string, name: string, graphId: string, updatedAtMs: number) => {
-		const key = repoKey(owner, name);
-		let entry = byKey.get(key);
-		if (!entry) {
-			entry = { owner, name, graphIds: new Set(), maxUpdatedAt: 0 };
-			byKey.set(key, entry);
-		}
-		entry.graphIds.add(graphId);
-		if (Number.isFinite(updatedAtMs) && updatedAtMs > entry.maxUpdatedAt) {
-			entry.maxUpdatedAt = updatedAtMs;
-		}
-	};
-
-	for (const graph of graphs) {
-		const seenOnGraph = new Set<string>();
-		const updatedAtMs = new Date(graph.updatedAt).getTime();
-		for (const p of graph.graphify?.purls ?? []) {
-			const repo = parseGithubRepo(p.purl);
-			if (!repo) continue;
-			const key = repoKey(repo.owner, repo.name);
-			if (seenOnGraph.has(key)) continue;
-			seenOnGraph.add(key);
-			add(repo.owner, repo.name, graph.id, updatedAtMs);
-		}
-		if (graph.repo) {
-			const key = repoKey(graph.repo.owner, graph.repo.name);
-			if (!seenOnGraph.has(key)) {
-				add(graph.repo.owner, graph.repo.name, graph.id, updatedAtMs);
-			}
-		}
-	}
-
-	const freshnessByKey = new Map<string, GraphifyRepoEntry>();
-	for (const entry of graphifyRepos ?? []) {
-		freshnessByKey.set(repoKey(entry.owner, entry.name), entry);
-	}
-
-	return [...byKey.values()]
-		.sort(
-			(a, b) =>
-				b.maxUpdatedAt - a.maxUpdatedAt ||
-				b.graphIds.size - a.graphIds.size ||
-				a.owner.localeCompare(b.owner) ||
-				a.name.localeCompare(b.name),
-		)
-		.map((e) => {
-			const freshness = freshnessByKey.get(repoKey(e.owner, e.name));
-			const graphify: RepoCardGraphify | null = freshness
-				? {
-						status: freshness.status,
-						hasCached: freshness.cached != null,
-						purl: freshness.purl,
-						repoRoot: freshness.path,
-					}
-				: null;
-			return {
-				owner: e.owner,
-				name: e.name,
-				graphCount: e.graphIds.size,
-				hasRecent:
-					recentIds == null ||
-					[...e.graphIds].some((id) => recentIds.has(id)),
-				graphify,
-			};
-		});
 }
 
 function formatRegularAuditCountdown(status: RegularAuditStatus, nowMs: number): string {
@@ -404,7 +272,11 @@ function SubsystemsTabHeader({
 	showAll,
 	hiddenStaleCount,
 	onToggleShowAll,
+	issuesOnly,
+	onToggleIssuesOnly,
 	regularAudit,
+	searchQuery,
+	onSearchChange,
 }: {
 	lastLoadedAt: number | null;
 	sortBy: SubsystemSortKey;
@@ -412,7 +284,11 @@ function SubsystemsTabHeader({
 	showAll?: boolean;
 	hiddenStaleCount?: number;
 	onToggleShowAll?: () => void;
+	issuesOnly?: boolean;
+	onToggleIssuesOnly?: () => void;
 	regularAudit?: RegularAuditStatus | null;
+	searchQuery?: string;
+	onSearchChange?: (query: string) => void;
 }) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -443,7 +319,27 @@ function SubsystemsTabHeader({
 			}}
 		>
 			<div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-				<div style={{ fontSize: theme.fontSizes[2], fontWeight: 600 }}>Subsystems</div>
+				{onSearchChange && (
+					<input
+						type="search"
+						value={searchQuery ?? ""}
+						onChange={(e) => onSearchChange(e.target.value)}
+						placeholder="Filter subsystems…"
+						aria-label="Filter subsystem models"
+						style={{
+							fontSize: theme.fontSizes[1],
+							fontFamily: theme.fonts.body,
+							color: theme.colors.text,
+							background: theme.colors.background,
+							border: `1px solid ${theme.colors.border ?? "#333"}`,
+							borderRadius: 6,
+							padding: "4px 10px",
+							width: 200,
+							outline: "none",
+							flexShrink: 0,
+						}}
+					/>
+				)}
 				<div
 					role="group"
 					aria-label="Sort subsystems"
@@ -478,39 +374,88 @@ function SubsystemsTabHeader({
 						</button>
 					);
 				})}
-				{onToggleShowAll && (
-					<button
-						key="recent"
-						type="button"
-						title={
-							showAll
-								? "Show only graphs edited in the last day"
-								: hiddenStaleCount != null && hiddenStaleCount > 0
-									? `Show ${hiddenStaleCount} older hidden graph${hiddenStaleCount === 1 ? "" : "s"}`
-									: "Show graphs older than a day"
-						}
-						aria-pressed={!showAll}
-						onClick={onToggleShowAll}
-						style={{
-							fontSize: theme.fontSizes[0],
-							fontWeight: !showAll ? 600 : 400,
-							letterSpacing: 0.3,
-							textTransform: "uppercase",
-							padding: "1px 7px",
-							borderRadius: 999,
-							border: `1px solid ${
-								!showAll ? theme.colors.primary : "transparent"
-							}`,
-							background: !showAll ? `${theme.colors.primary}22` : "transparent",
-							color: !showAll ? theme.colors.primary : muted,
-							cursor: "pointer",
-							fontFamily: theme.fonts.body,
-						}}
-					>
-						Recent
-					</button>
-				)}
 				</div>
+				{(onToggleShowAll || onToggleIssuesOnly) && (
+					<>
+						<div
+							aria-hidden="true"
+							style={{
+								width: 1,
+								alignSelf: "stretch",
+								background: theme.colors.border ?? "#333",
+								flexShrink: 0,
+							}}
+						/>
+						<div
+							role="group"
+							aria-label="Filter subsystems"
+							style={{ display: "flex", alignItems: "center", gap: 4 }}
+						>
+							{onToggleShowAll && (
+							<button
+								key="recent"
+								type="button"
+								title={
+									showAll
+										? "Show only graphs edited in the last day"
+										: hiddenStaleCount != null && hiddenStaleCount > 0
+											? `Show ${hiddenStaleCount} older hidden graph${hiddenStaleCount === 1 ? "" : "s"}`
+											: "Show graphs older than a day"
+								}
+								aria-pressed={!showAll}
+								onClick={onToggleShowAll}
+								style={{
+									fontSize: theme.fontSizes[0],
+									fontWeight: !showAll ? 600 : 400,
+									letterSpacing: 0.3,
+									textTransform: "uppercase",
+									padding: "1px 7px",
+									borderRadius: 4,
+									border: `1px solid ${
+										!showAll ? theme.colors.primary : (theme.colors.border ?? "#333")
+									}`,
+									background: !showAll ? `${theme.colors.primary}22` : "transparent",
+									color: !showAll ? theme.colors.primary : muted,
+									cursor: "pointer",
+									fontFamily: theme.fonts.body,
+								}}
+							>
+								Recent
+							</button>
+							)}
+							{onToggleIssuesOnly && (
+							<button
+								key="issues"
+								type="button"
+								title={
+									issuesOnly
+										? "Show all graphs"
+										: "Show only graphs with failed verification or failed audits"
+								}
+								aria-pressed={issuesOnly}
+								onClick={onToggleIssuesOnly}
+								style={{
+									fontSize: theme.fontSizes[0],
+									fontWeight: issuesOnly ? 600 : 400,
+									letterSpacing: 0.3,
+									textTransform: "uppercase",
+									padding: "1px 7px",
+									borderRadius: 4,
+									border: `1px solid ${
+										issuesOnly ? theme.colors.primary : (theme.colors.border ?? "#333")
+									}`,
+									background: issuesOnly ? `${theme.colors.primary}22` : "transparent",
+									color: issuesOnly ? theme.colors.primary : muted,
+									cursor: "pointer",
+									fontFamily: theme.fonts.body,
+								}}
+							>
+								Issues
+							</button>
+							)}
+						</div>
+					</>
+				)}
 				{auditLabel && (
 					<div
 						title={
@@ -584,22 +529,223 @@ function SubsystemsTabShell({ children }: { children: ReactNode }) {
 	);
 }
 
+/**
+ * Left file panel for the Subsystems tab: per-repo Pierre `SubsystemFileTree`s
+ * over every visible subsystem, grouped with `buildRepoGroups` — the same
+ * primitives the detail graph sidebar uses. Fed by `summary.files` (the host
+ * already loads every full model per listing), so no detail fetches are
+ * needed. Clicking a file highlights its owning graph in the list; a shared
+ * file prefers the selected row's graph when it owns it, else the topmost
+ * owner in list order.
+ */
+function FilesPanel({
+	graphs,
+	selectedId,
+	width,
+	onHighlightGraph,
+}: {
+	graphs: SubsystemModelSummary[];
+	selectedId: string | null;
+	width: number;
+	onHighlightGraph: (graph: SubsystemModelSummary) => void;
+}) {
+	const { theme } = useTheme();
+	const byId = useMemo(() => new Map(graphs.map((g) => [g.id, g])), [graphs]);
+
+	const { groups, owners } = useMemo(() => {
+		const flat = graphs.flatMap((g) =>
+			(g.files ?? []).map((f) => ({ file: f.file, purl: f.purl })),
+		);
+		const grouped = buildRepoGroups(flat);
+		// `${repoKey}\0${file}` → owning graph ids in list order.
+		const owners = new Map<string, string[]>();
+		for (const g of graphs) {
+			for (const f of g.files ?? []) {
+				const key = `${purlRepoKey(f.purl) ?? ""}\0${f.file}`;
+				const arr = owners.get(key);
+				if (arr) {
+					if (!arr.includes(g.id)) arr.push(g.id);
+				} else {
+					owners.set(key, [g.id]);
+				}
+			}
+		}
+		// Repos holding files from the most subsystem graphs first.
+		const graphCount = (group: RepoGroup): number => {
+			const ids = new Set<string>();
+			for (const e of group.entries) {
+				for (const id of owners.get(
+					`${group.repoKey ?? ""}\0${e.file}`,
+				) ?? []) {
+					ids.add(id);
+				}
+			}
+			return ids.size;
+		};
+		const groups = [...grouped.groups].sort(
+			(a, b) =>
+				graphCount(b) - graphCount(a) ||
+				b.entries.length - a.entries.length ||
+				(a.repo ?? "").localeCompare(b.repo ?? ""),
+		);
+		return { groups, owners };
+	}, [graphs]);
+
+	const onSelectFile = useCallback(
+		(repoKey: string | undefined, displayPath: string) => {
+			const ids = owners.get(`${repoKey ?? ""}\0${displayPath}`) ?? [];
+			const pick =
+				selectedId && ids.includes(selectedId) ? selectedId : ids[0];
+			const graph = pick ? byId.get(pick) : undefined;
+			if (graph) onHighlightGraph(graph);
+		},
+		[owners, byId, selectedId, onHighlightGraph],
+	);
+
+	return (
+		<div
+			style={{
+				width,
+				minWidth: width,
+				borderRight: `1px solid ${theme.colors.border ?? "#333"}`,
+				background: theme.colors.backgroundSecondary ?? theme.colors.background,
+				display: "flex",
+				flexDirection: "column",
+				minHeight: 0,
+			}}
+		>
+			<div
+				style={{
+					flex: 1,
+					minHeight: 0,
+					overflowY: "auto",
+					display: "flex",
+					flexDirection: "column",
+				}}
+			>
+				{groups.map((group, i) => (
+					<RepoFilesGroup
+						key={group.repoKey ?? "__no-repo__"}
+						group={group}
+						bordered={i > 0}
+						onSelectFile={(displayPath) =>
+							onSelectFile(group.repoKey, displayPath)
+						}
+					/>
+				))}
+			</div>
+		</div>
+	);
+}
+
+function RepoFilesGroup({
+	group,
+	bordered,
+	onSelectFile,
+}: {
+	group: RepoGroup;
+	bordered: boolean;
+	onSelectFile: (displayPath: string) => void;
+}) {
+	const { theme } = useTheme();
+	const [collapsed, setCollapsed] = useState(false);
+	const files = useMemo(
+		() => group.entries.map((e) => e.displayPath),
+		[group],
+	);
+	const avatar = group.repoKey
+		? repoAvatarUrl(group.repoKey)
+		: undefined;
+	const label = group.repo ?? "No repo";
+	// Definite height so the tree fills it; grows with file count, capped.
+	const height = Math.min(320, Math.max(120, files.length * 26 + 48));
+
+	return (
+		<div
+			style={{
+				flex: "0 0 auto",
+				height: collapsed ? undefined : height,
+				display: "flex",
+				flexDirection: "column",
+				borderTop: bordered
+					? `1px solid ${theme.colors.border ?? "#333"}`
+					: undefined,
+			}}
+		>
+			<button
+				type="button"
+				onClick={() => setCollapsed((v) => !v)}
+				title={collapsed ? "Expand repo files" : "Collapse repo files"}
+				aria-expanded={!collapsed}
+				onMouseEnter={(e) => {
+					e.currentTarget.style.background = theme.colors.border ?? "#333";
+				}}
+				onMouseLeave={(e) => {
+					e.currentTarget.style.background = "transparent";
+				}}
+				style={{
+					flexShrink: 0,
+					display: "flex",
+					alignItems: "center",
+					gap: 6,
+					padding: "8px 12px 4px",
+					border: "none",
+					borderRadius: 4,
+					background: "transparent",
+					cursor: "pointer",
+					fontFamily: theme.fonts.body,
+					textAlign: "left",
+					minWidth: 0,
+					transition: "background 120ms ease",
+				}}
+			>
+				{avatar && (
+					<img
+						src={avatar}
+						alt=""
+						width={28}
+						height={28}
+						style={{ borderRadius: 6, flexShrink: 0 }}
+					/>
+				)}
+				<span
+					style={{
+						fontSize: theme.fontSizes[2],
+						fontFamily: theme.fonts.monospace,
+						color: theme.colors.text,
+						fontWeight: 600,
+						whiteSpace: "nowrap",
+						overflow: "hidden",
+						textOverflow: "ellipsis",
+					}}
+					title={group.owner ? `${group.owner}/${label}` : label}
+				>
+					{label}
+				</span>
+			</button>
+			{!collapsed && (
+				<SubsystemFileTree
+					files={files}
+					onSelectFile={onSelectFile}
+					headerless
+				/>
+			)}
+		</div>
+	);
+}
+
 export function SubsystemModelsView() {
 	const { theme } = useTheme();
 	const [graphs, setGraphs] = useState<SubsystemModelSummary[] | null>(null);
-	const [graphifyRepos, setGraphifyRepos] = useState<GraphifyRepoEntry[] | null>(
-		null,
-	);
 	const [lastLoadedAt, setLastLoadedAt] = useState<number | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [confirmId, setConfirmId] = useState<string | null>(null);
 	const [copiedId, setCopiedId] = useState<string | null>(null);
 	const [sharingId, setSharingId] = useState<string | null>(null);
-	const [repoFilter, setRepoFilter] = useState<ReadonlySet<string>>(
-		() => new Set(),
-	);
 	const [sortBy, setSortBy] = useState<SubsystemSortKey>("opened");
 	const [showAll, setShowAll] = useState(false);
+	const [issuesOnly, setIssuesOnly] = useState(false);
+	const [searchQuery, setSearchQuery] = useState("");
 	const [message, setMessage] = useState<string | null>(null);
 	const [auditByGraphId, setAuditByGraphId] = useState<
 		Record<string, ListAuditEntry>
@@ -621,6 +767,52 @@ export function SubsystemModelsView() {
 	const [regularAudit, setRegularAudit] = useState<RegularAuditStatus | null>(
 		null,
 	);
+	/** Selected row highlight (file-tree clicks land here, no new tab). */
+	const [selectedId, setSelectedId] = useState<string | null>(null);
+
+	// Panel width (px). Draggable via the resize handle between the panel
+	// and the list — same pattern as the detail graph sidebar in
+	// `@principal-ai/subsystems-react` (mousedown + document move/up, clamped).
+	const [panelWidth, setPanelWidth] = useState(350);
+	const [panelDrag, setPanelDrag] = useState(false);
+	const panelDragStartX = useRef(0);
+	const panelDragStartWidth = useRef(350);
+	const panelDragMaxWidth = useRef(600);
+	const PANEL_MIN_WIDTH = 200;
+
+	const onPanelResizeStart = useCallback(
+		(e: React.MouseEvent) => {
+			e.preventDefault();
+			panelDragStartX.current = e.clientX;
+			panelDragStartWidth.current = panelWidth;
+			panelDragMaxWidth.current = Math.max(
+				window.innerWidth * 0.6,
+				PANEL_MIN_WIDTH,
+			);
+			setPanelDrag(true);
+		},
+		[panelWidth],
+	);
+
+	useEffect(() => {
+		if (!panelDrag) return;
+		const onMove = (e: MouseEvent) => {
+			const delta = e.clientX - panelDragStartX.current;
+			setPanelWidth(
+				Math.min(
+					Math.max(panelDragStartWidth.current + delta, PANEL_MIN_WIDTH),
+					panelDragMaxWidth.current,
+				),
+			);
+		};
+		const onUp = () => setPanelDrag(false);
+		document.addEventListener("mousemove", onMove);
+		document.addEventListener("mouseup", onUp);
+		return () => {
+			document.removeEventListener("mousemove", onMove);
+			document.removeEventListener("mouseup", onUp);
+		};
+	}, [panelDrag]);
 	const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 
@@ -653,12 +845,8 @@ export function SubsystemModelsView() {
 
 	const refresh = useCallback(async () => {
 		try {
-			const [subResult, gfResult] = await Promise.all([
-				electrobun.rpc!.request.listSubsystemModels({}),
-				electrobun.rpc!.request.listGraphifyRepos({}).catch(() => null),
-			]);
+			const subResult = await electrobun.rpc!.request.listSubsystemModels({});
 			setGraphs(subResult.graphs);
-			if (gfResult) setGraphifyRepos(gfResult.repos);
 			setLastLoadedAt(Date.now());
 			setError(null);
 			setAuditByGraphId((prev) => {
@@ -751,7 +939,18 @@ export function SubsystemModelsView() {
 	}, [refresh]);
 
 	const onOpen = useCallback(async (graph: SubsystemModelSummary) => {
+		setSelectedId(graph.id);
 		await electrobun.rpc!.request.openSubsystemModel({ graphId: graph.id });
+	}, []);
+
+	/** File-tree click: highlight the owning row in place, no new tab. */
+	const onHighlightGraph = useCallback((graph: SubsystemModelSummary) => {
+		setSelectedId(graph.id);
+		requestAnimationFrame(() => {
+			document
+				.querySelector(`[data-subsystem-row="${CSS.escape(graph.id)}"]`)
+				?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+		});
 	}, []);
 
 
@@ -807,15 +1006,6 @@ export function SubsystemModelsView() {
 		[refresh],
 	);
 
-	const onToggleRepoFilter = useCallback((key: string) => {
-		setRepoFilter((prev) => {
-			const next = new Set(prev);
-			if (next.has(key)) next.delete(key);
-			else next.add(key);
-			return next;
-		});
-	}, []);
-
 	const onMaintain = useCallback(
 		(e: React.MouseEvent, graph: SubsystemModelSummary) => {
 			e.stopPropagation();
@@ -869,6 +1059,7 @@ export function SubsystemModelsView() {
 					delete next[graph.id];
 					return next;
 				});
+				setSelectedId((current) => (current === graph.id ? null : current));
 			} catch (err) {
 				setError(err instanceof Error ? err.message : String(err));
 			}
@@ -989,43 +1180,33 @@ export function SubsystemModelsView() {
 	const now = Date.now();
 	const isRecent = (g: SubsystemModelSummary) =>
 		now - new Date(g.updatedAt).getTime() <= RECENT_MS;
-	// Recency ignoring the repo filter, so a card stays lit while any of
-	// its graphs is recent — selecting a repo must not dim the others stale.
-	const recentIds = showAll
-		? null
-		: new Set(graphs.filter(isRecent).map((g) => g.id));
-	const repos = collectReposFromGraphs(graphs, graphifyRepos, recentIds);
-	const knownKeys = new Set(repos.map((r) => repoKey(r.owner, r.name)));
-	const filterSet = asRepoFilterSet(repoFilter);
-	const activeFilter = new Set(
-		[...filterSet].filter((k) => knownKeys.has(k)),
-	);
-	const visibleGraphs =
-		activeFilter.size === 0
+	const query = searchQuery.trim().toLowerCase();
+	const searchedGraphs =
+		query.length === 0
 			? graphs
-			: graphs.filter((g) =>
-					[...activeFilter].every((key) => {
-						const [owner, name] = key.split("/");
-						return owner != null && name != null && graphUsesRepo(g, owner, name);
-					}),
-				);
+			: graphs.filter((g) => {
+					if (g.title.toLowerCase().includes(query)) return true;
+					if (g.description?.toLowerCase().includes(query)) return true;
+					if (g.id.toLowerCase().includes(query)) return true;
+					for (const r of g.repos ?? []) {
+						if (`${r.owner}/${r.name}`.toLowerCase().includes(query))
+							return true;
+					}
+					return false;
+				});
+	const issueGraphs = issuesOnly
+		? searchedGraphs.filter((g) => {
+				const entry = auditByGraphId[g.id];
+				return entry?.status === "issues" || entry?.status === "error";
+			})
+		: searchedGraphs;
 	const recentGraphs = showAll
-		? visibleGraphs
-		: visibleGraphs.filter(isRecent);
-	const hiddenStaleCount = visibleGraphs.length - recentGraphs.length;
-	const sortedGraphs = [...recentGraphs].sort((a, b) => {
-		if (sortBy === "issues") {
-			const diff =
-				listAuditIssueSortValue(auditByGraphId[b.id]) -
-				listAuditIssueSortValue(auditByGraphId[a.id]);
-			if (diff !== 0) return diff;
-			// Stable tie-break: most recently edited first.
-			return (
-				subsystemModelSortTime(b, "edited") - subsystemModelSortTime(a, "edited")
-			);
-		}
-		return subsystemModelSortTime(b, sortBy) - subsystemModelSortTime(a, sortBy);
-	});
+		? issueGraphs
+		: issueGraphs.filter(isRecent);
+	const hiddenStaleCount = issueGraphs.length - recentGraphs.length;
+	const sortedGraphs = [...recentGraphs].sort(
+		(a, b) => subsystemModelSortTime(b, sortBy) - subsystemModelSortTime(a, sortBy),
+	);
 
 	return (
 		<SubsystemsTabShell>
@@ -1036,22 +1217,50 @@ export function SubsystemModelsView() {
 				showAll={showAll}
 				hiddenStaleCount={hiddenStaleCount}
 				onToggleShowAll={() => setShowAll((v) => !v)}
+				issuesOnly={issuesOnly}
+				onToggleIssuesOnly={() => setIssuesOnly((v) => !v)}
 				regularAudit={regularAudit}
-			/>
-			<SubsystemRepoCards
-				repos={repos}
-				selectedKeys={activeFilter}
-				onToggle={onToggleRepoFilter}
+				searchQuery={searchQuery}
+				onSearchChange={setSearchQuery}
 			/>
 			<SubsystemsTabBody>
 				<div
 					style={{
 						flex: 1,
 						minHeight: 0,
-						overflowY: "auto",
-						padding: "16px 24px",
+						display: "flex",
+						flexDirection: "row",
+						userSelect: panelDrag ? "none" : undefined,
 					}}
 				>
+					<FilesPanel
+						graphs={sortedGraphs}
+						selectedId={selectedId}
+						width={panelWidth}
+						onHighlightGraph={onHighlightGraph}
+					/>
+					<div
+						onMouseDown={onPanelResizeStart}
+						aria-label="Resize files panel"
+						title="Drag to resize"
+						style={{
+							width: 3,
+							flexShrink: 0,
+							cursor: "col-resize",
+							background: theme.colors.border,
+							transition: "background 120ms ease",
+							zIndex: 1,
+						}}
+					/>
+					<div
+						style={{
+							flex: 1,
+							minWidth: 0,
+							minHeight: 0,
+							overflowY: "auto",
+							padding: "16px 24px",
+						}}
+					>
 			{message && (
 				<div
 					style={{
@@ -1076,11 +1285,13 @@ export function SubsystemModelsView() {
 						padding: "24px 0",
 					}}
 				>
-					{activeFilter.size > 0
-						? `No graphs use all of: ${[...activeFilter].join(", ")}.`
-						: hiddenStaleCount > 0
-							? `No graphs edited in the last day — ${hiddenStaleCount} older hidden.`
-							: "No subsystem graphs."}
+					{query.length > 0 && searchedGraphs.length === 0
+						? `No graphs match "${searchQuery.trim()}".`
+						: issuesOnly && issueGraphs.length === 0
+							? "No graphs with verification issues."
+							: hiddenStaleCount > 0
+								? `No graphs edited in the last day — ${hiddenStaleCount} older hidden.`
+								: "No subsystem graphs."}
 				</div>
 			) : (
 			<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -1097,13 +1308,16 @@ export function SubsystemModelsView() {
 
 					return (
 						<div
-							key={graph.id}
+							data-subsystem-row={graph.id}
 							onClick={() => onOpen(graph)}
 							onMouseEnter={(e) => {
 								e.currentTarget.style.borderColor = theme.colors.textMuted ?? "#555";
 							}}
 							onMouseLeave={(e) => {
-								e.currentTarget.style.borderColor = theme.colors.border ?? "#333";
+								e.currentTarget.style.borderColor =
+									graph.id === selectedId
+										? theme.colors.primary
+										: (theme.colors.border ?? "#333");
 							}}
 							style={{
 								display: "flex",
@@ -1111,7 +1325,11 @@ export function SubsystemModelsView() {
 								gap: 12,
 								padding: "8px 12px",
 								borderRadius: 4,
-								border: `1px solid ${theme.colors.border ?? "#333"}`,
+								border: `1px solid ${
+									graph.id === selectedId
+										? theme.colors.primary
+										: (theme.colors.border ?? "#333")
+								}`,
 								background: theme.colors.backgroundSecondary ?? "transparent",
 								cursor: "pointer",
 								fontSize: theme.fontSizes[2],
@@ -1370,6 +1588,7 @@ export function SubsystemModelsView() {
 			</div>
 			)}
 				</div>
+				</div>
 			</SubsystemsTabBody>
 			{auditModal && (
 				<AuditResultsModal
@@ -1395,7 +1614,7 @@ export function SubsystemModelsView() {
 								checkedAt: report.checkedAt,
 								stale: false,
 								issueCount: report.findings.filter(
-									(f) => f.severity === "error" || f.severity === "warn",
+									(f) => f.severity === "error",
 								).length,
 								report,
 							},

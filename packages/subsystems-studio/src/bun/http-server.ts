@@ -23,18 +23,19 @@ import {
 } from "./graphify-store";
 import {
 	createSubsystemModel,
-	findComponentConstructProblems,
-	findDeclarationProvenanceProblems,
-	findRelationTypeProblems,
-	findWalkthroughProblems,
 	getSubsystemModel,
 	listSubsystemModels,
 	normalizeDeclarationProvenance,
+	purlRepoKey,
 	subsystemModelFilePath,
 	updateSubsystemModel,
 	type StoredSubsystemModel,
 	type SubsystemModelDocument,
 } from "./subsystem-model-store";
+import {
+	findSubsystemModelProblems,
+	portableDocumentFrom,
+} from "./subsystem-model-validation";
 import {
 	acceptSubsystemModelProposal,
 	createSubsystemModelProposal,
@@ -43,6 +44,7 @@ import {
 	rejectSubsystemModelProposal,
 } from "./proposal-store";
 import { loadViewerSettings } from "./viewer-settings";
+import { registerProjectInAlexandria } from "./alexandria";
 import type { SubsystemModelProposalChange } from "../shared/contract";
 const PORT = Number(process.env["PRINCIPAL_STUDIO_HTTP_PORT"] ?? 3045);
 
@@ -93,6 +95,52 @@ async function parseBody(req: Request): Promise<unknown> {
 function isRepoRoots(v: unknown): v is Record<string, string> {
 	if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
 	return Object.values(v).every((root) => typeof root === "string");
+}
+
+function githubRemote(owner: unknown, name: unknown): string | undefined {
+	if (typeof owner !== "string" || typeof name !== "string") return undefined;
+	if (!owner || !name) return undefined;
+	return `https://github.com/${owner}/${name}.git`;
+}
+
+/** `pkg:github/owner/name` → `https://github.com/owner/name.git`. */
+function githubRemoteFromPurlKey(key: string): string | undefined {
+	const parts = key.split("/");
+	const name = parts.pop();
+	const owner = parts.pop();
+	return githubRemote(owner, name);
+}
+
+/** First component purl (repo key) in the payload — repo identity is purl-derived. */
+function firstComponentPurlKey(body: Record<string, unknown>): string | undefined {
+	const components = body["components"];
+	if (!Array.isArray(components)) return undefined;
+	for (const c of components) {
+		if (!c || typeof c !== "object") continue;
+		const key = purlRepoKey((c as { purl?: string }).purl);
+		if (key) return key;
+	}
+	return undefined;
+}
+
+/**
+ * Roots shipped with a create/update payload are not stored on the model — they
+ * are registered into Alexandria (the system of record for repo→checkout) so
+ * later resolution can find them. Idempotent; unknown remotes are skipped.
+ */
+function registerSuppliedRoots(body: Record<string, unknown>): void {
+	if (typeof body["repoRoot"] === "string" && body["repoRoot"]) {
+		const key = firstComponentPurlKey(body);
+		registerProjectInAlexandria(
+			body["repoRoot"],
+			key ? githubRemoteFromPurlKey(key) : undefined,
+		);
+	}
+	if (isRepoRoots(body["repoRoots"])) {
+		for (const [key, root] of Object.entries(body["repoRoots"])) {
+			if (root) registerProjectInAlexandria(root, githubRemoteFromPurlKey(key));
+		}
+	}
 }
 
 function ensureFailResponse(result: { error: string; durationMs: number }): Response {
@@ -277,14 +325,11 @@ export async function handleSubsystemModelRequest(
 		if (!body["title"] || typeof body["title"] !== "string") return error("title is required");
 		if (!Array.isArray(body["components"])) return error("components array is required");
 		if (!Array.isArray(body["relations"])) return error("relations array is required");
-		const problems = [
-			...findComponentConstructProblems(body["components"]),
-			...findDeclarationProvenanceProblems(body["components"]),
-			...findRelationTypeProblems(body["relations"]),
-			...findWalkthroughProblems(body["walkthroughs"]),
-		];
+		const problems = findSubsystemModelProblems(body);
 		if (problems.length > 0) return error(`invalid graph: ${problems.join("; ")}`);
 		normalizeDeclarationProvenance(body["components"]);
+
+		registerSuppliedRoots(body);
 
 		const record = await createSubsystemModel({
 			title: body["title"] as string,
@@ -292,10 +337,6 @@ export async function handleSubsystemModelRequest(
 			components: body["components"] as SubsystemModelDocument["components"],
 			relations: body["relations"] as SubsystemModelDocument["relations"],
 			walkthroughs: body["walkthroughs"] as StoredSubsystemModel["walkthroughs"],
-			source: typeof body["source"] === "string" ? body["source"] : undefined,
-			repo: body["repo"] as { owner: string; name: string } | undefined,
-			repoRoot: typeof body["repoRoot"] === "string" ? body["repoRoot"] : undefined,
-			repoRoots: isRepoRoots(body["repoRoots"]) ? body["repoRoots"] : undefined,
 		});
 		return json({ ok: true, graph: record }, 201);
 	}
@@ -428,12 +469,20 @@ export async function handleSubsystemModelRequest(
 		if (method === "PUT") {
 			const body = (await parseBody(req)) as Record<string, unknown> | null;
 			if (!body) return error("Invalid JSON body");
-			const problems = [
-				...(body["components"] !== undefined ? findComponentConstructProblems(body["components"]) : []),
-				...(body["components"] !== undefined ? findDeclarationProvenanceProblems(body["components"]) : []),
-				...(body["relations"] !== undefined ? findRelationTypeProblems(body["relations"]) : []),
-				...(body["walkthroughs"] !== undefined ? findWalkthroughProblems(body["walkthroughs"]) : []),
-			];
+			const existing = await getSubsystemModel(id);
+			if (!existing) return error("Graph not found", 404);
+			// Local roots are host metadata, not document fields — learn them into
+			// Alexandria rather than persisting them on the record.
+			registerSuppliedRoots(body);
+			delete body["repoRoot"];
+			delete body["repoRoots"];
+			delete body["repo"];
+			// Validate the *resulting* document: existing overlaid with the patch.
+			const merged = {
+				...portableDocumentFrom(existing as unknown as Record<string, unknown>),
+				...portableDocumentFrom(body),
+			};
+			const problems = findSubsystemModelProblems(merged);
 			if (problems.length > 0) return error(`invalid graph: ${problems.join("; ")}`);
 			if (body["components"] !== undefined) normalizeDeclarationProvenance(body["components"]);
 			const updated = await updateSubsystemModel(id, body as Parameters<typeof updateSubsystemModel>[1]);

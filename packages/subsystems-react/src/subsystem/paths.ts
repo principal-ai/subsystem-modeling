@@ -5,7 +5,7 @@
  * by its `purl` (`pkg:github/<owner>/<name>[#<path>]`) — never to the machine.
  * When a graph spans several repos the sidebar tree needs synthetic
  * `<owner>/<name>/` prefixes to keep same-named paths apart; hosts resolve
- * each file against `repoRoots[purlRepo] ?? repoRoot`.
+ * each file against its own purl's checkout (via the Alexandria registry).
  */
 
 /** Normalize a purl to its repo key: fragment and surrounding whitespace stripped. */

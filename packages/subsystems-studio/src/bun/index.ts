@@ -308,6 +308,12 @@ const PERMANENT_TAB_DEFS: Array<{
 	flag: keyof DefaultTabFlags;
 }> = [
 	{
+		id: SUBSYSTEMS_TAB_ID,
+		kind: "subsystems",
+		title: "Subsystems",
+		flag: "subsystems",
+	},
+	{
 		id: AGENT_SESSIONS_TAB_ID,
 		kind: "agent-sessions",
 		title: "Agent Sessions",
@@ -318,12 +324,6 @@ const PERMANENT_TAB_DEFS: Array<{
 		kind: "maintenance-sessions",
 		title: "Maintenance Sessions",
 		flag: "maintenanceSessions",
-	},
-	{
-		id: SUBSYSTEMS_TAB_ID,
-		kind: "subsystems",
-		title: "Subsystems",
-		flag: "subsystems",
 	},
 	{
 		id: GRAPHIFY_TAB_ID,
@@ -1075,6 +1075,46 @@ async function deleteGraphAndCloseTabs(graphId: string): Promise<{ ok: boolean; 
 	return { ok: false, error: `unknown graph: ${graphId}` };
 }
 
+/**
+ * Distinct GitHub repos referenced by a model's components, derived from their
+ * purls. The model stores no `repo` field — purls are the single source of
+ * truth, so this is computed per listing.
+ */
+function githubReposFromComponents(
+	components: ReadonlyArray<{ purl?: string }>,
+): Array<{ owner: string; name: string }> {
+	const byKey = new Map<string, { owner: string; name: string }>();
+	for (const c of components) {
+		const match = /^pkg:github\/([^/]+)\/([^/#?]+)/.exec((c.purl ?? "").trim());
+		if (!match) continue;
+		const owner = match[1]!;
+		const name = match[2]!;
+		const key = `${owner}/${name}`.toLowerCase();
+		if (!byKey.has(key)) byKey.set(key, { owner, name });
+	}
+	return [...byKey.values()];
+}
+
+/**
+ * Deduped component file anchors for the Subsystems tab file panel.
+ * Components sharing a file (multiple symbols per module) collapse to one
+ * entry; file-less components (external / custom_entity) are skipped.
+ */
+function subsystemFilesFromComponents(
+	components: ReadonlyArray<{ file?: string; purl?: string }>,
+): Array<{ file: string; purl?: string }> {
+	const seen = new Set<string>();
+	const out: Array<{ file: string; purl?: string }> = [];
+	for (const c of components) {
+		if (!c.file) continue;
+		const key = `${c.purl ?? ""}\0${c.file}`;
+		if (seen.has(key)) continue;
+		seen.add(key);
+		out.push({ file: c.file, purl: c.purl });
+	}
+	return out;
+}
+
 async function walkFiles(
 	root: string,
 ): Promise<Array<{ path: string; size: number }>> {
@@ -1453,15 +1493,13 @@ const requests: RequestHandlers = {
 				if (!tab) return { ok: false, error: `unknown tab: ${tabId}` };
 				if (tab.kind === "subsystem-model") {
 					// Graph components carry repo-relative paths; reads are
-					// sandboxed to the repo's recorded local root (opt-in —
-					// graphs posted without roots don't serve files). Multi-repo
-					// graphs resolve each file against the root of the
-					// component's own purl before falling back to `repoRoot`.
+					// sandboxed to the component's repo checkout, resolved from
+					// Alexandria by the component's purl.
 					const graph = await getSubsystemModel(tab.graphId);
 					const component = graph?.components.find((c) => c.file === path);
-					const root = graph && component
-						? resolveRepoRootForComponent(graph, component.purl)
-						: graph?.repoRoot;
+					const root = component
+						? resolveRepoRootForComponent(component.purl)
+						: undefined;
 					if (!root) return { ok: false, error: "graph has no local root for this file" };
 					try {
 						const absolute = resolveSandboxed(root, path);
@@ -1975,9 +2013,13 @@ const requests: RequestHandlers = {
 							createdAt: e.createdAt,
 							updatedAt: e.updatedAt,
 							lastOpenedAt: e.lastOpenedAt,
-							source: e.source,
-							repo: e.repo,
-							path: subsystemModelFilePath(e.id),
+						repos: full
+							? githubReposFromComponents(full.components)
+							: undefined,
+						files: full
+							? subsystemFilesFromComponents(full.components)
+							: undefined,
+						path: subsystemModelFilePath(e.id),
 							gist: e.gist ?? full?.gist,
 							graphify,
 							lastAudit,

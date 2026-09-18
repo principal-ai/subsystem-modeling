@@ -15,8 +15,6 @@ import { makeShowcaseRenderers } from '../showcase/files';
 
 const LAYER_DWELL_MS = 10_000;
 const WALKTHROUGH_STEP_MS = 4_500;
-/** Resume auto-advance this long after the last graph interaction. */
-const INTERACTION_RESUME_MS = 4_000;
 
 function walkthroughCycleMs(
   walkthroughs: { steps: unknown[] }[] | undefined,
@@ -32,10 +30,11 @@ function walkthroughCycleMs(
 function ExplorerInner() {
   const { theme } = useTheme();
   const [selectedId, setSelectedId] = useState<HomeCategoryId>('constructs');
+  // Sticky pause: interacting with the graph pauses auto-advance and it does
+  // NOT resume on its own — the play button (or picking another layer) resumes.
   const [paused, setPaused] = useState(false);
   const [progress, setProgress] = useState(0);
   const remainingRef = useRef(LAYER_DWELL_MS);
-  const resumeTimerRef = useRef<number | null>(null);
   const fileRenderers = useMemo(
     () => makeShowcaseRenderers(activeHomeExample.caseDir),
     [],
@@ -46,6 +45,7 @@ function ExplorerInner() {
     homeCategories.findIndex((c) => c.id === selectedId),
   );
   const selected = homeCategories[selectedIndex] ?? homeCategories[0]!;
+  const isPaused = paused;
 
   const dwellMs = useMemo(() => {
     if (selected.id === 'walkthrough') {
@@ -62,7 +62,7 @@ function ExplorerInner() {
 
   // Drive progress + advance; freeze while paused (e.g. graph interaction).
   useEffect(() => {
-    if (paused) return;
+    if (isPaused) return;
 
     const start = Date.now();
     const startRemaining = remainingRef.current;
@@ -83,25 +83,10 @@ function ExplorerInner() {
 
     raf = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(raf);
-  }, [paused, selectedId, dwellMs, selectedIndex]);
-
-  useEffect(() => {
-    return () => {
-      if (resumeTimerRef.current != null) {
-        window.clearTimeout(resumeTimerRef.current);
-      }
-    };
-  }, []);
+  }, [isPaused, selectedId, dwellMs, selectedIndex]);
 
   const pauseForInteraction = () => {
     setPaused(true);
-    if (resumeTimerRef.current != null) {
-      window.clearTimeout(resumeTimerRef.current);
-    }
-    resumeTimerRef.current = window.setTimeout(() => {
-      setPaused(false);
-      resumeTimerRef.current = null;
-    }, INTERACTION_RESUME_MS);
   };
 
   const border = theme.colors.border ?? 'rgba(127,127,127,0.3)';
@@ -109,7 +94,26 @@ function ExplorerInner() {
   return (
     <div className="home-explorer">
       <nav className="home-explorer-nav" aria-label="Subsystem model layers">
-        <p className="home-explorer-nav-label">Building a model</p>
+        <div className="home-explorer-nav-header">
+          <p className="home-explorer-nav-label">Modeling a Subsystem</p>
+          <button
+            type="button"
+            className="home-explorer-play-toggle"
+            onClick={() => setPaused((p) => !p)}
+            aria-label={paused ? 'Play auto-advance' : 'Pause auto-advance'}
+            title={paused ? 'Play' : 'Pause'}
+          >
+            {paused ? (
+              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                <path d="M4 2.5v11l9-5.5-9-5.5z" fill="currentColor" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                <path d="M4 2.5h3v11H4zM9 2.5h3v11H9z" fill="currentColor" />
+              </svg>
+            )}
+          </button>
+        </div>
         <ul className="home-explorer-nav-list">
           {homeCategories.map((cat) => {
             const active = cat.id === selected.id;
@@ -133,10 +137,6 @@ function ExplorerInner() {
                   aria-expanded={active}
                   onClick={() => {
                     setPaused(false);
-                    if (resumeTimerRef.current != null) {
-                      window.clearTimeout(resumeTimerRef.current);
-                      resumeTimerRef.current = null;
-                    }
                     setSelectedId(cat.id);
                   }}
                 >
@@ -156,7 +156,7 @@ function ExplorerInner() {
                 {active ? (
                   <div
                     className={
-                      paused
+                      isPaused
                         ? 'home-explorer-progress home-explorer-progress--paused'
                         : 'home-explorer-progress'
                     }
@@ -165,8 +165,8 @@ function ExplorerInner() {
                     aria-valuemax={100}
                     aria-valuenow={Math.round(progress * 100)}
                     aria-label={
-                      paused
-                        ? 'Auto-advance paused while you explore the graph'
+                      isPaused
+                        ? 'Auto-advance paused'
                         : 'Progress toward next layer'
                     }
                   >

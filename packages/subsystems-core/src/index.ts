@@ -12,3 +12,9 @@
  */
 
 export * from './types';
+
+// Cross-field validation (the rules the JSON Schema can't express). Structural
+// (schema) validation is enforced per surface against
+// `schemas/subsystem-model.schema.json`.
+export { validateSubsystemModelCrossField } from './validation';
+export type { SubsystemValidationProblem } from './validation';

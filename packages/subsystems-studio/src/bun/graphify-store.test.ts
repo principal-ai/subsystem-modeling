@@ -14,6 +14,13 @@ import {
 	sanitizePurlDirName,
 	assessSubsystemGraphifyReadiness,
 } from "./graphify-store";
+import { registerProjectInAlexandria } from "./alexandria";
+
+// Repo → checkout resolution is Alexandria-backed; keep the registry in a temp
+// home so tests never touch the real ~/.alexandria/projects.json.
+process.env["PRINCIPAL_ALEXANDRIA_HOME"] = mkdtempSync(
+	join(tmpdir(), "gf-alexandria-"),
+);
 
 describe("sanitizePurlDirName", () => {
 	test("strips pkg: and lowercases", () => {
@@ -189,7 +196,7 @@ describe("assessSubsystemGraphifyReadiness", () => {
 	test("building set marks running", () => {
 		const purl = "pkg:github/acme/widget";
 		const r = assessSubsystemGraphifyReadiness(
-			{ components: [{ purl }], repoRoot: "/no/such/root" },
+			{ components: [{ purl }] },
 			new Set([purl]),
 		);
 		expect(r.status).toBe("running");
@@ -262,6 +269,7 @@ describe("assessSubsystemGraphifyReadiness", () => {
 		expect(head.length).toBeGreaterThan(0);
 
 		const purl = "pkg:github/acme/current-slot";
+		registerProjectInAlexandria(repo, "https://github.com/acme/current-slot.git");
 		const slot = cacheSlotDir(purl, head, null, storeRoot);
 		mkdirSync(slot, { recursive: true });
 		writeFileSync(
@@ -284,7 +292,7 @@ describe("assessSubsystemGraphifyReadiness", () => {
 		);
 
 		const r = assessSubsystemGraphifyReadiness(
-			{ components: [{ purl }], repoRoot: repo },
+			{ components: [{ purl }] },
 			undefined,
 			storeRoot,
 		);
@@ -309,6 +317,7 @@ describe("assessSubsystemGraphifyReadiness", () => {
 		spawnSync("git", ["commit", "-m", "init"], { cwd: repo, stdio: "ignore" });
 
 		const purl = "pkg:github/acme/stale-slot";
+		registerProjectInAlexandria(repo, "https://github.com/acme/stale-slot.git");
 		const slot = cacheSlotDir(purl, "oldhead", null, storeRoot);
 		mkdirSync(slot, { recursive: true });
 		writeFileSync(
@@ -331,7 +340,7 @@ describe("assessSubsystemGraphifyReadiness", () => {
 		);
 
 		const r = assessSubsystemGraphifyReadiness(
-			{ components: [{ purl }], repoRoot: repo },
+			{ components: [{ purl }] },
 			undefined,
 			storeRoot,
 		);
@@ -366,6 +375,7 @@ describe("ensureCurrentGraphifyCachesForModel", () => {
 		const dirty = dirtyFingerprint(repo);
 		const storeRoot = mkdtempSync(join(tmpdir(), "gf-ensure-store-"));
 		const purl = "pkg:github/acme/ensure-hit";
+		registerProjectInAlexandria(repo, "https://github.com/acme/ensure-hit.git");
 		const slot = cacheSlotDir(purl, head!, dirty, storeRoot);
 		mkdirSync(slot, { recursive: true });
 		writeFileSync(
@@ -390,7 +400,6 @@ describe("ensureCurrentGraphifyCachesForModel", () => {
 		const r = await ensureCurrentGraphifyCachesForModel(
 			{
 				components: [{ purl, construct: "function" }],
-				repoRoot: repo,
 			},
 			{ storeRoot, bin: "/nonexistent/graphify-should-not-run" },
 		);

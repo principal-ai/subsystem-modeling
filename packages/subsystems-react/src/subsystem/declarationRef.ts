@@ -26,7 +26,7 @@ export interface SubsystemDeclarationRef {
 }
 
 export type DeclarationFreshness =
-  | 'valid'
+  | 'fresh'
   | 'stale'
   | 'missing'
   | 'unanchored'

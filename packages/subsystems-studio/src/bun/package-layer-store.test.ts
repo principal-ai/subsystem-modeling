@@ -15,6 +15,13 @@ import {
 	runPackageLayerDiscover,
 	walkRepoFiles,
 } from "./package-layer-runner";
+import { registerProjectInAlexandria } from "./alexandria";
+
+// Repo → checkout resolution is Alexandria-backed; keep the registry in a temp
+// home so tests never touch the real ~/.alexandria/projects.json.
+process.env["PRINCIPAL_ALEXANDRIA_HOME"] = mkdtempSync(
+	join(tmpdir(), "pkg-alexandria-"),
+);
 
 function initRepo(): string {
 	const dir = mkdtempSync(join(tmpdir(), "pkg-layers-"));
@@ -219,6 +226,7 @@ describe("ensureCurrentPackageCachesForModel", () => {
 		const dir = initRepo();
 		const storeRoot = mkdtempSync(join(tmpdir(), "pkg-model-"));
 		const purl = "pkg:github/acme/widget";
+		registerProjectInAlexandria(dir, "https://github.com/acme/widget.git");
 		const r = await ensureCurrentPackageCachesForModel(
 			{
 				components: [
@@ -227,7 +235,6 @@ describe("ensureCurrentPackageCachesForModel", () => {
 					{ purl: "pkg:github/other/missing", construct: "function" },
 					{ purl, construct: "external" },
 				],
-				repoRoots: { [purl]: dir },
 			},
 			{ storeRoot },
 		);

@@ -85,12 +85,49 @@ export type { UseElkLayoutOptions, UseElkLayoutResult } from './hooks/useElkLayo
 // Subsystem component graph
 export { SubsystemComponentGraph } from './subsystem/SubsystemComponentGraph';
 export type { SubsystemComponentGraphProps, WalkthroughViewerContext } from './subsystem/SubsystemComponentGraph';
+export { ConstructsCatalog } from './subsystem/ConstructsCatalog';
+export type { ConstructsCatalogProps } from './subsystem/ConstructsCatalog';
 export type {
   ComponentVerificationState,
   ComponentVerificationPhase,
   ComponentDeclarationProps,
 } from './subsystem/ComponentDeclaration';
 export { ComponentDeclaration } from './subsystem/ComponentDeclaration';
+export {
+  SubsystemDiagnosticToggle,
+  diagnosticStatusColor,
+  diagnosticTitle,
+} from './subsystem/DiagnosticToggle';
+export type {
+  SubsystemDiagnostic,
+  SubsystemDiagnosticStatus,
+  SubsystemDiagnosticToggleProps,
+} from './subsystem/DiagnosticToggle';
+export {
+  SubsystemIssueList,
+  SubsystemIssueCard,
+  groupIssuesByTarget,
+  groupIssuesByCategory,
+  issueCategory,
+  issueKindLabel,
+  humanizeIssueKind,
+  issueKindOrder,
+  worstSeverity,
+  severityRank,
+  SUBSYSTEM_ISSUE_CATEGORIES,
+  SUBSYSTEM_ISSUE_CATEGORY_LABEL,
+} from './subsystem/IssueList';
+export type {
+  SubsystemIssue,
+  SubsystemIssueSeverity,
+  SubsystemIssueTarget,
+  SubsystemIssueTargetKind,
+  SubsystemIssueCategory,
+  SubsystemIssueGroup,
+  SubsystemIssueCategoryGroup,
+  SubsystemIssueCardProps,
+  SubsystemIssueListProps,
+} from './subsystem/IssueList';
 export { MECHANISM_COLOR, MECHANISM_STYLE } from './subsystem/model';
 export { CONSTRUCT_COLOR, componentColor, constructColorsFromPierreTheme } from './pierre/constructColors';
 export {
@@ -135,6 +172,7 @@ export {
   deriveNameFromSymbol,
   nodeMinWidthForBadges,
   deriveGraphEdges,
+  isConstructsOnlyModel,
   derivedGraphEdgeId,
   walkthroughStepGraphEdgeId,
   isRelationMechanism,

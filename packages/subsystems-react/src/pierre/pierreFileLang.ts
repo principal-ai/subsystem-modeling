@@ -3,12 +3,8 @@
  *
  * Pierre's default extension map sends `.h` → `objective-cpp`. Loading
  * C-family Shiki grammars (`cpp` / `objective-cpp`) in CodeView has trapped
- * WebKit (`JSString::getIndex` / EXC_BREAKPOINT) — even with unique per-step
- * `file.name`s — so we force plain text for those paths until Pierre/WebKit
- * is safe with them.
- *
- * Distinct walkthrough slices of the same path still need unique `file.name`s
- * (see `pierreCodeViewFileName`).
+ * WebKit (`JSString::getIndex` / EXC_BREAKPOINT), so we force plain text for
+ * those paths until Pierre/WebKit is safe with them.
  */
 
 const C_FAMILY_EXT = new Set([
@@ -45,11 +41,3 @@ export function pierreLangForPath(path: string): 'text' | undefined {
   return isPierreCFamilyPath(path) ? 'text' : undefined;
 }
 
-/**
- * Unique CodeView `file.name` that still carries a real extension for
- * inference, so distinct slices of the same path never share a display name.
- */
-export function pierreCodeViewFileName(path: string, index: number): string {
-  const base = path.split(/[/\\]/).pop() ?? path;
-  return `${String(index + 1).padStart(2, '0')}-${base}`;
-}

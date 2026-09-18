@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { SectionPager } from './shared'
 
 export function MaintainerOverview() {
@@ -28,6 +29,10 @@ export function MaintainerOverview() {
           <strong>Walkthrough</strong> is the content necessary to help
           understand a concept. It houses mechanisms similar to a stacktrace,
           but allows for more loose definitions.
+        </p>
+        <p>
+          Each layer can fail a check. See an issue and its fix{' '}
+          <Link to="/maintainer/issues">side by side</Link>.
         </p>
       </header>
 

@@ -7,6 +7,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { File } from '@pierre/diffs/react';
+import {
+  getFiletypeFromFileName,
+  getHighlighterOptions,
+  preloadHighlighter,
+} from '@pierre/diffs';
 import { useTheme } from '@principal-ade/industry-theme';
 import { buildPierreOptions, PIERRE_FILE_STYLE } from './pierreBackground';
 import { pierreLangForPath } from './pierreFileLang';
@@ -33,6 +38,12 @@ export function PierreFileView({
   const { theme } = useTheme();
   const [contents, setContents] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Pierre highlights on the main thread with no worker pool: a cold first
+  // render paints an empty <pre> and never re-renders once Shiki resolves.
+  // Warm the shared highlighter for this file before mounting <File> so the
+  // very first render produces content.
+  const [highlighterReady, setHighlighterReady] = useState(false);
+  const lang = pierreLangForPath(filePath) ?? getFiletypeFromFileName(fileName);
 
   const fileObject = useMemo(
     () =>
@@ -60,6 +71,21 @@ export function PierreFileView({
     };
   }, [filePath, readFile]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setHighlighterReady(false);
+    void preloadHighlighter(getHighlighterOptions(lang, {}))
+      .catch(() => {
+        // Fall through: let <File> attempt its own (plain-text) render.
+      })
+      .then(() => {
+        if (!cancelled) setHighlighterReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lang]);
+
   const onPostRender = useCallback(
     (fileContainer: HTMLElement) => {
       if (focusLine == null) return;
@@ -83,7 +109,7 @@ export function PierreFileView({
       </div>
     );
   }
-  if (fileObject === null) {
+  if (fileObject === null || !highlighterReady) {
     return (
       <div style={{ padding: 16, color: theme.colors.textSecondary }}>
         Loading…

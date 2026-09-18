@@ -36,10 +36,7 @@ import { useTheme } from '@principal-ade/industry-theme';
 import type { SubsystemWalkthrough } from '../subsystem/model';
 import type { SubsystemOpenFileOptions } from '../subsystem/declarationRef';
 import { buildPierreOptions, PIERRE_FILE_STYLE } from './pierreBackground';
-import {
-  pierreCodeViewFileName,
-  pierreLangForPath,
-} from './pierreFileLang';
+import { pierreLangForPath } from './pierreFileLang';
 import { resolvePierreSyntaxThemeName } from './pierreSyntaxTheme';
 import {
   remapSnippetLineNumbers,
@@ -192,7 +189,7 @@ const items = useMemo((): CodeViewItem<WalkthroughStepAnnotation>[] => {
         version: 1,
         annotations,
         file: {
-          name: pierreCodeViewFileName(step.file, index),
+          name: step.file,
           contents: slice.contents,
           lang: pierreLangForPath(step.file),
           cacheKey: `${walkthrough.id}:${index}:${step.file}:${step.line}:${slice.sliceStart}-${slice.sliceEnd}`,
@@ -240,12 +237,7 @@ const items = useMemo((): CodeViewItem<WalkthroughStepAnnotation>[] => {
   const renderHeaderPrefix = useMemo(() => {
     return (item: CodeViewItem) => {
       const index = Number.parseInt(item.id.split(':').pop() ?? '', 10);
-      const step = walkthrough.steps[index];
-      if (!step) return null;
-      const label =
-        step.symbol != null && step.symbol.length > 0
-          ? step.symbol
-          : `step ${index + 1}`;
+      if (!walkthrough.steps[index]) return null;
       return (
         <span
           style={{
@@ -255,7 +247,7 @@ const items = useMemo((): CodeViewItem<WalkthroughStepAnnotation>[] => {
             marginRight: 8,
           }}
         >
-          {index + 1}. {label}
+          {index + 1}.
         </span>
       );
     };

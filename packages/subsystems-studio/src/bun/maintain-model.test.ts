@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { SubsystemModelAuditReport } from "../shared/contract";
 import {
-	BOUNDARY_FIXER_AGENT,
 	BOUNDARY_GAP_FILLER_AGENT,
 	GAP_FILLER_AGENT,
 	ISSUE_FIXER_AGENT,
@@ -24,7 +23,7 @@ function emptyReport(
 			components: 0,
 			filesVerified: 0,
 			symbolsVerified: 0,
-			declarationsValid: 0,
+			declarationsFresh: 0,
 			constructsMatched: 0,
 			signaturesMatched: 0,
 			anchorsExact: 0,
@@ -50,7 +49,6 @@ function emptyReport(
 			modulesClaimed: 0,
 			moduleFileOk: 0,
 			moduleFileMismatch: 0,
-			moduleWithoutFile: 0,
 			processNestsChecked: 0,
 			processNestOk: 0,
 			processNestDisagree: 0,
@@ -101,27 +99,6 @@ describe("selectMaintainRoute", () => {
 			layer: "topology",
 			mode: "issues",
 		});
-	});
-
-	test("prefers boundary issues over topology issues", () => {
-		const report = emptyReport({
-			needsUpdate: true,
-			findings: [
-				{
-					kind: "boundary_module_without_file",
-					severity: "error",
-					componentId: "boot",
-					message: "no file",
-				},
-				{
-					kind: "topology_broken_endpoint",
-					severity: "error",
-					relationId: "r1",
-					message: "broken",
-				},
-			],
-		});
-		expect(selectMaintainRoute(report)?.agent).toBe(BOUNDARY_FIXER_AGENT);
 	});
 
 	test("prefers construct gaps over topology soft gaps", () => {

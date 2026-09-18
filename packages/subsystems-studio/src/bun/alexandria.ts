@@ -109,9 +109,26 @@ class NodeFsAdapter implements FileSystemAdapter {
 }
 
 let store: ProjectRegistryStore | null = null;
+let storeHome: string | null = null;
 function registry(): ProjectRegistryStore {
-	if (!store) store = new ProjectRegistryStore(new NodeFsAdapter(), homedir());
+	// Rebuild when the home changes (tests swap PRINCIPAL_ALEXANDRIA_HOME
+	// between files in one process).
+	const home = registryHome();
+	if (!store || storeHome !== home) {
+		store = new ProjectRegistryStore(new NodeFsAdapter(), home);
+		storeHome = home;
+	}
 	return store;
+}
+
+/**
+ * The registry lives under `<home>/.alexandria`. `PRINCIPAL_ALEXANDRIA_HOME`
+ * redirects it (tests point this at a temp dir so they never touch the real
+ * `~/.alexandria/projects.json`).
+ */
+function registryHome(): string {
+	const override = process.env["PRINCIPAL_ALEXANDRIA_HOME"]?.trim();
+	return override ? override : homedir();
 }
 
 /**

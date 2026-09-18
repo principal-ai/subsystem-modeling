@@ -33,10 +33,7 @@ import {
 	loadPackagesSlice,
 	runPackageLayerDiscover,
 } from "./package-layer-runner";
-import {
-	purlRepoKey,
-	resolveRepoRootForComponent,
-} from "./subsystem-model-store";
+import { purlRepoKey } from "./subsystem-model-store";
 import type { PackageLayerRepoEntry } from "../shared/contract";
 
 const ROOT = join(homedir(), ".principal", "package-layers");
@@ -703,8 +700,6 @@ export async function ensureCurrentPackageCachesForModel(
 			proposed?: boolean;
 			construct?: string;
 		}>;
-		repoRoot?: string;
-		repoRoots?: Record<string, string>;
 	},
 	opts?: { storeRoot?: string },
 ): Promise<{
@@ -722,11 +717,7 @@ export async function ensureCurrentPackageCachesForModel(
 		}
 		const key = purlRepoKey(c.purl);
 		if (!key || key === "external" || byPurl.has(key)) continue;
-		const fromGraph = resolveRepoRootForComponent(graph, key);
-		const repoRoot =
-			(fromGraph && existsSync(fromGraph) ? fromGraph : null) ||
-			resolveRepoRootForPurl(key) ||
-			undefined;
+		const repoRoot = resolveRepoRootForPurl(key) ?? undefined;
 		byPurl.set(key, { purl: key, repoRoot });
 	}
 

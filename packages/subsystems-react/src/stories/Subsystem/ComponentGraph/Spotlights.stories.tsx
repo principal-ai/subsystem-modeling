@@ -211,7 +211,7 @@ const nodeSpotlights: Array<{ label: string; component: SubsystemComponent; note
   },
   {
     label: 'framework: react · stereotype: component — still construct: function',
-    note: 'badge reads "react · component"; name wears <> ; color stays function',
+    note: 'badge reads "react · component"; name renders bare ; color stays function',
     component: {
       id: 'analysis-view',
       name: 'AnalysisView',

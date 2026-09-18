@@ -146,6 +146,12 @@ export interface SubsystemComponent {
   file: string;
   /** PURL identifying the repo or package this component lives in (for subgraph grouping). */
   purl: string;
+  /**
+   * App/repo logo shown on the declaration card in place of the GitHub owner
+   * avatar (any image URL or data URI). Optional; typically one image stamped
+   * across the components of a repo.
+   */
+  logo?: string;
   /** One-line purpose shown on the node. */
   purpose?: string;
   /**
@@ -331,8 +337,8 @@ export function walkthroughStepGraphEdgeId(
 }
 
 export function deriveGraphEdges(doc: {
-  relations?: SubsystemRelation[];
-  walkthroughs?: SubsystemWalkthrough[];
+  relations?: readonly SubsystemRelation[];
+  walkthroughs?: readonly SubsystemWalkthrough[];
 }): SubsystemComponentEdge[] {
   const byId = new Map<string, SubsystemComponentEdge>();
   for (const r of doc.relations ?? []) {
@@ -364,6 +370,22 @@ export function deriveGraphEdges(doc: {
 }
 
 /**
+ * True when the model has components but no topology or walkthrough edges.
+ * Those snapshots are a catalog of declarations, not a graph.
+ */
+export function isConstructsOnlyModel(doc: {
+  components: readonly { id: string }[];
+  relations?: readonly SubsystemRelation[];
+  walkthroughs?: readonly SubsystemWalkthrough[];
+}): boolean {
+  if (doc.components.length === 0) return false;
+  return deriveGraphEdges({
+    relations: doc.relations,
+    walkthroughs: doc.walkthroughs,
+  }).length === 0;
+}
+
+/**
  * Derive a consistent display `name` from a code `symbol` + construct.
  *
  * `symbol` is the source of truth (fully-qualified code identity). The name
@@ -385,14 +407,13 @@ export function deriveNameFromSymbol(
   }
   if (!name) name = existingName ?? 'untitled';
 
-  // Decorations = what the drill-down shows. Framework stereotypes can override
-  // the language decoration (a React component wears `<>` instead of `()`).
-  // Executable constructs wear `()`; brace-bodied constructs (interface,
-  // type_alias, enum) wear ` {}`. Classes render bare — the construct badge
-  // already says "class".
+  // Decorations = what the drill-down shows. Executable constructs wear `()`;
+  // brace-bodied constructs (interface, type_alias, enum) wear ` {}`. Classes
+  // render bare — the construct badge already says "class". Framework
+  // stereotypes (e.g. a React component) also render bare.
   // Everything else (class, store, external) renders bare.
-  if (stereotype === 'component' && !name.startsWith('<')) {
-    return `<${name}>`;
+  if (stereotype === 'component') {
+    return name;
   }
   if ((construct === 'function' || construct === 'method') && !name.endsWith('()')) {
     name = `${name}()`;
@@ -479,6 +500,61 @@ export function processGroupNodeId(processKey: string): string {
 /** React Flow id for a module boundary group node. */
 export function moduleGroupNodeId(moduleKey: string): string {
   return `module:${moduleKey}`;
+}
+
+export const MODULE_BADGE_INSET = 12;
+const MODULE_BADGE_CHAR_WIDTH = 12.5;
+const MODULE_BADGE_CHROME = 16;
+const MODULE_FRAME_BORDER = 4;
+
+export function moduleBadgeLabel(path: string, availableWidth = 0): string {
+  if (path.length * MODULE_BADGE_CHAR_WIDTH + MODULE_BADGE_CHROME <= availableWidth) {
+    return path;
+  }
+  const parts = path.split(/[\\/]/).filter((part) => part !== '' && part !== '.');
+  if (parts.length <= 2) return path;
+  return `${parts[0]}/…/${parts[parts.length - 1]}`;
+}
+
+/**
+ * Hover form of the badge: the collapsed `first/…/last` plus as many trailing
+ * path segments as fit in `availableWidth`. Greedily pulls segments off the
+ * tail so hovering reveals the path without ever distorting the glyphs or
+ * spilling past the frame's inner width. Falls back to the full path (no
+ * collapse) if everything fits.
+ */
+export function moduleBadgeHoverLabel(path: string, availableWidth = 0): string {
+  if (path.length * MODULE_BADGE_CHAR_WIDTH + MODULE_BADGE_CHROME <= availableWidth) {
+    return path;
+  }
+  const parts = path.split(/[\\/]/).filter((part) => part !== '' && part !== '.');
+  if (parts.length <= 2) return path;
+  let tailStart = parts.length - 1;
+  while (tailStart > 1) {
+    const candidate = `${parts[0]}/…/${parts.slice(tailStart - 1).join('/')}`;
+    if (candidate.length * MODULE_BADGE_CHAR_WIDTH + MODULE_BADGE_CHROME <= availableWidth) {
+      tailStart -= 1;
+    } else {
+      break;
+    }
+  }
+  return `${parts[0]}/…/${parts.slice(tailStart).join('/')}`;
+}
+
+/** Estimated render width (px) of the badge for `path` in the badge font. */
+export function moduleBadgeWidth(path: string): number {
+  return Math.ceil(path.length * MODULE_BADGE_CHAR_WIDTH + MODULE_BADGE_CHROME);
+}
+
+export function moduleMinWidthForBadge(path: string): number {
+  const collapsed = moduleBadgeLabel(path);
+  // `…` renders ~1.4× a regular char in the bold badge font — account for it
+  // so a path that just crosses the fit threshold doesn't collapse in vain.
+  const expanded = path[0] === '…' ? 0 : 1;
+  const glyphWidth = collapsed.length * MODULE_BADGE_CHAR_WIDTH + 4 * expanded;
+  return Math.ceil(
+    glyphWidth + MODULE_BADGE_CHROME + MODULE_BADGE_INSET * 2 + MODULE_FRAME_BORDER,
+  );
 }
 
 /** React Flow id for a package (repo) boundary group node. */
@@ -1342,6 +1418,7 @@ export async function buildSubsystemGraph(
           id: g.id,
           memberIds: g.memberIds,
           parentId: g.parentId,
+          minWidth: g.region.kind === 'module' ? moduleMinWidthForBadge(g.region.label) : undefined,
         })),
       });
       const builtGroupIds = new Set(result.groupBounds.keys());

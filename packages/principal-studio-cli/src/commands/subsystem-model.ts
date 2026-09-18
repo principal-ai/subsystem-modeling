@@ -14,13 +14,12 @@ import { tryResolveViewerLaunch } from './trail.js';
 import { handoffToRunning } from '../lib/viewer-ipc.js';
 import {
   createSubsystemModel,
-  findCreateProblems,
   getSubsystemModel,
-  isRepoRoots,
   listSubsystemModels,
   subsystemModelFilePath,
   type StoredSubsystemModel,
 } from '../lib/subsystem-model-store.js';
+import { findSubsystemModelProblems } from '../lib/subsystem-model-validation.js';
 
 async function readPayloadFromStdin(): Promise<string> {
   const chunks: Buffer[] = [];
@@ -172,7 +171,7 @@ async function createAction(options: {
   }
   const body = parsed as Record<string, unknown>;
 
-  const problems = findCreateProblems(body);
+  const problems = findSubsystemModelProblems(body);
   if (problems.length > 0) {
     process.stderr.write(`invalid model: ${problems.join('; ')}\n`);
     process.exit(2);
@@ -189,10 +188,6 @@ async function createAction(options: {
       components: body['components'] as unknown[],
       relations: body['relations'] as unknown[],
       walkthroughs: Array.isArray(body['walkthroughs']) ? body['walkthroughs'] : undefined,
-      source: typeof body['source'] === 'string' ? body['source'] : undefined,
-      repo: body['repo'] as { owner: string; name: string } | undefined,
-      repoRoot: typeof body['repoRoot'] === 'string' ? body['repoRoot'] : undefined,
-      repoRoots: isRepoRoots(body['repoRoots']) ? body['repoRoots'] : undefined,
     });
   }
 

@@ -63,7 +63,7 @@ export interface SubsystemModelAuditListSummary {
 
 export function auditIssueCount(report: SubsystemModelAuditReport): number {
 	const fromFindings = report.findings.filter(
-		(f) => f.severity === "error" || f.severity === "warn",
+		(f) => f.severity === "error",
 	).length;
 	if (fromFindings > 0) return fromFindings;
 	return report.checks.filter((c) => c.verdict === "issue").length;
@@ -72,26 +72,22 @@ export function auditIssueCount(report: SubsystemModelAuditReport): number {
 export function auditHasIssues(report: SubsystemModelAuditReport): boolean {
 	if (report.needsUpdate) return true;
 	if (report.checks.some((c) => c.verdict === "issue")) return true;
-	return report.findings.some((f) => f.severity === "error" || f.severity === "warn");
+	return report.findings.some((f) => f.severity === "error");
 }
 
 /** Gaps that are not failures — some checks confirmed, some still need follow-up. */
 export function auditHasPartialGaps(report: SubsystemModelAuditReport): boolean {
-	if (report.findings.some((f) => f.kind === "construct_unconfirmed")) return true;
-	if (report.findings.some((f) => f.kind === "signature_unconfirmed")) return true;
-	if (
-		report.findings.some(
-			(f) =>
-				f.kind === "topology_relation_unconfirmed" ||
-				f.kind === "topology_import_unconfirmed",
-		)
-	)
-		return true;
+	// Any info-severity finding is a gap: unconfirmed claim, or unavailable input
+	// (repo/cache). Errors are handled earlier by auditHasIssues.
+	if (report.findings.some((f) => f.severity === "info")) return true;
+	// Check-level gaps that may not have emitted a finding on their own.
 	for (const c of report.checks) {
+		if (c.verdict === "issue") continue;
 		if (c.constructInferred === "unknown" && c.constructMatch !== true) return true;
 		if (c.signature === "skipped") return true;
 	}
 	if (report.topologyChecks?.some((c) => c.verdict === "gap")) return true;
+	if (report.boundaryChecks?.some((c) => c.verdict === "gap")) return true;
 	return false;
 }
 

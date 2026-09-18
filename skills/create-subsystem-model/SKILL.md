@@ -126,14 +126,18 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
 
 Rules:
 
-- `file` paths MUST be repo-root-relative (they join onto `repoRoot` for reads);
-  `purl` subpaths carry the same path after `#`.
+- `file` paths MUST be repo-root-relative (each file is resolved against its
+  own repo's checkout); `purl` subpaths carry the same path after `#`.
 - Portable documents carry only `$schema` / `title` / `description` /
-  `components` / `relations` / `walkthroughs`. Host-only fields — `source`,
-  `repo`, `repoRoot`, `repoRoots` — are **envelope binding** on the stored
-  record, not part of the portable standard; the CLI accepts them for
-  create/update, but drop them before writing a gist or any share surface. On
-  the wire, repo identity lives on each component's `purl`.
+  `components` / `relations` / `walkthroughs`. Repo identity lives on each
+  component's `purl` — there is no stored `repo` field. Local checkouts are
+  resolved from the **Alexandria registry** (`~/.alexandria/projects.json`), so
+  you normally pass nothing extra: registering the repo in Alexandria (opening
+  it in Studio, or `repo add`) is what makes file reads work. A create/update
+  payload may still carry `repoRoot` (single repo) or `repoRoots` (map keyed by
+  purl repo key) as a **registration hint** — Studio learns those paths into
+  Alexandria instead of storing them — but they are not part of the document and
+  are dropped before any share surface.
 - `purpose` is rendered as a doc comment under the node's declaration: one
   plain-text sentence, verb-first. No markdown (backticks render literally),
   no brace-dumps, no restating the signature — specifics belong in
@@ -152,7 +156,10 @@ Rules:
   `process`, the module frame nests inside that process frame
   (process → module → export). Singleton modules (one export) stay unframed —
   same 2+ member rule as process.
-- Keep models to one subsystem, roughly 4–15 components. Split sprawling ones.
+- Scope by story, not by node count: one subsystem / one coherent flow. Include
+  a component only when a walkthrough actually reaches it or it carries a
+  topology claim — a node no walkthrough reaches is a smell. Split only when
+  the model spans genuinely unrelated stories or stops reading at a glance.
 - Component `id`s are referenced by relation / walkthrough `from`/`to`; never rename on update.
 - Relation `id`s are stable topology keys; walkthrough steps carry their own `from`/`to`/`mechanism`.
 
@@ -174,8 +181,10 @@ hops are **derived** from steps — you never author an `edges` array.
 - Default **on** for any model that explains a request path, open/close loop,
   save/load, refresh, or multi-hop interaction.
 - One walkthrough per distinct story (not one mega-walk of every hop).
-- Prefer 2–8 steps. Reuse the same `from`/`to`/`mechanism` hop in multiple
-  walkthroughs when real (e.g. a shared scan hop on open and save).
+- Prefer 2–8 steps, touching roughly 2–6 distinct components. A walk that spans
+  most of the diagram is really several stories — split it. Reuse the same
+  `from`/`to`/`mechanism` hop in multiple walkthroughs when real (e.g. a shared
+  scan hop on open and save).
 
 **Step contract**
 
@@ -330,20 +339,26 @@ as `authored`.
 npx -y @principal-ai/principal-studio-cli subsystem-model open <graph.id>
 ```
 
-## repoRoot / repoRoots
+## Local checkouts (Alexandria)
 
-Opt-in but strongly recommended when the repo exists locally: clicking a node
-then serves the file inline in the detail panel (sandboxed read — traversal is
-rejected). Without a root the model still renders, but node clicks show
-only metadata (`graph has no repoRoot`). Needed for walkthrough site
-verification against real `file:line` contents.
+Files are served only when the component's repo is registered locally: clicking
+a node then serves the file inline in the detail panel (sandboxed read —
+traversal is rejected). Without a registered checkout the model still renders,
+but node clicks show only metadata, and walkthrough site verification against
+real `file:line` contents is skipped.
 
-- `repoRoot` — single repo: component `file` paths join onto it.
+Repo → checkout binding is **not stored on the model**. It is resolved per
+component from its `purl` via the Alexandria registry
+(`~/.alexandria/projects.json`) — the same registry Studio writes when you open
+a repo (`principal-ai repo add <path>` registers one explicitly).
+
+A create/update payload may include roots as a **registration hint**; Studio
+registers them into Alexandria (idempotent) and never stores them:
+
+- `repoRoot` — a single local checkout; its remote is derived from the first
+  component purl.
 - `repoRoots` — multi-repo models: a map keyed by purl repo key
   (`pkg:github/owner/name`, fragment stripped) → local root.
-
-Both are host-binding fields: accepted by the CLI and stored on the record,
-but not part of the portable document.
 
 ## Managing existing models
 

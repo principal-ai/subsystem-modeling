@@ -4,26 +4,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	fileDeclaresSymbol,
-	findComponentConstructProblems,
-	findDeclarationProvenanceProblems,
-	findRelationTypeProblems,
-	findWalkthroughProblems,
 	graphIdFromWatchFilename,
 	migrateLegacySubsystemGraphsDir,
 	normalizeDeclarationProvenance,
 	purlRepoKey,
 	resolveRepoRootForComponent,
 	shouldRestampOpened,
-	SUBSYSTEM_COMPONENT_CONSTRUCTS,
 	SUBSYSTEM_DECLARATION_PROVENANCES,
 	SUBSYSTEM_EDGE_MECHANISMS,
 	SUBSYSTEM_EDGE_MECHANISMS_COVER_PUBLISHED_UNION,
-	SUBSYSTEM_RELATION_TYPES,
 	subsystemModelFilePath,
 	verifyModelFiles,
 	type SubsystemComponent,
-	type SubsystemComponentEdge,
 } from "./subsystem-model-store";
+import { registerProjectInAlexandria } from "./alexandria";
 
 let tmp: string;
 let repoA: string;
@@ -31,11 +25,19 @@ let repoB: string;
 
 beforeAll(() => {
 	tmp = mkdtempSync(join(tmpdir(), "sgverify-"));
+	// Resolution is Alexandria-backed: point the registry at a temp home and
+	// register the fixture checkouts so purls resolve to them.
+	process.env["PRINCIPAL_ALEXANDRIA_HOME"] = tmp;
 	repoA = join(tmp, "repo-a");
 	repoB = join(tmp, "repo-b");
-	mkdirSync(repoA, { recursive: true });
+	mkdirSync(join(repoA, "src"), { recursive: true });
 	mkdirSync(join(repoB, "deep"), { recursive: true });
 	writeFileSync(join(repoA, "exists.ts"), "export {};\n", "utf8");
+	writeFileSync(
+		join(repoA, "src", "seam.ts"),
+		["function a() {}", "const store = createStore();", "writer(store, a());", ""].join("\n"),
+		"utf8",
+	);
 	writeFileSync(
 		join(repoA, "declares.ts"),
 		[
@@ -52,10 +54,13 @@ beforeAll(() => {
 		"utf8",
 	);
 	writeFileSync(join(repoB, "deep", "other.py"), "x = 1\n", "utf8");
+	registerProjectInAlexandria(repoA, "https://github.com/a/repo-a.git");
+	registerProjectInAlexandria(repoB, "https://github.com/a/repo-b.git");
 });
 
 afterAll(() => {
 	rmSync(tmp, { recursive: true, force: true });
+	delete process.env["PRINCIPAL_ALEXANDRIA_HOME"];
 });
 
 describe("purlRepoKey (store mirror)", () => {
@@ -134,32 +139,14 @@ describe("migrateLegacySubsystemGraphsDir", () => {
 });
 
 describe("resolveRepoRootForComponent", () => {
-	test("multi-repo graphs require an explicit per-repo entry (no cross-repo reads)", () => {
-		const graph = {
-			repoRoot: "/default/root",
-			repoRoots: { "pkg:github/a/b": "/repos/b" },
-		};
-		expect(resolveRepoRootForComponent(graph, "pkg:github/a/b#src/x.ts")).toBe("/repos/b");
-		expect(resolveRepoRootForComponent(graph, "pkg:github/x/y")).toBeUndefined();
-		expect(resolveRepoRootForComponent(graph, undefined)).toBeUndefined();
+	test("resolves a component purl to its Alexandria checkout", () => {
+		expect(resolveRepoRootForComponent("pkg:github/a/repo-a#src/x.ts")).toBe(repoA);
+		expect(resolveRepoRootForComponent("pkg:github/a/repo-b")).toBe(repoB);
 	});
 
-	test("single-repo graphs apply the default root to everyone", () => {
-		expect(resolveRepoRootForComponent({ repoRoot: "/only/root" }, "pkg:github/x/y")).toBe("/only/root");
-		expect(resolveRepoRootForComponent({ repoRoot: "/only/root" }, undefined)).toBe("/only/root");
-	});
-});
-
-describe("findRelationTypeProblems", () => {
-	test("accepts known relation types and flags unknown ones", () => {
-		expect(findRelationTypeProblems([{ id: "r1", from: "a", to: "b", relationType: "imports" }])).toEqual([]);
-		const problems = findRelationTypeProblems([
-			{ id: "ok", from: "a", to: "b", relationType: "extends" },
-			{ id: "bad", from: "a", to: "b", relationType: "teleports" },
-		]);
-		expect(problems).toHaveLength(1);
-		expect(problems[0]!).toContain('relation "bad"');
-		expect(problems[0]!).toContain("teleports");
+	test("returns undefined for unregistered repos and empty purls", () => {
+		expect(resolveRepoRootForComponent("pkg:github/a/never-registered")).toBeUndefined();
+		expect(resolveRepoRootForComponent(undefined)).toBeUndefined();
 	});
 });
 
@@ -173,11 +160,6 @@ describe("verifyModelFiles", () => {
 				{ id: "f1", name: "F", construct: "function", file: "", purl: "pkg:github/a/repo-a" },
 			],
 			relations: [],
-			repoRoot: repoA,
-			repoRoots: {
-				"pkg:github/a/repo-a": repoA,
-				"pkg:github/a/repo-b": repoB,
-			},
 		});
 
 		expect(result.verifiedCount).toBe(2);
@@ -227,7 +209,6 @@ describe("verifyModelFiles symbol pass", () => {
 				{ id: "no-symbol", name: "F", construct: "function", file: "exists.ts", purl: "pkg:github/a/repo-a" },
 			],
 			relations: [],
-			repoRoots: { "pkg:github/a/repo-a": repoA },
 		});
 
 		expect(result.verifiedCount).toBe(6);
@@ -241,22 +222,6 @@ describe("declaration provenance", () => {
 
 	test("pins the provenance set", () => {
 		expect([...SUBSYSTEM_DECLARATION_PROVENANCES]).toEqual(["verified", "authored"]);
-	});
-
-	test("accepts explicit verified/authored, flags anything else", () => {
-		const ok = [
-			{ id: "a", declaration: fnDetail, declarationProvenance: "verified" },
-			{ id: "b", declaration: fnDetail, declarationProvenance: "authored" },
-			{ id: "c" }, // no declaration at all
-		];
-		expect(findDeclarationProvenanceProblems(ok)).toEqual([]);
-		const bad = [
-			{ id: "x", declaration: fnDetail, declarationProvenance: "graphify" },
-			{ id: "y", declaration: fnDetail, declarationProvenance: 42 },
-		];
-		expect(findDeclarationProvenanceProblems(bad)).toHaveLength(2);
-		expect(findDeclarationProvenanceProblems(bad)[0]).toContain('"graphify"');
-		expect(findDeclarationProvenanceProblems(undefined)).toEqual([]);
 	});
 
 	test("normalize defaults missing provenance to authored and strips orphan claims", () => {
@@ -302,7 +267,6 @@ describe("declaration provenance", () => {
 		const result = await verifyModelFiles({
 			components,
 			relations: [],
-			repoRoots: { "pkg:github/a/repo-a": repoA },
 		});
 		expect(result.declarationsVerified).toBe(1);
 		expect(result.declarationsAuthored).toBe(1); // defaulted from missing
@@ -330,158 +294,36 @@ describe("relation and walkthrough mechanism sets", () => {
 		]);
 		expect(SUBSYSTEM_EDGE_MECHANISMS_COVER_PUBLISHED_UNION).toBe(true);
 	});
-
-	test("accepts every allowed relation type", () => {
-		const rels = SUBSYSTEM_RELATION_TYPES.map((relationType, i) => ({
-			id: `r${i}`,
-			from: "a",
-			to: "b",
-			relationType,
-		}));
-		expect(findRelationTypeProblems(rels)).toEqual([]);
-	});
-});
-
-describe("findComponentConstructProblems", () => {
-	test("pins the authored construct set (published union minus module)", () => {
-		expect([...SUBSYSTEM_COMPONENT_CONSTRUCTS]).toEqual([
-			"class",
-			"function",
-			"method",
-			"interface",
-			"type_alias",
-			"enum",
-			"store",
-			"external",
-			"custom_entity",
-		]);
-	});
-
-	test("accepts every authored construct", () => {
-		const components = SUBSYSTEM_COMPONENT_CONSTRUCTS.map((construct, i) => ({
-			id: `c${i}`,
-			name: `C${i}`,
-			construct,
-			file: "src/x.ts",
-			purl: "pkg:github/a/b",
-		}));
-		expect(findComponentConstructProblems(components)).toEqual([]);
-	});
-
-	test("rejects module with the subsystem-reference policy in the message", () => {
-		const problems = findComponentConstructProblems([
-			{ id: "mod1", construct: "module", file: "src/mod.ts", purl: "pkg:github/a/b" },
-		]);
-		expect(problems).toHaveLength(1);
-		expect(problems[0]).toContain('"mod1"');
-		expect(problems[0]).toContain("own subsystem");
-		expect(problems[0]).toContain("separate graph");
-	});
-
-	test("rejects off-vocabulary conceptual kinds", () => {
-		const problems = findComponentConstructProblems([
-			{ id: "s1", construct: "service", file: "src/s.ts", purl: "pkg:github/a/b" },
-			{ id: "s2", construct: "variable", file: "src/s2.ts", purl: "pkg:github/a/b" },
-		]);
-		expect(problems).toHaveLength(2);
-	});
-
-	test("flags non-string and missing kinds; tolerates absent input", () => {
-		expect(findComponentConstructProblems([{ id: "n1", construct: 7 }])).toHaveLength(1);
-		expect(findComponentConstructProblems([{ id: "n2" }])).toHaveLength(1);
-		expect(findComponentConstructProblems([])).toEqual([]);
-		expect(findComponentConstructProblems(undefined)).toEqual([]);
-	});
-});
-
-describe("findWalkthroughProblems", () => {
-	test("tolerates absent walkthroughs", () => {
-		expect(findWalkthroughProblems(undefined)).toEqual([]);
-	});
-
-	test("accepts a well-formed walkthrough step", () => {
-		const problems = findWalkthroughProblems([
-			{
-				id: "wt",
-				title: "save",
-				steps: [{ from: "a", to: "b", mechanism: "calls", file: "src/a.ts", line: 3 }],
-			},
-		]);
-		expect(problems).toEqual([]);
-	});
-
-	test("rejects non-array walkthroughs", () => {
-		expect(findWalkthroughProblems({})[0]).toContain("must be an array");
-	});
-
-	test("rejects missing id / title / steps and invalid hop fields", () => {
-		const missingId = findWalkthroughProblems([
-			{ id: "", title: "t", steps: [{ from: "a", to: "b", mechanism: "calls", file: "a.ts", line: 3 }] },
-		]);
-		expect(missingId.join("; ")).toContain("id is required");
-
-		const missingTitle = findWalkthroughProblems([
-			{ id: "wt", title: "", steps: [{ from: "a", to: "b", mechanism: "calls", file: "a.ts", line: 3 }] },
-		]);
-		expect(missingTitle.join("; ")).toContain("title is required");
-
-		const badMech = findWalkthroughProblems([
-			{ id: "wt", title: "t", steps: [{ from: "a", to: "b", mechanism: "imports", file: "a.ts", line: 3 }] },
-		]);
-		expect(badMech.join("; ")).toContain("unknown mechanism");
-	});
-
-	test("rejects non-positive or non-integer line", () => {
-		const problems = findWalkthroughProblems([
-			{
-				id: "wt",
-				title: "t",
-				steps: [{ from: "a", to: "b", mechanism: "calls", file: "a.ts", line: 0 }],
-			},
-		]);
-		expect(problems.join("; ")).toContain("positive 1-based integer");
-	});
 });
 
 describe("walkthrough verify pass", () => {
 	test("resolves steps to real site lines and flags stuck/blank/misfit sites", async () => {
-		const local = mkdtempSync(join(tmpdir(), "wt-verify-"));
-		try {
-			mkdirSync(join(local, "src"), { recursive: true });
-			writeFileSync(
-				join(local, "src", "seam.ts"),
-				["function a() {}", "const store = createStore();", "writer(store, a());", ""].join("\n"),
-				"utf8",
-			);
-			const components: SubsystemComponent[] = [
-				{ id: "a", name: "a", construct: "function", symbol: "a", file: "src/seam.ts", purl: "pkg:github/a/repo-a" },
-				{ id: "store", name: "store", construct: "store", file: "src/seam.ts", purl: "pkg:github/a/repo-a" },
-			];
-			const result = await verifyModelFiles({
-				components,
-				relations: [],
-				walkthroughs: [
-					{
-						id: "wt",
-						title: "save",
-						steps: [
-							{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 3 },
-							{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 999 },
-							{ from: "a", to: "store", mechanism: "calls", file: "src/nope.ts", line: 1 },
-							{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 4 },
-						],
-					},
-				],
-				repoRoots: { "pkg:github/a/repo-a": local },
-			});
+		// `src/seam.ts` lives in the registered repo-a checkout (see beforeAll).
+		const components: SubsystemComponent[] = [
+			{ id: "a", name: "a", construct: "function", symbol: "a", file: "src/seam.ts", purl: "pkg:github/a/repo-a" },
+			{ id: "store", name: "store", construct: "store", file: "src/seam.ts", purl: "pkg:github/a/repo-a" },
+		];
+		const result = await verifyModelFiles({
+			components,
+			relations: [],
+			walkthroughs: [
+				{
+					id: "wt",
+					title: "save",
+					steps: [
+						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 3 },
+						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 999 },
+						{ from: "a", to: "store", mechanism: "calls", file: "src/nope.ts", line: 1 },
+						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 4 },
+					],
+				},
+			],
+		});
 
-			expect(result.walkthroughsChecked).toBe(1);
-			const reasons = result.walkthroughsFailed.map((f) => f.reason);
-			expect(reasons.some((r) => r.includes("out of range"))).toBe(true);
-			expect(reasons.some((r) => r.includes("not found"))).toBe(true);
-			expect(reasons.some((r) => r.includes("blank"))).toBe(true);
-		} finally {
-			rmSync(local, { recursive: true, force: true });
-		}
+		expect(result.walkthroughsChecked).toBe(1);
+		const reasons = result.walkthroughsFailed.map((f) => f.reason);
+		expect(reasons.some((r) => r.includes("out of range"))).toBe(true);
+		expect(reasons.some((r) => r.includes("not found"))).toBe(true);
+		expect(reasons.some((r) => r.includes("blank"))).toBe(true);
 	});
 });

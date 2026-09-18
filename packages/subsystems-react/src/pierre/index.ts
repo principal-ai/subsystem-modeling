@@ -8,7 +8,6 @@ export { remapSnippetLineNumbers, sliceSnippetWindow } from './sliceSnippet';
 export type { SnippetSlice } from './sliceSnippet';
 export {
   isPierreCFamilyPath,
-  pierreCodeViewFileName,
   pierreLangForPath,
 } from './pierreFileLang';
 export {

@@ -8,11 +8,16 @@ import {
   getSubsystemPackageRegions,
   processGroupNodeId,
   moduleGroupNodeId,
+  moduleBadgeLabel,
+  moduleBadgeHoverLabel,
+  moduleBadgeWidth,
+  moduleMinWidthForBadge,
   packageGroupNodeId,
   buildBoundaryLayoutGroups,
   buildSubsystemGraph,
   componentPackageKey,
   deriveNameFromSymbol,
+  isConstructsOnlyModel,
   constructBadgeLabel,
   constructBadgeColor,
   FRAMEWORK_BADGE_COLOR,
@@ -127,9 +132,9 @@ describe('subsystem graph model', () => {
     expect(deriveNameFromSymbol('Foo {}', 'interface')).toBe('Foo {}');
   });
 
-  test('deriveNameFromSymbol uses JSX decoration for component stereotype', () => {
+  test('deriveNameFromSymbol renders component stereotype bare', () => {
     expect(deriveNameFromSymbol('AnalysisView', 'function', undefined, undefined, 'component')).toBe(
-      '<AnalysisView>',
+      'AnalysisView',
     );
     expect(deriveNameFromSymbol('useDrawingsHost', 'function', undefined, undefined, 'hook')).toBe(
       'useDrawingsHost()',
@@ -640,5 +645,88 @@ describe('subsystem graph model', () => {
       relations,
     };
     expect(subsystemGraphLayoutKey(base)).toBe(subsystemGraphLayoutKey(withRef));
+  });
+});
+
+describe('isConstructsOnlyModel', () => {
+  test('true when components exist and there are no edges', () => {
+    expect(isConstructsOnlyModel({ components: comps, relations: [], walkthroughs: [] })).toBe(true);
+    expect(isConstructsOnlyModel({ components: comps })).toBe(true);
+  });
+
+  test('false when empty, or when relations or walkthrough hops exist', () => {
+    expect(isConstructsOnlyModel({ components: [], relations: [] })).toBe(false);
+    expect(isConstructsOnlyModel({ components: comps, relations })).toBe(false);
+    expect(
+      isConstructsOnlyModel({
+        components: comps,
+        relations: [],
+        walkthroughs: [
+          {
+            id: 'wt',
+            title: 'flow',
+            steps: [
+              {
+                from: 'transcript',
+                to: 'reader',
+                mechanism: 'calls',
+                file: 'transcript.ts',
+                line: 1,
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('module badge labels', () => {
+  test('moduleBadgeLabel keeps the full path when it fits the module width', () => {
+    expect(moduleBadgeLabel('src/main.ts', 1000)).toBe('src/main.ts');
+  });
+
+  test('moduleBadgeLabel keeps short paths even with a tiny module', () => {
+    expect(moduleBadgeLabel('main.ts', 0)).toBe('main.ts');
+  });
+
+  test('moduleBadgeLabel collapses deep paths to first and last segment', () => {
+    expect(moduleBadgeLabel('packages/subsystems-react/src/subsystem/nodes.tsx', 0))
+      .toBe('packages/…/nodes.tsx');
+    expect(moduleBadgeLabel('src/session/transcript.ts', 0)).toBe('src/…/transcript.ts');
+  });
+
+  test('moduleMinWidthForBadge is generous enough for the first + last segments', () => {
+    for (const path of ['main.ts', 'packages/subsystems-react/src/subsystem/nodes.tsx']) {
+      const min = moduleMinWidthForBadge(path);
+      expect(min).toBeGreaterThanOrEqual(moduleMinWidthForBadge('main.ts'));
+      // The min width reserves enough for an actual non-collapsed label.
+      expect(moduleBadgeLabel('main.ts', min)).toBe('main.ts');
+    }
+    // A deep path would still collapse at its own min width — that's the point.
+    expect(moduleBadgeLabel('packages/subsystems-react/src/subsystem/nodes.tsx', moduleMinWidthForBadge('packages/subsystems-react/src/subsystem/nodes.tsx')))
+      .toMatch(/^packages\/…\/nodes\.tsx$/);
+  });
+
+  test('moduleBadgeHoverLabel reveals more trailing segments as width allows, never the full path', () => {
+    const deep = 'packages/subsystems-react/src/subsystem/nodes.tsx';
+    const fullWidth = moduleBadgeWidth(deep);
+    // Enough room for one more middle segment, but not the full path.
+    const oneMore = 'packages/…/subsystem/nodes.tsx';
+    const roomy = moduleBadgeWidth(oneMore) + 10;
+    const hovered = moduleBadgeHoverLabel(deep, roomy);
+    expect(hovered).toContain('…');
+    expect(hovered).not.toBe(deep);
+    expect(hovered.startsWith('packages/…/')).toBe(true);
+    // Reveals more than the bare first + last, without passing the budget.
+    expect(moduleBadgeWidth(hovered)).toBeGreaterThan(moduleBadgeWidth('packages/…/nodes.tsx'));
+    expect(moduleBadgeWidth(hovered)).toBeLessThanOrEqual(roomy);
+    expect(moduleBadgeWidth(hovered)).toBeLessThanOrEqual(fullWidth);
+    // With plenty of room it returns the full path.
+    expect(moduleBadgeHoverLabel(deep, fullWidth + 8)).toBe(deep);
+  });
+
+  test('moduleBadgeWidth estimates a label strictly wider than its shorter precursor', () => {
+    expect(moduleBadgeWidth('src/…/nodes.tsx')).toBeLessThan(moduleBadgeWidth('packages/…/nodes.tsx'));
   });
 });

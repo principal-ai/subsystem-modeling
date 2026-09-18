@@ -10,6 +10,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { File } from '@pierre/diffs/react';
+import {
+  getFiletypeFromFileName,
+  getHighlighterOptions,
+  preloadHighlighter,
+} from '@pierre/diffs';
 import { useTheme } from '@principal-ade/industry-theme';
 import { buildPierreOptions, PIERRE_FILE_STYLE } from './pierreBackground';
 import { pierreLangForPath } from './pierreFileLang';
@@ -47,6 +52,25 @@ export function PierreSnippetView({
   const { theme } = useTheme();
   const [contents, setContents] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Warm the shared highlighter before mounting <File>; a cold first render
+  // paints an empty <pre> that never re-renders (no worker pool).
+  const [highlighterReady, setHighlighterReady] = useState(false);
+  const lang = pierreLangForPath(filePath) ?? getFiletypeFromFileName(fileName);
+
+  useEffect(() => {
+    let cancelled = false;
+    setHighlighterReady(false);
+    void preloadHighlighter(getHighlighterOptions(lang, {}))
+      .catch(() => {
+        // Fall through: let <File> attempt its own (plain-text) render.
+      })
+      .then(() => {
+        if (!cancelled) setHighlighterReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lang]);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,7 +140,7 @@ export function PierreSnippetView({
       </div>
     );
   }
-  if (!fileObject || !slice) {
+  if (!fileObject || !slice || !highlighterReady) {
     return (
       <div style={{ padding: 16, color: theme.colors.textSecondary }}>
         Loading…

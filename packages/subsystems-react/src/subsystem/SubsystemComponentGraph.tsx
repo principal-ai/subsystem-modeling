@@ -7,6 +7,9 @@
  * inside one labeled boundary frame; nodes without one sit outside every
  * boundary. Clicking a component invokes `onSelect`.
  *
+ * When the model has components but no topology or walkthrough edges, the
+ * canvas is a constructs catalog (list + signature) instead of a graph.
+ *
  * This is a focused fork of the package's `GraphRenderer` pipeline (same ELK
  * edge routing, delayed fitView, Background/Controls/MiniMap, node/edge type
  * injection, onNodeClick) adapted to the subsystem model — read-only.
@@ -32,11 +35,12 @@ import {
   applyNodeChanges,
 } from '@xyflow/react';
 import { useTheme } from '@principal-ade/industry-theme';
-import { ChevronDown, ChevronUp, Pause, Play, X } from 'lucide-react';
+import { FileText, Pause, Play, X } from 'lucide-react';
 import { IndustryMarkdownSlide } from 'themed-markdown';
 import {
   buildSubsystemGraph,
   deriveGraphEdges,
+  isConstructsOnlyModel,
   isRelationMechanism,
   isWalkthroughMechanism,
   MECHANISM_COLOR,
@@ -50,8 +54,11 @@ import {
   type SubsystemRelation,
   type SubsystemWalkthrough,
 } from './model';
+import { ConstructsCatalog } from './ConstructsCatalog';
 import type { SubsystemOpenFileOptions } from './declarationRef';
 import { SubsystemComponentNode, SubsystemGroupNode, SubsystemEdge, SUBSYSTEM_CALLBACKS, hexWithAlpha, EDGE_DIM_ALPHA, fileMatchForNode, flowElementVisibility } from './nodes';
+import { SubsystemDiagnosticToggle, type SubsystemDiagnostic } from './DiagnosticToggle';
+import { SubsystemIssueList, type SubsystemIssue } from './IssueList';
 import { SubsystemFileTree } from './SubsystemFileTree';
 import { GraphLayoutCover } from './GraphLayoutCover';
 import { ComponentDeclaration } from './ComponentDeclaration';
@@ -109,8 +116,10 @@ export interface SubsystemComponentGraphProps {
    * - `relations`: topology relation edges (`imports`, `extends`, …)
    * - `walkthroughs`: walkthrough hop edges (`calls`, `feeds`, …), including
    *   step numbers when a flow is focused/hovered
-   * Defaults to `walkthroughs` when the model has walkthroughs but no
-   * relations (e.g. flow-only models), otherwise `relations`.
+   * Leave unset to let the sidebar's Files / Walkthroughs tab drive it: Files
+   * draws topology relations, Walkthroughs draws runtime hops. Without visible
+   * tabs, defaults to `walkthroughs` for a flow-only model (walkthroughs but
+   * no relations), otherwise `relations`.
    */
   edgeView?: SubsystemEdgeView;
   /** Subsystem title displayed in the sidebar. */
@@ -160,6 +169,30 @@ export interface SubsystemComponentGraphProps {
   sidebarExtra?: ReactNode;
   /** Rendered in the sidebar under the description (e.g. selection inspector). */
   sidebarAfterDescription?: ReactNode;
+  /**
+   * Diagnostics status chip in the sidebar title row (beside the description
+   * toggle). Shows the last verification pass's state as an icon color + count,
+   * and toggles the sidebar between the diagnostics list and the normal
+   * files/walkthroughs view. Omit to hide the chip.
+   */
+  diagnostic?: SubsystemDiagnostic;
+  /**
+   * Verification issues for this graph (audit findings). When diagnostics are
+   * active the sidebar's bottom panel becomes the issue list instead of the
+   * file tree / walkthroughs.
+   */
+  issues?: SubsystemIssue[];
+  /**
+   * Pin diagnostics mode (controlled). When omitted, the sidebar seeds
+   * diagnostics on iff `issues` is non-empty, and the title-row chip toggles it.
+   */
+  showIssues?: boolean;
+  /** Click an issue — focus its target on the graph / open detail. */
+  onSelectIssue?: (issue: SubsystemIssue) => void;
+  /** Apply an issue's deterministic fix. */
+  onApplyIssueFix?: (issue: SubsystemIssue) => void;
+  /** Hover an issue — transiently highlight its target (null on leave). */
+  onHoverIssue?: (issue: SubsystemIssue | null) => void;
   /**
    * Host-injected reader/renderer for the bottom file drawer, keyed by
    * repo-root-relative path. Opening happens on declaration/file-tree clicks.
@@ -274,7 +307,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, onVerifyComponent, componentVerification }: InnerProps) {
+function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, onVerifyComponent, componentVerification }: InnerProps) {
   const { theme } = useTheme();
   const { fitView } = useReactFlow();
   const viewport = useViewport();
@@ -282,13 +315,6 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
     () => deriveGraphEdges({ relations, walkthroughs }),
     [relations, walkthroughs],
   );
-  // One edge vocabulary at a time. When the caller doesn't pick, follow the
-  // model: a flow-only graph defaults to walkthrough edges rather than empty.
-  const resolvedEdgeView: SubsystemEdgeView =
-    edgeView ??
-    (relations.length === 0 && (walkthroughs?.length ?? 0) > 0
-      ? 'walkthroughs'
-      : 'relations');
   const [built, setBuilt] = useState<{ nodes: Node[]; edges: Edge[] }>({
     nodes: [],
     edges: [],
@@ -328,6 +354,19 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
   const [sidebarView, setSidebarView] = useState<'files' | 'walkthroughs'>(() =>
     walkthroughs?.length ? 'walkthroughs' : 'files',
   );
+  // One edge vocabulary at a time. When the caller doesn't pick, the sidebar's
+  // Files / Walkthroughs tab picks: Files draws topology relation edges,
+  // Walkthroughs draws runtime hop edges. Without visible tabs (no walkthroughs,
+  // or a sidebar-less embed) fall back to the model: a flow-only graph defaults
+  // to walkthrough edges rather than empty, everything else to relations.
+  const sidebarTabsVisible = !hideSidebar && (walkthroughs?.length ?? 0) > 0;
+  const resolvedEdgeView: SubsystemEdgeView =
+    edgeView ??
+    (sidebarTabsVisible
+      ? (sidebarView === 'walkthroughs' ? 'walkthroughs' : 'relations')
+      : relations.length === 0 && (walkthroughs?.length ?? 0) > 0
+        ? 'walkthroughs'
+        : 'relations');
   // Walkthrough flows the user has expanded (via the title row). Closed by
   // default so a graph with several flows doesn't dump every step list at once.
   const [expandedWalkthroughs, setExpandedWalkthroughs] = useState<Set<string>>(new Set());
@@ -935,6 +974,17 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
   // own owner-avatar header. Clicking a header collapses that repo's tree.
   const repoGroups = useMemo(() => buildRepoGroups(components), [components]);
   const hasWalkthroughs = useMemo(() => (walkthroughs?.length ?? 0) > 0, [walkthroughs]);
+  // Diagnostics view in the sidebar. Uncontrolled unless the host pins
+  // `showIssues`: the title-row chip toggles it, seeded from issues presence.
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState<boolean>(
+    showIssues ?? (issues?.length ?? 0) > 0,
+  );
+  const controlledIssues = showIssues !== undefined;
+  const issuesActive = controlledIssues ? showIssues : diagnosticsOpen;
+  const toggleIssues = () => {
+    if (!controlledIssues) setDiagnosticsOpen((v) => !v);
+    diagnostic?.onToggle?.();
+  };
   const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(new Set());
   const toggleRepoCollapsed = useCallback((key: string) => {
     setCollapsedRepos((prev) => {
@@ -1087,6 +1137,21 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
     setHoveredWalkthroughStep(null);
     setDrawerTarget((prev) => (prev?.kind === 'walkthrough' ? null : prev));
   }, []);
+
+  // Switching sidebar panels also switches the edge vocabulary. Leaving the
+  // Walkthroughs panel drops its canvas state (focus, expanded flows, selected
+  // edge) so the Files view's topology edges aren't gated by a flow the user
+  // can no longer see or un-dim.
+  const changeSidebarView = useCallback(
+    (view: 'files' | 'walkthroughs') => {
+      setSidebarView(view);
+      if (view === 'walkthroughs') return;
+      clearWalkthroughFocus();
+      setExpandedWalkthroughs(new Set());
+      setSelectedEdgeId(null);
+    },
+    [clearWalkthroughFocus],
+  );
 
   // Focus a single step's edge on the canvas and open/scroll the walkthrough
   // drawer to that step's snippet. Clicking the already-focused step clears
@@ -1426,7 +1491,7 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
       {/* Sidebar: scrollable title/description on top, files or flows pinned below.
           The description hides by default so files/flows get the room; the
           title-row toggle reveals it, and the lower panel yields back to 50%. */}
-      {!hideSidebar && (title || description || sidebarExtra || sidebarAfterDescription || treeFilePaths.length > 0 || hasWalkthroughs) && (
+      {!hideSidebar && (title || description || diagnostic || issuesActive || sidebarExtra || sidebarAfterDescription || treeFilePaths.length > 0 || hasWalkthroughs) && (
         <div
           style={{
             width: sidebarWidth,
@@ -1450,7 +1515,7 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
             }}
           >
           {sidebarExtra}
-          {(title || description) && (
+          {(title || description || diagnostic) && (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
               {title && (
                 <h2
@@ -1467,34 +1532,53 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
                   {title}
                 </h2>
               )}
-              {description && (
-                <button
-                  type="button"
-                  aria-expanded={descriptionVisible}
-                  aria-label={descriptionVisible ? 'Hide description' : 'Show description'}
-                  title={descriptionVisible ? 'Hide description' : 'Show description'}
-                  onMouseEnter={() => setDescToggleHover(true)}
-                  onMouseLeave={() => setDescToggleHover(false)}
-                  onClick={() => setDescriptionVisible((v) => !v)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                    width: 22,
-                    height: 22,
-                    padding: 0,
-                    border: 'none',
-                    borderRadius: 4,
-                    background: descToggleHover ? theme.colors.border : 'transparent',
-                    color: descToggleHover ? theme.colors.text : (theme.colors.textMuted ?? theme.colors.textSecondary),
-                    cursor: 'pointer',
-                    transition: 'background 120ms ease, color 120ms ease',
-                  }}
-                >
-                  {descriptionVisible ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </button>
-              )}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  flexShrink: 0,
+                  // Title's flex:1 already pushes this cluster right; without a
+                  // title, keep the actions flush right instead of flush-left.
+                  marginLeft: title ? undefined : 'auto',
+                }}
+              >
+                {diagnostic && (
+                  <SubsystemDiagnosticToggle
+                    {...diagnostic}
+                    active={issuesActive}
+                    onToggle={toggleIssues}
+                  />
+                )}
+                {description && (
+                  <button
+                    type="button"
+                    aria-expanded={descriptionVisible}
+                    aria-label={descriptionVisible ? 'Hide description' : 'Show description'}
+                    title={descriptionVisible ? 'Hide description' : 'Show description'}
+                    onMouseEnter={() => setDescToggleHover(true)}
+                    onMouseLeave={() => setDescToggleHover(false)}
+                    onClick={() => setDescriptionVisible((v) => !v)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      width: 22,
+                      height: 22,
+                      padding: 0,
+                      border: 'none',
+                      borderRadius: 4,
+                      background: descriptionVisible || descToggleHover ? theme.colors.border : 'transparent',
+                      color: descriptionVisible || descToggleHover ? theme.colors.text : (theme.colors.textMuted ?? theme.colors.textSecondary),
+                      cursor: 'pointer',
+                      transition: 'background 120ms ease, color 120ms ease',
+                    }}
+                  >
+                    <FileText size={14} />
+                  </button>
+                )}
+              </div>
             </div>
           )}
           {description && descriptionVisible && (
@@ -1507,7 +1591,6 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
                 theme={theme}
                 disableScroll={true}
                 disableBasePadding
-                fontSizeScale={0.9}
                 enableKeyboardScrolling={false}
                 autoFocusOnVisible={false}
               />
@@ -1515,7 +1598,7 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
           )}
           {sidebarAfterDescription}
           </div>
-          {(treeFilePaths.length > 0 || hasWalkthroughs) && (
+          {(treeFilePaths.length > 0 || hasWalkthroughs || issuesActive) && (
             <div
               style={{
                 ...(showDesc ? { height: '50%' as const } : { flex: 1, minHeight: 0 }),
@@ -1527,6 +1610,15 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
                 overflow: 'hidden',
               }}
             >
+              {issuesActive ? (
+                <SubsystemIssueList
+                  issues={issues ?? []}
+                  onSelectIssue={onSelectIssue}
+                  onApplyFix={onApplyIssueFix}
+                  onHoverIssue={onHoverIssue}
+                />
+              ) : (
+                <>
               {hasWalkthroughs && (
                 <div
                   role="tablist"
@@ -1545,7 +1637,7 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
                       type="button"
                       role="tab"
                       aria-selected={sidebarView === view}
-                      onClick={() => setSidebarView(view)}
+                      onClick={() => changeSidebarView(view)}
                       style={{
                         flex: 1,
                         minWidth: 0,
@@ -1640,13 +1732,15 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
               })}
               </>
               ) : null}
+                </>
+              )}
             </div>
           )}
         </div>
       )}
       
       {/* Drag handle between sidebar and canvas — resize the left panel. */}
-      {!hideSidebar && (title || description || sidebarExtra || sidebarAfterDescription || treeFilePaths.length > 0 || hasWalkthroughs) && (
+      {!hideSidebar && (title || description || diagnostic || issuesActive || sidebarExtra || sidebarAfterDescription || treeFilePaths.length > 0 || hasWalkthroughs) && (
         <div
           onMouseDown={onSidebarResizeStart}
           aria-label="Resize sidebar"
@@ -1936,6 +2030,18 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
               onRelatedSelect={resolveRelatedComponent}
               onVerify={onVerifyComponent}
               verification={componentVerification}
+              fileOpen={
+                drawerTarget?.kind === 'file' &&
+                !!selected.file &&
+                selected.file === drawerTarget.file
+              }
+              declarationOpen={
+                drawerTarget?.kind === 'file' &&
+                drawerTarget.startLine != null &&
+                !!selected.file &&
+                selected.file === drawerTarget.file &&
+                selected.declarationRef?.startLine === drawerTarget.startLine
+              }
             />
           </div>
         )}
@@ -2352,7 +2458,7 @@ function WalkthroughFlow({
                   style={{
                     flexShrink: 0,
                     width: 14,
-                    fontSize: theme.fontSizes[0] * 0.8,
+                    fontSize: theme.fontSizes[0],
                     fontFamily: theme.fonts.monospace,
                     color: stepActive ? theme.colors.text : muted,
                   }}
@@ -2435,6 +2541,12 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
     return () => ro.disconnect();
   }, []);
 
+  const constructsOnly = isConstructsOnlyModel({
+    components: props.components,
+    relations: props.relations,
+    walkthroughs: props.walkthroughs,
+  });
+
   return (
     <div
       ref={wrapRef}
@@ -2448,9 +2560,27 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
       }}
     >
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <ReactFlowProvider>
-          <Inner {...props} measured={size} />
-        </ReactFlowProvider>
+        {constructsOnly ? (
+          <ConstructsCatalog
+            components={props.components}
+            onSelect={props.onSelect}
+            title={props.title}
+            hideSidebar={props.hideSidebar}
+            description={props.description}
+            diagnostic={props.diagnostic}
+            sidebarExtra={props.sidebarExtra}
+            sidebarAfterDescription={props.sidebarAfterDescription}
+            renderFileViewer={props.renderFileViewer}
+            renderFileView={props.renderFileView}
+            onFileSelect={props.onFileSelect}
+            onVerifyComponent={props.onVerifyComponent}
+            componentVerification={props.componentVerification}
+          />
+        ) : (
+          <ReactFlowProvider>
+            <Inner {...props} measured={size} />
+          </ReactFlowProvider>
+        )}
       </div>
     </div>
   );

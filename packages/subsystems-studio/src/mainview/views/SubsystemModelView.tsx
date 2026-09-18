@@ -8,8 +8,8 @@
  * "Edit in Excalidraw" fades an editable drawing over the same pane.
  */
 
-import { useCallback, useEffect, useState } from "react";
-import { ClipboardCheck, Loader2, PenTool, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { PenTool, X } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
 	SubsystemComponentGraph,
@@ -18,6 +18,8 @@ import {
 	PierreSnippetView,
 	PierreWalkthroughCodeView,
 	type ComponentVerificationState,
+	type SubsystemDiagnostic,
+	type SubsystemIssue,
 	type SubsystemOpenFileOptions,
 	type WalkthroughViewerContext,
 } from "@principal-ai/subsystems-react";
@@ -28,17 +30,29 @@ import {
 	type AuditModalState,
 } from "../components/AuditResultsModal";
 import { runSubsystemModelAuditFlow } from "../auditSubsystemModelFlow";
+import {
+	auditReportToIssues,
+	diagnosticIssueCount,
+	diagnosticStatus,
+} from "../subsystemIssues";
 import { SubsystemExcalidrawOverlay } from "../components/SubsystemExcalidrawOverlay";
 import type { ExcalidrawSelectionInfo } from "../excalidraw/excalidrawToSubsystem";
 import type {
 	StoredSubsystemModel,
 	StudioMessages,
+	SubsystemModelAuditReport,
 } from "../../shared/contract";
 
 // Disabled for now — Excalidraw edits don't save back to the store yet
 // (excalidrawSceneToSubsystemModel exists but nothing wires it up), so the
 // editor is a dead end. Flip this on once save-back lands.
 const SHOW_EXCALIDRAW_EDIT = false;
+
+/** Placeholder graph for mapping before the model loads (never rendered). */
+const EMPTY_MODEL = {
+	components: [],
+	relations: [],
+} as unknown as StoredSubsystemModel;
 
 export function SubsystemModelView({
 	tabId,
@@ -55,6 +69,10 @@ export function SubsystemModelView({
 	const [verifyComponentId, setVerifyComponentId] = useState<string | null>(null);
 	const [auditBusy, setAuditBusy] = useState(false);
 	const [auditModal, setAuditModal] = useState<AuditModalState | null>(null);
+	const [auditReport, setAuditReport] = useState<SubsystemModelAuditReport | null>(null);
+	const [auditStale, setAuditStale] = useState(false);
+	/** Diagnostics list shown in the sidebar (toggled by the header chip). */
+	const [showIssues, setShowIssues] = useState(false);
 
 	const loadGraph = useCallback(() => {
 		void electrobun.rpc!.request
@@ -65,23 +83,40 @@ export function SubsystemModelView({
 			.catch(() => setGraph(null));
 	}, [graphId]);
 
+	const loadAudit = useCallback(() => {
+		void electrobun.rpc!.request
+			.getSubsystemModelAudit({ graphId })
+			.then((res) => {
+				setAuditReport(res.ok && res.report ? res.report : null);
+				setAuditStale(res.stale === true);
+			})
+			.catch(() => {
+				setAuditReport(null);
+				setAuditStale(false);
+			});
+	}, [graphId]);
+
 	useEffect(() => {
 		loadGraph();
+		loadAudit();
 		reloadSubscribers.add(loadGraph);
 		return () => {
 			reloadSubscribers.delete(loadGraph);
 		};
-	}, [loadGraph]);
+	}, [loadGraph, loadAudit]);
 
 	useEffect(() => {
 		const onPush = (payload: StudioMessages["subsystemModelChanged"]) => {
-			if (payload.graphId === graphId) loadGraph();
+			if (payload.graphId === graphId) {
+				loadGraph();
+				loadAudit();
+			}
 		};
 		subsystemModelChangeSubscribers.add(onPush);
 		return () => {
 			subsystemModelChangeSubscribers.delete(onPush);
 		};
-	}, [graphId, loadGraph]);
+	}, [graphId, loadGraph, loadAudit]);
 
 	const readFile = useCallback(
 		(path: string) =>
@@ -256,14 +291,71 @@ export function SubsystemModelView({
 		if (!graph || auditBusy) return;
 		setAuditBusy(true);
 		try {
-			await runSubsystemModelAuditFlow(graphId, {
+			const res = await runSubsystemModelAuditFlow(graphId, {
 				graph,
 				onModal: setAuditModal,
 			});
+			if (res.ok) {
+				setAuditReport(res.report);
+				setAuditStale(false);
+				setShowIssues(true);
+			}
 		} finally {
 			setAuditBusy(false);
 		}
 	}, [graph, graphId, auditBusy]);
+
+	// Chip: run when there's no report or it's stale, otherwise toggle the list.
+	const onDiagnosticToggle = useCallback(() => {
+		if (!auditReport || auditStale) {
+			void onAudit();
+			return;
+		}
+		setShowIssues((v) => !v);
+	}, [auditReport, auditStale, onAudit]);
+
+	const { issues: auditIssues, byId: auditFindingById } = useMemo(
+		() => auditReportToIssues(auditReport, graph ?? EMPTY_MODEL),
+		[auditReport, graph],
+	);
+
+	const diagnostic: SubsystemDiagnostic = {
+		status: diagnosticStatus(auditReport),
+		issueCount: diagnosticIssueCount(auditReport),
+		stale: auditStale,
+		busy: auditBusy,
+		onToggle: onDiagnosticToggle,
+	};
+
+	const onSelectIssue = useCallback(
+		(issue: SubsystemIssue) => {
+			if (issue.target?.kind === "component" && issue.target.id) {
+				onSelect(issue.target.id);
+			}
+		},
+		[onSelect],
+	);
+
+	const onApplyIssueFix = useCallback(
+		(issue: SubsystemIssue) => {
+			const finding = auditFindingById.get(issue.id);
+			const fixId = finding?.fix?.id;
+			if (!fixId) return;
+			void electrobun.rpc!.request
+				.applySubsystemModelAuditFix({
+					graphId,
+					fixId,
+					componentId: finding?.componentId,
+				})
+				.then((res) => {
+					if (res.ok && res.report) setAuditReport(res.report);
+				})
+				.catch(() => {
+					/* best-effort — the next audit refresh reconciles */
+				});
+		},
+		[auditFindingById, graphId],
+	);
 
 	if (graph === undefined) {
 		return <CenteredMessage title="Loading subsystem graph..." />;
@@ -293,6 +385,11 @@ export function SubsystemModelView({
 				onSelect={onSelect}
 				onVerifyComponent={(id) => void onVerifyComponent(id)}
 				componentVerification={verification}
+				diagnostic={diagnostic}
+				issues={auditIssues}
+				showIssues={showIssues}
+				onSelectIssue={onSelectIssue}
+				onApplyIssueFix={onApplyIssueFix}
 				sidebarAfterDescription={
 					excalidrawOpen ? <SelectionInspector selection={selection} /> : undefined
 				}
@@ -319,36 +416,7 @@ export function SubsystemModelView({
 							<X size={14} />
 							Back to graph
 						</button>
-					) : (
-						<button
-							type="button"
-							disabled={auditBusy}
-							onClick={() => void onAudit()}
-							style={{
-								display: "inline-flex",
-								alignItems: "center",
-								gap: 6,
-								padding: "6px 12px",
-								borderRadius: 6,
-								border: `1px solid ${theme.colors.border ?? "#333"}`,
-								background: theme.colors.background,
-								color: theme.colors.text,
-								fontSize: theme.fontSizes[1],
-								fontFamily: theme.fonts.monospace,
-								cursor: auditBusy ? "default" : "pointer",
-								opacity: auditBusy ? 0.7 : 1,
-								alignSelf: "flex-start",
-							}}
-							title="Ensure graphify cache if needed, then run a dry-run audit"
-						>
-							{auditBusy ? (
-								<Loader2 size={14} className="principal-studio-spin" />
-							) : (
-								<ClipboardCheck size={14} />
-							)}
-							{auditBusy ? "Auditing…" : "Audit"}
-						</button>
-					)
+					) : undefined
 				}
 				canvasOverlay={
 					<>
@@ -398,6 +466,8 @@ export function SubsystemModelView({
 					onClose={() => setAuditModal(null)}
 					onReportChange={(report) => {
 						setAuditModal({ phase: "done", report });
+						setAuditReport(report);
+						setAuditStale(false);
 					}}
 				/>
 			)}

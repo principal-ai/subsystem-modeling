@@ -37,10 +37,7 @@ import {
 	runGraphifyExtract,
 	type GraphifyGraphSmoke,
 } from "./graphify-runner";
-import {
-	purlRepoKey,
-	resolveRepoRootForComponent,
-} from "./subsystem-model-store";
+import { purlRepoKey } from "./subsystem-model-store";
 import type {
 	SubsystemGraphifyAggregateStatus,
 	SubsystemGraphifyPurlReadiness,
@@ -838,8 +835,6 @@ export async function ensureCurrentGraphifyCachesForModel(
 			proposed?: boolean;
 			construct?: string;
 		}>;
-		repoRoot?: string;
-		repoRoots?: Record<string, string>;
 	},
 	opts?: { storeRoot?: string; bin?: string },
 ): Promise<{
@@ -857,11 +852,7 @@ export async function ensureCurrentGraphifyCachesForModel(
 		}
 		const key = purlRepoKey(c.purl);
 		if (!key || key === "external" || byPurl.has(key)) continue;
-		const fromGraph = resolveRepoRootForComponent(graph, key);
-		const repoRoot =
-			(fromGraph && existsSync(fromGraph) ? fromGraph : null) ||
-			resolveRepoRootForPurl(key) ||
-			undefined;
+		const repoRoot = resolveRepoRootForPurl(key) ?? undefined;
 		byPurl.set(key, { purl: key, repoRoot });
 	}
 
@@ -902,8 +893,6 @@ export async function ensureCurrentGraphifyCachesForModel(
 export function assessSubsystemGraphifyReadiness(
 	graph: {
 		components: Array<{ purl?: string }>;
-		repoRoot?: string;
-		repoRoots?: Record<string, string>;
 	},
 	buildingPurls?: ReadonlySet<string>,
 	storeRoot?: string,
@@ -915,10 +904,7 @@ export function assessSubsystemGraphifyReadiness(
 		const key = purlRepoKey(c.purl);
 		if (!key || byPurl.has(key)) continue;
 
-		const fromGraph = resolveRepoRootForComponent(graph, key);
-		const repoRoot =
-			(fromGraph && existsSync(fromGraph) ? fromGraph : null) ||
-			resolveRepoRootForPurl(key);
+		const repoRoot = resolveRepoRootForPurl(key);
 
 		if (buildingPurls?.has(key)) {
 			byPurl.set(key, {

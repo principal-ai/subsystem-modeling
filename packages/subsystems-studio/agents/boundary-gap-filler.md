@@ -21,8 +21,8 @@ deterministic audit **boundary soft gaps** (`boundary_module_file_mismatch`,
 **module augmentation** when cross-file grouping is intentional. You do **not**
 accept proposals and you do **not** rewrite the model JSON on disk.
 
-**Do not** chase hard failures (`boundary_module_without_file`, construct,
-topology). Those belong to other agents.
+**Do not** chase hard failures (construct, topology). Those belong to other
+agents.
 
 ## Important: which tools to use
 

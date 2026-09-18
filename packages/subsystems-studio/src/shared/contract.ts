@@ -292,15 +292,6 @@ export interface StoredSubsystemModel {
 	updatedAt: string;
 	/** Host-local: when a viewer last opened this graph (machine-specific). */
 	lastOpenedAt?: string;
-	source?: string;
-	repo?: { owner: string; name: string };
-	/** Local root component `file` paths resolve against (sandboxed reads). */
-	repoRoot?: string;
-	/**
-	 * Per-repo local roots for multi-repo graphs, keyed by purl repo key
-	 * (`pkg:github/owner/name`, fragment stripped).
-	 */
-	repoRoots?: Record<string, string>;
 	/**
 	 * Host-only GitHub gist link. Not portable — used so Share as gist can
 	 * PATCH an existing gist instead of minting a duplicate.
@@ -336,6 +327,14 @@ export interface SubsystemGraphifyReadiness {
 	purls: SubsystemGraphifyPurlReadiness[];
 }
 
+/** Component file anchor for the Subsystems tab file panel (no symbols). */
+export interface SubsystemModelFileRef {
+	/** Repo-root-relative source path. */
+	file: string;
+	/** PURL for repo grouping. Multi-repo graphs draw one tree per repo key. */
+	purl?: string;
+}
+
 /** Lightweight listing row for the Subsystems tab (no components/edges). */
 export interface SubsystemModelSummary {
 	id: string;
@@ -347,8 +346,11 @@ export interface SubsystemModelSummary {
 	updatedAt: string;
 	/** Host-local: when a viewer last opened this graph (never opened = absent). */
 	lastOpenedAt?: string;
-	source?: string;
-	repo?: { owner: string; name: string };
+	/**
+	 * Repos this model references, derived from its components' purls (GitHub
+	 * only). Not stored on the record — repo identity travels on the purls.
+	 */
+	repos?: Array<{ owner: string; name: string }>;
 	/** Absolute path to the persisted JSON (`~/.principal/subsystem-models/<id>.json`). */
 	path: string;
 	/** Host-only gist link when this model has been shared. */
@@ -369,6 +371,12 @@ export interface SubsystemModelSummary {
 	};
 	/** Pending agent correction proposals awaiting confirm. */
 	pendingProposalCount?: number;
+	/**
+	 * Deduped component file anchors, derived from the full model the host
+	 * already loads per listing. Powers the list file panel without extra
+	 * detail fetches.
+	 */
+	files?: SubsystemModelFileRef[];
 }
 
 /** Result of verifying one subsystem component (declaration-panel Verify). */
@@ -456,7 +464,7 @@ export interface SubsystemComponentVerificationResult {
 	};
 	/** Declaration start-line anchor + freshness (exact anchor + readable file). */
 	declaration?: {
-		freshness: "valid" | "stale" | "missing" | "unanchored" | "unchecked";
+		freshness: "fresh" | "stale" | "missing" | "unanchored" | "unchecked";
 		ref?: SubsystemDeclarationRef;
 		liveLineHash?: string;
 	};
@@ -465,23 +473,23 @@ export interface SubsystemComponentVerificationResult {
 /** One finding from a dry-run deterministic subsystem-model audit. */
 export type SubsystemModelAuditFindingKind =
 	| "missing_file"
-	| "missing_symbol"
+	| "symbol_ambiguous"
+	| "symbol_unmatched"
 	| "walkthrough"
 	| "stale_declaration"
 	| "construct_mismatch"
 	| "construct_unconfirmed"
 	| "signature_mismatch"
 	| "signature_unconfirmed"
-	| "anchor"
-	| "unresolved"
+	| "repo_unresolved"
+	| "graphify_unavailable"
 	| "topology_broken_endpoint"
 	| "topology_import_unconfirmed"
 	| "topology_relation_unconfirmed"
-	| "boundary_module_without_file"
 	| "boundary_module_file_mismatch"
 	| "boundary_process_nest_disagree";
 
-export type SubsystemModelAuditSeverity = "error" | "warn" | "info";
+export type SubsystemModelAuditSeverity = "error" | "info";
 
 /**
  * Deterministic fix the user can apply from the audit UI (no agent).
@@ -517,6 +525,8 @@ export interface SubsystemModelAuditFinding {
 	relationId?: string;
 	/** Module frame key when the finding is about boundary membership. */
 	moduleKey?: string;
+	/** Repo purl when the finding is graph-level, about a repo rather than a node. */
+	purl?: string;
 	walkthroughId?: string;
 	step?: number;
 	message: string;
@@ -536,7 +546,7 @@ export interface SubsystemModelAuditCheck {
 	/** null = no symbol claimed or file unresolved. */
 	symbolDeclared: boolean | null;
 	declarationFreshness?:
-		| "valid"
+		| "fresh"
 		| "stale"
 		| "missing"
 		| "unanchored"
@@ -594,7 +604,7 @@ export interface SubsystemModelAuditReport {
 		components: number;
 		filesVerified: number;
 		symbolsVerified: number;
-		declarationsValid: number;
+		declarationsFresh: number;
 		constructsMatched: number;
 		signaturesMatched: number;
 		anchorsExact: number;
@@ -625,7 +635,6 @@ export interface SubsystemModelAuditReport {
 		modulesClaimed: number;
 		moduleFileOk: number;
 		moduleFileMismatch: number;
-		moduleWithoutFile: number;
 		processNestsChecked: number;
 		processNestOk: number;
 		processNestDisagree: number;

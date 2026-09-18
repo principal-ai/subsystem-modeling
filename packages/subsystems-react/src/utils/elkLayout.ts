@@ -79,7 +79,7 @@ export interface ElkLayoutOptions {
    * nests this group under another group; omit for a root-level frame.
    * Members reference their immediate parent via React Flow `parentId`.
    */
-  groups?: Array<{ id: string; memberIds: string[]; parentId?: string }>;
+  groups?: Array<{ id: string; memberIds: string[]; parentId?: string; minWidth?: number }>;
 }
 
 /** Result of ELK layout computation */
@@ -587,7 +587,11 @@ export async function computeElkLayout(
       builtGroups.set(g.id, {
         id: g.id,
         children: childNodes,
-        layoutOptions: compoundLayoutOptions,
+        layoutOptions: g.minWidth == null ? compoundLayoutOptions : {
+          ...compoundLayoutOptions,
+          'elk.nodeSize.constraints': 'MINIMUM_SIZE',
+          'elk.nodeSize.minimum': `(${g.minWidth},0)`,
+        },
       });
     }
     if (!progress) {

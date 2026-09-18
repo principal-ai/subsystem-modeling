@@ -423,6 +423,7 @@ section h2 {
   flex: 1;
   min-height: 0;
   height: 100%;
+  text-align: left;
 }
 
 .home-explorer-nav {
@@ -434,13 +435,49 @@ section h2 {
   text-align: left;
 }
 
+.home-explorer-nav-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
 .home-explorer-nav-label {
   margin: 0;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font-size: 0.68rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: rgba(156, 163, 175, 0.9);
+}
+
+.home-explorer-play-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+  color: #d1d5db;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.home-explorer-play-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f9fafb;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.home-explorer-play-toggle:focus-visible {
+  outline: 2px solid var(--brand-bright);
+  outline-offset: 1px;
 }
 
 .home-explorer-nav-list {
@@ -1669,6 +1706,21 @@ code {
   grid-template-columns: 13.5rem minmax(0, 1100px);
 }
 
+.docs-layout--issues {
+  --docs-pad-top: 1.15rem;
+  grid-template-columns: 13.5rem minmax(0, 1fr);
+  align-items: stretch;
+  min-height: calc(100svh - 3.5rem);
+  padding-bottom: 1.25rem;
+}
+
+.docs-layout--issues .docs-layout-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding-top: var(--docs-pad-top);
+}
+
 .docs-layout-main {
   min-width: 0;
   padding-top: var(--docs-pad-top);
@@ -1771,6 +1823,11 @@ code {
     grid-template-columns: minmax(0, 920px);
   }
 
+  .docs-layout.docs-layout--issues {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
   .docs-toc--sidebar {
     display: none;
   }
@@ -1821,6 +1878,16 @@ code {
 .maintainer-header strong {
   color: #e5e7eb;
   font-weight: 600;
+}
+
+.maintainer-header a {
+  color: var(--brand-bright);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.maintainer-header a:hover {
+  text-decoration: underline;
 }
 
 .maintainer-loop {
@@ -2351,4 +2418,220 @@ code {
   font-size: clamp(1.65rem, 2.4vw, 2.05rem);
   letter-spacing: -0.02em;
   color: #f3f4f6;
+}
+
+/* ---------- issues hero (issue | fix) ---------- */
+
+.issues-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.issues-page .maintainer-pager {
+  flex-shrink: 0;
+  margin-top: 1.15rem;
+  padding-top: 1rem;
+}
+
+.issue-fix-hero {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  text-align: left;
+}
+
+.issue-fix-copy {
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.issue-fix-copy h1 {
+  margin: 0 0 0.45rem;
+  font-size: clamp(1.55rem, 3.2vw, 2.35rem);
+  letter-spacing: -0.03em;
+  color: #f3f4f6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45em;
+  white-space: nowrap;
+}
+
+.issue-fix-copy p {
+  margin: 0 auto;
+  max-width: 40rem;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: #9ca3af;
+}
+
+.issue-fix-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.issue-fix-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.12rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: #d1d5db;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.issue-fix-tab:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #f3f4f6;
+}
+
+.issue-fix-tab--active {
+  background: rgba(var(--wash-maintainer-rgb), 0.16);
+  border-color: rgba(var(--wash-maintainer-rgb), 0.55);
+  color: #f9fafb;
+}
+
+.issue-fix-tab-layer {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9ca3af;
+}
+
+.issue-fix-tab--active .issue-fix-tab-layer {
+  color: rgba(var(--wash-maintainer-rgb), 0.95);
+}
+
+.issue-fix-tab-check {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.issue-fix-blurb {
+  margin: 0 auto;
+  max-width: 44rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: #9ca3af;
+  text-align: center;
+}
+
+.issue-fix-stage {
+  flex: 1;
+  min-height: 420px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.issue-fix-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.issue-fix-pane--issue {
+  border-color: rgba(248, 81, 73, 0.35);
+}
+
+.issue-fix-pane--fix {
+  border-color: rgba(63, 185, 80, 0.35);
+}
+
+.issue-fix-pane-header {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.45rem 0.75rem;
+  padding: 0.7rem 0.85rem 0.6rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.issue-fix-pane-caption {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: #9ca3af;
+}
+
+.issue-fix-graph {
+  flex: 1;
+  min-height: 240px;
+  position: relative;
+}
+
+.issue-fix-snippet {
+  flex-shrink: 0;
+  max-height: 9.5rem;
+  overflow: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.issue-fix-snippet .maintainer-mechanism-example {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  font-size: 0.75rem;
+  background: #0a0a0a;
+}
+
+@media (max-width: 900px) {
+  .docs-layout.docs-layout--issues {
+    min-height: 0;
+  }
+
+  .issues-page,
+  .issue-fix-hero {
+    flex: none;
+    height: auto;
+    min-height: 0;
+  }
+
+  .issue-fix-tabs {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.15rem;
+  }
+
+  .issue-fix-tab {
+    flex: 0 0 auto;
+  }
+
+  .issue-fix-stage {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .issue-fix-pane {
+    min-height: 28rem;
+  }
+
+  .issue-fix-graph {
+    min-height: 320px;
+  }
+
+  .issue-fix-copy h1 {
+    white-space: normal;
+  }
 }

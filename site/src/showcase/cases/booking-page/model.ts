@@ -4,7 +4,7 @@ import type {
   SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
 
-const PURL = 'pkg:github/you/booking-page';
+const PURL = 'pkg:github/you/scheduling-app';
 
 export const components: SubsystemComponent[] = [
   {
@@ -18,6 +18,12 @@ export const components: SubsystemComponent[] = [
     stereotype: 'component',
     purl: PURL,
     file: 'app/book/page.tsx',
+    declarationRef: {
+      file: 'app/book/page.tsx',
+      startLine: 11,
+      lineHash: '4c7d47276514c3bac1f63505c8be4c50',
+      capturedAt: '2025-01-01T00:00:00.000Z',
+    },
     module: 'app/book/page.tsx',
     purpose: 'Browser UI — calls server actions only; never touches the DB.',
     layer: 1,
@@ -38,6 +44,12 @@ export const components: SubsystemComponent[] = [
     symbol: 'captureEvent',
     purl: PURL,
     file: 'lib/captureEvent.ts',
+    declarationRef: {
+      file: 'lib/captureEvent.ts',
+      startLine: 7,
+      lineHash: 'e7541ce8084780a92eb1b388df968737',
+      capturedAt: '2025-01-01T00:00:00.000Z',
+    },
     module: 'lib/captureEvent.ts',
     purpose: 'Client-side PostHog wrapper for product moments.',
     layer: 2,
@@ -64,6 +76,12 @@ export const components: SubsystemComponent[] = [
     stereotype: 'server-action',
     purl: PURL,
     file: 'app/book/actions.ts',
+    declarationRef: {
+      file: 'app/book/actions.ts',
+      startLine: 13,
+      lineHash: 'a2bbf4ed06fda8c074ebf7b09e734915',
+      capturedAt: '2025-01-01T00:00:00.000Z',
+    },
     module: 'app/book/actions.ts',
     purpose: 'Server action — wire boundary for loading availability.',
     layer: 2,
@@ -87,6 +105,12 @@ export const components: SubsystemComponent[] = [
     stereotype: 'server-action',
     purl: PURL,
     file: 'app/book/actions.ts',
+    declarationRef: {
+      file: 'app/book/actions.ts',
+      startLine: 17,
+      lineHash: '83c2a721935e6f8d6c8cfa583fb41f9d',
+      capturedAt: '2025-01-01T00:00:00.000Z',
+    },
     module: 'app/book/actions.ts',
     purpose: 'Server action — wire boundary for confirming a booking.',
     layer: 2,
@@ -115,6 +139,12 @@ export const components: SubsystemComponent[] = [
     stereotype: 'server-action',
     purl: PURL,
     file: 'app/book/actions.ts',
+    declarationRef: {
+      file: 'app/book/actions.ts',
+      startLine: 25,
+      lineHash: 'f7f044bf7c93176737086987ef0de7b5',
+      capturedAt: '2025-01-01T00:00:00.000Z',
+    },
     module: 'app/book/actions.ts',
     purpose: 'Server action — wire boundary for releasing a booking.',
     layer: 2,
@@ -135,6 +165,12 @@ export const components: SubsystemComponent[] = [
     symbol: 'listSlots',
     purl: PURL,
     file: 'lib/listSlots.ts',
+    declarationRef: {
+      file: 'lib/listSlots.ts',
+      startLine: 8,
+      lineHash: '8bf16b9dbbaff5e811d4bd2053c642c8',
+      capturedAt: '2025-01-01T00:00:00.000Z',
+    },
     module: 'lib/listSlots.ts',
     purpose: 'Server lib — read open slots from the store.',
     layer: 3,
@@ -155,6 +191,12 @@ export const components: SubsystemComponent[] = [
     symbol: 'createBooking',
     purl: PURL,
     file: 'lib/createBooking.ts',
+    declarationRef: {
+      file: 'lib/createBooking.ts',
+      startLine: 12,
+      lineHash: '06bab10f57a6ff1ca04f7d1dd2c9d839',
+      capturedAt: '2025-01-01T00:00:00.000Z',
+    },
     module: 'lib/createBooking.ts',
     purpose: 'Server lib — persist a reservation.',
     layer: 3,
@@ -175,6 +217,12 @@ export const components: SubsystemComponent[] = [
     symbol: 'cancelBooking',
     purl: PURL,
     file: 'lib/cancelBooking.ts',
+    declarationRef: {
+      file: 'lib/cancelBooking.ts',
+      startLine: 6,
+      lineHash: '646a51577140263c34a7d5d5046e84d9',
+      capturedAt: '2025-01-01T00:00:00.000Z',
+    },
     module: 'lib/cancelBooking.ts',
     purpose: 'Server lib — mark a booking cancelled.',
     layer: 3,

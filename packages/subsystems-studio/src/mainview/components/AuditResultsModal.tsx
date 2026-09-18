@@ -37,16 +37,14 @@ function formatCheckedAt(iso: string): string {
 }
 
 function severityColor(
-	severity: "error" | "warn" | "info",
+	severity: "error" | "info",
 	colors: {
 		error?: string;
-		warning?: string;
 		textMuted?: string;
 		textSecondary?: string;
 	},
 ): string {
 	if (severity === "error") return colors.error ?? "#e5534b";
-	if (severity === "warn") return colors.warning ?? "#d4a017";
 	return colors.textMuted ?? colors.textSecondary ?? "#888";
 }
 
@@ -61,7 +59,6 @@ function toneColors(
 	tone: AuditTone,
 	colors: {
 		error?: string;
-		warning?: string;
 		success?: string;
 		border?: string;
 		text?: string;
@@ -96,7 +93,6 @@ function toneColors(
 type AuditTheme = {
 	colors: {
 		error?: string;
-		warning?: string;
 		success?: string;
 		border?: string;
 		text?: string;
@@ -129,7 +125,7 @@ function statusPill(
 				background: active ? colors.background : colors.background,
 				color: colors.text,
 				fontFamily: theme.fonts.monospace,
-				fontSize: theme.fontSizes[0] * 0.92,
+				fontSize: theme.fontSizes[0],
 				lineHeight: 1.5,
 				boxShadow: active ? `0 0 0 1px ${colors.text}` : undefined,
 				cursor: opts?.interactive ? "pointer" : undefined,
@@ -319,7 +315,7 @@ function buildCheckParts(c: SubsystemModelAuditReport["checks"][number]): {
 				label: "signature not in cache",
 				tone: "neutral",
 			});
-		if (c.declarationFreshness === "valid")
+		if (c.declarationFreshness === "fresh")
 			graphify.push({
 				kind: "declaration_fresh",
 				label: "declaration line matches",
@@ -367,7 +363,8 @@ function findingKindToCheckKind(
 	switch (kind) {
 		case "missing_file":
 			return "file_missing";
-		case "missing_symbol":
+		case "symbol_ambiguous":
+		case "symbol_unmatched":
 			return "no_symbol_node";
 		case "stale_declaration":
 			return "declaration_stale";
@@ -379,9 +376,8 @@ function findingKindToCheckKind(
 			return "signature_mismatch";
 		case "signature_unconfirmed":
 			return "signature_skipped";
-		case "anchor":
-			return "no_symbol_node";
-		case "unresolved":
+		case "repo_unresolved":
+		case "graphify_unavailable":
 			return "cache_unavailable";
 		default:
 			return null;
@@ -500,7 +496,7 @@ function AuditLegend({
 							<div key={section}>
 								<div
 									style={{
-										fontSize: theme.fontSizes[0] * 0.85,
+										fontSize: theme.fontSizes[0],
 										fontFamily: theme.fonts.monospace,
 										textTransform: "uppercase",
 										letterSpacing: "0.04em",
@@ -641,9 +637,9 @@ function AuditDoneBody({
 		workBits.push(
 			`${s.filesVerified} file${s.filesVerified === 1 ? "" : "s"} on disk`,
 		);
-	if (s.declarationsValid)
+	if (s.declarationsFresh)
 		workBits.push(
-			`${s.declarationsValid} declaration${s.declarationsValid === 1 ? "" : "s"} fresh`,
+			`${s.declarationsFresh} declaration${s.declarationsFresh === 1 ? "" : "s"} fresh`,
 		);
 	if (s.constructsMatched)
 		workBits.push(`${s.constructsMatched} construct match`);
@@ -671,7 +667,7 @@ function AuditDoneBody({
 		);
 	if (s.brokenRelationEndpoints)
 		issueBits.push(
-			`${s.brokenRelationEndpoints} broken relation endpoint${s.brokenRelationEndpoints === 1 ? "" : "s"}`,
+			`${s.brokenRelationEndpoints} broken relationship endpoint${s.brokenRelationEndpoints === 1 ? "" : "s"}`,
 		);
 	if (s.staleDeclarations)
 		issueBits.push(
@@ -693,7 +689,10 @@ function AuditDoneBody({
 		issueBits.push(
 			`${s.importsUnconfirmed} import${s.importsUnconfirmed === 1 ? "" : "s"} unconfirmed`,
 		);
-	if (s.unresolved) issueBits.push(`${s.unresolved} unresolved`);
+	if (s.unresolved)
+		issueBits.push(
+			`${s.unresolved} repo/cache unavailable`,
+		);
 
 	const checksWithParts = report.checks.map((c) => ({
 		check: c,
@@ -902,7 +901,7 @@ function AuditDoneBody({
 					>
 						<span
 							style={{
-								fontSize: theme.fontSizes[0] * 0.85,
+								fontSize: theme.fontSizes[0],
 								fontFamily: theme.fonts.monospace,
 								textTransform: "uppercase",
 								letterSpacing: "0.03em",
@@ -971,7 +970,7 @@ function AuditDoneBody({
 											fontFamily: theme.fonts.monospace,
 											textTransform: "uppercase",
 											letterSpacing: "0.03em",
-											fontSize: theme.fontSizes[0] * 0.85,
+											fontSize: theme.fontSizes[0],
 											color: muted,
 											marginRight: 6,
 										}}
@@ -1005,7 +1004,7 @@ function AuditDoneBody({
 											fontFamily: theme.fonts.monospace,
 											textTransform: "uppercase",
 											letterSpacing: "0.03em",
-											fontSize: theme.fontSizes[0] * 0.85,
+											fontSize: theme.fontSizes[0],
 											color: muted,
 											marginRight: 6,
 										}}
@@ -1130,7 +1129,7 @@ function AuditDoneBody({
 							>
 								<span
 									style={{
-										fontSize: theme.fontSizes[0] * 0.85,
+										fontSize: theme.fontSizes[0],
 										fontFamily: theme.fonts.monospace,
 										textTransform: "uppercase",
 										letterSpacing: "0.03em",

@@ -1,26 +1,20 @@
 /**
- * Minimal tests for CLI subsystem-model structural validation.
+ * Structural + cross-field validation for the CLI (schema gate mirror).
  */
 
 import { describe, expect, test } from 'bun:test';
-import {
-  findCreateProblems,
-  findComponentConstructProblems,
-  findRelationTypeProblems,
-} from '../lib/subsystem-model-store.js';
+import { findSubsystemModelProblems } from '../lib/subsystem-model-validation.js';
 
-describe('findCreateProblems', () => {
-  test('requires title, components, relations', () => {
-    expect(findCreateProblems({})).toEqual([
-      'title is required',
-      'components array is required',
-      'relations array is required',
-    ]);
+describe('findSubsystemModelProblems', () => {
+  test('requires title, components, relations (schema)', () => {
+    const problems = findSubsystemModelProblems({});
+    expect(problems.length).toBeGreaterThan(0);
+    expect(problems.join(' ')).toContain('required');
   });
 
   test('accepts a minimal valid model', () => {
     expect(
-      findCreateProblems({
+      findSubsystemModelProblems({
         title: 'Checkout',
         components: [
           {
@@ -36,29 +30,60 @@ describe('findCreateProblems', () => {
     ).toEqual([]);
   });
 
-  test('rejects unknown construct and mechanism', () => {
-    expect(findComponentConstructProblems([{ id: 'a', construct: 'module' }])).toHaveLength(1);
-    expect(
-      findRelationTypeProblems([{ id: 'r1', from: 'a', to: 'b', relationType: 'teleports' }]),
-    ).toHaveLength(1);
+  test('rejects an unknown construct (schema)', () => {
+    const problems = findSubsystemModelProblems({
+      title: 'x',
+      components: [
+        { id: 'a', name: 'A', construct: 'module', file: 'src/a.ts', purl: 'pkg:github/a/b' },
+      ],
+      relations: [],
+    });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('allowed:');
   });
 
   test('accepts a custom_entity actor', () => {
     expect(
-      findComponentConstructProblems([
-        {
-          id: 'tech',
-          name: 'FacilitiesTechnician',
-          construct: 'custom_entity',
-          entityKind: 'Person',
-          file: '',
-          purl: 'pkg:github/novatech/facilities-ops',
-          declaration: {
-            kind: 'custom_entity',
-            attributes: [{ key: 'level', value: 'L1' }],
+      findSubsystemModelProblems({
+        title: 'x',
+        components: [
+          {
+            id: 'tech',
+            name: 'FacilitiesTechnician',
+            construct: 'custom_entity',
+            entityKind: 'Person',
+            file: '',
+            purl: 'pkg:github/novatech/facilities-ops',
+            declaration: {
+              kind: 'custom_entity',
+              attributes: [{ key: 'level', value: 'L1' }],
+            },
           },
-        },
-      ]),
+        ],
+        relations: [],
+      }),
     ).toEqual([]);
+  });
+
+  test('create gate rejects a module without a file (cross-field)', () => {
+    const problems = findSubsystemModelProblems({
+      title: 'x',
+      components: [
+        { id: 'a', name: 'a', construct: 'function', module: 'src/host', file: '', purl: 'pkg:github/a/b' },
+      ],
+      relations: [],
+    });
+    expect(problems.some((p) => p.includes('file is empty'))).toBe(true);
+  });
+
+  test('rejects a relation endpoint with no component (cross-field)', () => {
+    const problems = findSubsystemModelProblems({
+      title: 'x',
+      components: [
+        { id: 'a', name: 'a', construct: 'function', file: 'src/a.ts', purl: 'pkg:github/a/b' },
+      ],
+      relations: [{ id: 'r1', from: 'a', to: 'ghost', relationType: 'imports' }],
+    });
+    expect(problems.some((p) => p.includes('/relations/0/to'))).toBe(true);
   });
 });

@@ -28,7 +28,6 @@ export interface BoundaryComponentCheck {
 
 export interface BoundaryAuditFinding {
 	kind:
-		| "boundary_module_without_file"
 		| "boundary_module_file_mismatch"
 		| "boundary_process_nest_disagree";
 	severity: "error" | "info";
@@ -47,7 +46,6 @@ export interface BoundaryAuditResult {
 		modulesClaimed: number;
 		moduleFileOk: number;
 		moduleFileMismatch: number;
-		moduleWithoutFile: number;
 		/** Multi-member module groups inspected for process nest. */
 		processNestsChecked: number;
 		processNestOk: number;
@@ -94,7 +92,6 @@ export function auditBoundaryFields(
 	let modulesClaimed = 0;
 	let moduleFileOk = 0;
 	let moduleFileMismatch = 0;
-	let moduleWithoutFile = 0;
 	let processNestsChecked = 0;
 	let processNestOk = 0;
 	let processNestDisagree = 0;
@@ -126,6 +123,9 @@ export function auditBoundaryFields(
 		byModule.set(modNorm, members);
 
 		if (!fileRaw) {
+			// A grounded component with a module but no file is rejected at
+			// input (findModuleFileProblems). Externals/proposed carry no file
+			// by design, so they are skipped rather than flagged.
 			if (isUngrounded(c)) {
 				checks.push({
 					componentId: c.id,
@@ -137,28 +137,7 @@ export function auditBoundaryFields(
 					verdict: "skipped",
 					note: "module on external/proposed — no file required",
 				});
-				continue;
 			}
-			moduleWithoutFile++;
-			const note = `module ${JSON.stringify(moduleRaw)} set but file is empty — nowhere to ground the frame`;
-			checks.push({
-				componentId: c.id,
-				componentName: c.name,
-				kind: "module_file",
-				module: moduleRaw,
-				file: "",
-				process: processRaw || undefined,
-				verdict: "issue",
-				note,
-			});
-			findings.push({
-				kind: "boundary_module_without_file",
-				severity: "error",
-				componentId: c.id,
-				componentName: c.name,
-				moduleKey: modNorm,
-				message: note,
-			});
 			continue;
 		}
 
@@ -274,7 +253,6 @@ export function auditBoundaryFields(
 			modulesClaimed,
 			moduleFileOk,
 			moduleFileMismatch,
-			moduleWithoutFile,
 			processNestsChecked,
 			processNestOk,
 			processNestDisagree,

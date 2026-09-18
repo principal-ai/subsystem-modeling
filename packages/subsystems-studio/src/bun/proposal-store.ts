@@ -98,11 +98,7 @@ function resolveAugmentationTarget(
 	if (!c) return null;
 	const file = (ch.file ?? c.file ?? "").trim();
 	const symbol = (ch.symbol ?? c.symbol ?? "").trim();
-	const purl =
-		purlRepoKey(ch.purl ?? c.purl) ||
-		(graph.repo
-			? `pkg:github/${graph.repo.owner}/${graph.repo.name}`
-			: "");
+	const purl = purlRepoKey(ch.purl ?? c.purl) || "";
 	if (!file || !symbol || !purl) return null;
 	return { file, symbol, purl, componentName: c.name };
 }
@@ -128,11 +124,7 @@ function resolveRelationAugmentationTarget(
 	if (!from || !to) return null;
 	const fromFile = (from.file ?? "").trim();
 	const fromSymbol = (from.symbol ?? "").trim();
-	const purl =
-		purlRepoKey(from.purl) ||
-		(graph.repo
-			? `pkg:github/${graph.repo.owner}/${graph.repo.name}`
-			: "");
+	const purl = purlRepoKey(from.purl) || "";
 	if (!fromFile || !fromSymbol || !purl) return null;
 	const toFile = (to.file ?? "").trim() || undefined;
 	const toSymbol = (to.symbol ?? "").trim() || undefined;

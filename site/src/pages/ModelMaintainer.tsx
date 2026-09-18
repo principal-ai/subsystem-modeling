@@ -1,5 +1,6 @@
 export { MaintainerLayout as ModelMaintainer } from './maintainer/Layout'
 export { MaintainerOverview } from './maintainer/Overview'
+export { MaintainerIssues } from './maintainer/Issues'
 export { MaintainerConstruct } from './maintainer/Construct'
 export { MaintainerStaticTopology } from './maintainer/StaticTopology'
 export { MaintainerRuntimeTopology } from './maintainer/RuntimeTopology'

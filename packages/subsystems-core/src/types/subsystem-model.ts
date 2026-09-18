@@ -381,11 +381,6 @@ export interface SubsystemWalkthrough {
   steps: SubsystemWalkthroughStep[];
 }
 
-export interface SubsystemRepoRef {
-  owner: string;
-  name: string;
-}
-
 /**
  * Portable subsystem model — the shareable standard.
  * No host paths, provenance, document-level repo, store ids, or verification.
@@ -408,35 +403,12 @@ export interface SubsystemModelDocument {
 }
 
 /**
- * Host/machine fields layered onto a portable document for local use.
- * Not part of the portable standard — viewers and stores own this envelope.
- */
-export interface SubsystemModelHostBinding {
-  /** Provenance of the model (e.g. `agent:<name>`, `manual`). */
-  source?: string;
-  /**
-   * Optional document-level repo summary for host indexes/listings.
-   * Portable identity lives on each component's `purl`.
-   */
-  repo?: SubsystemRepoRef;
-  /**
-   * Local filesystem root component `file` paths resolve against.
-   * Opt-in; sandboxed reads for single-repo models.
-   */
-  repoRoot?: string;
-  /**
-   * Per-repo local roots for multi-repo models, keyed by purl repo key
-   * (`pkg:github/owner/name`, fragment stripped).
-   */
-  repoRoots?: Record<string, string>;
-}
-
-/**
- * Hydrated model: portable document + host binding + optional store metadata.
+ * Hydrated model: portable document + store metadata.
  * Shape used after a host accepts/persists a model for viewing on a machine.
+ * Local path binding is resolved from Alexandria (via each component's purl)
+ * and repo identity is derived from purls — neither is stored here.
  */
-export interface SubsystemModelHydrated
-  extends SubsystemModelDocument, SubsystemModelHostBinding {
+export interface SubsystemModelHydrated extends SubsystemModelDocument {
   /** Store-assigned id when persisted. */
   id?: string;
   createdAt?: string;

@@ -25,8 +25,8 @@ function purlRepoKey(purl: string | undefined): string | undefined {
 /** Unique package purls that can be graphify-ensured for this graph. */
 export function graphifyTargets(
 	graph: StoredSubsystemModel,
-): Array<{ purl: string; repoRoot?: string }> {
-	const byPurl = new Map<string, { purl: string; repoRoot?: string }>();
+): Array<{ purl: string }> {
+	const byPurl = new Map<string, { purl: string }>();
 	for (const c of graph.components) {
 		if (
 			c.proposed ||
@@ -36,11 +36,7 @@ export function graphifyTargets(
 			continue;
 		const key = purlRepoKey(c.purl);
 		if (!key || key === "external" || byPurl.has(key)) continue;
-		const fromRoots = graph.repoRoots?.[key];
-		const repoRoot =
-			(fromRoots && fromRoots.length > 0 ? fromRoots : undefined) ??
-			(graph.repoRoots ? undefined : graph.repoRoot);
-		byPurl.set(key, { purl: key, repoRoot });
+		byPurl.set(key, { purl: key });
 	}
 	return [...byPurl.values()];
 }
@@ -165,19 +161,13 @@ export async function runSubsystemModelAuditFlow(
 	const title = graph.title;
 
 	try {
-		const targets = graphifyTargets(graph).filter((t) => t.repoRoot);
-		const skipped = graphifyTargets(graph).filter((t) => !t.repoRoot);
-		let purls: AuditGraphifyPurlProgress[] = [
-			...targets.map((t) => ({
-				purl: t.purl,
-				status: "pending" as const,
-			})),
-			...skipped.map((t) => ({
-				purl: t.purl,
-				status: "ready" as const,
-				detail: "skipped — no local repoRoot",
-			})),
-		];
+		// Roots are resolved host-side (Alexandria); a purl with no checkout is
+		// reported as skipped once ensure reports it, not filtered out here.
+		const targets = graphifyTargets(graph);
+		let purls: AuditGraphifyPurlProgress[] = targets.map((t) => ({
+			purl: t.purl,
+			status: "pending" as const,
+		}));
 		onModal?.({ phase: "graphify", title, purls });
 
 		for (const t of targets) {
@@ -201,7 +191,6 @@ export async function runSubsystemModelAuditFlow(
 			try {
 				result = await electrobun.rpc!.request.ensureGraphifyGraph({
 					purl: t.purl,
-					repoRoot: t.repoRoot,
 				});
 			} catch (err) {
 				waiter.cancel();
@@ -218,6 +207,14 @@ export async function runSubsystemModelAuditFlow(
 			if (!result.ok) {
 				waiter.cancel();
 				onGraphifyPurl?.(null);
+				if (/no local checkout/i.test(result.error ?? "")) {
+					purls = patchPurl(purls, t.purl, {
+						status: "ready",
+						detail: "skipped — no local repoRoot",
+					});
+					onModal?.({ phase: "graphify", title, purls });
+					continue;
+				}
 				const error =
 					result.code === "graphify_not_installed"
 						? `${result.error ?? "graphify CLI not found"} — open the Graphify tab to install`

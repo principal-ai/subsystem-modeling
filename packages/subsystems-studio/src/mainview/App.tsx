@@ -320,6 +320,10 @@ export function App() {
 	// Once the user clicks a tab, the host's boot/resume suggestion must not
 	// override their own selection on a later listTabs.
 	const userChoseRef = useRef(false);
+	// Activation history (oldest → newest) for MRU fallback when the active
+	// tab is closed. The renderer owns the on-screen tab, so it owns the
+	// recency order — the host only keeps a single resume suggestion.
+	const historyRef = useRef<string[]>([]);
 
 	// Keep-mounted views for permanent tabs (library, agent sessions,
 	// subsystems). Each view registers once on first visit and stays in the
@@ -334,6 +338,16 @@ export function App() {
 		bump();
 	}, []);
 
+	// Record each activation (newest last, deduped, capped) so closing the
+	// active tab can fall back to the last active tab rather than strip order.
+	useEffect(() => {
+		const history = historyRef.current;
+		const idx = history.lastIndexOf(activeTabId);
+		if (idx !== -1) history.splice(idx, 1);
+		history.push(activeTabId);
+		if (history.length > 50) history.splice(0, history.length - 50);
+	}, [activeTabId]);
+
 	useEffect(() => {
 		const refresh = async (focusTabId?: string) => {
 			try {
@@ -347,11 +361,30 @@ export function App() {
 				const suggestionValid =
 					!userChoseRef.current &&
 					result.tabs.some((t) => t.id === result.suggestedActiveTabId);
+				// Drop closed tabs from the MRU history (including the current
+				// one when it was just closed) so the fallback only considers
+				// tabs that still exist.
+				const liveIds = new Set(result.tabs.map((t) => t.id));
+				historyRef.current = historyRef.current.filter((id) =>
+					liveIds.has(id),
+				);
 				let next: string;
 				if (focusValid) next = focusTabId!;
 				else if (currentValid) next = current;
-				else if (suggestionValid) next = result.suggestedActiveTabId;
-				else next = result.tabs[result.tabs.length - 1]?.id ?? "library";
+				else {
+					let mru: string | undefined;
+					const history = historyRef.current;
+					for (let i = history.length - 1; i >= 0; i--) {
+						const candidate = history[i]!;
+						if (liveIds.has(candidate)) {
+							mru = candidate;
+							break;
+						}
+					}
+					if (mru !== undefined) next = mru;
+					else if (suggestionValid) next = result.suggestedActiveTabId;
+					else next = result.tabs[result.tabs.length - 1]?.id ?? "library";
+				}
 				if (next !== current) {
 					setActiveTabId(next);
 					// Fire-and-forget: the renderer already switched; this just

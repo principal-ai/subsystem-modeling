@@ -14,6 +14,7 @@ import { promises as fs, watch, type FSWatcher } from "node:fs";
 import { homedir } from "node:os";
 import { join, basename } from "node:path";
 import { deriveGraphEdges } from "@principal-ai/subsystems-core";
+import { resolveRepoRootFromAlexandria } from "./alexandria";
 import type {
 	SubsystemComponent,
 	SubsystemComponentEdge,
@@ -167,24 +168,6 @@ export interface StoredSubsystemModel extends SubsystemModelDocument {
 	 * portable document. Absent for graphs never opened on this machine.
 	 */
 	lastOpenedAt?: string;
-	/** Where this graph came from (agent session, manual creation, etc.). */
-	source?: string;
-	/** Repository this graph is about. */
-	repo?: { owner: string; name: string };
-	/**
-	 * Local filesystem root component `file` paths resolve against. Opt-in:
-	 * only set it for graphs whose components reference a repo on this
-	 * machine. File reads are sandboxed to this root.
-	 *
-	 * Single-repo graphs: the default root for every component.
-	 */
-	repoRoot?: string;
-	/**
-	 * Per-repo local roots for multi-repo graphs, keyed by purl repo key
-	 * (`pkg:github/owner/name`, fragment stripped). A component's `file`
-	 * resolves against `repoRoots[purlRepo] ?? repoRoot`.
-	 */
-	repoRoots?: Record<string, string>;
 	/**
 	 * Host-only GitHub gist link for this record. Not part of the portable
 	 * document — stamped after a successful Share as gist so re-share PATCHes
@@ -212,7 +195,7 @@ export interface SubsystemModelVerification {
 	verifiedCount: number;
 	/** Components with a known local root but no such file. */
 	missingCount: number;
-	/** Components whose purl has no entry in `repoRoots`/`repoRoot` — skipped. */
+	/** Components whose purl is not registered in Alexandria — skipped. */
 	unresolvedCount: number;
 	/** The misses, for surfacing in UI/API responses. */
 	missing: Array<{ componentId: string; file: string }>;
@@ -229,16 +212,15 @@ export interface SubsystemModelVerification {
 	/** Components carrying hand-authored declarations. */
 	declarationsAuthored: number;
 	/**
-	 * Walkthrough step sites that fully resolved (edge exists, file + line
-	 * resolve against a local root, and the line text has affinity with the
-	 * edge). Steps whose edge endpoints have no local root are skipped, not
-	 * failed — absence of a machine is not an error.
+	 * Walkthrough step sites that fully resolved (file + line resolve against a
+	 * local root). Steps whose edge endpoints have no local root are skipped,
+	 * not failed — absence of a machine is not an error.
 	 */
 	walkthroughsChecked: number;
 	/**
-	 * Walkthrough steps that could not be taken as claimed: unknown hop,
-	 * missing file, line out of range, or a site line with no affinity to the
-	 * edge (a step can't point at a random line and claim it is the seam).
+	 * Walkthrough steps that could not be taken as claimed: missing file, line
+	 * out of range, or a blank site line. (Text affinity — "does the line
+	 * mention the hop?" — is heuristic and intentionally not checked here.)
 	 */
 	walkthroughsFailed: Array<{
 		walkthroughId: string;
@@ -264,8 +246,6 @@ export interface SubsystemModelIndexEntry {
 	/** Mirrors the record's `lastOpenedAt` — listing sort without full reads. */
 	lastOpenedAt?: string;
 	fileName: string;
-	source?: string;
-	repo?: { owner: string; name: string };
 	/** Host-only gist link mirrored from the record for list/share UI. */
 	gist?: { id: string; fileName?: string };
 }
@@ -326,84 +306,6 @@ export const SUBSYSTEM_EDGE_MECHANISMS_COVER_PUBLISHED_UNION: SubsystemEdgeMecha
 	? true
 	: false = true;
 
-export function findRelationTypeProblems(relations: unknown): string[] {
-	if (!Array.isArray(relations)) return ["relations must be an array"];
-	const problems: string[] = [];
-	for (const rel of relations) {
-		const r = rel as Partial<{ id: string; from: string; to: string; relationType: string }> | null;
-		if (typeof r?.id !== "string" || !r.id.trim()) {
-			problems.push(`relation ${JSON.stringify(r?.id ?? "<no id>")}: id is required`);
-		}
-		if (typeof r?.from !== "string" || !r.from.trim()) {
-			problems.push(`relation ${JSON.stringify(r?.id ?? "<no id>")}: from is required`);
-		}
-		if (typeof r?.to !== "string" || !r.to.trim()) {
-			problems.push(`relation ${JSON.stringify(r?.id ?? "<no id>")}: to is required`);
-		}
-		if (
-			typeof r?.relationType !== "string" ||
-			!(SUBSYSTEM_RELATION_TYPES as readonly string[]).includes(r.relationType)
-		) {
-			problems.push(
-				`relation ${JSON.stringify(r?.id ?? "<no id>")}: unknown relationType ${JSON.stringify(r?.relationType)} — allowed: ${SUBSYSTEM_RELATION_TYPES.join(", ")}`,
-			);
-		}
-	}
-	return problems;
-}
-
-/**
- * Human-readable problems with a graph's walkthroughs (empty = valid).
- * A walkthrough is an ordered runtime story: each hop names from/to/mechanism
- * plus a file:line site (display edges are derived). Reject unknown mechanisms
- * or sites that can't be a code location before persist.
- */
-export function findWalkthroughProblems(walkthroughs: unknown): string[] {
-	if (walkthroughs === undefined) return [];
-	if (!Array.isArray(walkthroughs)) return ["walkthroughs must be an array"];
-	const problems: string[] = [];
-	for (const wt of walkthroughs) {
-		const w = wt as Partial<SubsystemWalkthrough> | null;
-		const label = JSON.stringify(w?.id ?? "<no id>");
-		if (typeof w?.id !== "string" || !w.id.trim()) {
-			problems.push(`walkthrough ${label}: id is required`);
-			continue;
-		}
-		if (typeof w?.title !== "string" || !w.title.trim()) {
-			problems.push(`walkthrough ${label}: title is required`);
-		}
-		if (!Array.isArray(w.steps)) {
-			problems.push(`walkthrough ${label}: steps array is required`);
-			continue;
-		}
-		w.steps.forEach((step, i) => {
-			const s = step as Partial<SubsystemWalkthroughStep> | null;
-			if (typeof s?.from !== "string" || !s.from.trim()) {
-				problems.push(`walkthrough ${label}: step ${i} from is required`);
-			}
-			if (typeof s?.to !== "string" || !s.to.trim()) {
-				problems.push(`walkthrough ${label}: step ${i} to is required`);
-			}
-			if (
-				typeof s?.mechanism !== "string" ||
-				!(SUBSYSTEM_WALKTHROUGH_MECHANISMS as readonly string[]).includes(s.mechanism)
-			) {
-				problems.push(
-					`walkthrough ${label}: step ${i} unknown mechanism ${JSON.stringify(s?.mechanism)} — allowed: ${SUBSYSTEM_WALKTHROUGH_MECHANISMS.join(", ")}`,
-				);
-			}
-			if (typeof s?.file !== "string" || !s.file.trim()) {
-				problems.push(`walkthrough ${label}: step ${i} file is required`);
-			} else if (typeof s?.line !== "number" || !Number.isInteger(s.line) || s.line < 1) {
-				problems.push(
-					`walkthrough ${label}: step ${i} line must be a positive 1-based integer (file ${JSON.stringify(s?.file)})`,
-				);
-			}
-		});
-	}
-	return problems;
-}
-
 // ---------------------------------------------------------------------------
 // Component-kind validation
 // ---------------------------------------------------------------------------
@@ -429,25 +331,6 @@ export const SUBSYSTEM_COMPONENT_CONSTRUCTS = [
 
 export type ComponentConstruct = (typeof SUBSYSTEM_COMPONENT_CONSTRUCTS)[number];
 
-/** Human-readable problems with component kinds (empty = valid). */
-export function findComponentConstructProblems(components: unknown): string[] {
-	if (!Array.isArray(components)) return [];
-	const problems: string[] = [];
-	for (const component of components) {
-		const c = component as Partial<SubsystemComponent> | null;
-		if (
-			typeof c?.construct === "string" &&
-			(SUBSYSTEM_COMPONENT_CONSTRUCTS as readonly string[]).includes(c.construct)
-		) {
-			continue;
-		}
-		problems.push(
-			`component ${JSON.stringify(c?.id ?? "<no id>")}: invalid construct ${JSON.stringify(c?.construct)} — allowed: ${SUBSYSTEM_COMPONENT_CONSTRUCTS.join(", ")}. A module is its own subsystem: anchor to a concrete export (symbol + file), or publish it as a separate graph and reference it.`,
-		);
-	}
-	return problems;
-}
-
 // ---------------------------------------------------------------------------
 // Detail-provenance validation
 // ---------------------------------------------------------------------------
@@ -461,32 +344,6 @@ export function findComponentConstructProblems(components: unknown): string[] {
 export const SUBSYSTEM_DECLARATION_PROVENANCES = ["verified", "authored"] as const;
 
 export type DeclarationProvenance = (typeof SUBSYSTEM_DECLARATION_PROVENANCES)[number];
-
-/**
- * Human-readable problems with explicit declaration-provenance claims (empty =
- * valid).
- */
-export function findDeclarationProvenanceProblems(components: unknown): string[] {
-	if (!Array.isArray(components)) return [];
-	const problems: string[] = [];
-	for (const component of components) {
-		const c = component as Record<string, unknown> | null;
-		if (!c || typeof c !== "object") continue;
-		if (!c["declaration"]) continue;
-		const p = c["declarationProvenance"];
-		if (p === undefined) continue;
-		if (
-			typeof p === "string" &&
-			(SUBSYSTEM_DECLARATION_PROVENANCES as readonly string[]).includes(p)
-		) {
-			continue;
-		}
-		problems.push(
-			`component ${JSON.stringify(String(c["id"] ?? "<no id>"))}: invalid declarationProvenance ${JSON.stringify(p)} — allowed: ${SUBSYSTEM_DECLARATION_PROVENANCES.join(", ")}. Hand-authored declarations must be "authored"; "verified" is reserved for tool-extracted data.`,
-		);
-	}
-	return problems;
-}
 
 /**
  * Fill safe defaults so stored declarations always satisfy the published
@@ -537,21 +394,23 @@ export function purlRepoKey(purl: string | undefined): string | undefined {
 }
 
 /**
- * Pick the local root for a component's file.
+ * Resolve a component's local root from Alexandria by its purl.
  *
- * Multi-repo graphs (`repoRoots` present) require an explicit per-repo entry —
- * falling back to a default root would read one repo's files from another's
- * tree. Only single-repo graphs (no `repoRoots`) apply `repoRoot` to everyone.
+ * The model does not store local paths — repo identity travels on each
+ * component's `purl`, and Alexandria (`~/.alexandria/projects.json`) is the
+ * system of record mapping it to a checkout. Returns undefined when the repo
+ * is not registered (or has no GitHub remote).
  */
 export function resolveRepoRootForComponent(
-	graph: Pick<StoredSubsystemModel, "repoRoot" | "repoRoots">,
 	purl: string | undefined,
 ): string | undefined {
-	if (graph.repoRoots) {
-		const key = purlRepoKey(purl);
-		return key ? graph.repoRoots[key] : undefined;
-	}
-	return graph.repoRoot;
+	const key = purlRepoKey(purl);
+	if (!key) return undefined;
+	const parts = key.split("/"); // ["pkg:github", owner, name]
+	const name = parts.pop();
+	const owner = parts.pop();
+	if (!owner || !name) return undefined;
+	return resolveRepoRootFromAlexandria(owner, name) ?? undefined;
 }
 
 /**
@@ -569,50 +428,6 @@ export function fileDeclaresSymbol(content: string, symbol: string): boolean {
 }
 
 /**
- * Candidate affinity tokens for a walkthrough step's site line: identifier
- * words (>= 4 chars) drawn from the edge's endpoint symbols/names and every
- * entry in the edge's `refs`. A site line that mentions none of these is not
- * plausibly the seam the edge claims — "readFile" from a ref, "openDrawing"
- * from a symbol, "DRAWING_EVENTS" from an event ref, etc.
- */
-export function walkthroughStepTokens(
-	edge: SubsystemComponentEdge,
-	from: SubsystemComponent | undefined,
-	to: SubsystemComponent | undefined,
-): string[] {
-	const tokens = new Set<string>();
-	const add = (s: string | undefined) => {
-		if (!s) return;
-		for (const word of s.split(/[^A-Za-z_]+/)) {
-			if (word.length >= 4) tokens.add(word.toLowerCase());
-		}
-	};
-	for (const c of [from, to]) {
-		if (!c) continue;
-		add(c.symbol);
-		add(c.name);
-	}
-	for (const ref of edge.refs ?? []) add(ref);
-	return [...tokens];
-}
-
-/**
- * True when the site line text mentions any affinity token for the edge —
- * the derived check that backs "a step can't point at a random line and claim
- * it is the seam." Lenient by design: a match on one endpoint or one ref
- * token counts.
- */
-export function walkthroughStepHasAffinity(
-	lineText: string,
-	edge: SubsystemComponentEdge,
-	from: SubsystemComponent | undefined,
-	to: SubsystemComponent | undefined,
-): boolean {
-	const hay = lineText.toLowerCase();
-	return walkthroughStepTokens(edge, from, to).some((t) => hay.includes(t));
-}
-
-/**
  * Check every component's `file` against its repo's local root. When the graph
  * carries `walkthroughs`, each step's site is also resolved. Symbol presence is
  * intentionally not checked here (graphify audit owns that). Purely
@@ -620,8 +435,6 @@ export function walkthroughStepHasAffinity(
  */
 export async function verifyModelFiles(
 	doc: SubsystemModelDocument & {
-		repoRoot?: string;
-		repoRoots?: Record<string, string>;
 		walkthroughs?: SubsystemWalkthrough[];
 	},
 ): Promise<SubsystemModelVerification> {
@@ -643,7 +456,7 @@ export async function verifyModelFiles(
 		}
 		if (c.proposed) continue;
 		if (!c.file) continue;
-		const root = resolveRepoRootForComponent(doc, c.purl);
+		const root = resolveRepoRootForComponent(c.purl);
 		if (!root) {
 			unresolvedCount++;
 			continue;
@@ -683,8 +496,8 @@ export async function verifyModelFiles(
 				const from = componentById.get(step.from);
 				const to = componentById.get(step.to);
 				const root =
-					resolveRepoRootForComponent(doc, from?.purl) ??
-					resolveRepoRootForComponent(doc, to?.purl);
+					resolveRepoRootForComponent(from?.purl) ??
+					resolveRepoRootForComponent(to?.purl);
 				if (!root) continue;
 				const abs = join(root, step.file);
 				try {
@@ -696,18 +509,6 @@ export async function verifyModelFiles(
 					const lineText = lines[step.line - 1] ?? "";
 					if (!lineText.trim()) {
 						fail(`line ${step.line} in ${step.file} is blank`);
-						continue;
-					}
-					const hopEdge: SubsystemComponentEdge = {
-						id: `${step.from}--${step.mechanism}-->${step.to}`,
-						from: step.from,
-						to: step.to,
-						mechanism: step.mechanism,
-					};
-					if (!walkthroughStepHasAffinity(lineText, hopEdge, from, to)) {
-						fail(
-							`site line ${step.file}:${step.line} has no affinity with hop ${JSON.stringify(hopEdge.id)} (expected one of: ${walkthroughStepTokens(hopEdge, from, to).join(" | ")})`,
-						);
 						continue;
 					}
 					walkthroughsChecked++;
@@ -871,8 +672,6 @@ function indexEntryFor(record: StoredSubsystemModel): SubsystemModelIndexEntry {
 		updatedAt: record.updatedAt,
 		lastOpenedAt: record.lastOpenedAt,
 		fileName: `${record.id}.json`,
-		source: record.source,
-		repo: record.repo,
 		gist: record.gist,
 	};
 }
@@ -948,10 +747,6 @@ export async function createSubsystemModel(
 	doc: SubsystemModelDocument & {
 		title: string;
 		description?: string;
-		source?: string;
-		repo?: { owner: string; name: string };
-		repoRoot?: string;
-		repoRoots?: Record<string, string>;
 		walkthroughs?: SubsystemWalkthrough[];
 	},
 ): Promise<StoredSubsystemModel> {
@@ -983,10 +778,6 @@ export async function updateSubsystemModel(
 			| "components"
 			| "relations"
 			| "walkthroughs"
-			| "source"
-			| "repo"
-			| "repoRoot"
-			| "repoRoots"
 			| "gist"
 		>
 	>,

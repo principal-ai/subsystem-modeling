@@ -68,7 +68,9 @@ export type HomeProgressionExample = {
 };
 
 function constructsOnly(components: readonly SubsystemComponent[]): SubsystemComponent[] {
-  return components.map(({ process: _p, module: _m, ...rest }) => rest);
+  // Keep `process`: the constructs list sorts by it. Only module frames are
+  // dropped (no topology in this layer).
+  return components.map(({ module: _m, ...rest }) => rest);
 }
 
 function staticView(components: readonly SubsystemComponent[]): SubsystemComponent[] {

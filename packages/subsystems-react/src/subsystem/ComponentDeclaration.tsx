@@ -52,7 +52,8 @@ export interface ComponentVerificationState {
   construct?: {
     claimed: string;
     inferred: string;
-    match: boolean;
+    /** true = match, false = known mismatch, null = unconfirmed (inferred unknown). */
+    match: boolean | null;
     evidence?: string[];
   };
   signature?: {
@@ -66,7 +67,7 @@ export interface ComponentVerificationState {
     inlineParameters?: number;
   };
   declaration?: {
-    freshness: 'valid' | 'stale' | 'missing' | 'unanchored' | 'unchecked';
+    freshness: 'fresh' | 'stale' | 'missing' | 'unanchored' | 'unchecked';
     ref?: {
       startLine: number;
       lineHash: string;
@@ -118,6 +119,21 @@ export interface ComponentDeclarationProps {
   onVerify?: (componentId: string) => void;
   /** Live verification status for the selected component. */
   verification?: ComponentVerificationState | null;
+  /** Start with the file path row visible (catalog / source-first views). */
+  defaultShowFile?: boolean;
+  /** True while this component's file is open in the host drawer — keeps the
+   *  declaration visibly tied to the source being read. */
+  fileOpen?: boolean;
+  /** True when this component's own declaration line is the one highlighted in
+   *  the open file (vs. a sibling construct sharing the same file). */
+  declarationOpen?: boolean;
+  /** Hide the repo/app identity (logo + name) — for hosts that render it once
+   *  per purl group instead of on every declaration. */
+  showRepoIdentity?: boolean;
+  /** While the file row is visible, fold the declaration-line affordances into
+   *  the file badge: drop the top-right `L#` (redundant) and put the
+   *  description toggle in the badge after the line segment. */
+  fileBadgeChrome?: boolean;
 }
 
 function verificationSummary(
@@ -163,14 +179,14 @@ function verificationSummary(
         ? ` · declaration ${declFresh}${v.declaration?.ref ? ` L${v.declaration.ref.startLine}` : ''}`
         : '';
     const anchorBit = `exact → ${v.anchor?.label ?? v.anchor?.nodeId ?? 'node'}${loc}${declBit}`;
-    if (v.construct && !v.construct.match) {
-      const why =
-        v.construct.inferred === 'unknown'
-          ? `construct unknown (claimed ${v.construct.claimed})`
-          : `construct mismatch: claimed ${v.construct.claimed}, inferred ${v.construct.inferred}`;
+    if (v.construct && v.construct.match !== true) {
+      const unconfirmed = v.construct.match === null || v.construct.inferred === 'unknown';
+      const why = unconfirmed
+        ? `construct unconfirmed (claimed ${v.construct.claimed})`
+        : `construct mismatch: claimed ${v.construct.claimed}, inferred ${v.construct.inferred}`;
       return {
         text: [...bits, anchorBit, why].join(' · '),
-        color: '#e5534b',
+        color: unconfirmed ? warn : '#e5534b',
       };
     }
     if (v.signature && !v.signature.skipped && !v.signature.match) {
@@ -256,14 +272,22 @@ export function ComponentDeclaration({
   maxWidth,
   onVerify,
   verification,
+  defaultShowFile = false,
+  fileOpen = false,
+  declarationOpen = false,
+  showRepoIdentity = true,
+  fileBadgeChrome = false,
 }: ComponentDeclarationProps) {
   const { theme, mode } = useTheme();
   const pierreSyntaxTheme = resolvePierreSyntaxThemeName(mode);
-  const [fileHovered, setFileHovered] = useState(false);
-  const [showFile, setShowFile] = useState(false);
+  const [hoverSeg, setHoverSeg] = useState<
+    'path' | 'line' | 'desc' | 'action' | null
+  >(null);
+  const [showFile, setShowFile] = useState(defaultShowFile);
   const [showPurpose, setShowPurpose] = useState(false);
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const color = componentColor(component, pierreSyntaxTheme);
+  const inlineChrome = fileBadgeChrome && showFile && !!component.file;
   const okColor = '#3d9a5f';
   const warnColor = theme.colors.textSecondary;
 
@@ -409,20 +433,22 @@ export function ComponentDeclaration({
           {verifyBusy ? '…' : 'Verify'}
         </button>
       )}
-      {toggleBtn(showFile, () => setShowFile((v) => !v), 'Toggle file path', FileText)}
-      {lineLocationLabel}
-      {component.purpose?.trim() &&
+      {!inlineChrome &&
+        toggleBtn(showFile, () => setShowFile((v) => !v), 'Toggle file path', FileText)}
+      {!inlineChrome && lineLocationLabel}
+      {!inlineChrome &&
+        component.purpose?.trim() &&
         toggleBtn(showPurpose, () => setShowPurpose((v) => !v), 'Toggle description', AlignLeft)}
     </span>
   );
 
-  if (ghMatch) {
+  if (showRepoIdentity && ghMatch) {
     const [, ghOwner, ghRepo] = ghMatch;
     lines.push(
       line(
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
           <img
-            src={`https://github.com/${ghOwner}.png?size=40`}
+            src={component.logo ?? `https://github.com/${ghOwner}.png?size=40`}
             alt=""
             width={18}
             height={18}
@@ -445,7 +471,27 @@ export function ComponentDeclaration({
         'repo',
       ),
     );
-  } else if (component.purl) {
+  } else if (showRepoIdentity && component.logo) {
+    lines.push(
+      line(
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
+          <img
+            src={component.logo}
+            alt=""
+            width={18}
+            height={18}
+            style={{ borderRadius: 4, flexShrink: 0 }}
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+          <span style={commentStyle}>{formatPurl(component.purl)}</span>
+          {headerActions}
+        </span>,
+        'repo',
+      ),
+    );
+  } else if (showRepoIdentity && component.purl) {
     lines.push(
       line(
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
@@ -455,7 +501,7 @@ export function ComponentDeclaration({
         'purl',
       ),
     );
-  } else if (onVerify) {
+  } else if (onVerify || (!showRepoIdentity && !inlineChrome)) {
     lines.push(line(headerActions, 'actions'));
   }
 
@@ -503,25 +549,159 @@ export function ComponentDeclaration({
   }
 
   if (showFile && component.file) {
+    const fileInteractive = !!onOpenFile;
+    const fileSegHovered =
+      hoverSeg === 'path' || hoverSeg === 'line' || hoverSeg === 'action';
+    const segBorder =
+      fileOpen || (fileInteractive && fileSegHovered)
+        ? theme.colors.accent ?? color
+        : theme.colors.border;
+    const segBg = (seg: 'path' | 'line' | 'desc' | 'action') =>
+      hoverSeg === seg ? theme.colors.border : 'transparent';
+    const segHover = (seg: 'path' | 'line' | 'desc' | 'action') => ({
+      onMouseEnter: () => setHoverSeg(seg),
+      onMouseLeave: () => setHoverSeg((s) => (s === seg ? null : s)),
+    });
+    const segStyle = {
+      display: 'inline-flex',
+      alignItems: 'center',
+      transition: 'background 100ms ease',
+    } as const;
+    const openAt = fileInteractive
+      ? (e: { stopPropagation: () => void }) => {
+          e.stopPropagation();
+          openDeclarationFile();
+        }
+      : undefined;
     lines.push(
       line(
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <DetailLink onClick={onOpenFile ? openDeclarationFile : undefined}>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'stretch',
+              borderRadius: 6,
+              overflow: 'hidden',
+              border: `1px solid ${segBorder}`,
+              background: theme.colors.backgroundSecondary ?? 'transparent',
+              whiteSpace: 'nowrap',
+            }}
+          >
             <span
-              onMouseEnter={() => setFileHovered(true)}
-              onMouseLeave={() => setFileHovered(false)}
+              role={fileInteractive ? 'button' : undefined}
+              tabIndex={fileInteractive ? 0 : undefined}
+              title={fileInteractive ? `Open ${component.file}` : component.file}
+              onClick={openAt}
+              {...segHover('path')}
               style={{
-                color: theme.colors.textSecondary ?? muted,
-                fontFamily: theme.fonts.body,
-                fontSize: theme.fontSizes[1],
-                textDecoration: fileHovered && onOpenFile ? 'underline' : undefined,
-                textUnderlineOffset: 2,
+                ...segStyle,
+                padding: '1px 8px',
+                background: segBg('path'),
+                color:
+                  hoverSeg === 'path' && fileInteractive
+                    ? theme.colors.text
+                    : theme.colors.textSecondary ?? muted,
+                fontFamily: theme.fonts.monospace,
+                fontSize: theme.fontSizes[0],
+                cursor: fileInteractive ? 'pointer' : 'default',
               }}
             >
               {component.file}
             </span>
-          </DetailLink>
-          {lineLocationLabel}
+            {declarationStartLine != null && (
+              <span
+                role={fileInteractive ? 'button' : undefined}
+                tabIndex={fileInteractive ? 0 : undefined}
+                title="Open at declaration line"
+                onClick={openAt}
+                {...segHover('line')}
+                style={{
+                  ...segStyle,
+                  padding: '1px 6px',
+                  borderLeft: `1px solid ${segBorder}`,
+                  background: segBg('line'),
+                  color: theme.colors.accent ?? color,
+                  fontFamily: theme.fonts.monospace,
+                  fontSize: theme.fontSizes[0],
+                  cursor: fileInteractive ? 'pointer' : 'default',
+                }}
+              >
+                L{declarationStartLine}
+              </span>
+            )}
+            {inlineChrome && component.purpose?.trim() && (
+              <button
+                type="button"
+                title={showPurpose ? 'Hide description' : 'Show description'}
+                aria-label={showPurpose ? 'Hide description' : 'Show description'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowPurpose((v) => !v);
+                }}
+                {...segHover('desc')}
+                style={{
+                  ...segStyle,
+                  justifyContent: 'center',
+                  padding: '0 6px',
+                  border: 'none',
+                  borderLeft: `1px solid ${segBorder}`,
+                  background: segBg('desc'),
+                  color: showPurpose
+                    ? theme.colors.accent ?? color
+                    : theme.colors.textSecondary ?? muted,
+                  cursor: 'pointer',
+                }}
+              >
+                <AlignLeft size={12} />
+              </button>
+            )}
+            {fileOpen &&
+              (declarationOpen ? (
+                <span
+                  role={fileInteractive ? 'button' : undefined}
+                  tabIndex={fileInteractive ? 0 : undefined}
+                  title={fileInteractive ? 'Close file' : 'This declaration is shown below'}
+                  onClick={openAt}
+                  {...segHover('action')}
+                  style={{
+                    ...segStyle,
+                    padding: '1px 6px',
+                    borderLeft: `1px solid ${segBorder}`,
+                    background: segBg('action'),
+                    color: theme.colors.accent ?? color,
+                    fontFamily: theme.fonts.monospace,
+                    fontSize: theme.fontSizes[0] * 0.85,
+                    letterSpacing: 0.4,
+                    textTransform: 'uppercase',
+                    cursor: fileInteractive ? 'pointer' : 'default',
+                  }}
+                >
+                  {hoverSeg === 'action' && fileInteractive ? 'close' : 'open'}
+                </span>
+              ) : fileInteractive ? (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  title="Go to this declaration in the open file"
+                  onClick={openAt}
+                  {...segHover('action')}
+                  style={{
+                    ...segStyle,
+                    padding: '1px 6px',
+                    borderLeft: `1px solid ${segBorder}`,
+                    background: segBg('action'),
+                    color: theme.colors.accent ?? color,
+                    fontFamily: theme.fonts.monospace,
+                    fontSize: theme.fontSizes[0] * 0.85,
+                    letterSpacing: 0.4,
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                  }}
+                >
+                  go to
+                </span>
+              ) : null)}
+          </span>
         </span>,
         'file',
       ),
@@ -530,6 +710,12 @@ export function ComponentDeclaration({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [printWidth, setPrintWidth] = useState(80);
+
+  // The "open" segment flips to "close" on hover; clear that when the file
+  // closes so a later open doesn't render "close" while unhovered.
+  useEffect(() => {
+    if (!fileOpen) setHoverSeg((s) => (s === 'action' ? null : s));
+  }, [fileOpen]);
 
   useEffect(() => {
     const el = containerRef.current;

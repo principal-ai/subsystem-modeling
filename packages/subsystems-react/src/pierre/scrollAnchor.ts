@@ -20,5 +20,11 @@ export function scrollFocusLineIntoView(
   const lineEl = root.querySelector(
     `[data-line="${anchorLine}"]`,
   ) as HTMLElement | null;
-  lineEl?.scrollIntoView({ block: 'start', behavior: 'auto' });
+  if (!lineEl) return;
+  // scrollIntoView also nudges the code pane horizontally (the line is wider
+  // than the viewport, so `inline` alignment scrolls it right). Pin it back to
+  // the left edge so file/snippet views always open at column 0.
+  lineEl.scrollIntoView({ block: 'start', behavior: 'auto' });
+  const codeScroller = root.querySelector('code') as HTMLElement | null;
+  if (codeScroller) codeScroller.scrollLeft = 0;
 }
