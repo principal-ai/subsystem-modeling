@@ -735,6 +735,7 @@ function FilesPanel({
 	onPreviewFile,
 	combinedActive,
 	onToggleCombined,
+	autoFocusSingleRepo,
 }: {
 	graphs: SubsystemModelSummary[];
 	selectedId: string | null;
@@ -743,6 +744,8 @@ function FilesPanel({
 	onFocusRepo: (repoKey: string) => void;
 	combinedActive: boolean;
 	onToggleCombined: () => void;
+	/** Showcase single-repo: skip the repo overview and go straight to files. */
+	autoFocusSingleRepo?: boolean;
 	onHighlightGraph: (
 		graph: SubsystemModelSummary,
 		file: { repoKey: string | undefined; displayPath: string },
@@ -848,6 +851,7 @@ function FilesPanel({
 					}
 					combinedActive={combinedActive}
 					onToggleCombined={onToggleCombined}
+					autoFocusSingleRepo={autoFocusSingleRepo}
 				/>
 			</div>
 		</div>
@@ -1630,6 +1634,7 @@ export function SubsystemModelsView({
 						onPreviewFile={onPreviewFile}
 						combinedActive={combinedActive}
 						onToggleCombined={onToggleCombined}
+						autoFocusSingleRepo={scope != null}
 					/>
 					<div
 						onMouseDown={onPanelResizeStart}
@@ -1731,11 +1736,6 @@ export function SubsystemModelsView({
 			{combinedActive && focusedRepo ? (
 				<ComposedGraphPane
 					repoKey={focusedRepo}
-					repoLabel={
-						focusedRepo === "__no-repo__"
-							? "No repo"
-							: focusedRepo.replace(/^pkg:github\//, "")
-					}
 					graphs={graphs}
 					modelIds={scopeOrder ?? undefined}
 					onPreviewFile={onPreviewFile}

@@ -32,15 +32,12 @@ interface ComposedDocument {
 
 export function ComposedGraphPane({
 	repoKey,
-	repoLabel,
 	graphs,
 	modelIds,
 	onPreviewFile,
 }: {
 	/** Drilldown repo key of the focused repo. */
 	repoKey: string;
-	/** Human label for the header (owner/name). */
-	repoLabel: string;
 	/** Model summaries for resolving file-preview ownership. */
 	graphs: SubsystemModelSummary[];
 	/**
@@ -124,39 +121,13 @@ export function ComposedGraphPane({
 	return (
 		<div
 			style={{
-				// Bound to the parent pane: fill its height, never push past
-				// it — the canvas flexes into whatever remains after the header.
+				// Bound to the parent pane: fill its height, never push past it.
 				height: "100%",
 				minHeight: 480,
 				display: "flex",
 				flexDirection: "column",
 			}}
 		>
-			<div
-				style={{
-					flexShrink: 0,
-					display: "flex",
-					alignItems: "baseline",
-					gap: 8,
-					padding: "0 0 8px",
-					fontSize: theme.fontSizes[1],
-					color: muted,
-				}}
-			>
-				<span style={{ fontWeight: 600, color: theme.colors.text }}>
-					Combined graph
-				</span>
-				<span>
-					{repoLabel} · {composedModelIds.length} model
-					{composedModelIds.length === 1 ? "" : "s"}
-					{aggregate && aggregate.frames.length > 0
-						? ` · ${aggregate.frames.length} frames`
-						: ""}
-					{sidecar && sidecar.conflicts.length > 0
-						? ` · ${sidecar.conflicts.length} merge conflict${sidecar.conflicts.length === 1 ? "" : "s"}`
-						: ""}
-				</span>
-			</div>
 			{loading ? (
 				<div style={{ fontSize: theme.fontSizes[1], color: muted, padding: "24px 0" }}>
 					Composing models…

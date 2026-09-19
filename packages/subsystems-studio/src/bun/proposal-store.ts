@@ -182,7 +182,7 @@ function buildPreview(
 			} else {
 				rows.push({
 					label: `${label}.${ch.field}`,
-					before: rel ? (rel as Record<string, unknown>)[ch.field] : undefined,
+					before: rel ? (rel as unknown as Record<string, unknown>)[ch.field] : undefined,
 					after: ch.value,
 				});
 			}
@@ -370,7 +370,9 @@ function validateChanges(
 function applyChangesToGraph(
 	graph: StoredSubsystemModel,
 	changes: SubsystemModelProposalChange[],
-): Pick<StoredSubsystemModel, "components" | "walkthroughs" | "relations"> | null {
+): (Pick<StoredSubsystemModel, "components" | "walkthroughs"> & {
+	relations?: StoredSubsystemModel["relations"];
+}) | null {
 	const graphChanges = changes.filter((ch) => ch.target !== "augmentation");
 	if (graphChanges.length === 0) return null;
 

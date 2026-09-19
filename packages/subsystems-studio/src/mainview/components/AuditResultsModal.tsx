@@ -1294,13 +1294,11 @@ export function AuditResultsModal({
 	};
 
 	const headerTitle =
-		state.phase === "done" && doneReport
-			? `Audit — ${doneReport.title}`
+		state.phase === "done"
+			? `Audit — ${doneReport?.title ?? "complete"}`
 			: state.phase === "error"
 				? `Audit — ${state.title ?? "failed"}`
-				: state.phase === "graphify"
-					? `Audit — ${state.title}`
-					: `Audit — ${state.title}`;
+				: `Audit — ${state.title}`;
 
 	return (
 		<div

@@ -1877,7 +1877,8 @@ export type StudioMessages = {
 			| "issue-fixer"
 			| "gap-filler"
 			| "topology-fixer"
-			| "topology-gap-filler";
+			| "topology-gap-filler"
+			| "boundary-gap-filler";
 		/** True when audit was fully verified and no agent ran. */
 		skipped?: boolean;
 	};

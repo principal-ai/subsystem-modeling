@@ -189,7 +189,7 @@ export function OpencodeV2DebugView() {
 	}, []);
 
 	if (!status && !error) {
-		return <CenteredMessage>Checking OpenCode V2…</CenteredMessage>;
+		return <CenteredMessage title="Checking OpenCode V2…" />;
 	}
 
 	const busy = Boolean(status?.cliBusy);
@@ -204,7 +204,7 @@ export function OpencodeV2DebugView() {
 		border: `1px solid ${theme.colors.border ?? "rgba(255,255,255,0.12)"}`,
 		background: theme.colors.surface ?? "rgba(255,255,255,0.04)",
 		color: theme.colors.text,
-		fontFamily: theme.typography?.fontFamily ?? "inherit",
+		fontFamily: theme.fonts.body,
 	};
 
 	const label: CSSProperties = {
@@ -250,7 +250,7 @@ export function OpencodeV2DebugView() {
 				</p>
 
 				{error ? (
-					<p style={{ color: theme.colors.danger ?? "#e55", marginBottom: 16 }}>
+					<p style={{ color: theme.colors.error, marginBottom: 16 }}>
 						{error}
 					</p>
 				) : null}
@@ -308,7 +308,7 @@ export function OpencodeV2DebugView() {
 								? "Running"
 								: "Not running"}
 						{server?.error ? (
-							<span style={{ marginLeft: 8, color: theme.colors.danger ?? "#e55" }}>
+							<span style={{ marginLeft: 8, color: theme.colors.error }}>
 								{server.error}
 							</span>
 						) : null}
@@ -334,7 +334,7 @@ export function OpencodeV2DebugView() {
 							style={{
 								...btn,
 								background: theme.colors.primary ?? "#3d7a5a",
-								color: theme.colors.onPrimary ?? "#fff",
+								color: theme.colors.textOnPrimary,
 							}}
 						>
 							{busy && status?.cliBusy === "install" ? (
@@ -352,10 +352,10 @@ export function OpencodeV2DebugView() {
 								background:
 									status?.updateAvailable === true
 										? (theme.colors.primary ?? "#3d7a5a")
-										: (theme.colors.surfaceElevated ?? "rgba(255,255,255,0.08)"),
+										: (theme.colors.backgroundTertiary),
 								color:
 									status?.updateAvailable === true
-										? (theme.colors.onPrimary ?? "#fff")
+										? (theme.colors.textOnPrimary)
 										: muted,
 							}}
 						>
@@ -371,7 +371,7 @@ export function OpencodeV2DebugView() {
 						onClick={() => void refresh(true)}
 						style={{
 							...btn,
-							background: theme.colors.surfaceElevated ?? "rgba(255,255,255,0.08)",
+							background: theme.colors.backgroundTertiary,
 							color: theme.colors.text,
 						}}
 					>
@@ -409,7 +409,7 @@ export function OpencodeV2DebugView() {
 				</div>
 
 				{probe?.error ? (
-					<p style={{ color: theme.colors.danger ?? "#e55", marginBottom: 12, fontSize: theme.fontSizes[0] }}>
+					<p style={{ color: theme.colors.error, marginBottom: 12, fontSize: theme.fontSizes[0] }}>
 						{probe.error}
 					</p>
 				) : null}
@@ -423,7 +423,7 @@ export function OpencodeV2DebugView() {
 							...btn,
 							opacity: !installed || probeBusy ? 0.7 : 1,
 							background: theme.colors.primary ?? "#3d7a5a",
-							color: theme.colors.onPrimary ?? "#fff",
+							color: theme.colors.textOnPrimary,
 						}}
 					>
 						{probeBusy ? (
@@ -438,7 +438,7 @@ export function OpencodeV2DebugView() {
 						style={{
 							...btn,
 							opacity: probeBusy ? 1 : 0.5,
-							background: theme.colors.surfaceElevated ?? "rgba(255,255,255,0.08)",
+							background: theme.colors.backgroundTertiary,
 							color: theme.colors.text,
 						}}
 					>

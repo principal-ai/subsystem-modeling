@@ -1477,6 +1477,11 @@ function isStaticTab(
 	);
 }
 
+/** Narrows to trail tabs — the only tabs that carry a trail payload. */
+function isTrailTab(tab: TabState): tab is TrailTabState {
+	return tab.kind === "trail";
+}
+
 function summarize(tab: TabState): TabSummary {
 	if (tab.kind === "analysis") {
 		return { id: tab.id, kind: "analysis", title: tab.title };
@@ -1695,7 +1700,7 @@ const requests: RequestHandlers = {
 						return { ok: false, error: (err as Error).message };
 					}
 				}
-				if (tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-showcase") {
+				if (!isTrailTab(tab)) {
 					return { ok: false, error: `${tab.kind} tab does not serve files` };
 				}
 				return tab.mode === "remote"
@@ -1706,7 +1711,7 @@ const requests: RequestHandlers = {
 				const walkPath = path ?? null;
 				if (!walkPath) {
 					const tab = getTab(tabId);
-					if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model" || tab.kind === "subsystem-showcase") return { files: [] };
+					if (!tab || !isTrailTab(tab)) return { files: [] };
 					return tab.mode === "remote"
 						? getFileTreeRemote(tab)
 						: { files: await walkFiles(tab.repoRoot) };
@@ -1731,7 +1736,7 @@ const requests: RequestHandlers = {
 
 			createTrailNote: ({ tabId, draft }) => {
 				const tab = getTab(tabId);
-				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model" || tab.kind === "subsystem-showcase") {
+				if (!tab || !isTrailTab(tab)) {
 					return { ok: false, error: `unknown trail tab: ${tabId}` };
 				}
 				if (tab.payloadKind === "tour") {
@@ -1756,7 +1761,7 @@ const requests: RequestHandlers = {
 			},
 			updateTrailNote: ({ tabId, noteId, body }) => {
 				const tab = getTab(tabId);
-				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model" || tab.kind === "subsystem-showcase") {
+				if (!tab || !isTrailTab(tab)) {
 					return { ok: false, error: `unknown trail tab: ${tabId}` };
 				}
 				if (tab.payloadKind === "tour") {
@@ -1857,7 +1862,7 @@ const requests: RequestHandlers = {
 			},
 			shareTrail: ({ tabId }) => {
 				const tab = getTab(tabId);
-				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model" || tab.kind === "subsystem-showcase") {
+				if (!tab || !isTrailTab(tab)) {
 					return { ok: false, error: `unknown trail tab: ${tabId}` };
 				}
 				if (tab.payloadKind === "tour") {
@@ -1942,7 +1947,7 @@ const requests: RequestHandlers = {
 			},
 			deleteTrailNote: ({ tabId, noteId }) => {
 				const tab = getTab(tabId);
-				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model" || tab.kind === "subsystem-showcase") {
+				if (!tab || !isTrailTab(tab)) {
 					return { ok: false, error: `unknown trail tab: ${tabId}` };
 				}
 				if (tab.payloadKind === "tour") {

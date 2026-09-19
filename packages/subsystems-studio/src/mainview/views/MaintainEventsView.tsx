@@ -74,12 +74,12 @@ export function MaintainEventsView({
 		flexDirection: "column",
 		padding: 20,
 		color: theme.colors.text,
-		fontFamily: theme.typography?.fontFamily ?? "inherit",
+		fontFamily: theme.fonts.body,
 		boxSizing: "border-box",
 	};
 
 	if (!sessionId) {
-		return <CenteredMessage>Waiting for OpenCode session…</CenteredMessage>;
+		return <CenteredMessage title="Waiting for OpenCode session…" />;
 	}
 
 	return (
@@ -97,7 +97,7 @@ export function MaintainEventsView({
 					{events.length} events
 				</div>
 				{error ? (
-					<div style={{ marginTop: 8, color: theme.colors.danger ?? "#e55", fontSize: theme.fontSizes[0] }}>
+					<div style={{ marginTop: 8, color: theme.colors.error, fontSize: theme.fontSizes[0] }}>
 						{error}
 					</div>
 				) : null}

@@ -80,7 +80,7 @@ export function isAdoptableEmptyClaimedSignature(sig: {
 
 export function adoptGraphifySignatureFixFromVerify(
 	sig: NonNullable<SubsystemComponentVerificationResult["signature"]>,
-): SubsystemModelAuditFix | undefined {
+): Extract<SubsystemModelAuditFix, { id: "adopt_graphify_signature" }> | undefined {
 	if (!isAdoptableEmptyClaimedSignature(sig)) return undefined;
 	return {
 		id: "adopt_graphify_signature",
@@ -93,7 +93,7 @@ export function adoptGraphifySignatureFixFromVerify(
 export function adoptGraphifyFileFixFromVerify(
 	component: { file?: string },
 	suggest: NonNullable<SubsystemComponentVerificationResult["fileSuggest"]>,
-): SubsystemModelAuditFix {
+): Extract<SubsystemModelAuditFix, { id: "adopt_graphify_file" }> {
 	return {
 		id: "adopt_graphify_file",
 		label: `Update file to ${suggest.file}`,
@@ -416,7 +416,6 @@ export async function verifySubsystemComponent(
 	const anchor = resolveComponentAnchor(nodes, {
 		file: component.file,
 		symbol: component.symbol,
-		construct: component.construct,
 		purl: purlKey,
 	});
 
@@ -539,7 +538,7 @@ export async function verifySubsystemComponent(
 				evidence: [
 					...inferred.evidence,
 					`augmented construct ${augConstruct}`,
-					...(aug.evidence ?? []),
+					...(aug?.evidence ?? []),
 				],
 			};
 		} else {

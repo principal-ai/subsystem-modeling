@@ -10,7 +10,7 @@
  * the new dir is empty/missing, contents are moved on first ensureDir().
  */
 
-import { promises as fs, watch, type FSWatcher } from "node:fs";
+import { promises as fs, watch, type Dirent, type FSWatcher } from "node:fs";
 import { homedir } from "node:os";
 import { join, basename } from "node:path";
 import { deriveGraphEdges } from "@principal-ai/subsystems-core";
@@ -566,7 +566,7 @@ export async function migrateLegacySubsystemGraphsDir(roots?: {
 		legacyMigrateAttempted = true;
 	}
 
-	let legacyEntries: Awaited<ReturnType<typeof fs.readdir>>;
+	let legacyEntries: Dirent<string>[];
 	try {
 		legacyEntries = await fs.readdir(legacyRoot, { withFileTypes: true });
 	} catch {

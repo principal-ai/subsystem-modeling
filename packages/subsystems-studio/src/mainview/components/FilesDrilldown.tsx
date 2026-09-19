@@ -34,6 +34,11 @@ export interface FilesDrilldownProps {
 	combinedActive?: boolean;
 	/** Toggle combined-graph mode. */
 	onToggleCombined?: () => void;
+	/**
+	 * Showcase mode with a single repo: skip the overview (a one-row repo
+	 * selection) and go straight to that repo's file tree.
+	 */
+	autoFocusSingleRepo?: boolean;
 }
 
 /** React + expansion key for a group (matches the caller's boost mapping). */
@@ -355,12 +360,32 @@ export function FilesDrilldown({
 	onSelectFile,
 	combinedActive = false,
 	onToggleCombined,
+	autoFocusSingleRepo = false,
 }: FilesDrilldownProps) {
 	const { theme } = useTheme();
+	// Showcase with a single repo: the overview would be a one-row repo
+	// selection, so go straight to that repo's files instead.
+	const autoKey =
+		autoFocusSingleRepo && groups.length === 1
+			? drilldownRepoKey(groups[0]!)
+			: null;
 	const focused =
 		focusedRepo != null
 			? (groups.find((g) => drilldownRepoKey(g) === focusedRepo) ?? null)
-			: null;
+			: autoKey != null
+				? (groups.find((g) => drilldownRepoKey(g) === autoKey) ?? null)
+				: null;
+	// Sync the auto-focused repo up so the list filters and combined-graph
+	// mode key off the same focus the tree is showing. `onFocusRepo` toggles,
+	// so apply once (StrictMode would otherwise toggle it straight back off).
+	const autoFocusApplied = useRef(false);
+	useEffect(() => {
+		if (autoKey == null || focusedRepo != null || autoFocusApplied.current) {
+			return;
+		}
+		autoFocusApplied.current = true;
+		onFocusRepo(autoKey);
+	}, [autoKey, focusedRepo, onFocusRepo]);
 	// The focused repo's last model can be deleted out from under the drill
 	// (or filtered away) — drop focus so the overview (and back path) returns.
 	useEffect(() => {
@@ -430,7 +455,11 @@ export function FilesDrilldown({
 				<div style={{ ...paneStyle, height: "100%", overflow: "hidden" }}>
 					{shown && (
 						<>
-							<BackRow onBack={() => focusedRepo && onFocusRepo(focusedRepo)} />
+							{!autoKey && (
+								<BackRow
+									onBack={() => focusedRepo && onFocusRepo(focusedRepo)}
+								/>
+							)}
 							<RepoHeaderRow
 								group={shown}
 								showGithub
