@@ -20,13 +20,17 @@ export interface SubsystemFileTreeProps {
   hoveredFile?: string | null;
   /** Called when a file row is clicked; upstream toggles the drawer. */
   onSelectFile?: (file: string) => void;
+  /** Called on hover in/out of a file row — directories and non-file rows
+   *  emit null. Pierre exposes no hover API, so this rides a shadow-DOM
+   *  `mouseover` listener (see below). */
+  onHoverFile?: (file: string | null) => void;
   /** Hide the built-in "Files N" header row — used when an upstream repo
    *  header already labels the tree. */
   headerless?: boolean;
 }
 
 /** Fills its parent height by design — pin it with a sized flex container. */
-export function SubsystemFileTree({ files, selectedFile, hoveredFile, onSelectFile, headerless }: SubsystemFileTreeProps) {
+export function SubsystemFileTree({ files, selectedFile, hoveredFile, onSelectFile, onHoverFile, headerless }: SubsystemFileTreeProps) {
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const paths = useMemo(() => Array.from(new Set(files)).sort(), [files]);
@@ -38,6 +42,8 @@ export function SubsystemFileTree({ files, selectedFile, hoveredFile, onSelectFi
   pathSetRef.current = pathSet;
   const onSelectFileRef = useRef(onSelectFile);
   onSelectFileRef.current = onSelectFile;
+  const onHoverFileRef = useRef(onHoverFile);
+  onHoverFileRef.current = onHoverFile;
   const selectedFileRef = useRef<string | null>(selectedFile ?? null);
   selectedFileRef.current = selectedFile ?? null;
   // Suppresses onSelectFile while selection is driven programmatically from
@@ -108,6 +114,41 @@ export function SubsystemFileTree({ files, selectedFile, hoveredFile, onSelectFi
       }
     }
   }, [hoveredFile]);
+
+  // Hover notifications. Pierre exposes no hover callback hook, but its rows
+  // carry `data-item-path` / `data-item-type` inside an OPEN shadow root and
+  // it binds no `mouseover`/`mouseleave` handlers, so native mouse events
+  // bubble out to this wrapper. Resolve the row via `composedPath()` (which
+  // crosses the shadow boundary even though `event.target` is retargeted to
+  // the host), then emit the repo-root-relative path. Directories emit null.
+  const lastHoveredRef = useRef<string | null>(null);
+  useEffect(() => {
+    const host = treeRef.current;
+    if (!host) return;
+    const resolveFile = (e: MouseEvent): string | null => {
+      for (const el of e.composedPath()) {
+        if (!(el instanceof HTMLElement) || el.dataset.type !== 'item') continue;
+        if (el.dataset.itemType === 'folder') return null;
+        const raw = el.dataset.itemPath ?? '';
+        const path = raw.endsWith('/') ? raw.slice(0, -1) : raw;
+        return pathSetRef.current.has(path) ? path : null;
+      }
+      return null;
+    };
+    const emit = (file: string | null) => {
+      if (lastHoveredRef.current === file) return;
+      lastHoveredRef.current = file;
+      onHoverFileRef.current?.(file);
+    };
+    const handleOver = (e: MouseEvent) => emit(resolveFile(e));
+    const handleLeave = () => emit(null);
+    host.addEventListener('mouseover', handleOver);
+    host.addEventListener('mouseleave', handleLeave);
+    return () => {
+      host.removeEventListener('mouseover', handleOver);
+      host.removeEventListener('mouseleave', handleLeave);
+    };
+  }, []);
 
   // Re-scope the tree in place when the subsystem's file set changes.
   useEffect(() => {
