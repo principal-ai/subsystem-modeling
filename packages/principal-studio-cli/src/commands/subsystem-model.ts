@@ -377,6 +377,24 @@ async function rejectAction(
   if (!ok) process.exit(2);
 }
 
+async function showcaseAction(
+  ids: string[],
+  options: { title?: string },
+): Promise<void> {
+  if (!(await studioHttpUp())) {
+    process.stderr.write(
+      'Principal Studio HTTP is not running (need Studio on :3045 to open a showcase).\n',
+    );
+    process.exit(2);
+  }
+  const { ok, json } = await studioFetch('/api/subsystem-model/showcase', {
+    method: 'POST',
+    body: JSON.stringify({ ids, title: options.title }),
+  });
+  process.stdout.write(JSON.stringify(json, null, 2) + '\n');
+  if (!ok) process.exit(2);
+}
+
 export function createSubsystemModelCommand(): Command {
   const cmd = new Command('subsystem-model').description(
     'Create, open, audit, and propose corrections for subsystem models',
@@ -415,6 +433,15 @@ export function createSubsystemModelCommand(): Command {
     .description('Print a stored subsystem model as JSON')
     .argument('[id]', 'Model id (sg-…)')
     .action(getAction);
+
+  cmd
+    .command('showcase')
+    .description(
+      'Open a new Subsystem Showcase tab scoped to specific model ids (requires Studio HTTP)',
+    )
+    .argument('<ids...>', 'Model ids (sg-…)')
+    .option('--title <title>', 'Tab title')
+    .action(showcaseAction);
 
   cmd
     .command('audit')

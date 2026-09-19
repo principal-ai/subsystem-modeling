@@ -78,7 +78,7 @@ function PlaygroundDemo({ leftCount, rightCount, showEdgeLabels }: { leftCount: 
 
   for (let i = 0; i < leftCount; i++) {
     comps.push({
-      id: `l${i}`,
+      alias: `l${i}`,
       name: `Left${i}`,
       construct: 'class',
       file: `left${i}.ts`,
@@ -88,7 +88,7 @@ function PlaygroundDemo({ leftCount, rightCount, showEdgeLabels }: { leftCount: 
   }
   for (let i = 0; i < rightCount; i++) {
     comps.push({
-      id: `r${i}`,
+      alias: `r${i}`,
       name: `Right${i}`,
       construct: 'class',
       file: `right${i}.ts`,

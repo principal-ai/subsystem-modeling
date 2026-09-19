@@ -37,7 +37,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
   {
     label: 'function — no params',
     component: {
-      id: 'fn-void',
+      alias: 'fn-void',
       name: 'flush',
       construct: 'function',
       file: 'src/event-processing/sink.ts',
@@ -52,7 +52,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
   {
     label: 'function — single param',
     component: {
-      id: 'fn-one',
+      alias: 'fn-one',
       name: 'normalize',
       construct: 'function',
       file: 'src/session/SessionReader.ts',
@@ -68,7 +68,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
   {
     label: 'function — two params',
     component: {
-      id: 'fn-two',
+      alias: 'fn-two',
       name: 'normalizeSession',
       construct: 'function',
       file: 'src/event-processing/normalize.ts',
@@ -87,7 +87,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
   {
     label: 'function — rich params (positional, union, callback, generic return)',
     component: {
-      id: 'fn-rich',
+      alias: 'fn-rich',
       name: 'mergeSessions',
       construct: 'function',
       file: 'src/session/merge.ts',
@@ -108,7 +108,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
   {
     label: 'class — no body',
     component: {
-      id: 'class-empty',
+      alias: 'class-empty',
       name: 'EmptyClass',
       construct: 'class',
       file: 'src/empty.ts',
@@ -122,7 +122,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
   {
     label: 'class — properties only',
     component: {
-      id: 'class-props',
+      alias: 'class-props',
       name: 'Config',
       construct: 'class',
       file: 'src/config.ts',
@@ -141,7 +141,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
   {
     label: 'class — methods + properties + extends + implements',
     component: {
-      id: 'class-rich',
+      alias: 'class-rich',
       name: 'EventProcessor',
       construct: 'class',
       file: 'src/event-processing/EventProcessor.ts',
@@ -168,7 +168,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
   {
     label: 'type — properties',
     component: {
-      id: 'type-props',
+      alias: 'type-props',
       name: 'SessionRecord',
       construct: 'interface',
       file: 'src/session/transcript.ts',
@@ -186,7 +186,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
   {
     label: 'type — no properties',
     component: {
-      id: 'type-empty',
+      alias: 'type-empty',
       name: 'BrandedId',
       construct: 'interface',
       file: 'src/types.ts',
@@ -200,7 +200,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
   {
     label: 'external',
     component: {
-      id: 'ext',
+      alias: 'ext',
       name: 'principal-studio',
       construct: 'external',
       file: '',
@@ -215,7 +215,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
   {
     label: 'function — no symbol (uses name fallback)',
     component: {
-      id: 'fn-no-symbol',
+      alias: 'fn-no-symbol',
       name: 'anonymousHelper',
       construct: 'function',
       file: 'src/helpers.ts',
@@ -230,7 +230,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
   {
     label: 'method — standalone from class',
     component: {
-      id: 'method-normalize',
+      alias: 'method-normalize',
       name: 'normalize',
       construct: 'method',
       file: 'src/session/SessionReader.ts',
@@ -247,7 +247,7 @@ const cases: { label: string; component: SubsystemComponent }[] = [
   {
     label: 'method — no params',
     component: {
-      id: 'method-dispose',
+      alias: 'method-dispose',
       name: 'dispose',
       construct: 'method',
       file: 'src/event-processing/EventProcessor.ts',

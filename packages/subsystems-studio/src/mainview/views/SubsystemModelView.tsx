@@ -57,9 +57,12 @@ const EMPTY_MODEL = {
 export function SubsystemModelView({
 	tabId,
 	graphId,
+	focusWalkthroughId,
 }: {
 	tabId: string;
 	graphId: string;
+	/** Walkthrough to select on mount (opened from a row in the list). */
+	focusWalkthroughId?: string;
 }) {
 	const { theme } = useTheme();
 	const [graph, setGraph] = useState<StoredSubsystemModel | null | undefined>(undefined);
@@ -171,8 +174,8 @@ export function SubsystemModelView({
 	);
 
 	const onVerifyComponent = useCallback(
-		async (componentId: string) => {
-			setVerifyComponentId(componentId);
+		async (componentAlias: string) => {
+			setVerifyComponentId(componentAlias);
 			setVerification({
 				phase: "checking",
 				message: "Checking filesystem + graphify cache…",
@@ -180,7 +183,7 @@ export function SubsystemModelView({
 			try {
 				const result = await electrobun.rpc!.request.verifySubsystemComponent({
 					graphId,
-					componentId,
+					componentAlias,
 				});
 				const structured =
 					result.file != null ||
@@ -258,7 +261,7 @@ export function SubsystemModelView({
 							? {
 									...g,
 									components: g.components.map((c) =>
-										c.id === componentId
+										c.alias === componentAlias
 											? { ...c, declarationRef: result.declaration!.ref }
 											: c,
 									),
@@ -278,8 +281,8 @@ export function SubsystemModelView({
 	);
 
 	const onSelect = useCallback(
-		(componentId: string) => {
-			if (verifyComponentId && verifyComponentId !== componentId) {
+		(componentAlias: string) => {
+			if (verifyComponentId && verifyComponentId !== componentAlias) {
 				setVerifyComponentId(null);
 				setVerification(null);
 			}
@@ -345,7 +348,7 @@ export function SubsystemModelView({
 				.applySubsystemModelAuditFix({
 					graphId,
 					fixId,
-					componentId: finding?.componentId,
+					componentAlias: finding?.componentAlias,
 				})
 				.then((res) => {
 					if (res.ok && res.report) setAuditReport(res.report);
@@ -378,6 +381,7 @@ export function SubsystemModelView({
 				components={graph.components}
 				relations={graph.relations}
 				walkthroughs={graph.walkthroughs}
+				initialWalkthroughId={focusWalkthroughId}
 				title={graph.title}
 				description={graph.description}
 				renderFileViewer={renderFileViewer}

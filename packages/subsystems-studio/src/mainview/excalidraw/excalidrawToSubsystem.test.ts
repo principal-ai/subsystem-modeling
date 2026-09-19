@@ -11,7 +11,7 @@ import {
 import type { SubsystemComponent } from "@principal-ai/subsystems-react";
 
 const parser: SubsystemComponent = {
-	id: "src",
+	alias: "src",
 	name: "Parser",
 	construct: "class",
 	file: "parser.ts",
@@ -63,7 +63,7 @@ describe("excalidrawSceneToSubsystemModel", () => {
 		expect(graph.title).toBe("Round-trip");
 		expect(graph.components).toHaveLength(1);
 		expect(graph.components[0]).toMatchObject({
-			id: "src",
+			alias: "src",
 			construct: "class",
 			file: "parser.ts",
 			module: "parser.ts",

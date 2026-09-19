@@ -106,7 +106,7 @@ Allowed relation changes:
 - `{ "target": "relation", "relationId", "field": "delete", "value": true }`
 - `{ "target": "relation", "relationId", "field": "from"|"to"|"relationType", "value": "<string>" }`
 
-`from` / `to` must be an existing component id. Prefer delete over inventing ids.
+`from` / `to` must be an existing component alias. Prefer delete over inventing aliases.
 
 5. **Verify.** List proposals. Do **not** accept or reject.
 

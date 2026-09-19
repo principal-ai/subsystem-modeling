@@ -31,7 +31,7 @@ const LIB = 'pkg:github/acme/lib';
  */
 const multiRepoComponents: SubsystemComponent[] = [
   {
-    id: 'dispatch',
+    alias: 'dispatch',
     name: 'dispatch',
     construct: 'function',
     symbol: 'dispatch',
@@ -43,7 +43,7 @@ const multiRepoComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'session',
+    alias: 'session',
     name: 'SessionService',
     construct: 'class',
     symbol: 'SessionService',
@@ -55,7 +55,7 @@ const multiRepoComponents: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'parse',
+    alias: 'parse',
     name: 'parseEvent',
     construct: 'function',
     symbol: 'parseEvent',
@@ -67,7 +67,7 @@ const multiRepoComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'normalize',
+    alias: 'normalize',
     name: 'normalize',
     construct: 'function',
     symbol: 'normalize',
@@ -123,7 +123,7 @@ export const SingleRepoNoPackageFrames: Story = {
  */
 const nestedComponents: SubsystemComponent[] = [
   {
-    id: 'dispatch',
+    alias: 'dispatch',
     name: 'dispatch',
     construct: 'function',
     symbol: 'dispatch',
@@ -135,7 +135,7 @@ const nestedComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'boot',
+    alias: 'boot',
     name: 'boot',
     construct: 'function',
     symbol: 'boot',
@@ -147,7 +147,7 @@ const nestedComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'session',
+    alias: 'session',
     name: 'SessionService',
     construct: 'class',
     symbol: 'SessionService',
@@ -159,7 +159,7 @@ const nestedComponents: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'session-types',
+    alias: 'session-types',
     name: 'SessionRecord',
     construct: 'type_alias',
     symbol: 'SessionRecord',
@@ -171,7 +171,7 @@ const nestedComponents: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'parse',
+    alias: 'parse',
     name: 'parseEvent',
     construct: 'function',
     symbol: 'parseEvent',
@@ -183,7 +183,7 @@ const nestedComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'parse-types',
+    alias: 'parse-types',
     name: 'RawEvent',
     construct: 'type_alias',
     symbol: 'RawEvent',
@@ -195,7 +195,7 @@ const nestedComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'normalize',
+    alias: 'normalize',
     name: 'normalize',
     construct: 'function',
     symbol: 'normalize',
@@ -207,7 +207,7 @@ const nestedComponents: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'normalize-types',
+    alias: 'normalize-types',
     name: 'NormalizedEvent',
     construct: 'type_alias',
     symbol: 'NormalizedEvent',

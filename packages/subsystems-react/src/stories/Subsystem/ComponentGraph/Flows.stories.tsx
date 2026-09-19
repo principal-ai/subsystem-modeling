@@ -61,7 +61,7 @@ function readStoryFile(path: string): Promise<string> {
 
 const drawingComponents: SubsystemComponent[] = [
   {
-    id: 'panel',
+    alias: 'panel',
     name: 'DrawingsLeftPanel',
     construct: 'class',
     file: 'src/panels/DrawingsLeftPanel.tsx',
@@ -71,7 +71,7 @@ const drawingComponents: SubsystemComponent[] = [
     process: 'draw-list',
   },
   {
-    id: 'host',
+    alias: 'host',
     name: 'useDrawingsHost',
     construct: 'function',
     file: 'src/hooks/useDrawingsHost.ts',
@@ -81,7 +81,7 @@ const drawingComponents: SubsystemComponent[] = [
     process: 'draw-list',
   },
   {
-    id: 'storage',
+    alias: 'storage',
     name: 'DrawingsStorage',
     construct: 'class',
     file: 'src/storage/drawingsStorage.ts',
@@ -91,7 +91,7 @@ const drawingComponents: SubsystemComponent[] = [
     process: 'draw-host',
   },
   {
-    id: 'fs',
+    alias: 'fs',
     name: 'FileSystemService',
     construct: 'external',
     file: 'src/services/fileSystem.ts',
@@ -101,7 +101,7 @@ const drawingComponents: SubsystemComponent[] = [
     role: 'service',
   },
   {
-    id: 'shell',
+    alias: 'shell',
     name: 'WorkspaceShell',
     construct: 'class',
     file: 'src/workspace/WorkspaceShell.tsx',
@@ -111,7 +111,7 @@ const drawingComponents: SubsystemComponent[] = [
     process: 'draw-host',
   },
   {
-    id: 'tab',
+    alias: 'tab',
     name: 'DrawingTabContent',
     construct: 'class',
     file: 'src/components/DrawingTabContent.tsx',

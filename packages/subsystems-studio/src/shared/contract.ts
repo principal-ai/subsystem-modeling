@@ -13,6 +13,10 @@
  */
 
 import type { AgentSessionEvent } from "@principal-ai/agent-monitoring";
+// Type-only: the composed-graph sidecar crosses the host/renderer boundary,
+// so the contract names it here. Erased at compile — no runtime coupling to
+// bun-side modules.
+import type { MergeSidecar } from "../bun/merge-submodel-models";
 import type {
 	SubsystemComponent,
 	SubsystemComponentEdge,
@@ -27,6 +31,7 @@ import type {
 } from "@principal-ai/subsystems-react";
 
 /** Canonical subsystem-model types, re-shared with both processes. */
+export type { MergeSidecar } from "../bun/merge-submodel-models";
 export type {
 	SubsystemComponent,
 	SubsystemComponentEdge,
@@ -333,6 +338,19 @@ export interface SubsystemModelFileRef {
 	file: string;
 	/** PURL for repo grouping. Multi-repo graphs draw one tree per repo key. */
 	purl?: string;
+	/** Components declared in this file (powers the no-walkthrough fallback). */
+	components?: Array<{
+		alias: string;
+		name: string;
+		construct: string;
+		/** 1-based declaration line, when the model carries a declarationRef. */
+		startLine?: number;
+	}>;
+	/**
+	 * 1-based step lines sited in this file (walkthrough entries only;
+	 * sorted, deduped). Powers line focus in the file preview.
+	 */
+	lines?: number[];
 }
 
 /** Lightweight listing row for the Subsystems tab (no components/edges). */
@@ -377,6 +395,20 @@ export interface SubsystemModelSummary {
 	 * detail fetches.
 	 */
 	files?: SubsystemModelFileRef[];
+	/**
+	 * Per-walkthrough step sites, derived from the full model the host
+	 * already loads per listing. Powers file → walkthrough expansion
+	 * without extra detail fetches. Step `file`s are in component-`file`
+	 * form; `purl` is the step endpoint's repo (from ?? to).
+	 */
+	walkthroughs?: Array<{
+		id: string;
+		title: string;
+		stepCount: number;
+		files: SubsystemModelFileRef[];
+		/** Ordered step sites (file + line) for the step-bar strip. */
+		steps: Array<{ file: string; purl?: string; line?: number }>;
+	}>;
 }
 
 /** Result of verifying one subsystem component (declaration-panel Verify). */
@@ -385,7 +417,7 @@ export interface SubsystemComponentVerificationResult {
 	error?: string;
 	/** Stable code for agents (`construct_mismatch` | `construct_unconfirmed` | `signature_mismatch`). */
 	code?: "construct_mismatch" | "construct_unconfirmed" | "construct_unknown" | "signature_mismatch" | string;
-	componentId?: string;
+	componentAlias?: string;
 	/** Filesystem check against the local checkout. */
 	file?: {
 		exists: boolean;
@@ -519,7 +551,7 @@ export type SubsystemModelAuditFix =
 export interface SubsystemModelAuditFinding {
 	kind: SubsystemModelAuditFindingKind;
 	severity: SubsystemModelAuditSeverity;
-	componentId?: string;
+	componentAlias?: string;
 	componentName?: string;
 	/** Topology relation id when the finding is about relations[]. */
 	relationId?: string;
@@ -536,7 +568,7 @@ export interface SubsystemModelAuditFinding {
 
 /** Per-component checklist of what the deterministic audit actually inspected. */
 export interface SubsystemModelAuditCheck {
-	componentId: string;
+	componentAlias: string;
 	componentName?: string;
 	construct?: string;
 	symbol?: string;
@@ -584,7 +616,7 @@ export interface SubsystemModelAuditTopologyCheck {
 
 /** Per-component / per-module boundary membership check (process / module). */
 export interface SubsystemModelAuditBoundaryCheck {
-	componentId: string;
+	componentAlias: string;
 	componentName?: string;
 	kind: "module_file" | "process_nest" | "skipped";
 	module?: string;
@@ -652,14 +684,14 @@ export interface SubsystemModelAuditReport {
 export type SubsystemModelProposalChange =
 	| {
 			target: "component";
-			componentId: string;
+			componentAlias: string;
 			field: "file" | "symbol" | "construct" | "name" | "purl" | "process" | "module";
 			/** `null` clears an optional field (e.g. symbol). */
 			value: string | null;
 	  }
 	| {
 			target: "component";
-			componentId: string;
+			componentAlias: string;
 			field: "declarationRef";
 			value: SubsystemDeclarationRef | null;
 	  }
@@ -677,7 +709,7 @@ export type SubsystemModelProposalChange =
 			 * store — it does not change the model JSON.
 			 */
 			target: "augmentation";
-			componentId: string;
+			componentAlias: string;
 			field: "construct";
 			value: string;
 			/** Defaults from the component when omitted. */
@@ -691,7 +723,7 @@ export type SubsystemModelProposalChange =
 			 * Accept writes the augmentation store.
 			 */
 			target: "augmentation";
-			componentId: string;
+			componentAlias: string;
 			field: "signature";
 			value: { parameterTypes: string[]; returnTypes: string[] };
 			file?: string;
@@ -704,7 +736,7 @@ export type SubsystemModelProposalChange =
 			 * augmentation store — does not change model JSON.
 			 */
 			target: "augmentation";
-			componentId: string;
+			componentAlias: string;
 			field: "module";
 			/** Claimed module frame key (defaults from component.module). */
 			value: string;
@@ -763,7 +795,7 @@ export interface SubsystemModelProposal {
 	finding?: {
 		kind?: string;
 		severity?: string;
-		componentId?: string;
+		componentAlias?: string;
 		componentName?: string;
 		relationId?: string;
 		walkthroughId?: string;
@@ -964,7 +996,7 @@ export interface AnalysisSummary {
 
 export interface TabSummary {
 	id: string;
-	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "analysis" | "session-events" | "prompt" | "subsystem-model" | "subsystems" | "graphify" | "package-layers" | "opencode-v2" | "maintain-events";
+	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "analysis" | "session-events" | "prompt" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "graphify" | "package-layers" | "opencode-v2" | "maintain-events";
 	title: string;
 	mode?: ViewerMode;
 	payloadKind?: PayloadKind;
@@ -976,7 +1008,7 @@ export interface TabFullState {
 	ok: boolean;
 	error?: string;
 	id: string;
-	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "analysis" | "session-events" | "prompt" | "subsystem-model" | "subsystems" | "graphify" | "package-layers" | "opencode-v2" | "maintain-events";
+	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "analysis" | "session-events" | "prompt" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "graphify" | "package-layers" | "opencode-v2" | "maintain-events";
 	title: string;
 	mode?: ViewerMode;
 	payloadKind?: PayloadKind;
@@ -989,6 +1021,11 @@ export interface TabFullState {
 	analysisId?: string;
 	/** For `subsystem-model` tabs — the graph id the tab renders. */
 	graphId?: string;
+	/** For `subsystem-model` tabs opened from a walkthrough row — the
+	 *  walkthrough to select when the view mounts. */
+	focusWalkthroughId?: string;
+	/** For `subsystem-showcase` tabs — the ordered model ids to display. */
+	showcaseIds?: string[];
 	payload?: unknown;
 	/** Repo identity resolved host-side (git origin / explicit remote).
 	 *  `owner === "local"` means no GitHub origin was found; any other owner is a
@@ -1102,6 +1139,15 @@ export type StudioRequests = {
 	};
 	readFile: {
 		params: { tabId: string; path: string; repo?: string };
+		response: { ok: boolean; content?: string; error?: string };
+	};
+	/**
+	 * Read a subsystem component file by purl + repo-relative path (for the
+	 * Subsystems tab file preview, which has no single repo root).
+	 * Sandboxed to the purl's local checkout, like the subsystem-model read.
+	 */
+	readSubsystemFile: {
+		params: { purl?: string; file: string };
 		response: { ok: boolean; content?: string; error?: string };
 	};
 	getFileTree: {
@@ -1243,8 +1289,33 @@ export type StudioRequests = {
 		params: Record<string, never>;
 		response: { graphs: SubsystemModelSummary[] };
 	};
+	/**
+	 * Compose every stored model touching one repo-key into a single graph.
+	 * The merge runs host-side over full documents; edges are rebased to
+	 * canonical aliases so the returned document renders as-is. Read-only —
+	 * corrections go to source models via proposals.
+	 *
+	 * `modelIds` scopes the merge to a subset (a showcase tab's set): only
+	 * those models are considered. Omitted = every model touching the repo.
+	 */
+	getComposedSubsystemModel: {
+		params: { repoKey: string; modelIds?: string[] };
+		response: {
+			ok: boolean;
+			error?: string;
+			document?: {
+				title: string;
+				description?: string;
+				components: SubsystemComponent[];
+				relations: SubsystemRelation[];
+				walkthroughs?: SubsystemWalkthrough[];
+			};
+			sidecar?: MergeSidecar;
+			modelIds?: string[];
+		};
+	};
 	openSubsystemModel: {
-		params: { graphId: string };
+		params: { graphId: string; walkthroughId?: string };
 		response: { ok: boolean; error?: string; tabId?: string };
 	};
 	deleteSubsystemModel: {
@@ -1274,7 +1345,7 @@ export type StudioRequests = {
 	 * (anchor resolve). Does not run extract — cache must already be ready.
 	 */
 	verifySubsystemComponent: {
-		params: { graphId: string; componentId: string };
+		params: { graphId: string; componentAlias: string };
 		response: SubsystemComponentVerificationResult;
 	};
 	/**
@@ -1305,7 +1376,7 @@ export type StudioRequests = {
 				| "adopt_graphify_file"
 				| "adopt_graphify_declaration_ref";
 			/** One component, or omit to apply every adoptable instance of this fix. */
-			componentId?: string;
+			componentAlias?: string;
 		};
 		response: {
 			ok: boolean;

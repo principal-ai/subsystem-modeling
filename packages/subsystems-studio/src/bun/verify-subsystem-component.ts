@@ -294,7 +294,7 @@ async function captureDeclaration(
 	if (!opts?.dryRun) {
 		await updateSubsystemModel(graphId, {
 			components: components.map((c) =>
-				c.id === component.id ? { ...c, declarationRef: ref } : c,
+				c.alias === component.alias ? { ...c, declarationRef: ref } : c,
 			),
 		});
 	}
@@ -327,22 +327,22 @@ async function finalizeResult(
 
 export async function verifySubsystemComponent(
 	graphId: string,
-	componentId: string,
+	componentAlias: string,
 	opts?: { dryRun?: boolean },
 ): Promise<SubsystemComponentVerificationResult> {
 	const graph = await getSubsystemModel(graphId);
 	if (!graph) {
 		return { ok: false, error: `unknown graph: ${graphId}` };
 	}
-	const component = graph.components.find((c) => c.id === componentId);
+	const component = graph.components.find((c) => c.alias === componentAlias);
 	if (!component) {
-		return { ok: false, error: `unknown component: ${componentId}`, componentId };
+		return { ok: false, error: `unknown component: ${componentAlias}`, componentAlias };
 	}
 
 	if (component.proposed) {
 		return {
 			ok: true,
-			componentId,
+			componentAlias,
 			file: { exists: false, symbolDeclared: null },
 		};
 	}
@@ -371,7 +371,7 @@ export async function verifySubsystemComponent(
 	if (!purlKey) {
 		return {
 			ok: true,
-			componentId,
+			componentAlias,
 			file: fileResult,
 			cache: { status: "unavailable", purl: component.purl || "" },
 		};
@@ -395,7 +395,7 @@ export async function verifySubsystemComponent(
 	};
 
 	if (cacheStatus !== "ready") {
-		return { ok: true, componentId, file: fileResult, cache };
+		return { ok: true, componentAlias, file: fileResult, cache };
 	}
 
 	const cached = await getCachedGraphifyGraph(purlKey, {
@@ -404,7 +404,7 @@ export async function verifySubsystemComponent(
 	if (!cached) {
 		return {
 			ok: true,
-			componentId,
+			componentAlias,
 			file: fileResult,
 			cache: { ...cache, status: "missing" },
 		};
@@ -480,7 +480,7 @@ export async function verifySubsystemComponent(
 
 	const base: SubsystemComponentVerificationResult = {
 		ok: true,
-		componentId,
+		componentAlias,
 		file: fileResult,
 		cache,
 		anchor: mapAnchor(anchor),
@@ -784,7 +784,7 @@ export interface SubsystemModelVerificationSummary {
 	total: number;
 	tally: Record<string, number>;
 	results: Array<{
-		componentId: string;
+		componentAlias: string;
 		name?: string;
 		construct?: string;
 		file?: string;
@@ -812,11 +812,11 @@ export async function verifySubsystemModel(
 	const results: SubsystemModelVerificationSummary["results"] = [];
 	const tally: Record<string, number> = {};
 	for (const c of graph.components) {
-		const r = await verifySubsystemComponent(graphId, c.id, opts);
+		const r = await verifySubsystemComponent(graphId, c.alias, opts);
 		const { category, detail } = verifyVerdict(r);
 		tally[category] = (tally[category] ?? 0) + 1;
 		results.push({
-			componentId: c.id,
+			componentAlias: c.alias,
 			name: c.name,
 			construct: c.construct,
 			file: c.file,
@@ -875,7 +875,7 @@ export async function auditSubsystemModel(
 	}
 
 	const files = await verifyModelFiles(graph);
-	const missingFileIds = new Set(files.missing.map((m) => m.componentId));
+	const missingFileAliases = new Set(files.missing.map((m) => m.componentAlias));
 
 	const findings: SubsystemModelAuditFinding[] = [];
 	const checks: SubsystemModelAuditCheck[] = [];
@@ -899,7 +899,7 @@ export async function auditSubsystemModel(
 	let externalsSkipped = 0;
 	let missingSymbols = 0;
 
-	const seenComponentIssue = new Set<string>([...missingFileIds]);
+	const seenComponentIssue = new Set<string>([...missingFileAliases]);
 	// Availability findings are per-repo (purl), not per-component: one finding
 	// per unavailable repo rather than one per node that lives in it.
 	const repoUnresolvedPurls = new Set<string>();
@@ -914,7 +914,7 @@ export async function auditSubsystemModel(
 			externalsSkipped++;
 			okComponents++;
 			checks.push({
-				componentId: c.id,
+				componentAlias: c.alias,
 				componentName: c.name,
 				construct: c.construct,
 				symbol: c.symbol,
@@ -934,11 +934,11 @@ export async function auditSubsystemModel(
 			continue;
 		}
 
-		const r = await verifySubsystemComponent(graphId, c.id, { dryRun: true });
-		let issue = seenComponentIssue.has(c.id);
+		const r = await verifySubsystemComponent(graphId, c.alias, { dryRun: true });
+		let issue = seenComponentIssue.has(c.alias);
 
 		const check: SubsystemModelAuditCheck = {
-			componentId: c.id,
+			componentAlias: c.alias,
 			componentName: c.name,
 			construct: c.construct,
 			symbol: c.symbol,
@@ -957,7 +957,7 @@ export async function auditSubsystemModel(
 			const purl = (c.purl || "").trim();
 			check.fileExists = null;
 			check.graphify = "unavailable";
-			check.note = `No local repoRoot for ${c.purl || c.file || c.id}`;
+			check.note = `No local repoRoot for ${c.purl || c.file || c.alias}`;
 			check.verdict = "skipped";
 			if (purl && !repoUnresolvedPurls.has(purl)) {
 				repoUnresolvedPurls.add(purl);
@@ -984,7 +984,7 @@ export async function auditSubsystemModel(
 			findings.push({
 				kind: "missing_file",
 				severity: "error",
-				componentId: c.id,
+				componentAlias: c.alias,
 				componentName: c.name,
 				message: fix
 					? `File not found: ${c.file} — Graphify has ${c.symbol} at ${fix.file} (deterministic update available)`
@@ -1023,7 +1023,7 @@ export async function auditSubsystemModel(
 				findings.push({
 					kind: "stale_declaration",
 					severity: "error",
-					componentId: c.id,
+					componentAlias: c.alias,
 					componentName: c.name,
 					message: fix
 						? `Declaration moved — Graphify pins L${fix.declarationRef.startLine}${
@@ -1033,7 +1033,7 @@ export async function auditSubsystemModel(
 					fix,
 				});
 				staleDeclarations++;
-				seenComponentIssue.add(c.id);
+				seenComponentIssue.add(c.alias);
 			}
 		}
 
@@ -1049,7 +1049,7 @@ export async function auditSubsystemModel(
 			findings.push({
 				kind: "construct_unconfirmed",
 				severity: "info",
-				componentId: c.id,
+				componentAlias: c.alias,
 				componentName: c.name,
 				message: `Construct unclassified — claimed ${r.construct?.claimed ?? c.construct ?? "?"}, graphify inferred unknown${
 					r.construct?.evidence?.length
@@ -1063,12 +1063,12 @@ export async function auditSubsystemModel(
 			findings.push({
 				kind: "construct_mismatch",
 				severity: "error",
-				componentId: c.id,
+				componentAlias: c.alias,
 				componentName: c.name,
 				message: r.error ?? "Construct mismatch",
 			});
 			constructMismatches++;
-			seenComponentIssue.add(c.id);
+			seenComponentIssue.add(c.alias);
 		}
 
 		if (r.signature) {
@@ -1084,7 +1084,7 @@ export async function auditSubsystemModel(
 			findings.push({
 				kind: "signature_unconfirmed",
 				severity: "info",
-				componentId: c.id,
+				componentAlias: c.alias,
 				componentName: c.name,
 				message: `Signature not in cache — Graphify has no usable type edges${
 					r.signature.reason ? ` (${r.signature.reason})` : ""
@@ -1100,7 +1100,7 @@ export async function auditSubsystemModel(
 			findings.push({
 				kind: "signature_mismatch",
 				severity: "error",
-				componentId: c.id,
+				componentAlias: c.alias,
 				componentName: c.name,
 				message: fix
 					? `${r.error ?? "Signature mismatch"} — model has no named types; graphify does (deterministic fill available)`
@@ -1108,7 +1108,7 @@ export async function auditSubsystemModel(
 				fix,
 			});
 			signatureMismatches++;
-			seenComponentIssue.add(c.id);
+			seenComponentIssue.add(c.alias);
 		}
 
 		const hasClaimedSymbol = typeof c.symbol === "string" && c.symbol.trim().length > 0;
@@ -1130,7 +1130,7 @@ export async function auditSubsystemModel(
 				check.graphify = "confirmed";
 			} else {
 				check.graphify = "weak";
-				const base = { componentId: c.id, componentName: c.name };
+				const base = { componentAlias: c.alias, componentName: c.name };
 				if (resolution === "ambiguous") {
 					issue = true;
 					findings.push({
@@ -1139,7 +1139,7 @@ export async function auditSubsystemModel(
 						severity: "error",
 						message: `Multiple Graphify nodes match ${c.symbol} (${r.anchor?.candidates?.length ?? 0} candidates)`,
 					});
-					seenComponentIssue.add(c.id);
+					seenComponentIssue.add(c.alias);
 				} else {
 					findings.push({
 						...base,
@@ -1196,11 +1196,11 @@ export async function auditSubsystemModel(
 		});
 	}
 
-	const byComponentId = new Map(graph.components.map((c) => [c.id, c]));
+	const byComponentAlias = new Map(graph.components.map((c) => [c.alias, c]));
 	const augmentedRelationIds = new Set<string>();
 	for (const rel of graph.relations ?? []) {
-		const from = byComponentId.get(rel.from);
-		const to = byComponentId.get(rel.to);
+		const from = byComponentAlias.get(rel.from);
+		const to = byComponentAlias.get(rel.to);
 		if (!from?.file?.trim() || !from.symbol?.trim()) continue;
 		const purl = from.purl?.trim();
 		if (!purl || purl === "external") continue;
@@ -1211,7 +1211,7 @@ export async function auditSubsystemModel(
 			relationType: rel.relationType,
 			toFile: to?.file,
 			toSymbol: to?.symbol,
-			toId: to?.id,
+			toAlias: to?.alias,
 			toName: to?.name,
 		});
 		if (hit) augmentedRelationIds.add(rel.id);
@@ -1232,7 +1232,7 @@ export async function auditSubsystemModel(
 		});
 	}
 
-	const augmentedModuleIds = new Set<string>();
+	const augmentedModuleAliases = new Set<string>();
 	for (const c of graph.components) {
 		const mod = c.module?.trim();
 		if (!mod || !c.file?.trim() || !c.symbol?.trim()) continue;
@@ -1244,17 +1244,17 @@ export async function auditSubsystemModel(
 			symbol: c.symbol,
 			module: mod,
 		});
-		if (hit) augmentedModuleIds.add(c.id);
+		if (hit) augmentedModuleAliases.add(c.alias);
 	}
 
 	const boundary = auditBoundaryFields(graph.components, {
-		augmentedModuleIds,
+		augmentedModuleAliases,
 	});
 	for (const f of boundary.findings) {
 		findings.push({
 			kind: f.kind,
 			severity: f.severity,
-			componentId: f.componentId,
+			componentAlias: f.componentAlias,
 			componentName: f.componentName,
 			moduleKey: f.moduleKey,
 			message: f.message,
@@ -1345,7 +1345,7 @@ export async function applySubsystemModelAuditFix(opts: {
 		| "adopt_graphify_signature"
 		| "adopt_graphify_file"
 		| "adopt_graphify_declaration_ref";
-	componentId?: string;
+	componentAlias?: string;
 }): Promise<
 	| {
 			ok: true;
@@ -1366,27 +1366,27 @@ export async function applySubsystemModelAuditFix(opts: {
 	const graph = await getSubsystemModel(opts.graphId);
 	if (!graph) return { ok: false, error: `unknown graph: ${opts.graphId}` };
 
-	const targetIds = opts.componentId
-		? [opts.componentId]
-		: graph.components.map((c) => c.id);
+	const targetAliases = opts.componentAlias
+		? [opts.componentAlias]
+		: graph.components.map((c) => c.alias);
 
 	if (opts.fixId === "adopt_graphify_file") {
 		const fileUpdates = new Map<string, string>();
 
-		for (const componentId of targetIds) {
-			const component = graph.components.find((c) => c.id === componentId);
+		for (const componentAlias of targetAliases) {
+			const component = graph.components.find((c) => c.alias === componentAlias);
 			if (!component) {
-				if (opts.componentId) {
-					return { ok: false, error: `unknown component: ${componentId}` };
+				if (opts.componentAlias) {
+					return { ok: false, error: `unknown component: ${componentAlias}` };
 				}
 				continue;
 			}
 
-			const verified = await verifySubsystemComponent(opts.graphId, componentId, {
+			const verified = await verifySubsystemComponent(opts.graphId, componentAlias, {
 				dryRun: true,
 			});
 			if (!verified.fileSuggest?.file) {
-				if (opts.componentId) {
+				if (opts.componentAlias) {
 					return {
 						ok: false,
 						error:
@@ -1395,7 +1395,7 @@ export async function applySubsystemModelAuditFix(opts: {
 				}
 				continue;
 			}
-			fileUpdates.set(componentId, verified.fileSuggest.file);
+			fileUpdates.set(componentAlias, verified.fileSuggest.file);
 		}
 
 		if (fileUpdates.size === 0) {
@@ -1403,7 +1403,7 @@ export async function applySubsystemModelAuditFix(opts: {
 		}
 
 		const components = graph.components.map((c) => {
-			const file = fileUpdates.get(c.id);
+			const file = fileUpdates.get(c.alias);
 			if (!file) return c;
 			return {
 				...c,
@@ -1431,16 +1431,16 @@ export async function applySubsystemModelAuditFix(opts: {
 	if (opts.fixId === "adopt_graphify_declaration_ref") {
 		const refUpdates = new Map<string, SubsystemDeclarationRef>();
 
-		for (const componentId of targetIds) {
-			const component = graph.components.find((c) => c.id === componentId);
+		for (const componentAlias of targetAliases) {
+			const component = graph.components.find((c) => c.alias === componentAlias);
 			if (!component) {
-				if (opts.componentId) {
-					return { ok: false, error: `unknown component: ${componentId}` };
+				if (opts.componentAlias) {
+					return { ok: false, error: `unknown component: ${componentAlias}` };
 				}
 				continue;
 			}
 
-			const verified = await verifySubsystemComponent(opts.graphId, componentId, {
+			const verified = await verifySubsystemComponent(opts.graphId, componentAlias, {
 				dryRun: true,
 			});
 			const decl = verified.declaration;
@@ -1452,7 +1452,7 @@ export async function applySubsystemModelAuditFix(opts: {
 				typeof repin.startLine === "number" &&
 				typeof repin.lineHash === "string";
 			if (!canRepin || !repin) {
-				if (opts.componentId) {
+				if (opts.componentAlias) {
 					return {
 						ok: false,
 						error:
@@ -1461,7 +1461,7 @@ export async function applySubsystemModelAuditFix(opts: {
 				}
 				continue;
 			}
-			refUpdates.set(componentId, repin);
+			refUpdates.set(componentAlias, repin);
 		}
 
 		if (refUpdates.size === 0) {
@@ -1469,7 +1469,7 @@ export async function applySubsystemModelAuditFix(opts: {
 		}
 
 		const components = graph.components.map((c) => {
-			const declarationRef = refUpdates.get(c.id);
+			const declarationRef = refUpdates.get(c.alias);
 			if (!declarationRef) return c;
 			return { ...c, declarationRef };
 		});
@@ -1491,46 +1491,46 @@ export async function applySubsystemModelAuditFix(opts: {
 
 	const updates = new Map<string, NonNullable<SubsystemComponent["declaration"]>>();
 
-	for (const componentId of targetIds) {
-		const component = graph.components.find((c) => c.id === componentId);
+	for (const componentAlias of targetAliases) {
+		const component = graph.components.find((c) => c.alias === componentAlias);
 		if (!component) {
-			if (opts.componentId) {
-				return { ok: false, error: `unknown component: ${componentId}` };
+			if (opts.componentAlias) {
+				return { ok: false, error: `unknown component: ${componentAlias}` };
 			}
 			continue;
 		}
 		if (component.construct !== "function" && component.construct !== "method") {
-			if (opts.componentId) {
+			if (opts.componentAlias) {
 				return {
 					ok: false,
-					error: `component ${componentId} is not a function/method`,
+					error: `component ${componentAlias} is not a function/method`,
 				};
 			}
 			continue;
 		}
 
-		const verified = await verifySubsystemComponent(opts.graphId, componentId, {
+		const verified = await verifySubsystemComponent(opts.graphId, componentAlias, {
 			dryRun: true,
 		});
 		if (!verified.ok && verified.code !== "signature_mismatch") {
-			if (opts.componentId) {
+			if (opts.componentAlias) {
 				return {
 					ok: false,
-					error: verified.error ?? `verify failed for ${componentId}`,
+					error: verified.error ?? `verify failed for ${componentAlias}`,
 				};
 			}
 			continue;
 		}
 		const sig = verified.signature;
 		if (!sig) {
-			if (opts.componentId) {
-				return { ok: false, error: `no signature check for ${componentId}` };
+			if (opts.componentAlias) {
+				return { ok: false, error: `no signature check for ${componentAlias}` };
 			}
 			continue;
 		}
 		const fix = adoptGraphifySignatureFixFromVerify(sig);
 		if (!fix) {
-			if (opts.componentId) {
+			if (opts.componentAlias) {
 				return {
 					ok: false,
 					error:
@@ -1541,7 +1541,7 @@ export async function applySubsystemModelAuditFix(opts: {
 		}
 
 		updates.set(
-			componentId,
+			componentAlias,
 			buildDeclarationFromAdoptedSignature(
 				component,
 				fix.parameterTypes,
@@ -1555,7 +1555,7 @@ export async function applySubsystemModelAuditFix(opts: {
 	}
 
 	const components = graph.components.map((c) => {
-		const declaration = updates.get(c.id);
+		const declaration = updates.get(c.alias);
 		if (!declaration) return c;
 		return {
 			...c,

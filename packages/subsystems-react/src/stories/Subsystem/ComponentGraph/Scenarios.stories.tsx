@@ -37,7 +37,7 @@ const mermaidPurl = 'pkg:github/principal-ade/industry-themed-markdown';
 
 const mermaidComponents: SubsystemComponent[] = [
   {
-    id: 'input',
+    alias: 'input',
     name: 'MarkdownContent',
     construct: 'type_alias',
     file: 'industryMarkdown/components/IndustryMarkdownSlide.tsx',
@@ -46,7 +46,7 @@ const mermaidComponents: SubsystemComponent[] = [
     symbol: 'MarkdownContent',
   },
   {
-    id: 'slide',
+    alias: 'slide',
     name: 'IndustryMarkdownSlide',
     construct: 'class',
     file: 'industryMarkdown/components/IndustryMarkdownSlide.tsx',
@@ -55,7 +55,7 @@ const mermaidComponents: SubsystemComponent[] = [
     symbol: 'IndustryMarkdownSlide',
   },
   {
-    id: 'chunk',
+    alias: 'chunk',
     name: 'MermaidChunk',
     construct: 'type_alias',
     file: 'industryMarkdown/types/customMarkdownChunks.ts',
@@ -64,7 +64,7 @@ const mermaidComponents: SubsystemComponent[] = [
     symbol: 'MermaidChunk',
   },
   {
-    id: 'lazy',
+    alias: 'lazy',
     name: 'IndustryLazyMermaidDiagram',
     construct: 'class',
     file: 'industryMarkdown/components/IndustryLazyMermaidDiagram.tsx',
@@ -73,7 +73,7 @@ const mermaidComponents: SubsystemComponent[] = [
     symbol: 'IndustryLazyMermaidDiagram',
   },
   {
-    id: 'diagram',
+    alias: 'diagram',
     name: 'IndustryMermaidDiagram',
     construct: 'class',
     file: 'industryMarkdown/components/IndustryMermaidDiagram.tsx',
@@ -82,7 +82,7 @@ const mermaidComponents: SubsystemComponent[] = [
     symbol: 'IndustryMermaidDiagram',
   },
   {
-    id: 'helpers',
+    alias: 'helpers',
     name: 'beautifulMermaid',
     construct: 'function',
     file: 'industryMarkdown/utils/beautifulMermaid.ts',
@@ -175,7 +175,7 @@ const coreLibPurl2 = 'pkg:github/principal-ai/principal-view-core-library';
 const accessSurfaceComponents: SubsystemComponent[] = [
   // --- external actor: no process → outside every boundary region
   {
-    id: 'agents',
+    alias: 'agents',
     name: 'agent clients',
     construct: 'external',
     file: '',
@@ -185,7 +185,7 @@ const accessSurfaceComponents: SubsystemComponent[] = [
   },
   // --- principal-studio/host process region
   {
-    id: 'http-entry',
+    alias: 'http-entry',
     name: 'HTTP bridge :3045',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/http-server.ts',
@@ -197,7 +197,7 @@ const accessSurfaceComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'create',
+    alias: 'create',
     name: 'createSubsystemModel',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -208,7 +208,7 @@ const accessSurfaceComponents: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'update',
+    alias: 'update',
     name: 'updateSubsystemModel',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -219,7 +219,7 @@ const accessSurfaceComponents: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'delete',
+    alias: 'delete',
     name: 'deleteSubsystemModel',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -230,7 +230,7 @@ const accessSurfaceComponents: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'get',
+    alias: 'get',
     name: 'getSubsystemModel',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -241,7 +241,7 @@ const accessSurfaceComponents: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'watcher',
+    alias: 'watcher',
     name: 'startSubsystemModelDirWatcher',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -252,7 +252,7 @@ const accessSurfaceComponents: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'store',
+    alias: 'store',
     name: 'Graph Store',
     construct: 'store',
     file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -273,7 +273,7 @@ const accessSurfaceComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'broadcast',
+    alias: 'broadcast',
     name: 'broadcastSubsystemModelChanged',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/index.ts',
@@ -284,7 +284,7 @@ const accessSurfaceComponents: SubsystemComponent[] = [
     layer: 4,
   },
   {
-    id: 'ipc-entry',
+    alias: 'ipc-entry',
     name: 'StudioMessages',
     construct: 'interface',
     file: 'packages/subsystems-studio/src/shared/contract.ts',
@@ -296,7 +296,7 @@ const accessSurfaceComponents: SubsystemComponent[] = [
     layer: 4,
   },
   {
-    id: 'avatars',
+    alias: 'avatars',
     name: 'resolveAuthorAvatars',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/avatars.ts',
@@ -308,7 +308,7 @@ const accessSurfaceComponents: SubsystemComponent[] = [
   },
   // --- principal-studio/renderer process region
   {
-    id: 'subs',
+    alias: 'subs',
     name: 'subsystemModelChangeSubscribers',
     construct: 'function',
     file: 'packages/subsystems-studio/src/mainview/rpc.ts',
@@ -319,7 +319,7 @@ const accessSurfaceComponents: SubsystemComponent[] = [
     layer: 5,
   },
   {
-    id: 'open-view',
+    alias: 'open-view',
     name: 'SubsystemModelView',
     construct: 'function',
     file: 'packages/subsystems-studio/src/mainview/views/SubsystemModelView.tsx',
@@ -330,7 +330,7 @@ const accessSurfaceComponents: SubsystemComponent[] = [
     layer: 6,
   },
   {
-    id: 'list-view',
+    alias: 'list-view',
     name: 'SubsystemModelsView',
     construct: 'function',
     file: 'packages/subsystems-studio/src/mainview/views/SubsystemModelsView.tsx',
@@ -343,7 +343,7 @@ const accessSurfaceComponents: SubsystemComponent[] = [
   // --- external service: no process, identity via purl — the far side of an
   //     outbound crossing
   {
-    id: 'github',
+    alias: 'github',
     name: 'api.github.com',
     construct: 'external',
     file: '',
@@ -423,7 +423,7 @@ const storeFlavorPurl = 'pkg:github/principal-ai/agent-monitoring';
 const storeFlavorComponents: SubsystemComponent[] = [
   // --- flavor 1: module-state store
   {
-    id: 'f1-create',
+    alias: 'f1-create',
     name: 'createSubsystemModel',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -434,7 +434,7 @@ const storeFlavorComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'f1-get',
+    alias: 'f1-get',
     name: 'getSubsystemModel',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -445,7 +445,7 @@ const storeFlavorComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'f1-store',
+    alias: 'f1-store',
     name: 'Graph Store',
     construct: 'store',
     file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -466,7 +466,7 @@ const storeFlavorComponents: SubsystemComponent[] = [
   //     the class (verifiable declaration, methods = access mechanism) and
   //     the state (construct: 'store', the db/state visualization)
   {
-    id: 'f2-cache',
+    alias: 'f2-cache',
     name: 'SessionCache',
     construct: 'class',
     file: 'src/session/SessionCache.ts',
@@ -489,7 +489,7 @@ const storeFlavorComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'f2-store',
+    alias: 'f2-store',
     name: 'Session Cache State',
     construct: 'store',
     file: 'src/session/SessionCache.ts',
@@ -506,7 +506,7 @@ const storeFlavorComponents: SubsystemComponent[] = [
   },
   // --- flavor 3: external shared store
   {
-    id: 'f3-accessor',
+    alias: 'f3-accessor',
     name: 'loadAppState',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/app-state.ts',
@@ -517,7 +517,7 @@ const storeFlavorComponents: SubsystemComponent[] = [
     layer: 5,
   },
   {
-    id: 'f3-store',
+    alias: 'f3-store',
     name: 'app-state.db',
     construct: 'store',
     file: '',
@@ -576,7 +576,7 @@ export const StoreFlavors: Story = {
 // ---------------------------------------------------------------------------
 const sharedStoreComponents: SubsystemComponent[] = [
   {
-    id: 'ss-load',
+    alias: 'ss-load',
     name: 'loadSubsystemModel',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -587,7 +587,7 @@ const sharedStoreComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'ss-save',
+    alias: 'ss-save',
     name: 'saveSubsystemModel',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -598,7 +598,7 @@ const sharedStoreComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'ss-watch',
+    alias: 'ss-watch',
     name: 'startSubsystemModelDirWatcher',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -609,7 +609,7 @@ const sharedStoreComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'ss-migrate',
+    alias: 'ss-migrate',
     name: 'migrateGraphIndex',
     construct: 'function',
     file: 'packages/principal-studio-cli/src/graph-index.ts',
@@ -620,7 +620,7 @@ const sharedStoreComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'ss-store',
+    alias: 'ss-store',
     name: '~/.principal/subsystem-models',
     construct: 'store',
     file: '',
@@ -690,7 +690,7 @@ const spectrumPurl = 'pkg:github/principal-ai/principal-view-core-library';
 const storeSpectrumComponents: SubsystemComponent[] = [
   // --- 1. persistent store — strongest store-ness
   {
-    id: 'db',
+    alias: 'db',
     name: 'app-state.db',
     construct: 'store',
     file: '',
@@ -708,7 +708,7 @@ const storeSpectrumComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'load',
+    alias: 'load',
     name: 'loadAppState',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/app-state.ts',
@@ -719,7 +719,7 @@ const storeSpectrumComponents: SubsystemComponent[] = [
   },
   // --- 2. file-backed module store
   {
-    id: 'graph-store',
+    alias: 'graph-store',
     name: 'Graph Store',
     construct: 'store',
     file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -739,7 +739,7 @@ const storeSpectrumComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'create',
+    alias: 'create',
     name: 'createSubsystemModel',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -750,7 +750,7 @@ const storeSpectrumComponents: SubsystemComponent[] = [
   },
   // --- 3. class-managed retained data — manager class + separate store node
   {
-    id: 'cache',
+    alias: 'cache',
     name: 'SessionCache',
     construct: 'class',
     file: 'src/session/SessionCache.ts',
@@ -778,7 +778,7 @@ const storeSpectrumComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'cache-state',
+    alias: 'cache-state',
     name: 'Session Cache State',
     construct: 'store',
     file: 'src/session/SessionCache.ts',
@@ -797,7 +797,7 @@ const storeSpectrumComponents: SubsystemComponent[] = [
   },
   // --- 4. module in-memory data collection — no interface, no persistence
   {
-    id: 'metrics',
+    alias: 'metrics',
     name: 'Audit Metrics Buffer',
     construct: 'store',
     file: 'packages/subsystems-studio/src/bun/audit-metrics.ts',
@@ -815,7 +815,7 @@ const storeSpectrumComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'record',
+    alias: 'record',
     name: 'recordAuditResult',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/audit-metrics.ts',
@@ -826,7 +826,7 @@ const storeSpectrumComponents: SubsystemComponent[] = [
   },
   // --- 5. module singleton values
   {
-    id: 'config',
+    alias: 'config',
     name: 'Studio Config',
     construct: 'store',
     file: 'packages/subsystems-studio/src/bun/config.ts',
@@ -843,7 +843,7 @@ const storeSpectrumComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'conf',
+    alias: 'conf',
     name: 'readStudioConfig',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/config.ts',
@@ -854,7 +854,7 @@ const storeSpectrumComponents: SubsystemComponent[] = [
   },
   // --- 6. lone scalar module binding
   {
-    id: 'selected',
+    alias: 'selected',
     name: 'Selected Graph Id',
     construct: 'store',
     file: 'packages/subsystems-studio/src/mainview/rpc.ts',
@@ -868,7 +868,7 @@ const storeSpectrumComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'sel',
+    alias: 'sel',
     name: 'chooseGraph',
     construct: 'function',
     file: 'packages/subsystems-studio/src/mainview/rpc.ts',
@@ -879,7 +879,7 @@ const storeSpectrumComponents: SubsystemComponent[] = [
   },
   // --- 7. behavior bag — least store-like (the disputed rpc.ts case)
   {
-    id: 'subs',
+    alias: 'subs',
     name: 'Proposals Subscribers',
     construct: 'store',
     file: 'packages/subsystems-studio/src/mainview/rpc.ts',
@@ -898,7 +898,7 @@ const storeSpectrumComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'dispatch',
+    alias: 'dispatch',
     name: 'subsystemModelProposalsChanged',
     construct: 'function',
     file: 'packages/subsystems-studio/src/mainview/rpc.ts',
@@ -908,7 +908,7 @@ const storeSpectrumComponents: SubsystemComponent[] = [
     layer: 11,
   },
   {
-    id: 'view',
+    alias: 'view',
     name: 'SubsystemModelsView',
     construct: 'function',
     file: 'packages/subsystems-studio/src/mainview/views/SubsystemModelsView.tsx',
@@ -964,7 +964,7 @@ const typePurl = 'pkg:github/principal-ai/subsystem-modeling';
 const typeSpectrumComponents: SubsystemComponent[] = [
   // --- 1. generic callable — the StudioMessageSubscriber refactor case
   {
-    id: 'subscriber',
+    alias: 'subscriber',
     name: 'StudioMessageSubscriber',
     construct: 'type_alias',
     file: 'packages/subsystems-studio/src/mainview/rpc.ts',
@@ -983,7 +983,7 @@ const typeSpectrumComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'listener',
+    alias: 'listener',
     name: 'registerProposalListener',
     construct: 'function',
     file: 'packages/subsystems-studio/src/mainview/rpc.ts',
@@ -994,7 +994,7 @@ const typeSpectrumComponents: SubsystemComponent[] = [
   },
   // --- 2. interface — object shape, the path that worked before
   {
-    id: 'messages',
+    alias: 'messages',
     name: 'StudioMessages',
     construct: 'interface',
     file: 'packages/subsystems-studio/src/shared/contract.ts',
@@ -1015,7 +1015,7 @@ const typeSpectrumComponents: SubsystemComponent[] = [
   },
   // --- 3. enum — named members
   {
-    id: 'kind',
+    alias: 'kind',
     name: 'MaintainRunKind',
     construct: 'enum',
     file: 'packages/subsystems-studio/src/mainview/rpc.ts',
@@ -1034,7 +1034,7 @@ const typeSpectrumComponents: SubsystemComponent[] = [
   },
   // --- 4. union — alternatives
   {
-    id: 'state',
+    alias: 'state',
     name: 'UIState',
     construct: 'type_alias',
     file: 'packages/subsystems-studio/src/mainview/rpc.ts',
@@ -1049,7 +1049,7 @@ const typeSpectrumComponents: SubsystemComponent[] = [
   },
   // --- 5. plain reference alias
   {
-    id: 'rows',
+    alias: 'rows',
     name: 'SessionRows',
     construct: 'type_alias',
     file: 'packages/subsystems-studio/src/bun/server-sessions.ts',
@@ -1064,7 +1064,7 @@ const typeSpectrumComponents: SubsystemComponent[] = [
   },
   // --- 6. does-not-fit → raw rhs escape hatch
   {
-    id: 'deep',
+    alias: 'deep',
     name: 'DeepPartial',
     construct: 'type_alias',
     file: 'packages/subsystems-studio/src/mainview/types.ts',
@@ -1080,7 +1080,7 @@ const typeSpectrumComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'api',
+    alias: 'api',
     name: 'ApiRoute',
     construct: 'type_alias',
     file: 'packages/subsystems-studio/src/bun/http-server.ts',
@@ -1095,7 +1095,7 @@ const typeSpectrumComponents: SubsystemComponent[] = [
   },
   // --- 7. the reference target the aliasOf/raw types point at
   {
-    id: 'record',
+    alias: 'record',
     name: 'ServerSessionRow',
     construct: 'interface',
     file: 'packages/subsystems-studio/src/shared/contract.ts',
@@ -1154,7 +1154,7 @@ export const TypeFamilySpectrum: Story = {
 // ---------------------------------------------------------------------------
 const queueComponents: SubsystemComponent[] = [
   {
-    id: 'q-producer',
+    alias: 'q-producer',
     name: 'enqueueAnalysisJob',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/analysis-queue.ts',
@@ -1165,7 +1165,7 @@ const queueComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'q-queue',
+    alias: 'q-queue',
     name: 'Analysis Queue',
     construct: 'store',
     file: 'packages/subsystems-studio/src/bun/analysis-queue.ts',
@@ -1183,7 +1183,7 @@ const queueComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'q-worker',
+    alias: 'q-worker',
     name: 'Bun.Worker',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/analysis-worker.ts',
@@ -1194,7 +1194,7 @@ const queueComponents: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'q-results',
+    alias: 'q-results',
     name: 'Analysis Results',
     construct: 'store',
     file: 'packages/subsystems-studio/src/bun/analysis-store.ts',
@@ -1249,7 +1249,7 @@ export const QueueAsStore: Story = {
 const dataVizDoc: SubsystemModelDocument = {
   components: [
     {
-      id: 'agents',
+      alias: 'agents',
       name: 'agent clients',
       construct: 'external',
       file: '',
@@ -1258,7 +1258,7 @@ const dataVizDoc: SubsystemModelDocument = {
       layer: 0,
     },
     {
-      id: 'http-entry',
+      alias: 'http-entry',
       name: 'HTTP bridge :3045',
       construct: 'function',
       file: 'packages/subsystems-studio/src/bun/http-server.ts',
@@ -1270,7 +1270,7 @@ const dataVizDoc: SubsystemModelDocument = {
       layer: 1,
     },
     {
-      id: 'create',
+      alias: 'create',
       name: 'createSubsystemModel',
       construct: 'function',
       file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -1281,7 +1281,7 @@ const dataVizDoc: SubsystemModelDocument = {
       layer: 2,
     },
     {
-      id: 'store',
+      alias: 'store',
       name: 'Graph Store',
       construct: 'store',
       file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -1298,7 +1298,7 @@ const dataVizDoc: SubsystemModelDocument = {
       },
     },
     {
-      id: 'get',
+      alias: 'get',
       name: 'getSubsystemModel',
       construct: 'function',
       file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -1309,7 +1309,7 @@ const dataVizDoc: SubsystemModelDocument = {
       layer: 2,
     },
     {
-      id: 'broadcast',
+      alias: 'broadcast',
       name: 'broadcastSubsystemModelChanged',
       construct: 'function',
       file: 'packages/subsystems-studio/src/bun/index.ts',
@@ -1320,7 +1320,7 @@ const dataVizDoc: SubsystemModelDocument = {
       layer: 4,
     },
     {
-      id: 'cache',
+      alias: 'cache',
       name: 'SessionCache',
       construct: 'class',
       file: 'src/session/SessionCache.ts',
@@ -1330,7 +1330,7 @@ const dataVizDoc: SubsystemModelDocument = {
       layer: 5,
     },
     {
-      id: 'cache-state',
+      alias: 'cache-state',
       name: 'Session Cache State',
       construct: 'store',
       file: 'src/session/SessionCache.ts',

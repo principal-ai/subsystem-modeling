@@ -627,7 +627,7 @@ function AuditDoneBody({
 			| "adopt_graphify_signature"
 			| "adopt_graphify_file"
 			| "adopt_graphify_declaration_ref",
-		componentId?: string,
+		componentAlias?: string,
 	) => void;
 }) {
 	const s = report.summary;
@@ -710,8 +710,8 @@ function AuditDoneBody({
 		if (!filterKind) return true;
 		const mapped = findingKindToCheckKind(f.kind);
 		if (mapped === filterKind) return true;
-		if (!f.componentId) return false;
-		return visibleChecks.some(({ check }) => check.componentId === f.componentId);
+		if (!f.componentAlias) return false;
+		return visibleChecks.some(({ check }) => check.componentAlias === f.componentAlias);
 	});
 
 	return (
@@ -887,7 +887,7 @@ function AuditDoneBody({
 
 				return (
 					<div
-						key={c.componentId}
+						key={c.componentAlias}
 						style={{
 							display: "flex",
 							alignItems: "flex-start",
@@ -929,7 +929,7 @@ function AuditDoneBody({
 										fontSize: theme.fontSizes[1],
 									}}
 								>
-									{c.componentName ?? c.componentId}
+									{c.componentName ?? c.componentAlias}
 								</span>
 								{c.symbol ? (
 									<span
@@ -987,7 +987,7 @@ function AuditDoneBody({
 											}}
 										>
 											{sourceParts.map((part) => (
-												<span key={`source-${c.componentId}-${part.kind}`}>
+												<span key={`source-${c.componentAlias}-${part.kind}`}>
 													{statusPill(part.label, part.tone, theme, {
 														active: filterKind === part.kind,
 													})}
@@ -1020,7 +1020,7 @@ function AuditDoneBody({
 										}}
 									>
 										{graphifyParts.map((part) => (
-											<span key={`graphify-${c.componentId}-${part.kind}`}>
+											<span key={`graphify-${c.componentAlias}-${part.kind}`}>
 												{statusPill(part.label, part.tone, theme, {
 													active: filterKind === part.kind,
 												})}
@@ -1108,14 +1108,14 @@ function AuditDoneBody({
 					{ordered.map((f, i) => {
 						const label =
 							f.componentName ??
-							f.componentId ??
+							f.componentAlias ??
 							(f.walkthroughId != null
 								? `${f.walkthroughId}${f.step != null ? ` #${f.step}` : ""}`
 								: f.kind);
 						const accent = severityColor(f.severity, theme.colors);
 						return (
 							<div
-								key={`${f.kind}-${f.componentId ?? f.walkthroughId ?? i}-${i}`}
+								key={`${f.kind}-${f.componentAlias ?? f.walkthroughId ?? i}-${i}`}
 								style={{
 									display: "flex",
 									alignItems: "flex-start",
@@ -1172,11 +1172,11 @@ function AuditDoneBody({
 									>
 										{f.message}
 									</div>
-									{f.fix && f.componentId && (
+									{f.fix && f.componentAlias && (
 										<button
 											type="button"
 											disabled={applying != null}
-											onClick={() => onApplyFix(f.fix!.id, f.componentId)}
+											onClick={() => onApplyFix(f.fix!.id, f.componentAlias)}
 											style={{
 												marginTop: 8,
 												padding: "3px 8px",
@@ -1193,7 +1193,7 @@ function AuditDoneBody({
 												gap: 6,
 											}}
 										>
-											{applying === `${f.fix.id}:${f.componentId}` && (
+											{applying === `${f.fix.id}:${f.componentAlias}` && (
 												<Loader2 size={11} className="principal-studio-spin" />
 											)}
 											{f.fix.label}
@@ -1268,17 +1268,17 @@ export function AuditResultsModal({
 			| "adopt_graphify_signature"
 			| "adopt_graphify_file"
 			| "adopt_graphify_declaration_ref",
-		componentId?: string,
+		componentAlias?: string,
 	) => {
 		if (state.phase !== "done" || applying) return;
 		const graphId = (localReport ?? state.report).graphId;
-		setApplying(componentId ? `${fixId}:${componentId}` : `all:${fixId}`);
+		setApplying(componentAlias ? `${fixId}:${componentAlias}` : `all:${fixId}`);
 		setApplyError(null);
 		try {
 			const res = await electrobun.rpc!.request.applySubsystemModelAuditFix({
 				graphId,
 				fixId,
-				componentId,
+				componentAlias,
 			});
 			if (!res.ok || !res.report) {
 				setApplyError(res.error ?? "Failed to apply fix");

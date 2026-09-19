@@ -76,13 +76,13 @@ Augmentation example (preferred when the model claim is already right):
   "author": "gap-filler",
   "finding": {
     "kind": "construct_unconfirmed",
-    "componentId": "…",
+    "componentAlias": "…",
     "message": "…"
   },
   "changes": [
     {
       "target": "augmentation",
-      "componentId": "…",
+      "componentAlias": "…",
       "field": "construct",
       "value": "interface"
     }
@@ -98,13 +98,13 @@ Model-construct correction example (only when the claim itself is wrong):
   "author": "gap-filler",
   "finding": {
     "kind": "construct_unconfirmed",
-    "componentId": "…",
+    "componentAlias": "…",
     "message": "…"
   },
   "changes": [
     {
       "target": "component",
-      "componentId": "…",
+      "componentAlias": "…",
       "field": "construct",
       "value": "class"
     }
@@ -132,13 +132,13 @@ the claim for the next audit.
   "author": "gap-filler",
   "finding": {
     "kind": "signature_unconfirmed",
-    "componentId": "…",
+    "componentAlias": "…",
     "message": "…"
   },
   "changes": [
     {
       "target": "augmentation",
-      "componentId": "…",
+      "componentAlias": "…",
       "field": "signature",
       "value": {
         "parameterTypes": ["HostInfo"],

@@ -2,7 +2,7 @@
  * Cross-field validation for a subsystem model document.
  *
  * These are the rules the JSON Schema (`schemas/subsystem-model.schema.json`)
- * cannot express — anything that spans fields or arrays: id uniqueness,
+ * cannot express — anything that spans fields or arrays: alias uniqueness,
  * referential integrity between relations/walkthroughs and components, and the
  * `module` implies `file` invariant. Structural checks (types, `required`,
  * enums, ranges, closed objects) belong to the schema and are enforced per
@@ -39,17 +39,17 @@ export function validateSubsystemModelCrossField(
   const relations = doc.relations ?? [];
   const walkthroughs = doc.walkthroughs ?? [];
 
-  // Component ids must be unique, and the set is the referential target for
-  // relations and walkthrough steps.
+  // Component aliases must be unique, and the set is the referential target
+  // for relations and walkthrough steps.
   const ids = new Set<string>();
   components.forEach((c, i) => {
-    if (ids.has(c.id)) {
+    if (ids.has(c.alias)) {
       problems.push({
-        path: `/components/${i}/id`,
-        message: `component ${JSON.stringify(c.id)}: duplicate id`,
+        path: `/components/${i}/alias`,
+        message: `component ${JSON.stringify(c.alias)}: duplicate alias`,
       });
     } else {
-      ids.add(c.id);
+      ids.add(c.alias);
     }
     // A grounded component that claims a `module` needs a `file` to ground the
     // frame. Externals / proposed carry no file by design.
@@ -58,7 +58,7 @@ export function validateSubsystemModelCrossField(
     if (module && !file && !isUngrounded(c)) {
       problems.push({
         path: `/components/${i}/module`,
-        message: `component ${JSON.stringify(c.id)}: module ${JSON.stringify(module)} is set but file is empty — a module frame needs a file to ground it (mark the component proposed if it is not placed yet).`,
+        message: `component ${JSON.stringify(c.alias)}: module ${JSON.stringify(module)} is set but file is empty — a module frame needs a file to ground it (mark the component proposed if it is not placed yet).`,
       });
     }
   });
@@ -67,13 +67,13 @@ export function validateSubsystemModelCrossField(
     if (!ids.has(r.from)) {
       problems.push({
         path: `/relations/${i}/from`,
-        message: `relation ${JSON.stringify(r.id)}: from ${JSON.stringify(r.from)} does not match any component id`,
+        message: `relation ${JSON.stringify(r.id)}: from ${JSON.stringify(r.from)} does not match any component alias`,
       });
     }
     if (!ids.has(r.to)) {
       problems.push({
         path: `/relations/${i}/to`,
-        message: `relation ${JSON.stringify(r.id)}: to ${JSON.stringify(r.to)} does not match any component id`,
+        message: `relation ${JSON.stringify(r.id)}: to ${JSON.stringify(r.to)} does not match any component alias`,
       });
     }
   });
@@ -83,13 +83,13 @@ export function validateSubsystemModelCrossField(
       if (!ids.has(step.from)) {
         problems.push({
           path: `/walkthroughs/${wi}/steps/${si}/from`,
-          message: `walkthrough ${JSON.stringify(w.id)}: step ${si} from ${JSON.stringify(step.from)} does not match any component id`,
+          message: `walkthrough ${JSON.stringify(w.id)}: step ${si} from ${JSON.stringify(step.from)} does not match any component alias`,
         });
       }
       if (!ids.has(step.to)) {
         problems.push({
           path: `/walkthroughs/${wi}/steps/${si}/to`,
-          message: `walkthrough ${JSON.stringify(w.id)}: step ${si} to ${JSON.stringify(step.to)} does not match any component id`,
+          message: `walkthrough ${JSON.stringify(w.id)}: step ${si} to ${JSON.stringify(step.to)} does not match any component alias`,
         });
       }
     });

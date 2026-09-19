@@ -39,7 +39,7 @@ const DEEP_VIEWS = 'packages/subsystems-studio/src/mainview/views/AnalysisView.t
  */
 const deepComponents: SubsystemComponent[] = [
   {
-    id: 'node-comp',
+    alias: 'node-comp',
     name: 'SubsystemComponentNode',
     construct: 'function',
     symbol: 'SubsystemComponentNode',
@@ -49,7 +49,7 @@ const deepComponents: SubsystemComponent[] = [
     purpose: 'Leaf component renderer',
   },
   {
-    id: 'group-comp',
+    alias: 'group-comp',
     name: 'SubsystemGroupNode',
     construct: 'function',
     symbol: 'SubsystemGroupNode',
@@ -59,7 +59,7 @@ const deepComponents: SubsystemComponent[] = [
     purpose: 'Boundary frame renderer',
   },
   {
-    id: 'edge-comp',
+    alias: 'edge-comp',
     name: 'SubsystemEdge',
     construct: 'function',
     symbol: 'SubsystemEdge',
@@ -69,7 +69,7 @@ const deepComponents: SubsystemComponent[] = [
     purpose: 'Edge renderer',
   },
   {
-    id: 'analysis',
+    alias: 'analysis',
     name: 'AnalysisView',
     construct: 'function',
     symbol: 'AnalysisView',
@@ -79,7 +79,7 @@ const deepComponents: SubsystemComponent[] = [
     purpose: 'Renders an analysis',
   },
   {
-    id: 'layers',
+    alias: 'layers',
     name: 'LayersProvider',
     construct: 'function',
     symbol: 'LayersProvider',
@@ -89,7 +89,7 @@ const deepComponents: SubsystemComponent[] = [
     purpose: 'Provides the layer UI',
   },
   {
-    id: 'use-drawings',
+    alias: 'use-drawings',
     name: 'useDrawingsHost',
     construct: 'function',
     symbol: 'useDrawingsHost',
@@ -135,7 +135,7 @@ const harnessRegion: SubsystemProcessRegion = {
   kind: 'module',
   key: DEEP_NODES,
   label: DEEP_NODES,
-  memberIds: ['node-comp', 'group-comp', 'edge-comp'],
+  memberAliases: ['node-comp', 'group-comp', 'edge-comp'],
 };
 
 /** Fixed frame; the badge is the only thing that grows on click. */

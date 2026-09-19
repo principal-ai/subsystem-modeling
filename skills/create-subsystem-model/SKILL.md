@@ -71,7 +71,7 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
   "description": "Optional one-liner.",
   "components": [                                  // required
     {
-      "id": "session-service",                     // stable, unique
+      "alias": "session-service",                  // model-local, unique; edges point here
       "name": "SessionService",
       "construct": "function",                     // see construct list below
       "role": "entry",                             // optional: entry | service
@@ -99,7 +99,7 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
     {
       "id": "sessions-to-warmup",
       "from": "session-service",
-      "to": "warmup-worker",                       // component ids, not names
+      "to": "warmup-worker",                       // component aliases, not names
       "relationType": "references",                // see relationType list below
       "refs": ["pkg:github/owner/repo#path/to/glue.ts"]  // optional purl evidence
     }
@@ -110,8 +110,8 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
       "title": "List sessions",
       "steps": [
         {
-          "from": "session-service",               // source component id
-          "to": "warmup-worker",                   // target component id
+          "from": "session-service",               // source component alias
+          "to": "warmup-worker",                   // target component alias
           "mechanism": "calls",                    // see mechanism list below
           "file": "packages/subsystems-studio/src/bun/server-sessions.ts",
           "line": 42,                              // 1-based site where the seam fires
@@ -160,7 +160,7 @@ Rules:
   a component only when a walkthrough actually reaches it or it carries a
   topology claim — a node no walkthrough reaches is a smell. Split only when
   the model spans genuinely unrelated stories or stops reading at a glance.
-- Component `id`s are referenced by relation / walkthrough `from`/`to`; never rename on update.
+- Component `alias`es are referenced by relation / walkthrough `from`/`to`; they are model-local and stable across file moves (edges point at the alias, not the location), so never rename on update. Code identity for composed multi-model views lives on `purl` + `file` + `symbol`, not the alias.
 - Relation `id`s are stable topology keys; walkthrough steps carry their own `from`/`to`/`mechanism`.
 
 Stdout is `{ ok: true, graph }` — capture `graph.id` (`sg-<ts>-<rand>`).
@@ -190,8 +190,8 @@ hops are **derived** from steps — you never author an `edges` array.
 
 | Field | Required | Meaning |
 |---|---|---|
-| `from` | yes | Source component `id` this hop starts from |
-| `to` | yes | Target component `id` this hop lands on |
+| `from` | yes | Source component `alias` this hop starts from |
+| `to` | yes | Target component `alias` this hop lands on |
 | `mechanism` | yes | Runtime seam label (closed set below) |
 | `file` | yes | Repo-root-relative path of the seam site |
 | `line` | yes | 1-based line in `file` where that relationship fires |

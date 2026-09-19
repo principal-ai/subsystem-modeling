@@ -69,14 +69,14 @@ function breakWords(s: string): string {
 
 export interface SubsystemGraphCallbacks {
   /** Click a component — open its file/entry point. */
-  onSelect?: (componentId: string) => void;
+  onSelect?: (componentAlias: string) => void;
   /** Click the filename badge — open that component's file in the drawer
    *  (same path as clicking the file link in the declaration panel). */
-  onOpenFile?: (componentId: string) => void;
+  onOpenFile?: (componentAlias: string) => void;
   /** Click an edge (or its label) — select the relationship. */
   onEdgeSelect?: (edgeId: string) => void;
   /** Hover a component (null on leave) — associates it with the file tree. */
-  onHover?: (componentId: string | null) => void;
+  onHover?: (componentAlias: string | null) => void;
   /** Upper bound for node width; nodes grow with content up to this, then wrap. */
   maxNodeWidth?: number;
 }
@@ -131,7 +131,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
     <div
       onMouseEnter={() => {
         setHover(true);
-        SUBSYSTEM_CALLBACKS.onHover?.(c.id);
+        SUBSYSTEM_CALLBACKS.onHover?.(c.alias);
       }}
       onMouseLeave={() => {
         setHover(false);
@@ -139,7 +139,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
       }}
       onClick={(e) => {
         e.stopPropagation();
-        SUBSYSTEM_CALLBACKS.onSelect?.(c.id);
+        SUBSYSTEM_CALLBACKS.onSelect?.(c.alias);
       }}
       style={{
         position: 'relative',
@@ -275,7 +275,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
           onClick={(e) => {
             // Open the file directly; don't also toggle node selection.
             e.stopPropagation();
-            SUBSYSTEM_CALLBACKS.onOpenFile?.(c.id);
+            SUBSYSTEM_CALLBACKS.onOpenFile?.(c.alias);
           }}
         >
           {c.file.split('/').pop()}

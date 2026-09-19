@@ -95,7 +95,7 @@ const spotlightRows: Array<{ label: string; component: SubsystemComponent }> = [
   {
     label: 'normal function (baseline)',
     component: {
-      id: 'live-fn',
+      alias: 'live-fn',
       name: 'ensureOpencode',
       construct: 'function',
       file: 'src/bun/opencode-v2.ts',
@@ -107,7 +107,7 @@ const spotlightRows: Array<{ label: string; component: SubsystemComponent }> = [
   {
     label: 'proposed function — dashed border + right badge',
     component: {
-      id: 'prop-fn',
+      alias: 'prop-fn',
       name: 'OpenCodeV2Lifecycle',
       construct: 'function',
       file: '',
@@ -120,7 +120,7 @@ const spotlightRows: Array<{ label: string; component: SubsystemComponent }> = [
   {
     label: 'proposed class',
     component: {
-      id: 'prop-class',
+      alias: 'prop-class',
       name: 'MaintainModelAgent',
       construct: 'class',
       file: 'src/bun/maintain-model-agent.ts',
@@ -133,7 +133,7 @@ const spotlightRows: Array<{ label: string; component: SubsystemComponent }> = [
   {
     label: 'proposed + role: entry (badge shows proposed only)',
     component: {
-      id: 'prop-entry',
+      alias: 'prop-entry',
       name: 'startMaintainFlow',
       construct: 'function',
       file: '',
@@ -147,7 +147,7 @@ const spotlightRows: Array<{ label: string; component: SubsystemComponent }> = [
   {
     label: 'external (contrast — real outside system)',
     component: {
-      id: 'ext',
+      alias: 'ext',
       name: 'OpenCode CLI',
       construct: 'external',
       file: '',
@@ -174,7 +174,7 @@ export const Spotlights: Story = {
       }}
     >
       {spotlightRows.map((row) => (
-        <NodeSpotlight key={row.component.id} {...row} />
+        <NodeSpotlight key={row.component.alias} {...row} />
       ))}
     </div>
   ),
@@ -185,7 +185,7 @@ export const Spotlights: Story = {
 // ---------------------------------------------------------------------------
 const migrationComponents: SubsystemComponent[] = [
   {
-    id: 'audit',
+    alias: 'audit',
     name: 'auditSubsystemModel',
     construct: 'function',
     file: 'src/bun/verify-subsystem-component.ts',
@@ -195,7 +195,7 @@ const migrationComponents: SubsystemComponent[] = [
     role: 'entry',
   },
   {
-    id: 'lifecycle',
+    alias: 'lifecycle',
     name: 'OpenCodeV2Lifecycle',
     construct: 'function',
     file: '',
@@ -205,7 +205,7 @@ const migrationComponents: SubsystemComponent[] = [
     proposed: true,
   },
   {
-    id: 'maintain',
+    alias: 'maintain',
     name: 'runMaintainModel',
     construct: 'function',
     file: 'src/bun/maintain-model.ts',
@@ -214,7 +214,7 @@ const migrationComponents: SubsystemComponent[] = [
     purpose: 'Existing maintain agent runner',
   },
   {
-    id: 'cli',
+    alias: 'cli',
     name: '@opencode-ai/cli',
     construct: 'external',
     file: '',

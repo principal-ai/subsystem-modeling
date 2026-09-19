@@ -22,7 +22,8 @@ export type TabState =
 	| { kind: "analysis"; id: string; analysisId: string }
 	| { kind: "session-events"; id: string; sessionId: string }
 	| { kind: "prompt"; id: string }
-	| { kind: "subsystem-model"; id: string; graphId: string }
+	| { kind: "subsystem-model"; id: string; graphId: string; walkthroughId?: string }
+	| { kind: "subsystem-showcase"; id: string; title: string; ids: string[] }
 	| { kind: "error"; message: string }
 	| {
 			kind: "ready";

@@ -79,7 +79,7 @@ describe("buildAuditFingerprint", () => {
 			updatedAt: "2026-01-01T00:00:00.000Z",
 			components: [
 				{
-					id: "c1",
+					alias: "c1",
 					file: "a.ts",
 					symbol: "foo",
 					construct: "function",
@@ -127,7 +127,7 @@ describe("buildAuditFingerprint", () => {
 
 		const before = buildAuditFingerprint({
 			updatedAt: "2026-01-01T00:00:00.000Z",
-			components: [{ id: "c1", purl }],
+			components: [{ alias: "c1", purl }],
 			graphify: {
 				status: "not_ready",
 				purls: [{ purl, status: "missing", repoRoot: repo }],
@@ -146,7 +146,7 @@ describe("buildAuditFingerprint", () => {
 
 		const after = buildAuditFingerprint({
 			updatedAt: "2026-01-01T00:00:00.000Z",
-			components: [{ id: "c1", purl }],
+			components: [{ alias: "c1", purl }],
 			graphify: {
 				status: "not_ready",
 				purls: [{ purl, status: "missing", repoRoot: repo }],

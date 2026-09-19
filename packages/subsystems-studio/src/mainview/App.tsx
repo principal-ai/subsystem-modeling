@@ -186,6 +186,16 @@ function ActiveTab({
 						kind: "subsystem-model",
 						id: tab.id,
 						graphId: tab.graphId ?? "",
+						walkthroughId: tab.focusWalkthroughId,
+					});
+					return;
+				}
+				if (tab.kind === "subsystem-showcase") {
+					setState({
+						kind: "subsystem-showcase",
+						id: tab.id,
+						title: tab.title,
+						ids: tab.showcaseIds ?? [],
 					});
 					return;
 				}
@@ -300,7 +310,20 @@ function ActiveTab({
 		return <PromptView tabId={state.id} />;
 	}
 	if (state.kind === "subsystem-model") {
-		return <SubsystemModelView tabId={state.id} graphId={state.graphId} />;
+		return (
+			<SubsystemModelView
+				tabId={state.id}
+				graphId={state.graphId}
+				focusWalkthroughId={state.walkthroughId}
+			/>
+		);
+	}
+	if (state.kind === "subsystem-showcase") {
+		return (
+			<SubsystemModelsView
+				scope={{ ids: state.ids, title: state.title }}
+			/>
+		);
 	}
 	// Static tab resolved — the rendered view is registered with App's
 	// keep-mounted stack and rendered there, not here.

@@ -67,10 +67,10 @@ async function writeFile(doc: ProposalFile): Promise<void> {
 
 function componentFieldBefore(
 	graph: StoredSubsystemModel,
-	componentId: string,
+	componentAlias: string,
 	field: string,
 ): unknown {
-	const c = graph.components.find((x) => x.id === componentId);
+	const c = graph.components.find((x) => x.alias === componentAlias);
 	if (!c) return undefined;
 	return (c as unknown as Record<string, unknown>)[field];
 }
@@ -94,7 +94,7 @@ function resolveAugmentationTarget(
 		{ target: "augmentation"; field: "construct" | "signature" | "module" }
 	>,
 ): { file: string; symbol: string; purl: string; componentName: string } | null {
-	const c = graph.components.find((x) => x.id === ch.componentId);
+	const c = graph.components.find((x) => x.alias === ch.componentAlias);
 	if (!c) return null;
 	const file = (ch.file ?? c.file ?? "").trim();
 	const symbol = (ch.symbol ?? c.symbol ?? "").trim();
@@ -113,14 +113,14 @@ function resolveRelationAugmentationTarget(
 	relationType: string;
 	toFile?: string;
 	toSymbol?: string;
-	toId: string;
+	toAlias: string;
 	toName: string;
 	label: string;
 } | null {
 	const rel = (graph.relations ?? []).find((r) => r.id === relationId);
 	if (!rel) return null;
-	const from = graph.components.find((c) => c.id === rel.from);
-	const to = graph.components.find((c) => c.id === rel.to);
+	const from = graph.components.find((c) => c.alias === rel.from);
+	const to = graph.components.find((c) => c.alias === rel.to);
 	if (!from || !to) return null;
 	const fromFile = (from.file ?? "").trim();
 	const fromSymbol = (from.symbol ?? "").trim();
@@ -128,7 +128,7 @@ function resolveRelationAugmentationTarget(
 	if (!fromFile || !fromSymbol || !purl) return null;
 	const toFile = (to.file ?? "").trim() || undefined;
 	const toSymbol = (to.symbol ?? "").trim() || undefined;
-	if (!toFile && !toSymbol && !to.id && !to.name) return null;
+	if (!toFile && !toSymbol && !to.alias && !to.name) return null;
 	return {
 		purl,
 		fromFile,
@@ -136,7 +136,7 @@ function resolveRelationAugmentationTarget(
 		relationType: rel.relationType,
 		toFile,
 		toSymbol,
-		toId: to.id,
+		toAlias: to.alias,
 		toName: to.name,
 		label: `${rel.from} → ${rel.to} (${rel.relationType})`,
 	};
@@ -150,11 +150,11 @@ function buildPreview(
 	for (const ch of changes) {
 		if (ch.target === "component") {
 			const name =
-				graph.components.find((c) => c.id === ch.componentId)?.name ??
-				ch.componentId;
+				graph.components.find((c) => c.alias === ch.componentAlias)?.name ??
+				ch.componentAlias;
 			rows.push({
 				label: `${name}.${ch.field}`,
-				before: componentFieldBefore(graph, ch.componentId, ch.field),
+				before: componentFieldBefore(graph, ch.componentAlias, ch.field),
 				after: ch.value,
 			});
 		} else if (ch.target === "walkthrough-step") {
@@ -197,10 +197,10 @@ function buildPreview(
 			});
 		} else if (ch.target === "augmentation" && ch.field === "module") {
 			const resolved = resolveAugmentationTarget(graph, ch);
-			const name = resolved?.componentName ?? ch.componentId;
+			const name = resolved?.componentName ?? ch.componentAlias;
 			const where = resolved
 				? `${resolved.file}#${resolved.symbol}`
-				: ch.componentId;
+				: ch.componentAlias;
 			rows.push({
 				label: `augment ${name}.module (${where})`,
 				before: "module≠file (unconfirmed)",
@@ -208,10 +208,10 @@ function buildPreview(
 			});
 		} else if (ch.target === "augmentation") {
 			const resolved = resolveAugmentationTarget(graph, ch);
-			const name = resolved?.componentName ?? ch.componentId;
+			const name = resolved?.componentName ?? ch.componentAlias;
 			const where = resolved
 				? `${resolved.file}#${resolved.symbol}`
-				: ch.componentId;
+				: ch.componentAlias;
 			if (ch.field === "signature") {
 				const sig = ch.value;
 				rows.push({
@@ -240,8 +240,8 @@ function validateChanges(
 	}
 	for (const ch of changes) {
 		if (ch.target === "component") {
-			if (!graph.components.some((c) => c.id === ch.componentId)) {
-				return `unknown component: ${ch.componentId}`;
+			if (!graph.components.some((c) => c.alias === ch.componentAlias)) {
+				return `unknown component: ${ch.componentAlias}`;
 			}
 			if (ch.field === "declarationRef") {
 				if (ch.value !== null && typeof ch.value !== "object") {
@@ -292,21 +292,21 @@ function validateChanges(
 				if (typeof ch.value !== "string" || !ch.value.trim()) {
 					return "augmentation construct value must be a non-empty string";
 				}
-				if (!graph.components.some((c) => c.id === ch.componentId)) {
-					return `unknown component: ${ch.componentId}`;
+				if (!graph.components.some((c) => c.alias === ch.componentAlias)) {
+					return `unknown component: ${ch.componentAlias}`;
 				}
 				if (!resolveAugmentationTarget(graph, ch)) {
-					return `augmentation for ${ch.componentId} needs file, symbol, and purl (on the change or component)`;
+					return `augmentation for ${ch.componentAlias} needs file, symbol, and purl (on the change or component)`;
 				}
 			} else if (ch.field === "module") {
 				if (typeof ch.value !== "string" || !ch.value.trim()) {
 					return "augmentation module value must be a non-empty string";
 				}
-				if (!graph.components.some((c) => c.id === ch.componentId)) {
-					return `unknown component: ${ch.componentId}`;
+				if (!graph.components.some((c) => c.alias === ch.componentAlias)) {
+					return `unknown component: ${ch.componentAlias}`;
 				}
 				if (!resolveAugmentationTarget(graph, ch)) {
-					return `augmentation for ${ch.componentId} needs file, symbol, and purl (on the change or component)`;
+					return `augmentation for ${ch.componentAlias} needs file, symbol, and purl (on the change or component)`;
 				}
 			} else {
 				const sig = ch.value;
@@ -327,11 +327,11 @@ function validateChanges(
 				if (params.length === 0 && returns.length === 0) {
 					return "augmentation signature must include at least one named type";
 				}
-				if (!graph.components.some((c) => c.id === ch.componentId)) {
-					return `unknown component: ${ch.componentId}`;
+				if (!graph.components.some((c) => c.alias === ch.componentAlias)) {
+					return `unknown component: ${ch.componentAlias}`;
 				}
 				if (!resolveAugmentationTarget(graph, ch)) {
-					return `augmentation for ${ch.componentId} needs file, symbol, and purl (on the change or component)`;
+					return `augmentation for ${ch.componentAlias} needs file, symbol, and purl (on the change or component)`;
 				}
 			}
 		} else if (ch.target === "relation") {
@@ -347,7 +347,7 @@ function validateChanges(
 				if (typeof ch.value !== "string" || !ch.value.trim()) {
 					return `relation ${ch.field} must be a non-empty component id`;
 				}
-				if (!graph.components.some((c) => c.id === ch.value)) {
+				if (!graph.components.some((c) => c.alias === ch.value)) {
 					return `unknown component for relation.${ch.field}: ${ch.value}`;
 				}
 			} else if (ch.field === "relationType") {
@@ -384,7 +384,7 @@ function applyChangesToGraph(
 
 	for (const ch of graphChanges) {
 		if (ch.target === "component") {
-			const idx = components.findIndex((c) => c.id === ch.componentId);
+			const idx = components.findIndex((c) => c.alias === ch.componentAlias);
 			if (idx < 0) continue;
 			const next = { ...components[idx]! } as unknown as Record<string, unknown>;
 			if (ch.value === null) delete next[ch.field];
@@ -437,7 +437,7 @@ async function applyAugmentationChanges(
 				relationType: resolved.relationType,
 				toFile: resolved.toFile,
 				toSymbol: resolved.toSymbol,
-				toId: resolved.toId,
+				toAlias: resolved.toAlias,
 				toName: resolved.toName,
 				source: proposal.author?.trim() || "proposal",
 				rationale: proposal.rationale,
@@ -451,7 +451,7 @@ async function applyAugmentationChanges(
 		}
 		const resolved = resolveAugmentationTarget(graph, ch);
 		if (!resolved) {
-			return `augmentation for ${ch.componentId} needs file, symbol, and purl`;
+			return `augmentation for ${ch.componentAlias} needs file, symbol, and purl`;
 		}
 		if (ch.field === "construct") {
 			const written = await upsertAcceptedConstructAugmentation({
@@ -463,7 +463,7 @@ async function applyAugmentationChanges(
 				rationale: proposal.rationale,
 				evidence: [
 					`proposal ${proposal.id}`,
-					`component ${ch.componentId}`,
+					`component ${ch.componentAlias}`,
 				],
 			});
 			if (!written.ok) return written.error;
@@ -477,7 +477,7 @@ async function applyAugmentationChanges(
 				rationale: proposal.rationale,
 				evidence: [
 					`proposal ${proposal.id}`,
-					`component ${ch.componentId}`,
+					`component ${ch.componentAlias}`,
 				],
 			});
 			if (!written.ok) return written.error;
@@ -494,7 +494,7 @@ async function applyAugmentationChanges(
 				rationale: proposal.rationale,
 				evidence: [
 					`proposal ${proposal.id}`,
-					`component ${ch.componentId}`,
+					`component ${ch.componentAlias}`,
 				],
 			});
 			if (!written.ok) return written.error;

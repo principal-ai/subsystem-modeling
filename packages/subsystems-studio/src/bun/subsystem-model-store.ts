@@ -198,7 +198,7 @@ export interface SubsystemModelVerification {
 	/** Components whose purl is not registered in Alexandria — skipped. */
 	unresolvedCount: number;
 	/** The misses, for surfacing in UI/API responses. */
-	missing: Array<{ componentId: string; file: string }>;
+	missing: Array<{ componentAlias: string; file: string }>;
 	/**
 	 * @deprecated Always 0. Symbol checks moved to graphify audit (exact anchor).
 	 */
@@ -206,7 +206,7 @@ export interface SubsystemModelVerification {
 	/**
 	 * @deprecated Always empty. Symbol checks moved to graphify audit.
 	 */
-	symbolsMissing: Array<{ componentId: string; symbol: string; file: string }>;
+	symbolsMissing: Array<{ componentAlias: string; symbol: string; file: string }>;
 	/** Components carrying tool-extracted (`verified`) declarations. */
 	declarationsVerified: number;
 	/** Components carrying hand-authored declarations. */
@@ -438,8 +438,8 @@ export async function verifyModelFiles(
 		walkthroughs?: SubsystemWalkthrough[];
 	},
 ): Promise<SubsystemModelVerification> {
-	const missing: Array<{ componentId: string; file: string }> = [];
-	const symbolsMissing: Array<{ componentId: string; symbol: string; file: string }> = [];
+	const missing: Array<{ componentAlias: string; file: string }> = [];
+	const symbolsMissing: Array<{ componentAlias: string; symbol: string; file: string }> = [];
 	let verifiedCount = 0;
 	let unresolvedCount = 0;
 	let symbolsVerified = 0;
@@ -466,7 +466,7 @@ export async function verifyModelFiles(
 			await fs.access(abs);
 			verifiedCount++;
 		} catch {
-			missing.push({ componentId: c.id, file: c.file });
+			missing.push({ componentAlias: c.alias, file: c.file });
 			continue;
 		}
 		// Symbol presence is verified via graphify (audit), not a text regex here.
@@ -476,8 +476,8 @@ export async function verifyModelFiles(
 	let walkthroughsChecked = 0;
 	const walkthroughsFailed: SubsystemModelVerification["walkthroughsFailed"] = [];
 	if (Array.isArray(doc.walkthroughs)) {
-		const componentById = new Map<string, SubsystemComponent>();
-		for (const c of doc.components) componentById.set(c.id, c);
+		const componentByAlias = new Map<string, SubsystemComponent>();
+		for (const c of doc.components) componentByAlias.set(c.alias, c);
 		for (const tl of doc.walkthroughs) {
 			if (!Array.isArray(tl.steps)) continue;
 			for (let i = 0; i < tl.steps.length; i++) {
@@ -493,8 +493,8 @@ export async function verifyModelFiles(
 						line: step.line,
 						reason,
 					});
-				const from = componentById.get(step.from);
-				const to = componentById.get(step.to);
+				const from = componentByAlias.get(step.from);
+				const to = componentByAlias.get(step.to);
 				const root =
 					resolveRepoRootForComponent(from?.purl) ??
 					resolveRepoRootForComponent(to?.purl);

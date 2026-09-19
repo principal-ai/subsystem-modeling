@@ -149,7 +149,7 @@ const nodeSpotlights: Array<{ label: string; component: SubsystemComponent; note
     label: 'construct: type_alias — a type alias',
     note: 'the `type` keyword form: `type X = { … }` or a union — anything `=`-assigned',
     component: {
-      id: 'alias-status',
+      alias: 'alias-status',
       name: 'AnalysisStatus',
       construct: 'type_alias',
       file: 'packages/subsystems-studio/src/bun/analysis.ts',
@@ -170,7 +170,7 @@ const nodeSpotlights: Array<{ label: string; component: SubsystemComponent; note
     label: 'role: entry on construct: type — contract as entry',
     note: 'same role, different inherited anatomy — entries are topology, not shape',
     component: {
-        id: 'ipc-entry',
+        alias: 'ipc-entry',
       name: 'StudioMessages',
       construct: 'interface',
       file: 'packages/subsystems-studio/src/shared/contract.ts',
@@ -183,7 +183,7 @@ const nodeSpotlights: Array<{ label: string; component: SubsystemComponent; note
     label: 'construct: enum — runtime values + a type',
     note: 'the one type-family form that exists at runtime; members render in the drill-down',
     component: {
-      id: 'enum-phase',
+      alias: 'enum-phase',
       name: 'VerificationPhase',
       construct: 'enum',
       file: 'packages/subsystems-studio/src/bun/verify.ts',
@@ -201,7 +201,7 @@ const nodeSpotlights: Array<{ label: string; component: SubsystemComponent; note
     label: 'construct: function — plain accessor',
     note: 'indigo; the default for anchored behavior',
     component: {
-      id: 'create',
+      alias: 'create',
       name: 'createSubsystemModel',
       construct: 'function',
       file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -213,7 +213,7 @@ const nodeSpotlights: Array<{ label: string; component: SubsystemComponent; note
     label: 'framework: react · stereotype: component — still construct: function',
     note: 'badge reads "react · component"; name renders bare ; color stays function',
     component: {
-      id: 'analysis-view',
+      alias: 'analysis-view',
       name: 'AnalysisView',
       construct: 'function',
       file: 'packages/subsystems-studio/src/mainview/views/AnalysisView.tsx',
@@ -228,7 +228,7 @@ const nodeSpotlights: Array<{ label: string; component: SubsystemComponent; note
     label: 'framework: react · stereotype: hook',
     note: 'same construct, different stereotype — badge "react · hook", keeps ()',
     component: {
-      id: 'drawings-host',
+      alias: 'drawings-host',
       name: 'useDrawingsHost',
       construct: 'function',
       file: 'packages/subsystems-studio/src/mainview/hooks/useDrawingsHost.ts',
@@ -242,7 +242,7 @@ const nodeSpotlights: Array<{ label: string; component: SubsystemComponent; note
     label: 'role: entry on construct: function — boundary element',
     note: 'orange overrides construct:color; anatomy inherited from the function',
     component: {
-      id: 'http-entry',
+      alias: 'http-entry',
       name: 'HTTP bridge :3045',
       construct: 'function',
       file: 'packages/subsystems-studio/src/bun/http-server.ts',
@@ -255,7 +255,7 @@ const nodeSpotlights: Array<{ label: string; component: SubsystemComponent; note
     label: 'construct: class — declaration anatomy',
     note: 'blue; drill-down renders the real class stub with its methods',
     component: {
-      id: 'cache',
+      alias: 'cache',
       name: 'SessionCache',
       construct: 'class',
       file: 'src/session/SessionCache.ts',
@@ -276,7 +276,7 @@ const nodeSpotlights: Array<{ label: string; component: SubsystemComponent; note
     label: 'construct: method — a function bound to its class',
     note: 'dotted symbol (SessionCache.put) is the identity; drill-down renders it inside a host-class stub',
     component: {
-      id: 'method-put',
+      alias: 'method-put',
       name: 'put',
       construct: 'method',
       file: 'src/session/SessionCache.ts',
@@ -293,7 +293,7 @@ const nodeSpotlights: Array<{ label: string; component: SubsystemComponent; note
     label: 'construct: store — state-block anatomy',
     note: 'green = the store construct:color; drill-down renders declare const state, never a class stub',
     component: {
-      id: 'store',
+      alias: 'store',
       name: 'Graph Store',
       construct: 'store',
       file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -306,7 +306,7 @@ const nodeSpotlights: Array<{ label: string; component: SubsystemComponent; note
     label: 'construct: external — actor outside every boundary',
     note: 'purple; no process → drawn outside all regions',
     component: {
-      id: 'agents',
+      alias: 'agents',
       name: 'agent clients',
       construct: 'external',
       file: '',
@@ -317,7 +317,7 @@ const nodeSpotlights: Array<{ label: string; component: SubsystemComponent; note
     label: 'role: service on construct: external — far-side boundary element',
     note: 'colored by its construct (external); identity via purl, no source at all',
     component: {
-      id: 'github',
+      alias: 'github',
       name: 'api.github.com',
       construct: 'external',
       file: '',
@@ -332,7 +332,7 @@ function NodeSpotlightsDemo() {
   const { mode } = useTheme();
   const constructColors = constructColorsFromPierreTheme(resolvePierreSyntaxThemeName(mode));
   const [activeIds, setActiveIds] = useState<Set<string>>(
-    () => new Set(nodeSpotlights.map((n) => n.component.id)),
+    () => new Set(nodeSpotlights.map((n) => n.component.alias)),
   );
   const toggle = (id: string) =>
     setActiveIds((prev) => {
@@ -344,7 +344,7 @@ function NodeSpotlightsDemo() {
       }
       return next;
     });
-  const visible = nodeSpotlights.filter((n) => activeIds.has(n.component.id));
+  const visible = nodeSpotlights.filter((n) => activeIds.has(n.component.alias));
 
   return (
     <div style={{ padding: 20, overflow: 'auto', height: '100vh', boxSizing: 'border-box', background: '#0f1216' }}>
@@ -358,7 +358,7 @@ function NodeSpotlightsDemo() {
           show:
         </span>
         {nodeSpotlights.map(({ component }) => {
-          const on = activeIds.has(component.id);
+          const on = activeIds.has(component.alias);
           const color = constructColors[component.construct];
           const chip = component.stereotype
             ? component.framework
@@ -369,9 +369,9 @@ function NodeSpotlightsDemo() {
               : component.construct;
           return (
             <button
-              key={component.id}
+              key={component.alias}
               type="button"
-              onClick={() => toggle(component.id)}
+              onClick={() => toggle(component.alias)}
               style={{
                 fontFamily: 'monospace',
                 fontSize: 11,
@@ -390,7 +390,7 @@ function NodeSpotlightsDemo() {
         })}
         <button
           type="button"
-          onClick={() => setActiveIds(new Set(nodeSpotlights.map((n) => n.component.id)))}
+          onClick={() => setActiveIds(new Set(nodeSpotlights.map((n) => n.component.alias)))}
           style={{ fontFamily: 'monospace', fontSize: 11, cursor: 'pointer', padding: '4px 10px', borderRadius: 999, border: '1px solid #2c313a', background: 'transparent', color: '#9ca3af' }}
         >
           all
@@ -410,7 +410,7 @@ function NodeSpotlightsDemo() {
         </div>
       )}
       {visible.map(({ label, component, note }) => (
-        <div key={component.id}>
+        <div key={component.alias}>
           <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#6b7280', margin: '10px 2px 6px' }}>
             {label} — {note}
           </div>
@@ -490,7 +490,7 @@ const anatomyComponents: Array<{ label: string; component: SubsystemComponent; n
     label: 'store detail → state block',
     note: 'declare const lines — honest to module-level state; no class stub, no methods',
     component: {
-      id: 'store',
+      alias: 'store',
       name: 'Graph Store',
       construct: 'store',
       file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -510,7 +510,7 @@ const anatomyComponents: Array<{ label: string; component: SubsystemComponent; n
     label: 'class detail → class stub',
     note: 'the verifiable access mechanism — methods with typed params + returns',
     component: {
-      id: 'cache',
+      alias: 'cache',
       name: 'SessionCache',
       construct: 'class',
       file: 'src/session/SessionCache.ts',
@@ -534,7 +534,7 @@ const anatomyComponents: Array<{ label: string; component: SubsystemComponent; n
     label: 'function detail → signature',
     note: 'params + return type, callers/callees intentionally not rendered (edges carry them)',
     component: {
-      id: 'get',
+      alias: 'get',
       name: 'getSubsystemModel',
       construct: 'function',
       file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -553,7 +553,7 @@ const anatomyComponents: Array<{ label: string; component: SubsystemComponent; n
     label: 'type detail → interface fields',
     note: 'the IPC contract as an entry: anatomy inherited from the type',
     component: {
-        id: 'ipc-entry',
+        alias: 'ipc-entry',
       name: 'StudioMessages',
       construct: 'interface',
       file: 'packages/subsystems-studio/src/shared/contract.ts',
@@ -575,7 +575,7 @@ const anatomyComponents: Array<{ label: string; component: SubsystemComponent; n
     label: 'method detail → method in host-class stub',
     note: 'the class is context, the method is the node — same anatomy a standalone function gets, plus the owning class',
     component: {
-      id: 'anatomy-method',
+      alias: 'anatomy-method',
       name: 'put',
       construct: 'method',
       file: 'src/session/SessionCache.ts',
@@ -593,7 +593,7 @@ const anatomyComponents: Array<{ label: string; component: SubsystemComponent; n
     label: 'type_alias detail → braced alias',
     note: 'the alias renders as `type X = { … }` — the honest keyword form',
     component: {
-      id: 'anatomy-alias',
+      alias: 'anatomy-alias',
       name: 'AnalysisStatus',
       construct: 'type_alias',
       file: 'packages/subsystems-studio/src/bun/analysis.ts',
@@ -611,7 +611,7 @@ const anatomyComponents: Array<{ label: string; component: SubsystemComponent; n
     label: 'enum detail → enum declaration',
     note: 'members render inline — the runtime type',
     component: {
-      id: 'anatomy-enum',
+      alias: 'anatomy-enum',
       name: 'VerificationPhase',
       construct: 'enum',
       file: 'packages/subsystems-studio/src/bun/verify.ts',
@@ -634,7 +634,7 @@ function AnatomySpotlightsDemo() {
         anatomy spotlights — data (left) → the drill-down panel you get on click (right).
       </div>
       {anatomyComponents.map(({ label, component, note }) => (
-        <div key={component.id}>
+        <div key={component.alias}>
           <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#6b7280', margin: '10px 2px 6px' }}>
             {label} — {note}
           </div>

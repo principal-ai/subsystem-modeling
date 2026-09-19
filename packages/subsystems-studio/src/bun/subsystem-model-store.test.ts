@@ -153,11 +153,11 @@ describe("resolveRepoRootForComponent", () => {
 describe("verifyModelFiles", () => {
 	test("buckets components into verified / missing / unresolved", async () => {		const result = await verifyModelFiles({
 			components: [
-				{ id: "a1", name: "A", construct: "function", file: "exists.ts", purl: "pkg:github/a/repo-a" },
-				{ id: "b1", name: "B", construct: "function", file: "deep/other.py", purl: "pkg:github/a/repo-b" },
-				{ id: "m1", name: "M", construct: "function", file: "nope.ts", purl: "pkg:github/a/repo-a" },
-				{ id: "u1", name: "U", construct: "function", file: "somewhere.ts", purl: "pkg:github/a/repo-remote" },
-				{ id: "f1", name: "F", construct: "function", file: "", purl: "pkg:github/a/repo-a" },
+				{ alias: "a1", name: "A", construct: "function", file: "exists.ts", purl: "pkg:github/a/repo-a" },
+				{ alias: "b1", name: "B", construct: "function", file: "deep/other.py", purl: "pkg:github/a/repo-b" },
+				{ alias: "m1", name: "M", construct: "function", file: "nope.ts", purl: "pkg:github/a/repo-a" },
+				{ alias: "u1", name: "U", construct: "function", file: "somewhere.ts", purl: "pkg:github/a/repo-remote" },
+				{ alias: "f1", name: "F", construct: "function", file: "", purl: "pkg:github/a/repo-a" },
 			],
 			relations: [],
 		});
@@ -165,7 +165,7 @@ describe("verifyModelFiles", () => {
 		expect(result.verifiedCount).toBe(2);
 		expect(result.missingCount).toBe(1);
 		expect(result.unresolvedCount).toBe(1);
-		expect(result.missing).toEqual([{ componentId: "m1", file: "nope.ts" }]);
+		expect(result.missing).toEqual([{ componentAlias: "m1", file: "nope.ts" }]);
 	});
 });
 
@@ -201,12 +201,12 @@ describe("verifyModelFiles symbol pass", () => {
 	test("no longer text-checks symbols (graphify owns that)", async () => {
 		const result = await verifyModelFiles({
 			components: [
-				{ id: "ok-exported", name: "A", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "exportedFn" },
-				{ id: "ok-private", name: "B", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "privateFn" },
-				{ id: "ok-qualified", name: "C", construct: "class", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "ns.Widget" },
-				{ id: "bad-symbol", name: "D", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "notDeclaredAnywhere" },
-				{ id: "mention-only", name: "E", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "buildAgentSessionsView" },
-				{ id: "no-symbol", name: "F", construct: "function", file: "exists.ts", purl: "pkg:github/a/repo-a" },
+				{ alias: "ok-exported", name: "A", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "exportedFn" },
+				{ alias: "ok-private", name: "B", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "privateFn" },
+				{ alias: "ok-qualified", name: "C", construct: "class", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "ns.Widget" },
+				{ alias: "bad-symbol", name: "D", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "notDeclaredAnywhere" },
+				{ alias: "mention-only", name: "E", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "buildAgentSessionsView" },
+				{ alias: "no-symbol", name: "F", construct: "function", file: "exists.ts", purl: "pkg:github/a/repo-a" },
 			],
 			relations: [],
 		});
@@ -226,9 +226,9 @@ describe("declaration provenance", () => {
 
 	test("normalize defaults missing provenance to authored and strips orphan claims", () => {
 		const components = [
-			{ id: "a", declaration: fnDetail }, // -> authored
-			{ id: "b", declarationProvenance: "verified", other: 1 }, // no declaration -> stripped
-			{ id: "c", declaration: fnDetail, declarationProvenance: "verified" }, // untouched
+			{ alias: "a", declaration: fnDetail }, // -> authored
+			{ alias: "b", declarationProvenance: "verified", other: 1 }, // no declaration -> stripped
+			{ alias: "c", declaration: fnDetail, declarationProvenance: "verified" }, // untouched
 		];
 		normalizeDeclarationProvenance(components);
 		expect(components[0]["declarationProvenance"]).toBe("authored");
@@ -238,14 +238,14 @@ describe("declaration provenance", () => {
 
 	test("normalize backfills per-construct arrays the published renderer requires", () => {
 		const components = [
-			{ id: "f", declaration: { kind: "function", parameters: [{ name: "id", type: "string" }] } },
-			{ id: "c", declaration: { kind: "class", methods: [] } },
-			{ id: "t", declaration: { kind: "type" } },
-			{ id: "e", declaration: { kind: "custom_entity" } },
+			{ alias: "f", declaration: { kind: "function", parameters: [{ name: "id", type: "string" }] } },
+			{ alias: "c", declaration: { kind: "class", methods: [] } },
+			{ alias: "t", declaration: { kind: "type" } },
+			{ alias: "e", declaration: { kind: "custom_entity" } },
 		];
 		normalizeDeclarationProvenance(components);
-		const d = (id: string) =>
-			(components.find((x) => x["id"] === id)?.["declaration"] ?? {}) as Record<string, unknown>;
+		const d = (alias: string) =>
+			(components.find((x) => x["alias"] === alias)?.["declaration"] ?? {}) as Record<string, unknown>;
 		expect(Object.keys(d("f"))).toContain("callers");
 		expect(d("f")["callees"]).toEqual([]);
 		expect(d("c")["extends"]).toEqual([]);
@@ -261,8 +261,8 @@ describe("declaration provenance", () => {
 		// publish; until then the store treats it as payload-level JSON, so the
 		// fixture is typed loosely here.
 		const components = [
-			{ id: "v1", name: "V1", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "exportedFn", declaration: fnDetail, declarationProvenance: "verified" },
-			{ id: "a1", name: "A1", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "privateFn", declaration: fnDetail },
+			{ alias: "v1", name: "V1", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "exportedFn", declaration: fnDetail, declarationProvenance: "verified" },
+			{ alias: "a1", name: "A1", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "privateFn", declaration: fnDetail },
 		] as unknown as Parameters<typeof verifyModelFiles>[0]["components"];
 		const result = await verifyModelFiles({
 			components,
@@ -300,8 +300,8 @@ describe("walkthrough verify pass", () => {
 	test("resolves steps to real site lines and flags stuck/blank/misfit sites", async () => {
 		// `src/seam.ts` lives in the registered repo-a checkout (see beforeAll).
 		const components: SubsystemComponent[] = [
-			{ id: "a", name: "a", construct: "function", symbol: "a", file: "src/seam.ts", purl: "pkg:github/a/repo-a" },
-			{ id: "store", name: "store", construct: "store", file: "src/seam.ts", purl: "pkg:github/a/repo-a" },
+			{ alias: "a", name: "a", construct: "function", symbol: "a", file: "src/seam.ts", purl: "pkg:github/a/repo-a" },
+			{ alias: "store", name: "store", construct: "store", file: "src/seam.ts", purl: "pkg:github/a/repo-a" },
 		];
 		const result = await verifyModelFiles({
 			components,

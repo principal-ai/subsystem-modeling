@@ -73,7 +73,7 @@ const CHANNELS: Channel[] = [
     label: 'baseline — function',
     note: 'border color = construct (function-indigo); left badge = construct.',
     component: {
-      id: 'fn',
+      alias: 'fn',
       name: 'auditSubsystemModel',
       construct: 'function',
       file: 'src/bun/verify-subsystem-component.ts',
@@ -85,7 +85,7 @@ const CHANNELS: Channel[] = [
     label: 'class',
     note: 'construct color changes per kind; nothing else moves.',
     component: {
-      id: 'cls',
+      alias: 'cls',
       name: 'MaintainModelAgent',
       construct: 'class',
       file: 'src/bun/maintain-model.ts',
@@ -97,7 +97,7 @@ const CHANNELS: Channel[] = [
     label: 'external',
     note: 'outside the system — square corners, no file.',
     component: {
-      id: 'ext',
+      alias: 'ext',
       name: '@opencode-ai/cli',
       construct: 'external',
       file: '',
@@ -109,7 +109,7 @@ const CHANNELS: Channel[] = [
     label: 'role badge',
     note: 'top-right badge = role.',
     component: {
-      id: 'role',
+      alias: 'role',
       name: 'handleRequest',
       construct: 'function',
       file: 'src/bun/http-server.ts',
@@ -122,7 +122,7 @@ const CHANNELS: Channel[] = [
     label: 'store + storage badge',
     note: 'store backs a storage badge beside the role badge.',
     component: {
-      id: 'store',
+      alias: 'store',
       name: 'sessionCache',
       construct: 'store',
       file: 'src/bun/session-cache.ts',
@@ -135,7 +135,7 @@ const CHANNELS: Channel[] = [
     label: 'proposed',
     note: 'dashed goldenrod border + right badge; fileless.',
     component: {
-      id: 'prop',
+      alias: 'prop',
       name: 'OpenCodeV2Lifecycle',
       construct: 'function',
       file: '',
@@ -148,7 +148,7 @@ const CHANNELS: Channel[] = [
     label: 'proposed + role',
     note: 'proposed wins the right badge; role stays on the model.',
     component: {
-      id: 'prop-role',
+      alias: 'prop-role',
       name: 'startMaintainFlow',
       construct: 'function',
       file: '',
@@ -162,7 +162,7 @@ const CHANNELS: Channel[] = [
     label: 'framework stereotype',
     note: 'left badge prefers "framework · stereotype"; border stays construct.',
     component: {
-      id: 'react',
+      alias: 'react',
       name: 'SubsystemComponentNode',
       construct: 'function',
       file: 'src/subsystem/nodes.tsx',
@@ -176,7 +176,7 @@ const CHANNELS: Channel[] = [
     label: 'custom entity',
     note: 'left badge wears the entityKind.',
     component: {
-      id: 'entity',
+      alias: 'entity',
       name: 'WorkRequester',
       construct: 'custom_entity',
       file: '',
@@ -188,7 +188,7 @@ const CHANNELS: Channel[] = [
     label: 'selected',
     note: 'selection only thickens the border (2 → 4); color stays construct.',
     component: {
-      id: 'sel',
+      alias: 'sel',
       name: 'runMaintainModel',
       construct: 'function',
       file: 'src/bun/maintain-model.ts',
@@ -246,7 +246,7 @@ export const Channels: Story = {
           }}
         >
           {CHANNELS.map((c) => (
-            <ChannelCell key={c.component.id} channel={c} />
+            <ChannelCell key={c.component.alias} channel={c} />
           ))}
         </div>
       </div>
@@ -423,32 +423,32 @@ const ISSUE_EXAMPLES: Array<{
   },
   {
     caption: 'error · earliest rung is file (declaration file missing)',
-    component: { ...CHANNELS[0]!.component, id: 'e-file' },
+    component: { ...CHANNELS[0]!.component, alias: 'e-file' },
     severity: 'error',
     rung: 'file',
     count: 2,
   },
   {
     caption: 'error · earliest rung is symbol (multiple symbol matches)',
-    component: { ...CHANNELS[1]!.component, id: 'e-sym' },
+    component: { ...CHANNELS[1]!.component, alias: 'e-sym' },
     severity: 'error',
     rung: 'symbol',
   },
   {
     caption: 'info/gap · dashed ring · declaration drift',
-    component: { ...CHANNELS[1]!.component, id: 'e-decl' },
+    component: { ...CHANNELS[1]!.component, alias: 'e-decl' },
     severity: 'info',
     rung: 'declaration',
   },
   {
     caption: 'error · type mismatch',
-    component: { ...CHANNELS[7]!.component, id: 'e-type' },
+    component: { ...CHANNELS[7]!.component, alias: 'e-type' },
     severity: 'error',
     rung: 'type',
   },
   {
     caption: 'error · signature mismatch (deepest rung)',
-    component: { ...CHANNELS[0]!.component, id: 'e-sig' },
+    component: { ...CHANNELS[0]!.component, alias: 'e-sig' },
     severity: 'error',
     rung: 'signature',
   },

@@ -25,7 +25,7 @@ function entityDetail(attributes: Array<[string, string]>): GraphifyCustomEntity
 
 const components: SubsystemComponent[] = [
   {
-    id: 'wr',
+    alias: 'wr',
     name: 'WorkRequester',
     construct: 'custom_entity',
     entityKind: 'Person',
@@ -39,7 +39,7 @@ const components: SubsystemComponent[] = [
     ]),
   },
   {
-    id: 'tech',
+    alias: 'tech',
     name: 'FacilitiesTechnician',
     construct: 'custom_entity',
     entityKind: 'Person',
@@ -54,7 +54,7 @@ const components: SubsystemComponent[] = [
     ]),
   },
   {
-    id: 'sup',
+    alias: 'sup',
     name: 'ShiftSupervisor',
     construct: 'custom_entity',
     entityKind: 'Person',
@@ -69,7 +69,7 @@ const components: SubsystemComponent[] = [
     ]),
   },
   {
-    id: 'mgr',
+    alias: 'mgr',
     name: 'CampusOpsManager',
     construct: 'custom_entity',
     entityKind: 'Person',
@@ -84,7 +84,7 @@ const components: SubsystemComponent[] = [
     ]),
   },
   {
-    id: 'vp',
+    alias: 'vp',
     name: 'VPOperations',
     construct: 'custom_entity',
     entityKind: 'Person',
@@ -99,7 +99,7 @@ const components: SubsystemComponent[] = [
     ]),
   },
   {
-    id: 'agent',
+    alias: 'agent',
     name: 'OpsInsightAgent',
     construct: 'custom_entity',
     entityKind: 'agent',
@@ -115,7 +115,7 @@ const components: SubsystemComponent[] = [
     ]),
   },
   {
-    id: 'queue',
+    alias: 'queue',
     name: 'NudgeQueue',
     construct: 'custom_entity',
     entityKind: 'queue',
@@ -131,7 +131,7 @@ const components: SubsystemComponent[] = [
     ]),
   },
   {
-    id: 'store',
+    alias: 'store',
     name: 'WorkRequestStore',
     construct: 'store',
     file: 'src/ops/workRequests.ts',

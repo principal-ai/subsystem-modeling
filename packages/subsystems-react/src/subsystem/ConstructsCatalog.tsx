@@ -29,7 +29,7 @@ import { resolvePierreSyntaxThemeName } from '../pierre/pierreSyntaxTheme';
 
 export interface ConstructsCatalogProps {
   components: SubsystemComponent[];
-  onSelect?: (componentId: string) => void;
+  onSelect?: (componentAlias: string) => void;
   title?: string;
   hideSidebar?: boolean;
   description?: string;
@@ -39,7 +39,7 @@ export interface ConstructsCatalogProps {
   renderFileViewer?: (file: string, opts?: SubsystemOpenFileOptions) => ReactNode;
   renderFileView?: (component: SubsystemComponent) => ReactNode;
   onFileSelect?: (file: string) => void;
-  onVerifyComponent?: (componentId: string) => void;
+  onVerifyComponent?: (componentAlias: string) => void;
   componentVerification?: ComponentVerificationState | null;
 }
 
@@ -111,7 +111,7 @@ function resolveRelated(
   const clean = ref.replace(/\(\)$/, '');
   return components.find(
     (c) =>
-      c.id === clean ||
+      c.alias === clean ||
       c.name === clean ||
       c.symbol === clean ||
       c.symbol?.replace(/\(\)$/, '') === clean,
@@ -170,11 +170,11 @@ export function ConstructsCatalog({
       .map((x) => x.c);
   }, [components]);
 
-  const [visibleIds, setVisibleIds] = useState<string[]>(() =>
-    orderedComponents[0] ? [orderedComponents[0].id] : [],
+  const [visibleAliases, setVisibleAliases] = useState<string[]>(() =>
+    orderedComponents[0] ? [orderedComponents[0].alias] : [],
   );
-  const [focusedId, setFocusedId] = useState<string | null>(
-    () => orderedComponents[0]?.id ?? null,
+  const [focusedAlias, setFocusedAlias] = useState<string | null>(
+    () => orderedComponents[0]?.alias ?? null,
   );
   const [descriptionVisible, setDescriptionVisible] = useState(false);
   const [descToggleHover, setDescToggleHover] = useState(false);
@@ -186,12 +186,12 @@ export function ConstructsCatalog({
   const [drawer, setDrawer] = useState<{ file: string; startLine?: number } | null>(
     null,
   );
-  const focusedRef = useRef<string | null>(focusedId);
-  focusedRef.current = focusedId;
+  const focusedAliasRef = useRef<string | null>(focusedAlias);
+  focusedAliasRef.current = focusedAlias;
 
-  const visibleSet = useMemo(() => new Set(visibleIds), [visibleIds]);
+  const visibleSet = useMemo(() => new Set(visibleAliases), [visibleAliases]);
   const visibleComponents = useMemo(
-    () => orderedComponents.filter((c) => visibleSet.has(c.id)),
+    () => orderedComponents.filter((c) => visibleSet.has(c.alias)),
     [orderedComponents, visibleSet],
   );
 
@@ -213,7 +213,7 @@ export function ConstructsCatalog({
     }> = [];
     const index = new Map<string, number>();
     for (const c of visibleComponents) {
-      const key = c.purl || c.id;
+      const key = c.purl || c.alias;
       let at = index.get(key);
       if (at == null) {
         at = groups.length;
@@ -227,17 +227,17 @@ export function ConstructsCatalog({
   }, [visibleComponents]);
 
   useEffect(() => {
-    if (!focusedId) return;
-    document.getElementById(`construct-${focusedId}`)?.scrollIntoView({ block: 'nearest' });
-  }, [focusedId]);
+    if (!focusedAlias) return;
+    document.getElementById(`construct-${focusedAlias}`)?.scrollIntoView({ block: 'nearest' });
+  }, [focusedAlias]);
 
   useEffect(() => {
-    const last = visibleIds[visibleIds.length - 1];
+    const last = visibleAliases[visibleAliases.length - 1];
     if (!last) return;
     document
       .getElementById(`construct-signature-${last}`)
       ?.scrollIntoView({ block: 'nearest' });
-  }, [visibleIds]);
+  }, [visibleAliases]);
 
   // Keep the declaration whose file is open in view, so the source and its
   // signature stay legible together.
@@ -249,47 +249,47 @@ export function ConstructsCatalog({
       ) ?? orderedComponents.find((c) => c.file === drawer.file);
     if (!match) return;
     document
-      .getElementById(`construct-signature-${match.id}`)
+      .getElementById(`construct-signature-${match.alias}`)
       ?.scrollIntoView({ block: 'nearest' });
   }, [orderedComponents, drawer]);
 
-  // Drop ids that left the model; if nothing remains, show the first construct.
+  // Drop aliases that left the model; if nothing remains, show the first construct.
   useEffect(() => {
-    const ids = new Set(orderedComponents.map((c) => c.id));
-    setVisibleIds((prev) => {
-      const next = prev.filter((id) => ids.has(id));
+    const aliases = new Set(orderedComponents.map((c) => c.alias));
+    setVisibleAliases((prev) => {
+      const next = prev.filter((alias) => aliases.has(alias));
       if (next.length > 0 || orderedComponents.length === 0) return next;
-      return [orderedComponents[0]!.id];
+      return [orderedComponents[0]!.alias];
     });
-    setFocusedId((prev) => {
-      if (prev && ids.has(prev)) return prev;
-      return orderedComponents[0]?.id ?? null;
+    setFocusedAlias((prev) => {
+      if (prev && aliases.has(prev)) return prev;
+      return orderedComponents[0]?.alias ?? null;
     });
   }, [orderedComponents]);
 
   const toggle = useCallback(
-    (id: string) => {
-      setFocusedId(id);
-      setVisibleIds((prev) =>
-        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    (alias: string) => {
+      setFocusedAlias(alias);
+      setVisibleAliases((prev) =>
+        prev.includes(alias) ? prev.filter((x) => x !== alias) : [...prev, alias],
       );
-      onSelect?.(id);
+      onSelect?.(alias);
     },
     [onSelect],
   );
 
   const show = useCallback(
-    (id: string) => {
-      setFocusedId(id);
-      setVisibleIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
-      onSelect?.(id);
+    (alias: string) => {
+      setFocusedAlias(alias);
+      setVisibleAliases((prev) => (prev.includes(alias) ? prev : [...prev, alias]));
+      onSelect?.(alias);
     },
     [onSelect],
   );
 
   const focusAt = useCallback(
-    (id: string) => {
-      setFocusedId(id);
+    (alias: string) => {
+      setFocusedAlias(alias);
     },
     [],
   );
@@ -307,17 +307,17 @@ export function ConstructsCatalog({
    *  all when they're already shown — mirroring a construct row toggle. */
   const toggleFile = useCallback(
     (comps: SubsystemComponent[]) => {
-      const ids = comps.map((c) => c.id);
-      setVisibleIds((prev) => {
+      const aliases = comps.map((c) => c.alias);
+      setVisibleAliases((prev) => {
         const set = new Set(prev);
-        const allVisible = ids.every((id) => set.has(id));
-        ids.forEach((id) => (allVisible ? set.delete(id) : set.add(id)));
-        return orderedComponents.filter((c) => set.has(c.id)).map((c) => c.id);
+        const allVisible = aliases.every((alias) => set.has(alias));
+        aliases.forEach((alias) => (allVisible ? set.delete(alias) : set.add(alias)));
+        return orderedComponents.filter((c) => set.has(c.alias)).map((c) => c.alias);
       });
       const first = comps[0];
       if (first) {
-        setFocusedId(first.id);
-        onSelect?.(first.id);
+        setFocusedAlias(first.alias);
+        onSelect?.(first.alias);
       }
     },
     [orderedComponents, onSelect],
@@ -380,8 +380,8 @@ export function ConstructsCatalog({
             </li>
           );
         }
-        const ids = child.components.map((c) => c.id);
-        const allVisible = ids.length > 0 && ids.every((id) => visibleSet.has(id));
+        const aliases = child.components.map((c) => c.alias);
+        const allVisible = aliases.length > 0 && aliases.every((alias) => visibleSet.has(alias));
         const hovered = hoveredRow === child.path;
         const color = componentColor(child.components[0]!, pierreTheme);
         return (
@@ -438,7 +438,7 @@ export function ConstructsCatalog({
                   color: allVisible ? color : muted,
                 }}
               >
-                {ids.length}
+                {aliases.length}
               </span>
             </button>
           </li>
@@ -473,7 +473,7 @@ export function ConstructsCatalog({
     (ref: string) => {
       const comp = resolveRelated(components, ref);
       if (!comp) return;
-      show(comp.id);
+      show(comp.alias);
     },
     [components, show],
   );
@@ -505,13 +505,13 @@ export function ConstructsCatalog({
       if (orderedComponents.length === 0) return;
       const idx = Math.max(
         0,
-        orderedComponents.findIndex((c) => c.id === focusedRef.current),
+        orderedComponents.findIndex((c) => c.alias === focusedAliasRef.current),
       );
       const next =
         orderedComponents[
           (idx + delta + orderedComponents.length) % orderedComponents.length
         ]!;
-      focusAt(next.id);
+      focusAt(next.alias);
     },
     [orderedComponents, focusAt],
   );
@@ -537,15 +537,15 @@ export function ConstructsCatalog({
         moveFocus(-1);
       } else if (e.key === 'Home') {
         e.preventDefault();
-        if (orderedComponents[0]) focusAt(orderedComponents[0].id);
+        if (orderedComponents[0]) focusAt(orderedComponents[0].alias);
       } else if (e.key === 'End') {
         e.preventDefault();
         const last = orderedComponents[orderedComponents.length - 1];
-        if (last) focusAt(last.id);
+        if (last) focusAt(last.alias);
       } else if (e.key === ' ' || e.key === 'Enter') {
-        if (focusedRef.current) {
+        if (focusedAliasRef.current) {
           e.preventDefault();
-          toggle(focusedRef.current);
+          toggle(focusedAliasRef.current);
         }
       } else if (e.key === 'Escape' && drawer) {
         setDrawer(null);
@@ -724,7 +724,7 @@ export function ConstructsCatalog({
           role="listbox"
           aria-label="Constructs"
           aria-multiselectable="true"
-          aria-activedescendant={focusedId ? `construct-${focusedId}` : undefined}
+          aria-activedescendant={focusedAlias ? `construct-${focusedAlias}` : undefined}
           style={{
             listStyle: 'none',
             margin: 0,
@@ -735,8 +735,8 @@ export function ConstructsCatalog({
           }}
         >
           {orderedComponents.map((c) => {
-            const visible = visibleSet.has(c.id);
-            const focused = c.id === focusedId;
+            const visible = visibleSet.has(c.alias);
+            const focused = c.alias === focusedAlias;
             const color = componentColor(c, pierreTheme);
             const badgeColor = constructBadgeColor(c) ?? color;
             const badgeLabel = constructBadgeLabel(c);
@@ -753,19 +753,19 @@ export function ConstructsCatalog({
               !!c.file &&
               c.file === drawer.file &&
               c.declarationRef?.startLine === drawer.startLine;
-            const hovered = hoveredRow === c.id;
+            const hovered = hoveredRow === c.alias;
             return (
-              <li key={c.id} role="presentation">
+              <li key={c.alias} role="presentation">
                 <button
                   type="button"
-                  id={`construct-${c.id}`}
+                  id={`construct-${c.alias}`}
                   role="option"
                   aria-selected={visible}
-                  data-testid={`construct-row-${c.id}`}
-                  onClick={() => toggle(c.id)}
-                  onMouseEnter={() => setHoveredRow(c.id)}
+                  data-testid={`construct-row-${c.alias}`}
+                  onClick={() => toggle(c.alias)}
+                  onMouseEnter={() => setHoveredRow(c.alias)}
                   onMouseLeave={() =>
-                    setHoveredRow((h) => (h === c.id ? null : h))
+                    setHoveredRow((h) => (h === c.alias ? null : h))
                   }
                   style={{
                     display: 'flex',
@@ -934,8 +934,8 @@ export function ConstructsCatalog({
                     c.declarationRef?.startLine === drawer.startLine;
                   return (
                     <div
-                      key={c.id}
-                      id={`construct-signature-${c.id}`}
+                      key={c.alias}
+                      id={`construct-signature-${c.alias}`}
                       style={{
                         border: `1px solid ${lineOpen ? accentColor : theme.colors.border}`,
                         boxShadow: lineOpen ? `0 0 0 1px ${accentColor}` : undefined,
@@ -955,7 +955,7 @@ export function ConstructsCatalog({
                         showRepoIdentity={false}
                         fileBadgeChrome={!!fileViewer}
                         verification={
-                          componentVerification && focusedId === c.id
+                          componentVerification && focusedAlias === c.alias
                             ? componentVerification
                             : undefined
                         }

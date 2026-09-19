@@ -32,7 +32,7 @@ const PURL = 'pkg:github/you/notes-intake';
 /** One construct of each core kind, no relations — the catalog view. */
 const constructsOnly: SubsystemComponent[] = [
   {
-    id: 'submit-note',
+    alias: 'submit-note',
     name: 'submitNote',
     construct: 'function',
     symbol: 'submitNote',
@@ -58,7 +58,7 @@ const constructsOnly: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'note-service',
+    alias: 'note-service',
     name: 'NoteService',
     construct: 'class',
     symbol: 'NoteService',
@@ -86,7 +86,7 @@ const constructsOnly: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'note-service-persist',
+    alias: 'note-service-persist',
     name: 'persist',
     construct: 'method',
     symbol: 'NoteService.persist',
@@ -108,7 +108,7 @@ const constructsOnly: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'note-repository',
+    alias: 'note-repository',
     name: 'NoteRepository',
     construct: 'interface',
     symbol: 'NoteRepository',
@@ -131,7 +131,7 @@ const constructsOnly: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'note-id',
+    alias: 'note-id',
     name: 'NoteId',
     construct: 'type_alias',
     symbol: 'NoteId',
@@ -150,7 +150,7 @@ const constructsOnly: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'note-kind',
+    alias: 'note-kind',
     name: 'NoteKind',
     construct: 'enum',
     symbol: 'NoteKind',

@@ -44,7 +44,7 @@ export const NarrowMaxWidth: Story = {
 // ---------------------------------------------------------------------------
 const namingConventionComponents: SubsystemComponent[] = [
   {
-    id: 'camel',
+    alias: 'camel',
     name: 'accumulateToAgentSessionEvents',
     construct: 'function',
     file: 'src/event-processing/accumulator.ts',
@@ -52,7 +52,7 @@ const namingConventionComponents: SubsystemComponent[] = [
     symbol: 'accumulateToAgentSessionEvents',
   },
   {
-    id: 'snake',
+    alias: 'snake',
     name: 'repo_normalized_universal_event',
     construct: 'interface',
     file: 'src/event-processing/repo_normalized.ts',
@@ -60,7 +60,7 @@ const namingConventionComponents: SubsystemComponent[] = [
     symbol: 'repo_normalized_universal_event',
   },
   {
-    id: 'pascal',
+    alias: 'pascal',
     name: 'RepoNormalizedUniversalAgentSessionEvent',
     construct: 'class',
     file: 'src/event-processing/RepoNormalized.ts',
@@ -68,7 +68,7 @@ const namingConventionComponents: SubsystemComponent[] = [
     symbol: 'RepoNormalizedUniversalAgentSessionEvent',
   },
   {
-    id: 'acronym',
+    alias: 'acronym',
     name: 'ProcessSSEStreamForEventToken',
     construct: 'function',
     file: 'src/event-processing/sse.ts',
@@ -76,7 +76,7 @@ const namingConventionComponents: SubsystemComponent[] = [
     symbol: 'ProcessSSEStreamForEventToken',
   },
   {
-    id: 'method',
+    alias: 'method',
     name: 'normalize',
     construct: 'function',
     file: 'src/session/SessionReader.ts',
@@ -84,7 +84,7 @@ const namingConventionComponents: SubsystemComponent[] = [
     symbol: 'SessionReader.normalize',
   },
   {
-    id: 'pkg',
+    alias: 'pkg',
     name: 'principal-studio',
     construct: 'external',
     file: '',
@@ -118,7 +118,7 @@ const variationPurl = 'pkg:github/principal-ai/agent-monitoring';
 const kindVariationComponents: SubsystemComponent[] = [
   // --- class: bare → members only → relationships only
   {
-    id: 'cls-bare',
+    alias: 'cls-bare',
     name: 'SessionStore',
     construct: 'class',
     file: 'src/session/SessionStore.ts',
@@ -128,7 +128,7 @@ const kindVariationComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'cls-members',
+    alias: 'cls-members',
     name: 'Transcoder',
     construct: 'class',
     file: 'src/session/Transcoder.ts',
@@ -151,7 +151,7 @@ const kindVariationComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'cls-relations',
+    alias: 'cls-relations',
     name: 'HttpTransport',
     construct: 'class',
     file: 'src/transport/HttpTransport.ts',
@@ -172,7 +172,7 @@ const kindVariationComponents: SubsystemComponent[] = [
 
   // --- function: bare → signature only → signature + call relationships
   {
-    id: 'fn-bare',
+    alias: 'fn-bare',
     name: 'bootstrap',
     construct: 'function',
     file: 'src/bootstrap.ts',
@@ -182,7 +182,7 @@ const kindVariationComponents: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'fn-signature',
+    alias: 'fn-signature',
     name: 'normalizeSession',
     construct: 'function',
     file: 'src/event-processing/normalize.ts',
@@ -202,7 +202,7 @@ const kindVariationComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'fn-calls',
+    alias: 'fn-calls',
     name: 'mergeSessions',
     construct: 'function',
     file: 'src/session/merge.ts',
@@ -224,7 +224,7 @@ const kindVariationComponents: SubsystemComponent[] = [
 
   // --- type: bare → fields only → fields + implementors + used-by
   {
-    id: 'ty-bare',
+    alias: 'ty-bare',
     name: 'RawFrame',
     construct: 'interface',
     file: 'src/session/RawFrame.ts',
@@ -234,7 +234,7 @@ const kindVariationComponents: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'ty-fields',
+    alias: 'ty-fields',
     name: 'SessionRecord',
     construct: 'interface',
     file: 'src/session/transcript.ts',
@@ -253,7 +253,7 @@ const kindVariationComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'ty-full',
+    alias: 'ty-full',
     name: 'Transport',
     construct: 'interface',
     file: 'src/transport/Transport.ts',
@@ -271,7 +271,7 @@ const kindVariationComponents: SubsystemComponent[] = [
 
   // --- external: bare → labeled
   {
-    id: 'ext-bare',
+    alias: 'ext-bare',
     name: 'left-pad',
     construct: 'external',
     file: '',
@@ -281,7 +281,7 @@ const kindVariationComponents: SubsystemComponent[] = [
     layer: 5,
   },
   {
-    id: 'ext-label',
+    alias: 'ext-label',
     name: 'principal-studio',
     construct: 'external',
     file: '',

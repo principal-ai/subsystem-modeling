@@ -163,7 +163,7 @@ export const ResolvedPostGraphify: Story = {
 // ---------------------------------------------------------------------------
 const investigationComponents: SubsystemComponent[] = [
   {
-    id: 'adapter',
+    alias: 'adapter',
     name: 'OpenCodeAdapter',
     construct: 'function',
     file: 'apps/server/src/provider/Layers/OpenCodeAdapter.ts',
@@ -172,7 +172,7 @@ const investigationComponents: SubsystemComponent[] = [
     symbol: 'makeOpenCodeAdapter',
   },
   {
-    id: 'ingestion',
+    alias: 'ingestion',
     name: 'ProviderRuntimeIngestion',
     construct: 'function',
     file: 'apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts',
@@ -181,7 +181,7 @@ const investigationComponents: SubsystemComponent[] = [
     symbol: 'ProviderRuntimeIngestion',
   },
   {
-    id: 'contracts',
+    alias: 'contracts',
     name: 'orchestration',
     construct: 'function',
     file: 'packages/contracts/src/orchestration.ts',

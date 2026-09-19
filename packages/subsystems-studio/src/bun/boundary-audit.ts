@@ -16,7 +16,7 @@ export type BoundaryCheckKind =
 export type BoundaryCheckVerdict = "ok" | "issue" | "gap" | "skipped";
 
 export interface BoundaryComponentCheck {
-	componentId: string;
+	componentAlias: string;
 	componentName?: string;
 	kind: BoundaryCheckKind;
 	module?: string;
@@ -31,7 +31,7 @@ export interface BoundaryAuditFinding {
 		| "boundary_module_file_mismatch"
 		| "boundary_process_nest_disagree";
 	severity: "error" | "info";
-	componentId?: string;
+	componentAlias?: string;
 	componentName?: string;
 	/** Module key when the finding is about a multi-member module group. */
 	moduleKey?: string;
@@ -78,16 +78,17 @@ function isUngrounded(c: SubsystemComponent): boolean {
 /**
  * Audit process/module membership fields on components.
  *
- * `augmentedModuleIds` — component ids with an accepted module-boundary
- * augmentation confirming an intentional module≠file grouping.
+ * `augmentedModuleAliases` — component aliases with an accepted
+ * module-boundary augmentation confirming an intentional module≠file
+ * grouping.
  */
 export function auditBoundaryFields(
 	components: readonly SubsystemComponent[],
-	opts?: { augmentedModuleIds?: ReadonlySet<string> },
+	opts?: { augmentedModuleAliases?: ReadonlySet<string> },
 ): BoundaryAuditResult {
 	const checks: BoundaryComponentCheck[] = [];
 	const findings: BoundaryAuditFinding[] = [];
-	const augmented = opts?.augmentedModuleIds;
+	const augmented = opts?.augmentedModuleAliases;
 
 	let modulesClaimed = 0;
 	let moduleFileOk = 0;
@@ -106,7 +107,7 @@ export function auditBoundaryFields(
 		if (!moduleRaw) {
 			if (!processRaw) continue;
 			checks.push({
-				componentId: c.id,
+				componentAlias: c.alias,
 				componentName: c.name,
 				kind: "skipped",
 				process: processRaw,
@@ -128,7 +129,7 @@ export function auditBoundaryFields(
 			// by design, so they are skipped rather than flagged.
 			if (isUngrounded(c)) {
 				checks.push({
-					componentId: c.id,
+					componentAlias: c.alias,
 					componentName: c.name,
 					kind: "module_file",
 					module: moduleRaw,
@@ -144,7 +145,7 @@ export function auditBoundaryFields(
 		if (moduleAgreesWithFile(moduleRaw, fileRaw)) {
 			moduleFileOk++;
 			checks.push({
-				componentId: c.id,
+				componentAlias: c.alias,
 				componentName: c.name,
 				kind: "module_file",
 				module: moduleRaw,
@@ -156,10 +157,10 @@ export function auditBoundaryFields(
 			continue;
 		}
 
-		if (augmented?.has(c.id)) {
+		if (augmented?.has(c.alias)) {
 			moduleFileOk++;
 			checks.push({
-				componentId: c.id,
+				componentAlias: c.alias,
 				componentName: c.name,
 				kind: "module_file",
 				module: moduleRaw,
@@ -174,7 +175,7 @@ export function auditBoundaryFields(
 		moduleFileMismatch++;
 		const note = `module ${JSON.stringify(moduleRaw)} does not match file ${JSON.stringify(fileRaw)} (and is not a path prefix)`;
 		checks.push({
-			componentId: c.id,
+			componentAlias: c.alias,
 			componentName: c.name,
 			kind: "module_file",
 			module: moduleRaw,
@@ -186,7 +187,7 @@ export function auditBoundaryFields(
 		findings.push({
 			kind: "boundary_module_file_mismatch",
 			severity: "info",
-			componentId: c.id,
+			componentAlias: c.alias,
 			componentName: c.name,
 			moduleKey: modNorm,
 			message: note,
@@ -207,7 +208,7 @@ export function auditBoundaryFields(
 			processNestOk++;
 			for (const m of members) {
 				checks.push({
-					componentId: m.id,
+					componentAlias: m.alias,
 					componentName: m.name,
 					kind: "process_nest",
 					module: moduleKey,
@@ -227,7 +228,7 @@ export function auditBoundaryFields(
 		const note = `module ${JSON.stringify(moduleKey)} members claim different processes: ${list}`;
 		for (const m of members) {
 			checks.push({
-				componentId: m.id,
+				componentAlias: m.alias,
 				componentName: m.name,
 				kind: "process_nest",
 				module: moduleKey,
@@ -238,7 +239,7 @@ export function auditBoundaryFields(
 			findings.push({
 				kind: "boundary_process_nest_disagree",
 				severity: "info",
-				componentId: m.id,
+				componentAlias: m.alias,
 				componentName: m.name,
 				moduleKey,
 				message: note,

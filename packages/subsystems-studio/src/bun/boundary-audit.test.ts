@@ -24,7 +24,7 @@ describe("moduleAgreesWithFile", () => {
 });
 
 function comp(
-	partial: Partial<SubsystemComponent> & Pick<SubsystemComponent, "id" | "name" | "construct">,
+	partial: Partial<SubsystemComponent> & Pick<SubsystemComponent, "alias" | "name" | "construct">,
 ): SubsystemComponent {
 	return {
 		purl: "pkg:github/acme/app",
@@ -36,7 +36,7 @@ describe("auditBoundaryFields", () => {
 	test("module matches file passes", () => {
 		const r = auditBoundaryFields([
 			comp({
-				id: "a",
+				alias: "a",
 				name: "A",
 				construct: "function",
 				file: "src/a.ts",
@@ -51,7 +51,7 @@ describe("auditBoundaryFields", () => {
 	test("grounded module without file is ignored (rejected at input)", () => {
 		const r = auditBoundaryFields([
 			comp({
-				id: "boot",
+				alias: "boot",
 				name: "boot",
 				construct: "function",
 				file: "",
@@ -65,7 +65,7 @@ describe("auditBoundaryFields", () => {
 	test("module without file skipped for external", () => {
 		const r = auditBoundaryFields([
 			comp({
-				id: "xy",
+				alias: "xy",
 				name: "xyflow",
 				construct: "external",
 				module: "pkg:npm/@xyflow/react",
@@ -78,7 +78,7 @@ describe("auditBoundaryFields", () => {
 	test("module ≠ file is a soft gap", () => {
 		const r = auditBoundaryFields([
 			comp({
-				id: "parse",
+				alias: "parse",
 				name: "parse",
 				construct: "function",
 				file: "src/session/transcript.ts",
@@ -95,14 +95,14 @@ describe("auditBoundaryFields", () => {
 		const r = auditBoundaryFields(
 			[
 				comp({
-					id: "parse",
+					alias: "parse",
 					name: "parse",
 					construct: "function",
 					file: "src/session/transcript.ts",
 					module: "src/session/paths.ts",
 				}),
 			],
-			{ augmentedModuleIds: new Set(["parse"]) },
+			{ augmentedModuleAliases: new Set(["parse"]) },
 		);
 		expect(r.summary.moduleFileOk).toBe(1);
 		expect(r.summary.moduleFileMismatch).toBe(0);
@@ -113,7 +113,7 @@ describe("auditBoundaryFields", () => {
 	test("process nest agrees", () => {
 		const r = auditBoundaryFields([
 			comp({
-				id: "boot",
+				alias: "boot",
 				name: "boot",
 				construct: "function",
 				file: "src/host/main.ts",
@@ -121,7 +121,7 @@ describe("auditBoundaryFields", () => {
 				process: "host",
 			}),
 			comp({
-				id: "create",
+				alias: "create",
 				name: "create",
 				construct: "function",
 				file: "src/host/main.ts",
@@ -139,7 +139,7 @@ describe("auditBoundaryFields", () => {
 	test("process nest disagrees is a soft gap", () => {
 		const r = auditBoundaryFields([
 			comp({
-				id: "boot",
+				alias: "boot",
 				name: "boot",
 				construct: "function",
 				file: "src/host/main.ts",
@@ -147,7 +147,7 @@ describe("auditBoundaryFields", () => {
 				process: "host",
 			}),
 			comp({
-				id: "create",
+				alias: "create",
 				name: "create",
 				construct: "function",
 				file: "src/host/main.ts",

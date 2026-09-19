@@ -116,7 +116,7 @@ export const PRINCIPAL_META_KEY = "principal" as const;
 
 export type PrincipalComponentMeta = {
 	type: "subsystem-component";
-	id: string;
+	alias: string;
 	name: string;
 	construct: SubsystemComponentConstruct;
 	file: string;
@@ -152,7 +152,7 @@ function omitUndefined<T extends Record<string, unknown>>(obj: T): T {
 export function principalMetaForComponent(c: SubsystemComponent): PrincipalComponentMeta {
 	return omitUndefined({
 		type: "subsystem-component",
-		id: c.id,
+		alias: c.alias,
 		name: c.name,
 		construct: asConstruct(c.construct),
 		file: c.file,
@@ -203,7 +203,7 @@ export async function layoutSubsystemForExcalidraw(
 	const nodes: Node[] = components.map((c, i) => {
 		const size = estimateSize(c);
 		return {
-			id: c.id,
+			id: c.alias,
 			position: { x: 40 + i * 280, y: 40 },
 			width: size.width,
 			height: size.height,
@@ -211,12 +211,12 @@ export async function layoutSubsystemForExcalidraw(
 		};
 	});
 
-	const realIds = new Set(components.map((c) => c.id));
+	const realAliases = new Set(components.map((c) => c.alias));
 	for (const e of edges) {
-		if (realIds.has(e.to)) continue;
+		if (realAliases.has(e.to)) continue;
 		const extId = `external:${e.to}`;
-		if (realIds.has(extId)) continue;
-		realIds.add(extId);
+		if (realAliases.has(extId)) continue;
+		realAliases.add(extId);
 		const label = e.to;
 		const width = Math.max(150, Math.min(300, label.length * 8 + 24));
 		nodes.push({
@@ -226,7 +226,7 @@ export async function layoutSubsystemForExcalidraw(
 			height: 60,
 			data: {
 				component: {
-					id: extId,
+					alias: extId,
 					name: label,
 					construct: "external",
 					purl: "external",
@@ -239,8 +239,8 @@ export async function layoutSubsystemForExcalidraw(
 
 	const flowEdges: Edge[] = edges.map((e) => ({
 		id: e.id,
-		source: realIds.has(e.from) ? e.from : `external:${e.from}`,
-		target: realIds.has(e.to) ? e.to : `external:${e.to}`,
+		source: realAliases.has(e.from) ? e.from : `external:${e.from}`,
+		target: realAliases.has(e.to) ? e.to : `external:${e.to}`,
 		label: e.mechanism,
 		data: { mechanism: e.mechanism, refs: e.refs },
 	}));

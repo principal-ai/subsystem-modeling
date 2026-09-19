@@ -62,6 +62,12 @@ async function reauditSubsystemModelAfterHttpMutation(graphId: string): Promise<
 /** Callback invoked when an agent requests a graph be opened in a tab. */
 export type OpenGraphTabHandler = (id: string) => Promise<{ ok: boolean; error?: string; tabId?: string }>;
 
+/** Callback invoked when an agent opens a scoped showcase tab over model ids. */
+export type OpenShowcaseTabHandler = (opts: {
+	title?: string;
+	ids: string[];
+}) => Promise<{ ok: boolean; error?: string; tabId?: string }>;
+
 /** Callback invoked when an agent deletes a graph (bridged so the host can
  *  close tabs rendering it before the record disappears). */
 export type DeleteGraphHandler = (id: string) => Promise<{ ok: boolean; error?: string }>;
@@ -275,6 +281,7 @@ export async function handleSubsystemModelRequest(
 	req: Request,
 	onOpenTab: OpenGraphTabHandler,
 	onDeleteGraph: DeleteGraphHandler,
+	onOpenShowcase: OpenShowcaseTabHandler,
 ): Promise<Response> {
 	const url = new URL(req.url);
 	// Alias legacy /api/subsystem-graph* → /api/subsystem-model* (skills mid-flip).
@@ -357,9 +364,9 @@ export async function handleSubsystemModelRequest(
 	);
 	if (componentVerifyMatch && method === "GET") {
 		const id = componentVerifyMatch[1];
-		const componentId = componentVerifyMatch[2];
+		const componentAlias = componentVerifyMatch[2];
 		const { verifySubsystemComponent } = await import("./verify-subsystem-component");
-		const result = await verifySubsystemComponent(id, componentId);
+		const result = await verifySubsystemComponent(id, componentAlias);
 		return json(result);
 	}
 
@@ -505,6 +512,26 @@ export async function handleSubsystemModelRequest(
 		return json(result);
 	}
 
+	// Open a scoped showcase tab over an explicit, ordered set of model ids
+	if (path === "/api/subsystem-model/showcase" && method === "POST") {
+		const body = (await parseBody(req)) as {
+			title?: unknown;
+			ids?: unknown;
+		} | null;
+		if (!body || !Array.isArray(body.ids) || body.ids.length === 0) {
+			return error("ids must be a non-empty array of model ids");
+		}
+		if (body.ids.some((id) => typeof id !== "string" || id.length === 0)) {
+			return error("ids must be a non-empty array of model ids");
+		}
+		const result = await onOpenShowcase({
+			title: typeof body.title === "string" ? body.title : undefined,
+			ids: body.ids as string[],
+		});
+		if (!result.ok) return error(result.error ?? "could not open showcase", 404);
+		return json(result, 201);
+	}
+
 	return error("Not found", 404);
 }
 
@@ -515,6 +542,7 @@ export async function handleSubsystemModelRequest(
 export function startHttpServer(
 	onOpenTab: OpenGraphTabHandler,
 	onDeleteGraph: DeleteGraphHandler,
+	onOpenShowcase: OpenShowcaseTabHandler,
 	proposalsChanged?: ProposalsChangedHandler,
 ): void {
 	onProposalsChanged = proposalsChanged ?? null;
@@ -522,7 +550,7 @@ export function startHttpServer(
 		port: PORT,
 		hostname: "127.0.0.1",
 		async fetch(req) {
-			return handleSubsystemModelRequest(req, onOpenTab, onDeleteGraph);
+			return handleSubsystemModelRequest(req, onOpenTab, onDeleteGraph, onOpenShowcase);
 		},
 	});
 

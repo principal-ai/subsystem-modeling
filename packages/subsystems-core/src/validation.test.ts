@@ -3,14 +3,14 @@ import { validateSubsystemModelCrossField } from './validation';
 import type { SubsystemModelDocument } from './types/subsystem-model';
 
 function comp(
-  id: string,
+  alias: string,
   extra: Partial<SubsystemModelDocument['components'][number]> = {},
 ) {
   return {
-    id,
-    name: id,
+    alias,
+    name: alias,
     construct: 'function' as const,
-    file: `src/${id}.ts`,
+    file: `src/${alias}.ts`,
     purl: 'pkg:github/acme/app',
     ...extra,
   };
@@ -41,12 +41,12 @@ describe('validateSubsystemModelCrossField', () => {
     expect(validateSubsystemModelCrossField(d)).toEqual([]);
   });
 
-  test('flags duplicate component ids', () => {
+  test('flags duplicate component aliases', () => {
     const problems = validateSubsystemModelCrossField(
       doc({ components: [comp('a'), comp('a')] }),
     );
     expect(problems).toHaveLength(1);
-    expect(problems[0]!.message).toContain('duplicate id');
+    expect(problems[0]!.message).toContain('duplicate alias');
   });
 
   test('flags relation endpoints that reference no component', () => {

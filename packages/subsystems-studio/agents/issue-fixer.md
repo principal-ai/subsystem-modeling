@@ -72,13 +72,13 @@ definition that matches this component’s role, and propose `field: "file"`.
   "author": "issue-fixer",
   "finding": {
     "kind": "missing_file",
-    "componentId": "…",
+    "componentAlias": "…",
     "message": "…"
   },
   "changes": [
     {
       "target": "component",
-      "componentId": "…",
+      "componentAlias": "…",
       "field": "file",
       "value": "src/a/Foo.ts"
     }
@@ -117,13 +117,13 @@ Graphify’s inferred construct is a **structural hint**, not ground truth. Do
   "author": "issue-fixer",
   "finding": {
     "kind": "construct_mismatch",
-    "componentId": "…",
+    "componentAlias": "…",
     "message": "…"
   },
   "changes": [
     {
       "target": "component",
-      "componentId": "…",
+      "componentAlias": "…",
       "field": "construct",
       "value": "class"
     }
@@ -155,13 +155,13 @@ claims).
   "author": "issue-fixer",
   "finding": {
     "kind": "missing_file",
-    "componentId": "…",
+    "componentAlias": "…",
     "message": "…"
   },
   "changes": [
     {
       "target": "component",
-      "componentId": "…",
+      "componentAlias": "…",
       "field": "file",
       "value": "src/new-path.ts"
     }

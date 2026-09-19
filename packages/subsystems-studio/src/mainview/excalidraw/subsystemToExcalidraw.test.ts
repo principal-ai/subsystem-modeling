@@ -12,7 +12,7 @@ import {
 
 const components: SubsystemComponent[] = [
 	{
-		id: "src",
+		alias: "src",
 		name: "Parser",
 		construct: "class",
 		file: "parser.ts",
@@ -22,7 +22,7 @@ const components: SubsystemComponent[] = [
 		layer: 1,
 	},
 	{
-		id: "dst",
+		alias: "dst",
 		name: "Reader",
 		construct: "class",
 		file: "reader.ts",
@@ -65,7 +65,7 @@ describe("layoutSubsystemForExcalidraw", () => {
 		const meta = principalMetaForComponent(components[0]!);
 		expect(meta).toEqual({
 			type: "subsystem-component",
-			id: "src",
+			alias: "src",
 			name: "Parser",
 			construct: "class",
 			file: "parser.ts",
@@ -80,7 +80,7 @@ describe("layoutSubsystemForExcalidraw", () => {
 
 	test("principalMetaForComponent round-trips proposed and role", () => {
 		const meta = principalMetaForComponent({
-			id: "lifecycle",
+			alias: "lifecycle",
 			name: "OpenCodeV2Lifecycle",
 			construct: "function",
 			file: "",

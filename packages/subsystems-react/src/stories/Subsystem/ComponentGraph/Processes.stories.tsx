@@ -31,7 +31,7 @@ const processComponents = [
     ['bridge', 'bridge', 'function', 'src/renderer/bridge.ts', 'pkg:github/principal-ai/principal-studio', 'IPC bridge to the host', 'bridge'],
   ]),
   {
-    id: 'svc',
+    alias: 'svc',
     name: 'telemetry',
     construct: 'external' as const,
     file: '',

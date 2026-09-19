@@ -161,7 +161,7 @@ describe("graphify augmentations", () => {
 		}
 	});
 
-	test("relation aug matches external by toId", async () => {
+	test("relation aug matches external by toAlias", async () => {
 		const root = mkdtempSync(join(tmpdir(), "ga-store-"));
 		try {
 			await upsertAcceptedRelationAugmentation({
@@ -169,7 +169,7 @@ describe("graphify augmentations", () => {
 				fromFile: "src/a.ts",
 				fromSymbol: "A",
 				relationType: "imports",
-				toId: "xyflow",
+				toAlias: "xyflow",
 				toName: "@xyflow/react",
 				source: "topology-gap-filler",
 				storeRoot: root,
@@ -179,17 +179,17 @@ describe("graphify augmentations", () => {
 				fromFile: "src/a.ts",
 				fromSymbol: "A",
 				relationType: "imports",
-				toId: "xyflow",
+				toAlias: "xyflow",
 				toName: "@xyflow/react",
 				storeRoot: root,
 			});
-			expect(hit?.claims.relation?.toId).toBe("xyflow");
+			expect(hit?.claims.relation?.toAlias).toBe("xyflow");
 			const miss = await findAcceptedRelationAugmentation({
 				purl: "pkg:github/acme/widget",
 				fromFile: "src/a.ts",
 				fromSymbol: "A",
 				relationType: "imports",
-				toId: "other",
+				toAlias: "other",
 				toName: "other",
 				storeRoot: root,
 			});

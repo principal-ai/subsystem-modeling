@@ -40,7 +40,8 @@ import { parseTourOrThrow } from "@principal-ai/file-city-builder";
 import { readFileRemote as fetchRemoteSlice } from "./remote-files";
 import { handoffToRunning, startIpcServer, type LoadTrailMessage } from "./ipc";
 import { startHttpServer } from "./http-server";
-import { deleteSubsystemModel, getSubsystemModel, listSubsystemModels, resolveRepoRootForComponent, setSubsystemModelChangeListener, startSubsystemModelDirWatcher, subsystemModelFilePath, touchSubsystemModelOpened, updateSubsystemModel } from "./subsystem-model-store";
+import { deleteSubsystemModel, getSubsystemModel, listSubsystemModels, purlRepoKey, resolveRepoRootForComponent, setSubsystemModelChangeListener, startSubsystemModelDirWatcher, subsystemModelFilePath, touchSubsystemModelOpened, updateSubsystemModel } from "./subsystem-model-store";
+import { mergeSubsystemModels, type MergeInputModel } from "./merge-submodel-models";
 import { publishSubsystemModelGist } from "./gist-publish";
 import {
 	buildAuditFingerprint,
@@ -502,6 +503,20 @@ interface SubsystemModelTabState {
 	kind: "subsystem-model";
 	title: string;
 	graphId: string;
+	/** Walkthrough to select when the view mounts (opened from a row). */
+	focusWalkthroughId?: string;
+}
+
+/**
+ * A read-only, agent-authored slice of the Subsystems list: the same view and
+ * rows as the permanent Subsystems tab, but scoped to an explicit, ordered set
+ * of model ids and without the filter header.
+ */
+interface SubsystemShowcaseTabState {
+	id: string;
+	kind: "subsystem-showcase";
+	title: string;
+	showcaseIds: string[];
 }
 
 type TabState =
@@ -517,6 +532,7 @@ type TabState =
 	| MaintainEventsTabState
 	| PromptTabState
 	| SubsystemModelTabState
+	| SubsystemShowcaseTabState
 	| TrailTabState;
 
 function permanentTabState(
@@ -1007,12 +1023,18 @@ function openAnalysisTab(analysisId: string): string {
 	return id;
 }
 
-async function openSubsystemModelTab(graphId: string): Promise<string | null> {
+async function openSubsystemModelTab(
+	graphId: string,
+	walkthroughId?: string,
+): Promise<string | null> {
 	// Fast path: already open — no I/O. Broadcast first so the tab switches
 	// immediately; stamp last-opened in the background. The detail view owns
 	// its Loading / not-found empty states and fills in via getSubsystemModel.
 	for (const existing of tabs.values()) {
 		if (existing.kind === "subsystem-model" && existing.graphId === graphId) {
+			// Keep the deep-link target current: reopening from a walkthrough
+			// row selects it; a plain open (row double-click) clears it.
+			existing.focusWalkthroughId = walkthroughId;
 			suggestedTabId = existing.id;
 			console.log(`[principal-studio] subsystem-model tab ${existing.id} focused (already open): ${graphId}`);
 			broadcastTabsChanged(existing.id);
@@ -1048,13 +1070,47 @@ async function openSubsystemModelTab(graphId: string): Promise<string | null> {
 		title = graph.title;
 	}
 	const id = String(nextTabId++);
-	tabs.set(id, { id, kind: "subsystem-model", title, graphId });
+	tabs.set(id, {
+		id,
+		kind: "subsystem-model",
+		title,
+		graphId,
+		...(walkthroughId ? { focusWalkthroughId: walkthroughId } : {}),
+	});
 	suggestedTabId = id;
 	console.log(`[principal-studio] subsystem-model tab ${id} added: ${graphId}`);
 	broadcastTabsChanged(id);
 	// Fire-and-forget: the last-opened stamp (full re-read + record/index
 	// rewrites) must not gate tab visibility.
 	void touchSubsystemModelOpened(graphId).catch(() => {});
+	return id;
+}
+
+/**
+ * Open an agent-authored showcase: a Subsystems-like tab scoped to an explicit,
+ * ordered set of stored model ids and stripped of the filter header. Unknown
+ * ids are dropped; returns null when none survive so callers report the error.
+ */
+async function openSubsystemShowcaseTab(opts: {
+	title?: string;
+	ids: string[];
+}): Promise<string | null> {
+	const known = new Set((await listSubsystemModels()).map((e) => e.id));
+	const seen = new Set<string>();
+	const ids: string[] = [];
+	for (const id of opts.ids) {
+		if (!known.has(id) || seen.has(id)) continue;
+		seen.add(id);
+		ids.push(id);
+	}
+	if (ids.length === 0) return null;
+	const title =
+		opts.title?.trim() || `Subsystem showcase (${ids.length})`;
+	const id = String(nextTabId++);
+	tabs.set(id, { id, kind: "subsystem-showcase", title, showcaseIds: ids });
+	suggestedTabId = id;
+	console.log(`[principal-studio] subsystem-showcase tab ${id} added: ${ids.length} model(s)`);
+	broadcastTabsChanged(id);
 	return id;
 }
 
@@ -1098,19 +1154,125 @@ function githubReposFromComponents(
 /**
  * Deduped component file anchors for the Subsystems tab file panel.
  * Components sharing a file (multiple symbols per module) collapse to one
- * entry; file-less components (external / custom_entity) are skipped.
+ * entry carrying each component's id/name/construct; file-less components
+ * (external / custom_entity) are skipped.
  */
 function subsystemFilesFromComponents(
-	components: ReadonlyArray<{ file?: string; purl?: string }>,
-): Array<{ file: string; purl?: string }> {
-	const seen = new Set<string>();
-	const out: Array<{ file: string; purl?: string }> = [];
+	components: ReadonlyArray<{
+		alias: string;
+		name: string;
+		construct: string;
+		file?: string;
+		purl?: string;
+		declarationRef?: { startLine?: number };
+	}>,
+): Array<{
+	file: string;
+	purl?: string;
+	components: Array<{
+		alias: string;
+		name: string;
+		construct: string;
+		startLine?: number;
+	}>;
+}> {
+	const byKey = new Map<
+		string,
+		{
+			file: string;
+			purl?: string;
+			components: Array<{
+				alias: string;
+				name: string;
+				construct: string;
+				startLine?: number;
+			}>;
+		}
+	>();
 	for (const c of components) {
 		if (!c.file) continue;
 		const key = `${c.purl ?? ""}\0${c.file}`;
-		if (seen.has(key)) continue;
-		seen.add(key);
-		out.push({ file: c.file, purl: c.purl });
+		let entry = byKey.get(key);
+		if (!entry) {
+			entry = { file: c.file, purl: c.purl, components: [] };
+			byKey.set(key, entry);
+		}
+		if (!entry.components.some((m) => m.alias === c.alias)) {
+			entry.components.push({
+				alias: c.alias,
+				name: c.name,
+				construct: c.construct,
+				startLine: c.declarationRef?.startLine,
+			});
+		}
+	}
+	return [...byKey.values()];
+}
+
+/**
+ * Per-walkthrough step sites for the Subsystems tab file → walkthrough
+ * expansion. Step `file`s are repo-root-relative (same form as component
+ * `file`); repo attribution reuses the step endpoint's purl (from ?? to),
+ * mirroring file verification's resolution.
+ */
+function subsystemWalkthroughsFromModel(
+	components: ReadonlyArray<{ alias: string; file?: string; purl?: string }>,
+	walkthroughs?: ReadonlyArray<{
+		id: string;
+		title: string;
+		steps?: ReadonlyArray<{ file: string; line: number; from: string; to: string }>;
+	}>,
+): Array<{
+	id: string;
+	title: string;
+	stepCount: number;
+	files: Array<{ file: string; purl?: string; lines?: number[] }>;
+	steps: Array<{ file: string; purl?: string; line?: number }>;
+}> {
+	const byAlias = new Map(components.map((c) => [c.alias, c]));
+	const out: Array<{
+		id: string;
+		title: string;
+		stepCount: number;
+		files: Array<{ file: string; purl?: string; lines?: number[] }>;
+		steps: Array<{ file: string; purl?: string; line?: number }>;
+	}> = [];
+	for (const w of walkthroughs ?? []) {
+		const steps = w.steps ?? [];
+		const files: Array<{ file: string; purl?: string; lines?: number[] }> = [];
+		const byKey = new Map<string, (typeof files)[number]>();
+		const stepSites: Array<{ file: string; purl?: string; line?: number }> = [];
+		for (const s of steps) {
+			if (!s.file) continue;
+			const purl = byAlias.get(s.from)?.purl ?? byAlias.get(s.to)?.purl;
+			const key = `${purl ?? ""}\0${s.file}`;
+			let entry = byKey.get(key);
+			if (!entry) {
+				entry = { file: s.file, purl, lines: [] };
+				byKey.set(key, entry);
+				files.push(entry);
+			}
+			if (
+				Number.isFinite(s.line) &&
+				s.line > 0 &&
+				!entry.lines!.includes(s.line)
+			) {
+				entry.lines!.push(s.line);
+			}
+			stepSites.push({
+				file: s.file,
+				purl,
+				line: Number.isFinite(s.line) && s.line > 0 ? s.line : undefined,
+			});
+		}
+		for (const f of files) f.lines!.sort((a, b) => a - b);
+		out.push({
+			id: w.id,
+			title: w.title,
+			stepCount: steps.length,
+			files,
+			steps: stepSites,
+		});
 	}
 	return out;
 }
@@ -1336,6 +1498,9 @@ function summarize(tab: TabState): TabSummary {
 			path: subsystemModelFilePath(tab.graphId),
 		};
 	}
+	if (tab.kind === "subsystem-showcase") {
+		return { id: tab.id, kind: "subsystem-showcase", title: tab.title };
+	}
 	if (isStaticTab(tab)) {
 		return { id: tab.id, kind: tab.kind, title: tab.title };
 	}
@@ -1395,6 +1560,16 @@ function fullState(tab: TabState): TabFullState {
 			kind: "subsystem-model",
 			title: tab.title,
 			graphId: tab.graphId,
+			focusWalkthroughId: tab.focusWalkthroughId,
+		};
+	}
+	if (tab.kind === "subsystem-showcase") {
+		return {
+			ok: true,
+			id: tab.id,
+			kind: "subsystem-showcase",
+			title: tab.title,
+			showcaseIds: tab.showcaseIds,
 		};
 	}
 	if (isStaticTab(tab)) {
@@ -1488,6 +1663,17 @@ const requests: RequestHandlers = {
 				return { ok: true };
 			},
 			closeTab: ({ id }) => closeTabById(id),
+			readSubsystemFile: async ({ purl, file }) => {
+				const root = resolveRepoRootForComponent(purl);
+				if (!root) return { ok: false, error: "no local checkout for this repo" };
+				try {
+					const absolute = resolveSandboxed(root, file);
+					const content = await fs.readFile(absolute, "utf8");
+					return { ok: true, content };
+				} catch (err) {
+					return { ok: false, error: (err as Error).message };
+				}
+			},
 			readFile: async ({ tabId, path, repo }) => {
 				const tab = getTab(tabId);
 				if (!tab) return { ok: false, error: `unknown tab: ${tabId}` };
@@ -1509,7 +1695,7 @@ const requests: RequestHandlers = {
 						return { ok: false, error: (err as Error).message };
 					}
 				}
-				if (tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt") {
+				if (tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-showcase") {
 					return { ok: false, error: `${tab.kind} tab does not serve files` };
 				}
 				return tab.mode === "remote"
@@ -1520,7 +1706,7 @@ const requests: RequestHandlers = {
 				const walkPath = path ?? null;
 				if (!walkPath) {
 					const tab = getTab(tabId);
-					if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model") return { files: [] };
+					if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model" || tab.kind === "subsystem-showcase") return { files: [] };
 					return tab.mode === "remote"
 						? getFileTreeRemote(tab)
 						: { files: await walkFiles(tab.repoRoot) };
@@ -1545,7 +1731,7 @@ const requests: RequestHandlers = {
 
 			createTrailNote: ({ tabId, draft }) => {
 				const tab = getTab(tabId);
-				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model") {
+				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model" || tab.kind === "subsystem-showcase") {
 					return { ok: false, error: `unknown trail tab: ${tabId}` };
 				}
 				if (tab.payloadKind === "tour") {
@@ -1570,7 +1756,7 @@ const requests: RequestHandlers = {
 			},
 			updateTrailNote: ({ tabId, noteId, body }) => {
 				const tab = getTab(tabId);
-				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model") {
+				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model" || tab.kind === "subsystem-showcase") {
 					return { ok: false, error: `unknown trail tab: ${tabId}` };
 				}
 				if (tab.payloadKind === "tour") {
@@ -1671,7 +1857,7 @@ const requests: RequestHandlers = {
 			},
 			shareTrail: ({ tabId }) => {
 				const tab = getTab(tabId);
-				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model") {
+				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model" || tab.kind === "subsystem-showcase") {
 					return { ok: false, error: `unknown trail tab: ${tabId}` };
 				}
 				if (tab.payloadKind === "tour") {
@@ -1756,7 +1942,7 @@ const requests: RequestHandlers = {
 			},
 			deleteTrailNote: ({ tabId, noteId }) => {
 				const tab = getTab(tabId);
-				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model") {
+				if (!tab || tab.kind === "library" || tab.kind === "agent-sessions" || tab.kind === "maintenance-sessions" || tab.kind === "subsystems" || tab.kind === "graphify" || tab.kind === "opencode-v2" || tab.kind === "maintain-events" || tab.kind === "analysis" || tab.kind === "session-events" || tab.kind === "prompt" || tab.kind === "subsystem-model" || tab.kind === "subsystem-showcase") {
 					return { ok: false, error: `unknown trail tab: ${tabId}` };
 				}
 				if (tab.payloadKind === "tour") {
@@ -1966,6 +2152,29 @@ const requests: RequestHandlers = {
 				if (!graph) return { ok: false, error: `unknown graph: ${graphId}` };
 				return { ok: true, graph };
 			},
+			getComposedSubsystemModel: async ({ repoKey, modelIds }) => {
+				const entries = await listSubsystemModels();
+				// A showcase tab passes its id set; without one, compose every
+				// model touching the repo (the permanent Subsystems tab).
+				const scope = modelIds ? new Set(modelIds) : null;
+				const models: MergeInputModel[] = [];
+				for (const e of entries) {
+					if (scope && !scope.has(e.id)) continue;
+					const full = await getSubsystemModel(e.id);
+					if (!full) continue;
+					const touches = (full.components ?? []).some(
+						(c) => (purlRepoKey(c.purl) ?? "__no-repo__") === repoKey,
+					);
+					if (touches) models.push({ id: e.id, document: full });
+				}
+				const merged = mergeSubsystemModels(models);
+				return {
+					ok: true as const,
+					document: merged.document,
+					sidecar: merged.sidecar,
+					modelIds: models.map((m) => m.id),
+				};
+			},
 			listSubsystemModels: async () => {
 				const entries = await listSubsystemModels();
 				const graphs = await Promise.all(
@@ -2016,9 +2225,15 @@ const requests: RequestHandlers = {
 						repos: full
 							? githubReposFromComponents(full.components)
 							: undefined,
-						files: full
-							? subsystemFilesFromComponents(full.components)
-							: undefined,
+					files: full
+						? subsystemFilesFromComponents(full.components)
+						: undefined,
+					walkthroughs: full
+						? subsystemWalkthroughsFromModel(
+								full.components,
+								full.walkthroughs,
+							)
+						: undefined,
 						path: subsystemModelFilePath(e.id),
 							gist: e.gist ?? full?.gist,
 							graphify,
@@ -2029,8 +2244,8 @@ const requests: RequestHandlers = {
 				);
 				return { graphs };
 			},
-			openSubsystemModel: async ({ graphId }) => {
-				const tabId = await openSubsystemModelTab(graphId);
+			openSubsystemModel: async ({ graphId, walkthroughId }) => {
+				const tabId = await openSubsystemModelTab(graphId, walkthroughId);
 				if (!tabId) return { ok: false, error: `unknown graph: ${graphId}` };
 				return { ok: true, tabId };
 			},
@@ -2061,11 +2276,11 @@ const requests: RequestHandlers = {
 					created: result.created,
 				};
 			},
-			verifySubsystemComponent: async ({ graphId, componentId }) =>
-				verifySubsystemComponent(graphId, componentId),
+			verifySubsystemComponent: async ({ graphId, componentAlias }) =>
+				verifySubsystemComponent(graphId, componentAlias),
 			auditSubsystemModel: async ({ graphId }) => auditSubsystemModel(graphId),
-			applySubsystemModelAuditFix: async ({ graphId, fixId, componentId }) =>
-				applySubsystemModelAuditFix({ graphId, fixId, componentId }),
+			applySubsystemModelAuditFix: async ({ graphId, fixId, componentAlias }) =>
+				applySubsystemModelAuditFix({ graphId, fixId, componentAlias }),
 			getSubsystemModelAudit: async ({ graphId }) => {
 				const full = await getSubsystemModel(graphId);
 				if (!full) return { ok: false, error: `unknown graph: ${graphId}` };
@@ -3413,6 +3628,16 @@ startHttpServer(
 		return { ok: true, tabId };
 	},
 	async (graphId) => deleteGraphAndCloseTabs(graphId),
+	async (opts) => {
+		const tabId = await openSubsystemShowcaseTab(opts);
+		if (!tabId) return { ok: false, error: "no known models in the given ids" };
+		try {
+			browserWindow.focus();
+		} catch (err) {
+			console.warn(`[principal-studio] could not focus window: ${(err as Error).message}`);
+		}
+		return { ok: true, tabId };
+	},
 	(graphId, pendingCount) => {
 		broadcastSubsystemModelProposalsChanged({ graphId, pendingCount });
 	},

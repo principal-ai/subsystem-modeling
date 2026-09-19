@@ -272,7 +272,14 @@ export type SubsystemConstructDeclaration =
 
 /** A component node — the named unit, construct-tagged. */
 export interface SubsystemComponent {
-  id: string;
+  /**
+   * Model-local stable alias. Referenced by relation / walkthrough `from` /
+   * `to`; unique per model. Edges point at the alias, not the location — a
+   * file move or symbol rename leaves edges intact. Code identity lives on
+   * `purl` + `file` + `symbol` and is what composed (multi-model) views
+   * join on, not this field.
+   */
+  alias: string;
   /** Display label. Prefer aligning with `symbol` when present. */
   name: string;
   construct: SubsystemConstruct;
@@ -333,9 +340,9 @@ export interface SubsystemComponent {
 /** A topology relation between components (structural / module / type). */
 export interface SubsystemRelation {
   id: string;
-  /** Source component id. */
+  /** Source component alias. */
   from: string;
-  /** Target component id (or external label). */
+  /** Target component alias (or external label). */
   to: string;
   relationType: SubsystemRelationType;
   /** Concrete file/symbol evidence (often purls). */
@@ -355,9 +362,9 @@ export interface SubsystemComponentEdge {
 }
 
 export interface SubsystemWalkthroughStep {
-  /** Source component id. */
+  /** Source component alias. */
   from: string;
-  /** Target component id. */
+  /** Target component alias. */
   to: string;
   /** Runtime seam label (Set B). */
   mechanism: SubsystemWalkthroughMechanism;

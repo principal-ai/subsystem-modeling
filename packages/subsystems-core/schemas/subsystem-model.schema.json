@@ -33,7 +33,7 @@
     },
     "relations": {
       "type": "array",
-      "description": "Topology relations (structural / module / type). `from` / `to` reference component `id`s. Runtime seams belong on walkthrough steps, not here.",
+      "description": "Topology relations (structural / module / type). `from` / `to` reference component `alias`es. Runtime seams belong on walkthrough steps, not here.",
       "items": {
         "$ref": "#/$defs/relation"
       }
@@ -122,7 +122,7 @@
     "component": {
       "type": "object",
       "required": [
-        "id",
+        "alias",
         "name",
         "construct",
         "file",
@@ -130,10 +130,10 @@
       ],
       "additionalProperties": false,
       "properties": {
-        "id": {
+        "alias": {
           "type": "string",
           "minLength": 1,
-          "description": "Stable unique id. Referenced by relation / walkthrough `from` / `to`; never rename on update."
+          "description": "Model-local stable alias, unique per model. Referenced by relation / walkthrough `from` / `to`; edges point at the alias, not the location, so a file move or symbol rename leaves edges intact. Code identity (for composed multi-model views) lives on `purl` + `file` + `symbol`, not here."
         },
         "name": {
           "type": "string",
@@ -230,12 +230,12 @@
         "from": {
           "type": "string",
           "minLength": 1,
-          "description": "Source component `id`."
+          "description": "Source component `alias`."
         },
         "to": {
           "type": "string",
           "minLength": 1,
-          "description": "Target component `id` (or external target label)."
+          "description": "Target component `alias` (or external target label)."
         },
         "relationType": {
           "$ref": "#/$defs/relationType"
@@ -264,12 +264,12 @@
         "from": {
           "type": "string",
           "minLength": 1,
-          "description": "Source component `id`."
+          "description": "Source component `alias`."
         },
         "to": {
           "type": "string",
           "minLength": 1,
-          "description": "Target component `id`."
+          "description": "Target component `alias`."
         },
         "mechanism": {
           "$ref": "#/$defs/mechanism"

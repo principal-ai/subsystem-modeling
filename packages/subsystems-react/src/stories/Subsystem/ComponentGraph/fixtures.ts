@@ -13,10 +13,10 @@ import type { GraphifyComponentDetail } from '../../../graphify';
 // Build a subsystem graph from a compact spec - helpers
 // ---------------------------------------------------------------------------
 export function components(
-  spec: Array<[id: string, name: string, construct: SubsystemComponent['construct'], file: string, purl: string, purpose?: string, symbol?: string, declaration?: GraphifyComponentDetail]>,
+  spec: Array<[alias: string, name: string, construct: SubsystemComponent['construct'], file: string, purl: string, purpose?: string, symbol?: string, declaration?: GraphifyComponentDetail]>,
 ): SubsystemComponent[] {
-  return spec.map(([id, name, construct, file, purl, purpose, symbol, declaration]) => ({
-    id,
+  return spec.map(([alias, name, construct, file, purl, purpose, symbol, declaration]) => ({
+    alias,
     name,
     construct,
     file,
@@ -135,7 +135,7 @@ export const readerDetail: GraphifyComponentDetail = {
 // ---------------------------------------------------------------------------
 export const investigateOnlyComponents: SubsystemComponent[] = [
   {
-    id: 'v1',
+    alias: 'v1',
     name: 'V1EventBridgeProcessor',
     construct: 'class',
     file: 'src/event-processing/V1EventBridge.ts',
@@ -144,7 +144,7 @@ export const investigateOnlyComponents: SubsystemComponent[] = [
     symbol: 'V1EventBridgeProcessor',
   },
   {
-    id: 'v2',
+    alias: 'v2',
     name: 'V2EventBridgeProcessor',
     construct: 'class',
     file: 'src/event-processing/V2EventBridge.ts',
@@ -153,7 +153,7 @@ export const investigateOnlyComponents: SubsystemComponent[] = [
     symbol: 'V2EventBridgeProcessor',
   },
   {
-    id: 'input',
+    alias: 'input',
     name: 'RepoNormalizedUniversalAgentSessionEvent',
     construct: 'interface',
     file: 'types/RepoNormalizedUniversalAgentSessionEvent.ts',
@@ -162,7 +162,7 @@ export const investigateOnlyComponents: SubsystemComponent[] = [
     symbol: 'RepoNormalizedUniversalAgentSessionEvent',
   },
   {
-    id: 'acc',
+    alias: 'acc',
     name: 'accumulateToAgentSessionEvents',
     construct: 'function',
     file: 'src/accumulateToAgentSessionEvents.ts',
@@ -171,7 +171,7 @@ export const investigateOnlyComponents: SubsystemComponent[] = [
     symbol: 'accumulateToAgentSessionEvents',
   },
   {
-    id: 'out',
+    alias: 'out',
     name: 'AgentSessionEvent',
     construct: 'interface',
     file: 'types/AgentSessionEvent.ts',

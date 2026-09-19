@@ -129,10 +129,10 @@ export interface GraphifyBundle {
 	edges: GraphifyEdge[];
 }
 
-function componentById(
+function componentByAlias(
 	components: readonly SubsystemComponent[],
 ): Map<string, SubsystemComponent> {
-	return new Map(components.map((c) => [c.id, c]));
+	return new Map(components.map((c) => [c.alias, c]));
 }
 
 function purlKey(purl: string | undefined): string | undefined {
@@ -236,7 +236,7 @@ export function graphifyHasImportTowardHints(
 }
 
 function externalHints(comp: SubsystemComponent): string[] {
-	return [comp.id, comp.name, comp.symbol ?? "", comp.purl ?? ""].filter(
+	return [comp.alias, comp.name, comp.symbol ?? "", comp.purl ?? ""].filter(
 		(s) => s.trim().length > 0 && s !== "external",
 	);
 }
@@ -268,7 +268,7 @@ export function auditTopologyRelations(
 	bundlesByPurl: ReadonlyMap<string, GraphifyBundle | null>,
 	opts?: { augmentedRelationIds?: ReadonlySet<string> },
 ): TopologyAuditResult {
-	const byId = componentById(components);
+	const byAlias = componentByAlias(components);
 	const augmented = opts?.augmentedRelationIds;
 	const checks: TopologyRelationCheck[] = [];
 	const findings: TopologyAuditFinding[] = [];
@@ -334,8 +334,8 @@ export function auditTopologyRelations(
 	};
 
 	for (const rel of relations) {
-		const fromComp = byId.get(rel.from);
-		const toComp = byId.get(rel.to);
+		const fromComp = byAlias.get(rel.from);
+		const toComp = byAlias.get(rel.to);
 		if (!fromComp || !toComp) {
 			brokenEndpoints++;
 			const missing = [
@@ -402,7 +402,7 @@ export function auditTopologyRelations(
 			pushUnconfirmed(
 				rel,
 				"unconfirmed",
-				`${rel.relationType} source ${fromComp.id} has no exact Graphify anchor — cannot corroborate`,
+				`${rel.relationType} source ${fromComp.alias} has no exact Graphify anchor — cannot corroborate`,
 			);
 			continue;
 		}

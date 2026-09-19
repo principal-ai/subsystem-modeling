@@ -127,7 +127,13 @@ export type SubsystemEdgeView = 'relations' | 'walkthroughs';
 
 /** A component node — the named unit, construct-tagged; `file` is its location. */
 export interface SubsystemComponent {
-  id: string;
+  /**
+   * Model-local stable alias, unique per model. Referenced by relation /
+   * walkthrough `from` / `to`; edges point at the alias, not the location.
+   * Code identity (for composed multi-model views) lives on
+   * `purl` + `file` + `symbol`, not here.
+   */
+  alias: string;
   name: string;
   /**
    * The node's construct — what it IS as a declaration (class, function,
@@ -268,8 +274,8 @@ export interface SubsystemRelation {
  */
 export interface SubsystemComponentEdge {
   id: string;
-  from: string; // component id
-  to: string; // component id or external target label
+  from: string; // component alias
+  to: string; // component alias or external target label
   mechanism: SubsystemEdgeMechanism;
   /** Concrete file/symbol refs backing the edge (the seam). */
   refs?: string[];
@@ -374,7 +380,7 @@ export function deriveGraphEdges(doc: {
  * Those snapshots are a catalog of declarations, not a graph.
  */
 export function isConstructsOnlyModel(doc: {
-  components: readonly { id: string }[];
+  components: readonly { alias: string }[];
   relations?: readonly SubsystemRelation[];
   walkthroughs?: readonly SubsystemWalkthrough[];
 }): boolean {
@@ -429,6 +435,40 @@ export function deriveNameFromSymbol(
   return name;
 }
 
+const CONSTRUCT_PLURALS: Record<string, string> = {
+  class: 'classes',
+  function: 'functions',
+  method: 'methods',
+  interface: 'interfaces',
+  type_alias: 'type aliases',
+  enum: 'enums',
+  store: 'stores',
+  external: 'externals',
+  custom_entity: 'custom entities',
+};
+
+/**
+ * One-line summary of what a group of declarations contains, e.g.
+ * `6 functions · 2 classes`. Used for aggregate frame boxes, which describe
+ * their contents (constructs) rather than their container. Empty/blank
+ * constructs are ignored. At most three groups; the rest folds into `+N more`.
+ */
+export function describeConstructBreakdown(constructs: readonly string[]): string {
+  const counts = new Map<string, number>();
+  for (const raw of constructs) {
+    const c = (raw ?? '').trim();
+    if (!c) continue;
+    counts.set(c, (counts.get(c) ?? 0) + 1);
+  }
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const parts = ranked.slice(0, 3).map(([c, n]) => {
+    if (n === 1) return `1 ${c}`;
+    return `${n} ${CONSTRUCT_PLURALS[c] ?? `${c}s`}`;
+  });
+  if (ranked.length > 3) parts.push(`+${ranked.length - 3} more`);
+  return parts.join(' · ') || 'empty';
+}
+
 /**
  * Human-readable purl identity — drops the `pkg:<type>/` scheme wrapper and
  * trailing version, keeping the package / owner-repo identity:
@@ -473,7 +513,7 @@ export interface SubsystemProcessRegion {
   /** Display label for the boundary frame. */
   label: string;
   /** Component ids that are members of this region. */
-  memberIds: string[];
+  memberAliases: string[];
 }
 
 /** Options for which boundary frames are kept. */
@@ -598,14 +638,14 @@ export function getSubsystemRegions(
     const p = c.process?.trim();
     if (!p) continue;
     const list = byProcess.get(p) ?? [];
-    list.push(c.id);
+    list.push(c.alias);
     byProcess.set(p, list);
   }
-  return [...byProcess.entries()].map(([key, memberIds]) => ({
+  return [...byProcess.entries()].map(([key, memberAliases]) => ({
     kind: 'process' as const,
     key,
     label: key,
-    memberIds,
+    memberAliases,
   }));
 }
 
@@ -621,14 +661,14 @@ export function getSubsystemModuleRegions(
     const m = c.module?.trim();
     if (!m) continue;
     const list = byModule.get(m) ?? [];
-    list.push(c.id);
+    list.push(c.alias);
     byModule.set(m, list);
   }
-  return [...byModule.entries()].map(([key, memberIds]) => ({
+  return [...byModule.entries()].map(([key, memberAliases]) => ({
     kind: 'module' as const,
     key,
     label: key,
-    memberIds,
+    memberAliases,
   }));
 }
 
@@ -645,14 +685,14 @@ export function getSubsystemPackageRegions(
     const key = componentPackageKey(c);
     if (!key) continue;
     const list = byPackage.get(key) ?? [];
-    list.push(c.id);
+    list.push(c.alias);
     byPackage.set(key, list);
   }
-  return [...byPackage.entries()].map(([key, memberIds]) => ({
+  return [...byPackage.entries()].map(([key, memberAliases]) => ({
     kind: 'package' as const,
     key,
     label: packageRegionLabel(key),
-    memberIds,
+    memberAliases,
   }));
 }
 
@@ -662,7 +702,7 @@ export function getSubsystemPackageRegions(
  */
 export interface BoundaryLayoutGroup {
   id: string;
-  memberIds: string[];
+  memberAliases: string[];
   /** When set, this group is a child of another boundary group. */
   parentId?: string;
   region: SubsystemProcessRegion;
@@ -672,7 +712,7 @@ function keepRegion(
   r: SubsystemProcessRegion,
   showSingletons: boolean,
 ): boolean {
-  return showSingletons || r.memberIds.length >= 2;
+  return showSingletons || r.memberAliases.length >= 2;
 }
 
 /**
@@ -689,7 +729,7 @@ export function buildBoundaryLayoutGroups(
 ): BoundaryLayoutGroup[] {
   const showSingletons = opts.showSingletonFrames === true;
   const packageMode = opts.packageFrames ?? 'multi-repo';
-  const byId = new Map(doc.components.map((c) => [c.id, c]));
+  const byAlias = new Map(doc.components.map((c) => [c.alias, c]));
 
   const allPackages = getSubsystemPackageRegions(doc);
   const packageEligible =
@@ -711,11 +751,35 @@ export function buildBoundaryLayoutGroups(
   );
   const keptProcessKeys = new Set(processes.map((r) => r.key));
 
+  // Leaves owned by a multi-member module belong to that module's frame
+  // exclusively. Multi-member modules are always built by ELK (never skipped
+  // as singletons), so letting a process/package group also list them
+  // directly would parent the same leaf twice and ELK throws
+  // ("value already present"). Mixed-process modules (common in composed
+  // graphs, where models frame one file under different processes) never
+  // nest — without this claim they land in both frames.
+  const claimedByModule = new Set<string>();
+  for (const r of modules) {
+    if (r.memberAliases.length >= 2) {
+      for (const alias of r.memberAliases) claimedByModule.add(alias);
+    }
+  }
+  // Same rule one level up: a leaf owned by a multi-member process frame
+  // must not also sit directly in a package frame. (Singleton processes
+  // never claim — ELK skips them and promotes the member upward, so the
+  // member has to stay reachable through its package or ungrouped.)
+  const claimedByProcess = new Set<string>();
+  for (const r of processes) {
+    if (r.memberAliases.length >= 2) {
+      for (const alias of r.memberAliases) claimedByProcess.add(alias);
+    }
+  }
+
   const moduleGroups: BoundaryLayoutGroup[] = modules.map((r) => {
     const processesOfMembers = new Set<string>();
     const packagesOfMembers = new Set<string>();
-    for (const id of r.memberIds) {
-      const c = byId.get(id);
+    for (const alias of r.memberAliases) {
+      const c = byAlias.get(alias);
       const p = c?.process?.trim();
       if (p) processesOfMembers.add(p);
       const pkg = c ? componentPackageKey(c) : undefined;
@@ -732,7 +796,7 @@ export function buildBoundaryLayoutGroups(
     }
     return {
       id: moduleGroupNodeId(r.key),
-      memberIds: [...r.memberIds],
+      memberAliases: [...r.memberAliases],
       parentId,
       region: r,
     };
@@ -742,15 +806,16 @@ export function buildBoundaryLayoutGroups(
     const processId = processGroupNodeId(r.key);
     const nestedModules = moduleGroups.filter((m) => m.parentId === processId);
     const nestedModuleKeys = new Set(nestedModules.map((m) => m.region.key));
-    const directLeaves = r.memberIds.filter((id) => {
-      const mod = byId.get(id)?.module?.trim();
+    const directLeaves = r.memberAliases.filter((alias) => {
+      if (claimedByModule.has(alias)) return false;
+      const mod = byAlias.get(alias)?.module?.trim();
       if (!mod) return true;
       return !nestedModuleKeys.has(mod);
     });
 
     const packagesOfMembers = new Set<string>();
-    for (const id of r.memberIds) {
-      const c = byId.get(id);
+    for (const alias of r.memberAliases) {
+      const c = byAlias.get(alias);
       const pkg = c ? componentPackageKey(c) : undefined;
       if (pkg) packagesOfMembers.add(pkg);
     }
@@ -762,7 +827,7 @@ export function buildBoundaryLayoutGroups(
 
     return {
       id: processId,
-      memberIds: [...nestedModules.map((m) => m.id), ...directLeaves],
+      memberAliases: [...nestedModules.map((m) => m.id), ...directLeaves],
       parentId,
       region: r,
     };
@@ -774,15 +839,20 @@ export function buildBoundaryLayoutGroups(
     const nestedModules = moduleGroups.filter((m) => m.parentId === packageId);
     const claimed = new Set<string>();
     for (const p of nestedProcesses) {
-      for (const id of p.region.memberIds) claimed.add(id);
+      for (const alias of p.region.memberAliases) claimed.add(alias);
     }
     for (const m of nestedModules) {
-      for (const id of m.region.memberIds) claimed.add(id);
+      for (const alias of m.region.memberAliases) claimed.add(alias);
     }
-    const directLeaves = r.memberIds.filter((id) => !claimed.has(id));
+    const directLeaves = r.memberAliases.filter(
+      (alias) =>
+        !claimed.has(alias) &&
+        !claimedByModule.has(alias) &&
+        !claimedByProcess.has(alias),
+    );
     return {
       id: packageId,
-      memberIds: [
+      memberAliases: [
         ...nestedProcesses.map((p) => p.id),
         ...nestedModules.map((m) => m.id),
         ...directLeaves,
@@ -1209,7 +1279,7 @@ export function convertSubsystemToNodes(
           ? processGroupNodeId(processKey)
           : undefined;
       nodes.push({
-        id: c.id,
+        id: c.alias,
         type: 'subsystem-component',
         ...(parentId ? { parentId } : {}),
         position: { x: PAD + col * COL_W, y: cursorY + row * ROW_H },
@@ -1245,18 +1315,18 @@ export function convertSubsystemToGroups(
 
 /**
  * Convert a subsystem graph document into React Flow edges. Edges whose target
- * is an external label (not a component id) point at a synthetic stub so the
+ * is an external label (not a component alias) point at a synthetic stub so the
  * relationship is visible without a member node.
  */
 export function convertSubsystemToEdges(doc: SubsystemModelDocument): SubsystemGraphEdge[] {
-  const compIds = new Set(doc.components.map((c) => c.id));
+  const compAliases = new Set(doc.components.map((c) => c.alias));
   const edges: SubsystemGraphEdge[] = [];
 
   for (const e of deriveGraphEdges(doc)) {
     const color = MECHANISM_COLOR[e.mechanism];
     const style = MECHANISM_STYLE[e.mechanism];
     // If `to` is a real component, connect directly; otherwise point at a stub node.
-    const isExternal = !compIds.has(e.to);
+    const isExternal = !compAliases.has(e.to);
     const targetId = isExternal ? `external:${e.to}` : e.to;
 
     edges.push({
@@ -1282,8 +1352,8 @@ export function subsystemGraphLayoutKey(
   doc: Pick<SubsystemModelDocument, 'components' | 'relations' | 'walkthroughs'>,
 ): string {
   const components = doc.components
-    .map(({ id, purl, name, symbol, construct, file, purpose, process, module }) =>
-      [id, purl, name, symbol ?? '', construct, file, purpose ?? '', process ?? '', module ?? ''].join('\0'))
+    .map(({ alias, purl, name, symbol, construct, file, purpose, process, module }) =>
+      [alias, purl, name, symbol ?? '', construct, file, purpose ?? '', process ?? '', module ?? ''].join('\0'))
     .sort()
     .join('\n');
   const edgeKey = deriveGraphEdges(doc)
@@ -1326,7 +1396,7 @@ export async function buildSubsystemGraph(
   const layoutGroups = buildBoundaryLayoutGroups(doc, frameOpts);
   const regions = layoutGroups.map((g) => g.region);
   const regionIds = new Set(layoutGroups.map((g) => g.id));
-  const byId = new Map(doc.components.map((c) => [c.id, c]));
+  const byAlias = new Map(doc.components.map((c) => [c.alias, c]));
 
   // Resolve leaf parentIds against kept frames: module → process → package.
   // Stamp package parents here (not in convertSubsystemToNodes) so single-repo
@@ -1335,7 +1405,7 @@ export async function buildSubsystemGraph(
     if (n.type !== 'subsystem-component') continue;
     const parentId = (n as { parentId?: string }).parentId;
     if (parentId && regionIds.has(parentId)) continue;
-    const comp = (n.data as SubsystemGraphNodeData).component ?? byId.get(n.id);
+    const comp = (n.data as SubsystemGraphNodeData).component ?? byAlias.get(n.id);
     const processKey = comp?.process?.trim();
     const processId = processKey ? processGroupNodeId(processKey) : undefined;
     if (processId && regionIds.has(processId)) {
@@ -1353,10 +1423,10 @@ export async function buildSubsystemGraph(
 
   // External edge targets that aren't real components → create stub nodes so
   // cross-package edges have something to land on.
-  const realIds = new Set(doc.components.map((c) => c.id));
+  const realAliases = new Set(doc.components.map((c) => c.alias));
   const externalIds: string[] = [];
   for (const e of deriveGraphEdges(doc)) {
-    if (!realIds.has(e.to)) {
+    if (!realAliases.has(e.to)) {
       const extId = `external:${e.to}`;
       if (!externalIds.includes(extId)) externalIds.push(extId);
     }
@@ -1372,7 +1442,7 @@ export async function buildSubsystemGraph(
       height: 60,
       data: {
         component: {
-          id: extId,
+          alias: extId,
           name: label,
           construct: 'external',
           purl: 'external',
@@ -1416,7 +1486,7 @@ export async function buildSubsystemGraph(
         edgeLabels: showEdgeLabels === false ? { enabled: false } : { enabled: true, placement: 'CENTER' },
         groups: layoutGroups.map((g) => ({
           id: g.id,
-          memberIds: g.memberIds,
+          memberIds: g.memberAliases,
           parentId: g.parentId,
           minWidth: g.region.kind === 'module' ? moduleMinWidthForBadge(g.region.label) : undefined,
         })),

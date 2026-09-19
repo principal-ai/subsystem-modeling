@@ -16,8 +16,8 @@ describe("findSubsystemModelProblems", () => {
       findSubsystemModelProblems(
         payload({
           components: [
-            { id: "a", name: "A", construct: "function", file: "src/a.ts", purl: "pkg:github/a/b" },
-            { id: "b", name: "B", construct: "class", file: "src/b.ts", purl: "pkg:github/a/b" },
+            { alias: "a", name: "A", construct: "function", file: "src/a.ts", purl: "pkg:github/a/b" },
+            { alias: "b", name: "B", construct: "class", file: "src/b.ts", purl: "pkg:github/a/b" },
           ],
           relations: [{ id: "r1", from: "a", to: "b", relationType: "imports" }],
         }),
@@ -28,7 +28,7 @@ describe("findSubsystemModelProblems", () => {
   test("rejects an off-vocabulary construct (schema)", () => {
     const problems = findSubsystemModelProblems(
       payload({
-        components: [{ id: "a", name: "A", construct: "widget", file: "src/a.ts", purl: "pkg:github/a/b" }],
+        components: [{ alias: "a", name: "A", construct: "widget", file: "src/a.ts", purl: "pkg:github/a/b" }],
       }),
     );
     expect(problems).toHaveLength(1);
@@ -39,7 +39,7 @@ describe("findSubsystemModelProblems", () => {
   test("rejects a module without a file (cross-field)", () => {
     const problems = findSubsystemModelProblems(
       payload({
-        components: [{ id: "a", name: "A", construct: "function", file: "", purl: "pkg:github/a/b", module: "src/host" }],
+        components: [{ alias: "a", name: "A", construct: "function", file: "", purl: "pkg:github/a/b", module: "src/host" }],
       }),
     );
     expect(problems).toHaveLength(1);
@@ -49,7 +49,7 @@ describe("findSubsystemModelProblems", () => {
   test("rejects a relation endpoint with no component (cross-field)", () => {
     const problems = findSubsystemModelProblems(
       payload({
-        components: [{ id: "a", name: "A", construct: "function", file: "src/a.ts", purl: "pkg:github/a/b" }],
+        components: [{ alias: "a", name: "A", construct: "function", file: "src/a.ts", purl: "pkg:github/a/b" }],
         relations: [{ id: "r1", from: "a", to: "ghost", relationType: "imports" }],
       }),
     );

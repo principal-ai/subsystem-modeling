@@ -48,8 +48,8 @@ function componentFromMeta(meta: Record<string, unknown>): SubsystemComponent {
 	const process = meta["process"];
 	const module = meta["module"];
 	return {
-		id: asString(meta["id"]),
-		name: asString(meta["name"], asString(meta["id"])),
+		alias: asString(meta["alias"], asString(meta["id"])),
+		name: asString(meta["name"], asString(meta["alias"], asString(meta["id"]))),
 		construct: (asString(meta["construct"], "function") as SubsystemComponent["construct"]),
 		file: asString(meta["file"]),
 		purl: asString(meta["purl"]),
@@ -107,7 +107,7 @@ function resolveSelectedElement(
 function selectionLabel(el: Record<string, unknown>, meta: Record<string, unknown> | null): string {
 	if (meta) {
 		if (meta["type"] === "subsystem-component") {
-			return asString(meta["symbol"] || meta["name"] || meta["id"], "component");
+			return asString(meta["symbol"] || meta["name"] || meta["alias"] || meta["id"], "component");
 		}
 		if (meta["type"] === "subsystem-edge") {
 			return asString(meta["mechanism"], "edge");
@@ -150,8 +150,8 @@ export function excalidrawSceneToSubsystemModel(
 		if (!meta) continue;
 		if (meta["type"] === "subsystem-component") {
 			const c = componentFromMeta(meta);
-			if (!c.id || seenComp.has(c.id)) continue;
-			seenComp.add(c.id);
+			if (!c.alias || seenComp.has(c.alias)) continue;
+			seenComp.add(c.alias);
 			components.push(c);
 		} else if (meta["type"] === "subsystem-edge") {
 			const e = edgeFromMeta(meta);

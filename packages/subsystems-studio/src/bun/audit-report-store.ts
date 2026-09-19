@@ -34,7 +34,7 @@ export interface PersistedSubsystemModelAudit {
 export interface AuditFingerprintSource {
 	updatedAt: string;
 	components: Array<{
-		id: string;
+		alias: string;
 		file?: string;
 		symbol?: string;
 		construct?: string;
@@ -115,7 +115,7 @@ export function buildAuditFingerprint(source: AuditFingerprintSource): string {
 	const claims = [...source.components]
 		.map((c) =>
 			[
-				c.id,
+				c.alias,
 				c.file ?? "",
 				c.symbol ?? "",
 				c.construct ?? "",

@@ -30,7 +30,7 @@ const purl = 'pkg:github/principal-ai/principal-view-core-library';
  */
 const reactUiComponents: SubsystemComponent[] = [
   {
-    id: 'create-graph',
+    alias: 'create-graph',
     name: 'createSubsystemModel',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -41,7 +41,7 @@ const reactUiComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'http-entry',
+    alias: 'http-entry',
     name: 'handleSubsystemModelRequest',
     construct: 'function',
     file: 'packages/subsystems-studio/src/bun/http-server.ts',
@@ -53,7 +53,7 @@ const reactUiComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'sessions-view',
+    alias: 'sessions-view',
     name: 'AgentSessionsOverviewView',
     construct: 'function',
     file: 'packages/subsystems-studio/src/mainview/views/AgentSessions.tsx',
@@ -66,7 +66,7 @@ const reactUiComponents: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'analysis-view',
+    alias: 'analysis-view',
     name: 'AnalysisView',
     construct: 'function',
     file: 'packages/subsystems-studio/src/mainview/views/AnalysisView.tsx',
@@ -79,7 +79,7 @@ const reactUiComponents: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'drawings-host',
+    alias: 'drawings-host',
     name: 'useDrawingsHost',
     construct: 'function',
     file: 'packages/subsystems-studio/src/mainview/hooks/useDrawingsHost.ts',
@@ -92,7 +92,7 @@ const reactUiComponents: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'graph-doc-type',
+    alias: 'graph-doc-type',
     name: 'SubsystemModelDocument',
     construct: 'type_alias',
     file: 'packages/subsystems-core/src/types/subsystem-model.ts',
@@ -146,7 +146,7 @@ export const ReactComponentsAndHooks: Story = {
 /** Nest-style stereotypes on the same ontology — controller / middleware / guard. */
 const nestComponents: SubsystemComponent[] = [
   {
-    id: 'graphs-controller',
+    alias: 'graphs-controller',
     name: 'SubsystemModelsController',
     construct: 'class',
     file: 'src/graphs/graphs.controller.ts',
@@ -159,7 +159,7 @@ const nestComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'auth-guard',
+    alias: 'auth-guard',
     name: 'AuthGuard',
     construct: 'class',
     file: 'src/auth/auth.guard.ts',
@@ -171,7 +171,7 @@ const nestComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'logging-mw',
+    alias: 'logging-mw',
     name: 'LoggingMiddleware',
     construct: 'function',
     file: 'src/logging/logging.middleware.ts',
@@ -183,7 +183,7 @@ const nestComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'graphs-service',
+    alias: 'graphs-service',
     name: 'GraphsService',
     construct: 'class',
     file: 'src/graphs/graphs.service.ts',

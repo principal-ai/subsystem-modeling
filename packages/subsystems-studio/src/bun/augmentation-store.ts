@@ -31,7 +31,7 @@ export type GraphifyRelationAugmentationClaim = {
 	relationType: string;
 	toFile?: string;
 	toSymbol?: string;
-	toId?: string;
+	toAlias?: string;
 	toName?: string;
 };
 
@@ -356,16 +356,16 @@ function normalizeRelationClaim(
 		typeof raw.toSymbol === "string" && raw.toSymbol.trim()
 			? raw.toSymbol.trim()
 			: undefined;
-	const toId =
-		typeof raw.toId === "string" && raw.toId.trim()
-			? raw.toId.trim()
+	const toAlias =
+		typeof raw.toAlias === "string" && raw.toAlias.trim()
+			? raw.toAlias.trim()
 			: undefined;
 	const toName =
 		typeof raw.toName === "string" && raw.toName.trim()
 			? raw.toName.trim()
 			: undefined;
-	if (!toFile && !toSymbol && !toId && !toName) return null;
-	return { relationType, toFile, toSymbol, toId, toName };
+	if (!toFile && !toSymbol && !toAlias && !toName) return null;
+	return { relationType, toFile, toSymbol, toAlias, toName };
 }
 
 /** Stable edge identity for lookup / supersede. */
@@ -378,7 +378,7 @@ export function relationAugmentationKey(
 	const to =
 		claim.toFile && claim.toSymbol
 			? augmentationKey(claim.toFile, claim.toSymbol)
-			: `id:${(claim.toId ?? "").trim()}|name:${(claim.toName ?? "").trim()}`;
+			: `id:${(claim.toAlias ?? "").trim()}|name:${(claim.toName ?? "").trim()}`;
 	return `${from}|${claim.relationType.trim()}|${to}`;
 }
 
@@ -386,14 +386,14 @@ function relationClaimFromEndpoints(opts: {
 	relationType: string;
 	toFile?: string;
 	toSymbol?: string;
-	toId?: string;
+	toAlias?: string;
 	toName?: string;
 }): GraphifyRelationAugmentationClaim | null {
 	return normalizeRelationClaim({
 		relationType: opts.relationType,
 		toFile: opts.toFile,
 		toSymbol: opts.toSymbol,
-		toId: opts.toId,
+		toAlias: opts.toAlias,
 		toName: opts.toName,
 	});
 }
@@ -408,7 +408,7 @@ export async function findAcceptedRelationAugmentation(opts: {
 	relationType: string;
 	toFile?: string;
 	toSymbol?: string;
-	toId?: string;
+	toAlias?: string;
 	toName?: string;
 	storeRoot?: string;
 }): Promise<GraphifyAugmentation | null> {
@@ -446,7 +446,7 @@ export async function upsertAcceptedRelationAugmentation(input: {
 	relationType: string;
 	toFile?: string;
 	toSymbol?: string;
-	toId?: string;
+	toAlias?: string;
 	toName?: string;
 	source: string;
 	rationale?: string;
@@ -467,7 +467,7 @@ export async function upsertAcceptedRelationAugmentation(input: {
 		return {
 			ok: false,
 			error:
-				"relation claim needs relationType and a target (toFile+toSymbol or toId/toName)",
+				"relation claim needs relationType and a target (toFile+toSymbol or toAlias/toName)",
 		};
 	}
 

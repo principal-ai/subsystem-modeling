@@ -35,7 +35,7 @@ type Story = StoryObj<typeof meta>;
 // ---------------------------------------------------------------------------
 const detailKindComponents: SubsystemComponent[] = [
   {
-    id: 'detail-class',
+    alias: 'detail-class',
     name: 'SessionReader',
     construct: 'class',
     file: 'src/session/SessionReader.ts',
@@ -45,7 +45,7 @@ const detailKindComponents: SubsystemComponent[] = [
     declaration: readerDetail,
   },
   {
-    id: 'detail-method',
+    alias: 'detail-method',
     name: 'normalize',
     construct: 'function',
     file: 'src/session/SessionReader.ts',
@@ -61,7 +61,7 @@ const detailKindComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'detail-fn',
+    alias: 'detail-fn',
     name: 'normalizeSession',
     construct: 'function',
     file: 'src/event-processing/normalize.ts',
@@ -80,7 +80,7 @@ const detailKindComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'detail-fn-rich',
+    alias: 'detail-fn-rich',
     name: 'mergeSessions',
     construct: 'function',
     file: 'src/session/merge.ts',
@@ -104,7 +104,7 @@ const detailKindComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'detail-fn-void',
+    alias: 'detail-fn-void',
     name: 'flush',
     construct: 'function',
     file: 'src/event-processing/sink.ts',
@@ -119,7 +119,7 @@ const detailKindComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'detail-class-rich',
+    alias: 'detail-class-rich',
     name: 'EventProcessor',
     construct: 'class',
     file: 'src/event-processing/EventProcessor.ts',
@@ -149,7 +149,7 @@ const detailKindComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'detail-type',
+    alias: 'detail-type',
     name: 'SessionRecord',
     construct: 'interface',
     file: 'src/session/transcript.ts',
@@ -167,7 +167,7 @@ const detailKindComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'detail-module',
+    alias: 'detail-module',
     name: 'CodexRolloutRecord',
     construct: 'interface',
     file: 'src/session/transcript.ts',
@@ -185,7 +185,7 @@ const detailKindComponents: SubsystemComponent[] = [
     } satisfies GraphifyComponentDetail,
   },
   {
-    id: 'detail-external',
+    alias: 'detail-external',
     // name = the package's name after the namespace; namespace shown above.
     name: 'principal-studio',
     construct: 'external',
@@ -232,7 +232,7 @@ const storyFileContents: Record<string, string> = {
 
 const declarationOpenComponents: SubsystemComponent[] = [
   {
-    id: 'detail',
+    alias: 'detail',
     name: 'ComponentDeclaration',
     construct: 'function',
     file: 'packages/subsystems-react/src/subsystem/ComponentDeclaration.tsx',
@@ -247,7 +247,7 @@ const declarationOpenComponents: SubsystemComponent[] = [
     },
   },
   {
-    id: 'resolver',
+    alias: 'resolver',
     name: 'resolve.ts',
     construct: 'function',
     file: 'packages/subsystems-react/src/graphify/resolve.ts',

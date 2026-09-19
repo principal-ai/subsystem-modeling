@@ -85,6 +85,14 @@ export type { UseElkLayoutOptions, UseElkLayoutResult } from './hooks/useElkLayo
 // Subsystem component graph
 export { SubsystemComponentGraph } from './subsystem/SubsystemComponentGraph';
 export type { SubsystemComponentGraphProps, WalkthroughViewerContext } from './subsystem/SubsystemComponentGraph';
+export { SubsystemAggregateGraph } from './subsystem/SubsystemAggregateGraph';
+export type {
+  SubsystemAggregateGraphProps,
+  AggregateFrameNode,
+  AggregateFrameMember,
+  AggregateFrameEdge,
+  AggregateHub,
+} from './subsystem/SubsystemAggregateGraph';
 export { ConstructsCatalog } from './subsystem/ConstructsCatalog';
 export type { ConstructsCatalogProps } from './subsystem/ConstructsCatalog';
 export type {

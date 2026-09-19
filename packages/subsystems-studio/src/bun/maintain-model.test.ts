@@ -68,7 +68,7 @@ describe("selectMaintainRoute", () => {
 				{
 					kind: "missing_file",
 					severity: "error",
-					componentId: "a",
+					componentAlias: "a",
 					message: "gone",
 				},
 				{
@@ -107,7 +107,7 @@ describe("selectMaintainRoute", () => {
 				{
 					kind: "construct_unconfirmed",
 					severity: "info",
-					componentId: "a",
+					componentAlias: "a",
 					message: "unknown",
 				},
 				{
@@ -127,7 +127,7 @@ describe("selectMaintainRoute", () => {
 				{
 					kind: "boundary_module_file_mismatch",
 					severity: "info",
-					componentId: "a",
+					componentAlias: "a",
 					message: "mismatch",
 				},
 				{
@@ -175,7 +175,7 @@ describe("selectMaintainRoute", () => {
 				{
 					kind: "boundary_process_nest_disagree",
 					severity: "info",
-					componentId: "a",
+					componentAlias: "a",
 					message: "disagree",
 				},
 			],

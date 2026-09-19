@@ -102,7 +102,7 @@ describe("graphifyHasImportTowardHints", () => {
 describe("auditTopologyRelations", () => {
 	const components: SubsystemComponent[] = [
 		{
-			id: "app",
+			alias: "app",
 			name: "App",
 			construct: "function",
 			symbol: "App",
@@ -110,14 +110,14 @@ describe("auditTopologyRelations", () => {
 			purl: "pkg:github/acme/app",
 		},
 		{
-			id: "xyflow",
+			alias: "xyflow",
 			name: "@xyflow/react",
 			construct: "external",
 			file: "",
 			purl: "external",
 		},
 		{
-			id: "helper",
+			alias: "helper",
 			name: "helper",
 			construct: "function",
 			symbol: "helper",
@@ -125,7 +125,7 @@ describe("auditTopologyRelations", () => {
 			purl: "pkg:github/acme/app",
 		},
 		{
-			id: "store",
+			alias: "store",
 			name: "SessionStore",
 			construct: "class",
 			symbol: "SessionStore",
@@ -133,7 +133,7 @@ describe("auditTopologyRelations", () => {
 			purl: "pkg:github/acme/app",
 		},
 		{
-			id: "write",
+			alias: "write",
 			name: "write",
 			construct: "method",
 			symbol: "write",
@@ -141,7 +141,7 @@ describe("auditTopologyRelations", () => {
 			purl: "pkg:github/acme/app",
 		},
 		{
-			id: "child",
+			alias: "child",
 			name: "Child",
 			construct: "class",
 			symbol: "Child",
@@ -149,7 +149,7 @@ describe("auditTopologyRelations", () => {
 			purl: "pkg:github/acme/app",
 		},
 		{
-			id: "parent",
+			alias: "parent",
 			name: "Parent",
 			construct: "class",
 			symbol: "Parent",

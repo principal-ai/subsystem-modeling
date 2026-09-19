@@ -18,7 +18,7 @@ describe('findSubsystemModelProblems', () => {
         title: 'Checkout',
         components: [
           {
-            id: 'api',
+            alias: 'api',
             name: 'checkoutApi',
             construct: 'function',
             file: 'src/api.ts',
@@ -34,7 +34,7 @@ describe('findSubsystemModelProblems', () => {
     const problems = findSubsystemModelProblems({
       title: 'x',
       components: [
-        { id: 'a', name: 'A', construct: 'module', file: 'src/a.ts', purl: 'pkg:github/a/b' },
+        { alias: 'a', name: 'A', construct: 'module', file: 'src/a.ts', purl: 'pkg:github/a/b' },
       ],
       relations: [],
     });
@@ -48,7 +48,7 @@ describe('findSubsystemModelProblems', () => {
         title: 'x',
         components: [
           {
-            id: 'tech',
+            alias: 'tech',
             name: 'FacilitiesTechnician',
             construct: 'custom_entity',
             entityKind: 'Person',
@@ -69,7 +69,7 @@ describe('findSubsystemModelProblems', () => {
     const problems = findSubsystemModelProblems({
       title: 'x',
       components: [
-        { id: 'a', name: 'a', construct: 'function', module: 'src/host', file: '', purl: 'pkg:github/a/b' },
+        { alias: 'a', name: 'a', construct: 'function', module: 'src/host', file: '', purl: 'pkg:github/a/b' },
       ],
       relations: [],
     });
@@ -80,7 +80,7 @@ describe('findSubsystemModelProblems', () => {
     const problems = findSubsystemModelProblems({
       title: 'x',
       components: [
-        { id: 'a', name: 'a', construct: 'function', file: 'src/a.ts', purl: 'pkg:github/a/b' },
+        { alias: 'a', name: 'a', construct: 'function', file: 'src/a.ts', purl: 'pkg:github/a/b' },
       ],
       relations: [{ id: 'r1', from: 'a', to: 'ghost', relationType: 'imports' }],
     });

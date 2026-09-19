@@ -28,12 +28,13 @@ import {
   formatPurl,
   packageColor,
   subsystemGraphLayoutKey,
+  describeConstructBreakdown,
 } from './model';
 import type { SubsystemComponent, SubsystemComponentEdge } from './model';
 
 const comps: SubsystemComponent[] = [
-  { id: 'reader', name: 'SessionReader', construct: 'class', file: 'SessionReader.ts', purl: 'pkg:github/principal-ai/agent-monitoring' },
-  { id: 'transcript', name: 'transcript', construct: 'function', file: 'transcript.ts', purl: 'pkg:github/principal-ai/agent-monitoring' },
+  { alias: 'reader', name: 'SessionReader', construct: 'class', file: 'SessionReader.ts', purl: 'pkg:github/principal-ai/agent-monitoring' },
+  { alias: 'transcript', name: 'transcript', construct: 'function', file: 'transcript.ts', purl: 'pkg:github/principal-ai/agent-monitoring' },
 ];
 
 const relations = [
@@ -63,7 +64,7 @@ describe('subsystem graph model', () => {
     const withExternal: SubsystemComponent[] = [
       ...comps,
       {
-        id: "proposed-watcher",
+        alias: "proposed-watcher",
         name: "watchDir",
         construct: "external",
         // Intentionally omit file/purl — agents often leave these off for externals.
@@ -240,24 +241,24 @@ describe('subsystem graph model', () => {
   test('getSubsystemRegions groups by process, skipping process-less nodes', () => {
     const regions = getSubsystemRegions({
       components: [
-        { id: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
-        { id: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
-        { id: 'c', name: 'c', construct: 'function', file: 'c.ts', purl: 'pkg:github/acme/app', process: 'app/renderer' },
-        { id: 'd', name: 'd', construct: 'function', file: 'd.ts', purl: 'pkg:github/acme/app' },
+        { alias: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
+        { alias: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
+        { alias: 'c', name: 'c', construct: 'function', file: 'c.ts', purl: 'pkg:github/acme/app', process: 'app/renderer' },
+        { alias: 'd', name: 'd', construct: 'function', file: 'd.ts', purl: 'pkg:github/acme/app' },
       ],
     });
     expect(regions.map((r) => r.key)).toEqual(['app/host', 'app/renderer']);
     expect(regions.every((r) => r.kind === 'process')).toBe(true);
-    expect(regions[0]!.memberIds).toEqual(['a', 'b']);
+    expect(regions[0]!.memberAliases).toEqual(['a', 'b']);
   });
 
   test('getSubsystemModuleRegions groups by module, skipping module-less nodes', () => {
     const regions = getSubsystemModuleRegions({
       components: [
-        { id: 'a', name: 'a', construct: 'function', file: 'transcript.ts', purl: 'pkg:github/acme/app', module: 'src/session/transcript.ts' },
-        { id: 'b', name: 'b', construct: 'type_alias', file: 'transcript.ts', purl: 'pkg:github/acme/app', module: 'src/session/transcript.ts' },
-        { id: 'c', name: 'c', construct: 'function', file: 'paths.ts', purl: 'pkg:github/acme/app', module: 'src/session/paths.ts' },
-        { id: 'd', name: 'd', construct: 'function', file: 'other.ts', purl: 'pkg:github/acme/app' },
+        { alias: 'a', name: 'a', construct: 'function', file: 'transcript.ts', purl: 'pkg:github/acme/app', module: 'src/session/transcript.ts' },
+        { alias: 'b', name: 'b', construct: 'type_alias', file: 'transcript.ts', purl: 'pkg:github/acme/app', module: 'src/session/transcript.ts' },
+        { alias: 'c', name: 'c', construct: 'function', file: 'paths.ts', purl: 'pkg:github/acme/app', module: 'src/session/paths.ts' },
+        { alias: 'd', name: 'd', construct: 'function', file: 'other.ts', purl: 'pkg:github/acme/app' },
       ],
     });
     expect(regions.map((r) => r.key)).toEqual([
@@ -265,14 +266,14 @@ describe('subsystem graph model', () => {
       'src/session/paths.ts',
     ]);
     expect(regions.every((r) => r.kind === 'module')).toBe(true);
-    expect(regions[0]!.memberIds).toEqual(['a', 'b']);
+    expect(regions[0]!.memberAliases).toEqual(['a', 'b']);
   });
 
   test('convertSubsystemToNodes prefers module parentId over process', () => {
     const nodes = convertSubsystemToNodes({
       components: [
         {
-          id: 'a',
+          alias: 'a',
           name: 'a',
           construct: 'function',
           file: 'a.ts',
@@ -280,7 +281,7 @@ describe('subsystem graph model', () => {
           process: 'app/host',
           module: 'src/a.ts',
         },
-        { id: 'd', name: 'd', construct: 'function', file: 'd.ts', purl: 'pkg:github/acme/app' },
+        { alias: 'd', name: 'd', construct: 'function', file: 'd.ts', purl: 'pkg:github/acme/app' },
       ],
       relations: [],
     });
@@ -293,8 +294,8 @@ describe('subsystem graph model', () => {
   test('convertSubsystemToNodes stamps parentId for process members only', () => {
     const nodes = convertSubsystemToNodes({
       components: [
-        { id: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
-        { id: 'd', name: 'd', construct: 'function', file: 'd.ts', purl: 'pkg:github/acme/app' },
+        { alias: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
+        { alias: 'd', name: 'd', construct: 'function', file: 'd.ts', purl: 'pkg:github/acme/app' },
       ],
       relations: [],
     });
@@ -307,8 +308,8 @@ describe('subsystem graph model', () => {
   test('convertSubsystemToGroups emits one parent per process', () => {
     const groups = convertSubsystemToGroups({
       components: [
-        { id: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
-        { id: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
+        { alias: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
+        { alias: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
       ],
     });
     expect(groups).toHaveLength(1);
@@ -320,7 +321,7 @@ describe('subsystem graph model', () => {
     const groups = convertSubsystemToGroups({
       components: [
         {
-          id: 'a',
+          alias: 'a',
           name: 'a',
           construct: 'function',
           file: 'a.ts',
@@ -329,7 +330,7 @@ describe('subsystem graph model', () => {
           module: 'src/a.ts',
         },
         {
-          id: 'b',
+          alias: 'b',
           name: 'b',
           construct: 'function',
           file: 'a.ts',
@@ -352,7 +353,7 @@ describe('subsystem graph model', () => {
     const { nodes, regions } = await buildSubsystemGraph({
       components: [
         {
-          id: 'boot',
+          alias: 'boot',
           name: 'boot',
           construct: 'function',
           file: 'main.ts',
@@ -362,7 +363,7 @@ describe('subsystem graph model', () => {
           symbol: 'boot',
         },
         {
-          id: 'create',
+          alias: 'create',
           name: 'createHost',
           construct: 'function',
           file: 'main.ts',
@@ -372,7 +373,7 @@ describe('subsystem graph model', () => {
           symbol: 'createHost',
         },
         {
-          id: 'write',
+          alias: 'write',
           name: 'writeSession',
           construct: 'function',
           file: 'store.ts',
@@ -382,7 +383,7 @@ describe('subsystem graph model', () => {
           symbol: 'writeSession',
         },
         {
-          id: 'store',
+          alias: 'store',
           name: 'SessionStore',
           construct: 'store',
           file: 'store.ts',
@@ -416,9 +417,9 @@ describe('subsystem graph model', () => {
   test('buildSubsystemGraph drops singleton process frames (no parentId, no group)', async () => {
     const { nodes, regions } = await buildSubsystemGraph({
       components: [
-        { id: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
-        { id: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
-        { id: 'solo', name: 'solo', construct: 'function', file: 's.ts', purl: 'pkg:github/acme/app', process: 'app/lonely' },
+        { alias: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
+        { alias: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
+        { alias: 'solo', name: 'solo', construct: 'function', file: 's.ts', purl: 'pkg:github/acme/app', process: 'app/lonely' },
       ],
       relations: [],
       walkthroughs: [{
@@ -436,7 +437,7 @@ describe('subsystem graph model', () => {
     const { nodes, regions } = await buildSubsystemGraph({
       components: [
         {
-          id: 'rec',
+          alias: 'rec',
           name: 'CodexRolloutRecord',
           construct: 'type_alias',
           file: 'transcript.ts',
@@ -445,7 +446,7 @@ describe('subsystem graph model', () => {
           symbol: 'CodexRolloutRecord',
         },
         {
-          id: 'parse',
+          alias: 'parse',
           name: 'parseTranscript',
           construct: 'function',
           file: 'transcript.ts',
@@ -454,7 +455,7 @@ describe('subsystem graph model', () => {
           symbol: 'parseTranscript',
         },
         {
-          id: 'solo',
+          alias: 'solo',
           name: 'lonely',
           construct: 'function',
           file: 'solo.ts',
@@ -477,10 +478,10 @@ describe('subsystem graph model', () => {
   test('getSubsystemPackageRegions groups by purl repo key, skipping externals', () => {
     const regions = getSubsystemPackageRegions({
       components: [
-        { id: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app#a.ts' },
-        { id: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app' },
-        { id: 'c', name: 'c', construct: 'function', file: 'c.ts', purl: 'pkg:github/other/lib' },
-        { id: 'ext', name: 'Stripe', construct: 'external', file: '', purl: 'pkg:npm/stripe' },
+        { alias: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app#a.ts' },
+        { alias: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app' },
+        { alias: 'c', name: 'c', construct: 'function', file: 'c.ts', purl: 'pkg:github/other/lib' },
+        { alias: 'ext', name: 'Stripe', construct: 'external', file: '', purl: 'pkg:npm/stripe' },
       ],
     });
     expect(regions.map((r) => r.key).sort()).toEqual([
@@ -494,8 +495,8 @@ describe('subsystem graph model', () => {
   test('buildBoundaryLayoutGroups skips package frames for single-repo graphs', () => {
     const groups = buildBoundaryLayoutGroups({
       components: [
-        { id: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app' },
-        { id: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app' },
+        { alias: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app' },
+        { alias: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app' },
       ],
     });
     expect(groups.filter((g) => g.region.kind === 'package')).toHaveLength(0);
@@ -504,10 +505,10 @@ describe('subsystem graph model', () => {
   test('buildBoundaryLayoutGroups frames packages when multi-repo', () => {
     const groups = buildBoundaryLayoutGroups({
       components: [
-        { id: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app' },
-        { id: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app' },
-        { id: 'c', name: 'c', construct: 'function', file: 'c.ts', purl: 'pkg:github/other/lib' },
-        { id: 'd', name: 'd', construct: 'function', file: 'd.ts', purl: 'pkg:github/other/lib' },
+        { alias: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app' },
+        { alias: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app' },
+        { alias: 'c', name: 'c', construct: 'function', file: 'c.ts', purl: 'pkg:github/other/lib' },
+        { alias: 'd', name: 'd', construct: 'function', file: 'd.ts', purl: 'pkg:github/other/lib' },
       ],
     });
     const pkgs = groups.filter((g) => g.region.kind === 'package');
@@ -521,7 +522,7 @@ describe('subsystem graph model', () => {
     const groups = buildBoundaryLayoutGroups({
       components: [
         {
-          id: 'a',
+          alias: 'a',
           name: 'a',
           construct: 'function',
           file: 'a.ts',
@@ -529,7 +530,7 @@ describe('subsystem graph model', () => {
           process: 'app/host',
         },
         {
-          id: 'b',
+          alias: 'b',
           name: 'b',
           construct: 'function',
           file: 'b.ts',
@@ -537,7 +538,7 @@ describe('subsystem graph model', () => {
           process: 'app/host',
         },
         {
-          id: 'c',
+          alias: 'c',
           name: 'c',
           construct: 'function',
           file: 'c.ts',
@@ -545,7 +546,7 @@ describe('subsystem graph model', () => {
           process: 'lib/worker',
         },
         {
-          id: 'd',
+          alias: 'd',
           name: 'd',
           construct: 'function',
           file: 'd.ts',
@@ -562,7 +563,7 @@ describe('subsystem graph model', () => {
     const { nodes } = await buildSubsystemGraph({
       components: [
         {
-          id: 'a1',
+          alias: 'a1',
           name: 'a1',
           construct: 'function',
           file: 'a.ts',
@@ -571,7 +572,7 @@ describe('subsystem graph model', () => {
           module: 'src/a.ts',
         },
         {
-          id: 'a2',
+          alias: 'a2',
           name: 'a2',
           construct: 'function',
           file: 'a.ts',
@@ -580,7 +581,7 @@ describe('subsystem graph model', () => {
           module: 'src/a.ts',
         },
         {
-          id: 'b1',
+          alias: 'b1',
           name: 'b1',
           construct: 'function',
           file: 'b.ts',
@@ -589,7 +590,7 @@ describe('subsystem graph model', () => {
           module: 'src/b.ts',
         },
         {
-          id: 'b2',
+          alias: 'b2',
           name: 'b2',
           construct: 'function',
           file: 'b.ts',
@@ -617,13 +618,59 @@ describe('subsystem graph model', () => {
     const groups = buildBoundaryLayoutGroups(
       {
         components: [
-          { id: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app' },
-          { id: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app' },
+          { alias: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app' },
+          { alias: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app' },
         ],
       },
       { packageFrames: 'always' },
     );
     expect(groups.filter((g) => g.region.kind === 'package')).toHaveLength(1);
+  });
+
+  test('mixed-process module members live only in the module frame', () => {
+    // Same file framed under two processes (composed-model vocabulary drift):
+    // the module cannot nest, so its members must not also sit directly in
+    // the process frames — ELK throws on double-parented leaves.
+    const groups = buildBoundaryLayoutGroups({
+      components: [
+        { alias: 'a1', name: 'a1', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app', module: 'src/a.ts', process: 'app/host' },
+        { alias: 'a2', name: 'a2', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app', module: 'src/a.ts', process: 'app/renderer' },
+        { alias: 'b1', name: 'b1', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
+      ],
+    });
+    const leafHits = new Map<string, string[]>();
+    for (const g of groups) {
+      for (const id of g.memberAliases) {
+        // Nested group ids legitimately appear in parents; only leaves count.
+        if (groups.some((h) => h.id === id)) continue;
+        leafHits.set(id, [...(leafHits.get(id) ?? []), g.id]);
+      }
+    }
+    for (const [leaf, owners] of leafHits) {
+      expect(`${leaf} in ${owners.length} groups: ${owners.join(',')}`).toBe(`${leaf} in 1 groups: ${owners[0]}`);
+    }
+    const mod = groups.find((g) => g.region.kind === 'module');
+    expect(mod?.memberAliases).toEqual(['a1', 'a2']);
+  });
+
+  test('module-less leaf in a mixed-package process lives only in the process frame', () => {
+    const groups = buildBoundaryLayoutGroups({
+      components: [
+        { alias: 'x', name: 'x', construct: 'function', file: 'x.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
+        { alias: 'y', name: 'y', construct: 'function', file: 'y.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
+        { alias: 'z', name: 'z', construct: 'function', file: 'z.ts', purl: 'pkg:github/other/lib', process: 'app/host' },
+      ],
+    });
+    const leafHits = new Map<string, string[]>();
+    for (const g of groups) {
+      for (const id of g.memberAliases) {
+        if (groups.some((h) => h.id === id)) continue;
+        leafHits.set(id, [...(leafHits.get(id) ?? []), g.id]);
+      }
+    }
+    for (const [leaf, owners] of leafHits) {
+      expect(owners).toHaveLength(1);
+    }
   });
 
   test('subsystemGraphLayoutKey ignores declarationRef-only changes', () => {
@@ -678,6 +725,22 @@ describe('isConstructsOnlyModel', () => {
         ],
       }),
     ).toBe(false);
+  });
+});
+
+describe('describeConstructBreakdown', () => {
+  test('counts by construct, most common first', () => {
+    expect(describeConstructBreakdown(['function', 'class', 'function'])).toBe(
+      '2 functions · 1 class',
+    );
+  });
+
+  test('ignores blank constructs and handles empties', () => {
+    expect(describeConstructBreakdown(['', '  ', 'store'])).toBe('1 store');
+    expect(describeConstructBreakdown([])).toBe('empty');
+    expect(describeConstructBreakdown(['interface', 'type_alias', 'enum', 'custom_entity'])).toBe(
+      '1 custom_entity · 1 enum · 1 interface · +1 more',
+    );
   });
 });
 

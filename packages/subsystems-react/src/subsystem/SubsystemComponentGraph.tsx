@@ -20,9 +20,6 @@ import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
-  Background,
-  BackgroundVariant,
-  Controls,
   useReactFlow,
   useViewport,
   type NodeTypes,
@@ -61,6 +58,7 @@ import { SubsystemDiagnosticToggle, type SubsystemDiagnostic } from './Diagnosti
 import { SubsystemIssueList, type SubsystemIssue } from './IssueList';
 import { SubsystemFileTree } from './SubsystemFileTree';
 import { GraphLayoutCover } from './GraphLayoutCover';
+import { GRAPH_NAV_PROPS, GraphChrome } from './graphChrome';
 import { ComponentDeclaration } from './ComponentDeclaration';
 import type { ComponentVerificationState } from './ComponentDeclaration';
 import { FileDrawer, FILE_DRAWER_HEIGHT_MS } from './FileDrawer';
@@ -101,7 +99,15 @@ export interface SubsystemComponentGraphProps {
    * (unselected ones dimmed); everything else is hidden.
    */
   walkthroughs?: SubsystemWalkthrough[];
-  onSelect?: (componentId: string) => void;
+  /**
+   * Deep-link target: when set, the matching walkthrough is selected on mount
+   * — its steps expanded and its flow focused on the canvas. Hosts use this
+   * when opening the graph from a walkthrough row in a list. Re-applies on a
+   * new id (or a remount); in-tab selection afterwards stays owned by the
+   * graph.
+   */
+  initialWalkthroughId?: string | null;
+  onSelect?: (componentAlias: string) => void;
   /** Called when an edge is clicked (relationship / mechanism + refs seam). */
   onEdgeSelect?: (edge: SubsystemComponentEdge) => void;
   /** Upper bound for node width in px; nodes grow with content up to this,
@@ -217,7 +223,7 @@ export interface SubsystemComponentGraphProps {
    */
   onFileSelect?: (file: string) => void;
   /** Verify the selected component against graphify (declaration panel). */
-  onVerifyComponent?: (componentId: string) => void;
+  onVerifyComponent?: (componentAlias: string) => void;
   /** Live verification status for the selected component. */
   componentVerification?: ComponentVerificationState | null;
 }
@@ -307,7 +313,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, onVerifyComponent, componentVerification }: InnerProps) {
+function Inner({ components, relations, walkthroughs, initialWalkthroughId, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, onVerifyComponent, componentVerification }: InnerProps) {
   const { theme } = useTheme();
   const { fitView } = useReactFlow();
   const viewport = useViewport();
@@ -335,7 +341,7 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
   // Pending deferred fit after opening the drawer; cancelled on re-entry / unmount.
   const pendingFocusFitRef = useRef<number | null>(null);
   // Component the pointer is over (null on leave) → transient tree highlight.
-  const [hoveredComponentId, setHoveredComponentId] = useState<string | null>(null);
+  const [hoveredComponentAlias, setHoveredComponentId] = useState<string | null>(null);
   // Walkthrough focus — selected flow (or step) is full strength; other
   // opened-flow members stay visible but dimmed; everything else is hidden.
   const [focusedWalkthroughId, setFocusedWalkthroughId] = useState<string | null>(null);
@@ -496,7 +502,7 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
   // writes back declarationRef).
   useEffect(() => {
     if (!selected) return;
-    const fresh = components.find((c) => c.id === selected.id);
+    const fresh = components.find((c) => c.alias === selected.alias);
     if (fresh && fresh !== selected) setSelected(fresh);
   }, [components, selected]);
 
@@ -646,12 +652,12 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
   );
 
   useEffect(() => {
-    SUBSYSTEM_CALLBACKS.onSelect = (id: string) => {
-      const comp = components.find((c) => c.id === id);
+    SUBSYSTEM_CALLBACKS.onSelect = (alias: string) => {
+      const comp = components.find((c) => c.alias === alias);
       if (comp) {
         // Clicking the already-selected node unselects it (toggle off).
         // Selection is independent of the file drawer — nodes never open it.
-        if (selectedRef.current?.id === comp.id) {
+        if (selectedRef.current?.alias === comp.alias) {
           setSelected(null);
           setSelectedEdgeId(null);
           return;
@@ -660,7 +666,7 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
         setSelectedEdgeId(null);
         setFocusedWalkthroughId(null);
         setFocusedStepIndex(null);
-        onSelect?.(id);
+        onSelect?.(alias);
       }
     };
     SUBSYSTEM_CALLBACKS.onEdgeSelect = selectEdge;
@@ -800,15 +806,15 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
       // Boundary frames follow their members: hidden when no member is
       // visible, dimmed when members are dimmed. Never selectable.
       if (n.type === 'subsystem-group') {
-        const memberIds = ((n.data as { region?: { memberIds?: string[] } } | undefined)?.region?.memberIds) ?? [];
+        const memberAliases = ((n.data as { region?: { memberAliases?: string[] } } | undefined)?.region?.memberAliases) ?? [];
         const vis = flowElementVisibility({
-          inOpened: memberIds.some((id) => openedNodeIds?.has(id) === true),
-          inSelected: memberIds.some((id) => brightNodeIds?.has(id) === true),
+          inOpened: memberAliases.some((alias) => openedNodeIds?.has(alias) === true),
+          inSelected: memberAliases.some((alias) => brightNodeIds?.has(alias) === true),
           anyOpened: openedNodeIds != null,
           anySelected: brightNodeIds != null,
         });
         const dimmed = previewNodeIds
-          ? vis.hidden || !memberIds.some((id) => previewNodeIds.has(id))
+          ? vis.hidden || !memberAliases.some((alias) => previewNodeIds.has(alias))
           : vis.dimmed;
         const hidden = vis.hidden;
         return {
@@ -823,7 +829,7 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
       }
       const comp = (n.data as { component?: SubsystemComponent } | undefined)?.component;
       const fileMatch = fileMatchForNode(comp?.file, openFile, focusNodeIds?.has(n.id) === true);
-      const isSelected = selected?.id !== undefined && comp?.id === selected.id;
+      const isSelected = selected?.alias !== undefined && comp?.alias === selected.alias;
       const vis = flowElementVisibility({
         inOpened: openedNodeIds?.has(n.id) === true,
         inSelected: brightNodeIds?.has(n.id) === true,
@@ -944,12 +950,12 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
       if (node.type === 'subsystem-component' && comp) {
         // Clicking the already-selected node unselects it (toggle off).
         // Selection is independent of the file drawer — nodes never open it.
-        if (selected?.id === comp.id) {
+        if (selected?.alias === comp.alias) {
           setSelected(null);
           return;
         }
         setSelected(comp);
-        if (comp.id) onSelect?.(comp.id);
+        if (comp.alias) onSelect?.(comp.alias);
       }
     },
     [onSelect, selected],
@@ -1137,6 +1143,23 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
     setHoveredWalkthroughStep(null);
     setDrawerTarget((prev) => (prev?.kind === 'walkthrough' ? null : prev));
   }, []);
+
+  // Host deep-link: opening the graph from a walkthrough row selects that
+  // flow — expand its steps, focus its edges, and switch the sidebar to
+  // Walkthroughs. Guarded by a ref so a later in-tab selection isn't yanked
+  // back; a remount (or a new id) re-applies it.
+  const appliedInitialWalkthroughRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialWalkthroughId) return;
+    if (appliedInitialWalkthroughRef.current === initialWalkthroughId) return;
+    if (!layoutReady || !walkthroughs?.length) return;
+    const tl = walkthroughs.find((t) => t.id === initialWalkthroughId);
+    if (!tl) return;
+    appliedInitialWalkthroughRef.current = initialWalkthroughId;
+    setSidebarView('walkthroughs');
+    setExpandedWalkthroughs((prev) => new Set(prev).add(tl.id));
+    focusWalkthroughEdges(tl);
+  }, [initialWalkthroughId, layoutReady, walkthroughs, focusWalkthroughEdges]);
 
   // Switching sidebar panels also switches the edge vocabulary. Leaving the
   // Walkthroughs panel drops its canvas state (focus, expanded flows, selected
@@ -1384,8 +1407,8 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
   // Filename-badge clicks on nodes open the drawer through the same path as
   // the declaration panel's file link (toggle + tree sync, no start line).
   useEffect(() => {
-    SUBSYSTEM_CALLBACKS.onOpenFile = (componentId: string) => {
-      const comp = components.find((c) => c.id === componentId);
+    SUBSYSTEM_CALLBACKS.onOpenFile = (componentAlias: string) => {
+      const comp = components.find((c) => c.alias === componentAlias);
       if (comp?.file) onOpenDeclarationFile(comp.file);
     };
     return () => {
@@ -1394,23 +1417,23 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
   }, [components, onOpenDeclarationFile]);
 
   // Detail-panel links: related-name clicks select the matching component —
-  // resolved by id, name, or symbol (call labels may carry a trailing `()`).
+  // resolved by alias, name, or symbol (call labels may carry a trailing `()`).
   const resolveRelatedComponent = useCallback(
     (ref: string) => {
       const clean = ref.replace(/\(\)$/, '');
       const comp = components.find(
         (c) =>
-          c.id === clean ||
+          c.alias === clean ||
           c.name === clean ||
           c.symbol === clean ||
           c.symbol?.replace(/\(\)$/, '') === clean,
       );
-      if (!comp || comp.id === selectedRef.current?.id) return;
+      if (!comp || comp.alias === selectedRef.current?.alias) return;
       setSelected(comp);
       setSelectedEdgeId(null);
       setFocusedWalkthroughId(null);
       setFocusedStepIndex(null);
-      onSelect?.(comp.id);
+      onSelect?.(comp.alias);
     },
     [components, onSelect],
   );
@@ -1450,9 +1473,9 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
 
   // The hovered node's file (null when not hovering / file-less component).
   const hoveredFile = useMemo(() => {
-    if (!hoveredComponentId) return null;
-    return components.find((c) => c.id === hoveredComponentId)?.file ?? null;
-  }, [components, hoveredComponentId]);
+    if (!hoveredComponentAlias) return null;
+    return components.find((c) => c.alias === hoveredComponentAlias)?.file ?? null;
+  }, [components, hoveredComponentAlias]);
 
   // Drawer content renderer: prefer the path-keyed viewer; fall back to the
   // legacy component-keyed one via a file → first-component lookup.
@@ -1847,24 +1870,13 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
         edges={dispEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        minZoom={0.05}
-        maxZoom={4}
+        {...GRAPH_NAV_PROPS}
         onNodeClick={onNodeClick}
         onEdgeClick={onEdgeClick}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         proOptions={{ hideAttribution: true }}
-        nodesDraggable={false}
-        elementsSelectable
-        selectNodesOnDrag={false}
-        nodesConnectable={false}
-        edgesReconnectable={false}
         onPaneClick={onPaneClick}
-        panOnDrag
-        panOnScroll
-        zoomOnScroll={false}
-        zoomOnPinch
-        zoomOnDoubleClick={false}
         style={{
           width: '100%',
           height: '100%',
@@ -1873,8 +1885,7 @@ function Inner({ components, relations, walkthroughs, onSelect, onEdgeSelect, me
           background: theme.colors.background,
         }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-        <Controls showZoom showFitView showInteractive />
+        <GraphChrome />
       </ReactFlow>
       {/* Graph / walkthrough / step titles — non-interactive chips at the top
           of the canvas. Graph-only embeds use these without opening the sidebar. */}

@@ -30,7 +30,7 @@ const PURL = 'pkg:github/principal-ai/agent-monitoring';
  */
 const moduleComponents: SubsystemComponent[] = [
   {
-    id: 'record',
+    alias: 'record',
     name: 'CodexRolloutRecord',
     construct: 'type_alias',
     symbol: 'CodexRolloutRecord',
@@ -41,7 +41,7 @@ const moduleComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'is-rollout',
+    alias: 'is-rollout',
     name: 'isCodexRollout',
     construct: 'function',
     symbol: 'isCodexRollout',
@@ -52,7 +52,7 @@ const moduleComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'parse',
+    alias: 'parse',
     name: 'parseTranscript',
     construct: 'function',
     symbol: 'parseTranscript',
@@ -63,7 +63,7 @@ const moduleComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'tool-name',
+    alias: 'tool-name',
     name: 'extractToolName',
     construct: 'function',
     symbol: 'extractToolName',
@@ -74,7 +74,7 @@ const moduleComponents: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'file-path',
+    alias: 'file-path',
     name: 'extractFilePath',
     construct: 'function',
     symbol: 'extractFilePath',
@@ -85,7 +85,7 @@ const moduleComponents: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'reader',
+    alias: 'reader',
     name: 'SessionReader',
     construct: 'class',
     symbol: 'SessionReader',
@@ -96,7 +96,7 @@ const moduleComponents: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'normalize',
+    alias: 'normalize',
     name: 'normalize',
     construct: 'method',
     symbol: 'SessionReader.normalize',
@@ -107,7 +107,7 @@ const moduleComponents: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'registry',
+    alias: 'registry',
     name: 'registerAgent',
     construct: 'function',
     symbol: 'registerAgent',
@@ -147,7 +147,7 @@ export const ModuleBoundaries: Story = {
 /** Process → module → export nesting (host / renderer). */
 const nestedComponents: SubsystemComponent[] = [
   {
-    id: 'boot',
+    alias: 'boot',
     name: 'boot',
     construct: 'function',
     symbol: 'boot',
@@ -160,7 +160,7 @@ const nestedComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'create-host',
+    alias: 'create-host',
     name: 'createHost',
     construct: 'function',
     symbol: 'createHost',
@@ -172,7 +172,7 @@ const nestedComponents: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'session-store',
+    alias: 'session-store',
     name: 'SessionStore',
     construct: 'store',
     symbol: 'SessionStore',
@@ -184,7 +184,7 @@ const nestedComponents: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'write-session',
+    alias: 'write-session',
     name: 'writeSession',
     construct: 'function',
     symbol: 'writeSession',
@@ -196,7 +196,7 @@ const nestedComponents: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'bridge',
+    alias: 'bridge',
     name: 'bridge',
     construct: 'function',
     symbol: 'bridge',
@@ -209,7 +209,7 @@ const nestedComponents: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'post-to-host',
+    alias: 'post-to-host',
     name: 'postToHost',
     construct: 'function',
     symbol: 'postToHost',
@@ -221,7 +221,7 @@ const nestedComponents: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'trail-view',
+    alias: 'trail-view',
     name: 'TrailView',
     construct: 'function',
     symbol: 'TrailView',
@@ -235,7 +235,7 @@ const nestedComponents: SubsystemComponent[] = [
     layer: 4,
   },
   {
-    id: 'use-trail',
+    alias: 'use-trail',
     name: 'useTrail',
     construct: 'function',
     symbol: 'useTrail',
@@ -249,7 +249,7 @@ const nestedComponents: SubsystemComponent[] = [
     layer: 4,
   },
   {
-    id: 'telemetry',
+    alias: 'telemetry',
     name: 'telemetry',
     construct: 'external',
     role: 'service',

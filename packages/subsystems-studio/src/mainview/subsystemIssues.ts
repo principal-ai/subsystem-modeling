@@ -58,21 +58,21 @@ export function diagnosticIssueCount(
 
 function componentLabel(
 	graph: StoredSubsystemModel,
-	id: string,
+	alias: string,
 	fallback?: string,
 ): string {
-	return graph.components.find((c) => c.id === id)?.name ?? fallback ?? id;
+	return graph.components.find((c) => c.alias === alias)?.name ?? fallback ?? alias;
 }
 
 function targetFor(
 	graph: StoredSubsystemModel,
 	finding: SubsystemModelAuditFinding,
 ): SubsystemIssueTarget | undefined {
-	if (finding.componentId) {
+	if (finding.componentAlias) {
 		return {
 			kind: "component",
-			id: finding.componentId,
-			label: componentLabel(graph, finding.componentId, finding.componentName),
+			id: finding.componentAlias,
+			label: componentLabel(graph, finding.componentAlias, finding.componentName),
 		};
 	}
 	if (finding.relationId) {
@@ -119,7 +119,7 @@ export function auditReportToIssues(
 	const byId = new Map<string, SubsystemModelAuditFinding>();
 	if (!report) return { issues, byId };
 	report.findings.forEach((finding, i) => {
-		const id = `${finding.kind}:${finding.componentId ?? finding.relationId ?? finding.moduleKey ?? finding.walkthroughId ?? finding.purl ?? "graph"}:${i}`;
+		const id = `${finding.kind}:${finding.componentAlias ?? finding.relationId ?? finding.moduleKey ?? finding.walkthroughId ?? finding.purl ?? "graph"}:${i}`;
 		byId.set(id, finding);
 		issues.push({
 			id,

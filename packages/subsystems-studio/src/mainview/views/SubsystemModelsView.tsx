@@ -12,13 +12,13 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bot, Check, Copy, Loader2, Share2 } from "lucide-react";
+import { Bot, Boxes, Check, Component as ComponentIcon, Copy, Info, Loader2, Route as RouteIcon, Share2 } from "lucide-react";
+import { DocumentView } from "themed-markdown";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
 	buildRepoGroups,
 	purlRepoKey,
-	repoAvatarUrl,
-	SubsystemFileTree,
+	PierreFileView,
 	type RepoGroup,
 } from "@principal-ai/subsystems-react";
 import type {
@@ -40,8 +40,10 @@ import {
 	type AuditModalState,
 } from "../components/AuditResultsModal";
 import { ProposalsModal } from "../components/ProposalsModal";
+import { FilesDrilldown, drilldownRepoKey } from "../components/FilesDrilldown";
+import { ComposedGraphPane } from "./ComposedGraphPane";
 import { MaintainModelPickerModal } from "../components/MaintainModelPickerModal";
-import { CenteredMessage, lastLoadedLabel, relativeTime } from "../ui";
+import { CenteredMessage, lastLoadedLabel } from "../ui";
 
 const SUBSYSTEMS_POLL_MS = 10_000;
 const COPY_FEEDBACK_MS = 1500;
@@ -249,8 +251,191 @@ function subsystemModelSortTime(
 	return Number.isFinite(opened) ? opened : 0;
 }
 
-function formatRegularAuditCountdown(status: RegularAuditStatus, nowMs: number): string {
-	if (!status.enabled) return "";
+/**
+ * Walkthroughs of a graph with a step site in the given file. Step files
+ * are in component-`file` form; repo attribution comes from the step
+ * endpoint's purl (host-derived). Purl-less steps match any repo.
+ */
+function walkthroughsUsingFile(
+	graph: SubsystemModelSummary,
+	repoKey: string | undefined,
+	displayPath: string,
+): NonNullable<SubsystemModelSummary["walkthroughs"]> {
+	return (graph.walkthroughs ?? []).filter((w) =>
+		w.files.some(
+			(f) =>
+				f.file === displayPath &&
+				((f.purl ?? "") === "" ||
+					(repoKey ?? "") === "" ||
+					purlRepoKey(f.purl) === repoKey),
+		),
+	);
+}
+
+/**
+ * Whether a graph references a file — via its component anchors or any
+ * walkthrough step site. Same repo-aware matching as the expansion helpers:
+ * purl-less entries match any repo. Drives the open-file list filter.
+ */
+function graphReferencesFile(
+	graph: SubsystemModelSummary,
+	repoKey: string | undefined,
+	displayPath: string,
+): boolean {
+	const match = (file: string, purl?: string) =>
+		file === displayPath &&
+		((purl ?? "") === "" ||
+			(repoKey ?? "") === "" ||
+			purlRepoKey(purl) === repoKey);
+	if ((graph.files ?? []).some((f) => match(f.file, f.purl))) return true;
+	return (graph.walkthroughs ?? []).some((w) =>
+		w.files.some((f) => match(f.file, f.purl)),
+	);
+}
+
+/**
+ * Components declared in the given file (host-derived per file anchor).
+ * This is the whole reason a walkthrough-less file is in the model.
+ */
+function componentsInFile(
+	graph: SubsystemModelSummary,
+	repoKey: string | undefined,
+	displayPath: string,
+): Array<{ alias: string; name: string; construct: string; startLine?: number }> {
+	const entry = (graph.files ?? []).find(
+		(f) =>
+			f.file === displayPath &&
+			((f.purl ?? "") === "" ||
+				(repoKey ?? "") === "" ||
+				purlRepoKey(f.purl) === repoKey),
+	);
+	return entry?.components ?? [];
+}
+
+/**
+ * First 1-based line the graph references in the given file: the topmost of
+ * its component declaration lines and walkthrough step lines. Drives preview
+ * focus when a row is clicked while a file is open. Null when the graph has
+ * no line data for the file (or doesn't reference it at all).
+ */
+function firstReferencedLine(
+	graph: SubsystemModelSummary,
+	repoKey: string | undefined,
+	displayPath: string,
+): number | null {
+	const lines: number[] = [];
+	for (const m of componentsInFile(graph, repoKey, displayPath)) {
+		if (m.startLine != null && Number.isFinite(m.startLine) && m.startLine > 0) {
+			lines.push(m.startLine);
+		}
+	}
+	for (const w of walkthroughsUsingFile(graph, repoKey, displayPath)) {
+		for (const f of w.files) {
+			if (f.file !== displayPath) continue;
+			for (const line of f.lines ?? []) lines.push(line);
+		}
+	}
+	if (lines.length === 0) return null;
+	return Math.min(...lines);
+}
+
+type SummaryWalkthrough = NonNullable<
+	SubsystemModelSummary["walkthroughs"]
+>[number];
+
+/** Whether one walkthrough step is sited in the open file (repo-aware). */
+function stepReferencesFile(
+	step: { file: string; purl?: string },
+	openFile: { repoKey: string | undefined; displayPath: string },
+): boolean {
+	return (
+		step.file === openFile.displayPath &&
+		((step.purl ?? "") === "" ||
+			(openFile.repoKey ?? "") === "" ||
+			purlRepoKey(step.purl) === openFile.repoKey)
+	);
+}
+
+/**
+ * One walkthrough row: wrapping title plus a step-bar strip (one segment per
+ * step) underneath. Segments sited in the open file light up in primary;
+ * the rest stay muted. Clicking opens the graph with this walkthrough selected.
+ */
+function WalkthroughButton({
+	graphTitle,
+	walkthrough,
+	openFile,
+	onOpen,
+}: {
+	graphTitle: string;
+	walkthrough: SummaryWalkthrough;
+	openFile: { repoKey: string | undefined; displayPath: string } | null;
+	onOpen: () => void;
+}) {
+	const { theme } = useTheme();
+	const inactive = theme.colors.border ?? "#333";
+	const [hover, setHover] = useState(false);
+	return (
+		<button
+			type="button"
+			onClick={(e) => {
+				e.stopPropagation();
+				onOpen();
+			}}
+			onMouseEnter={() => setHover(true)}
+			onMouseLeave={() => setHover(false)}
+			aria-label={`Open ${graphTitle} · ${walkthrough.title}`}
+			style={{
+				border: "none",
+				background: hover ? (theme.colors.border ?? "#333") : "transparent",
+				padding: "6px 4px",
+				borderRadius: 4,
+				cursor: "pointer",
+				color: "inherit",
+				font: "inherit",
+				textAlign: "left",
+				width: "100%",
+				display: "flex",
+				flexDirection: "column",
+				alignItems: "stretch",
+				gap: 4,
+				fontSize: theme.fontSizes[1],
+				transition: "background 120ms ease",
+			}}
+		>
+			<span
+				style={{
+					whiteSpace: "normal",
+					overflowWrap: "break-word",
+					wordBreak: "break-word",
+				}}
+			>
+				{walkthrough.title}
+			</span>
+			{walkthrough.steps.length > 0 && (
+				<span style={{ display: "flex", gap: 3 }} aria-hidden="true">
+					{walkthrough.steps.map((s, i) => {
+						const active = openFile != null && stepReferencesFile(s, openFile);
+						return (
+							<span
+								key={i}
+								style={{
+									flex: "1 1 0",
+									minWidth: 4,
+									height: 4,
+									borderRadius: 2,
+									background: active ? theme.colors.primary : inactive,
+								}}
+							/>
+						);
+					})}
+				</span>
+			)}
+		</button>
+	);
+}
+
+function formatRegularAuditCountdown(status: RegularAuditStatus, nowMs: number): string {	if (!status.enabled) return "";
 	if (status.running) return "Auditing…";
 	if (!status.nextAuditAt) return "Next audit soon…";
 	const ms = new Date(status.nextAuditAt).getTime() - nowMs;
@@ -530,29 +715,47 @@ function SubsystemsTabShell({ children }: { children: ReactNode }) {
 }
 
 /**
- * Left file panel for the Subsystems tab: per-repo Pierre `SubsystemFileTree`s
- * over every visible subsystem, grouped with `buildRepoGroups` — the same
+ * Left file panel for the Subsystems tab: a drill-down over every visible
+ * subsystem's files, grouped per repo with `buildRepoGroups` — the same
  * primitives the detail graph sidebar uses. Fed by `summary.files` (the host
  * already loads every full model per listing), so no detail fetches are
- * needed. Clicking a file highlights its owning graph in the list; a shared
- * file prefers the selected row's graph when it owns it, else the topmost
- * owner in list order.
+ * needed. Clicking a repo drills in (and narrows the list to its models);
+ * clicking a file highlights its owning graph and expands the walkthroughs
+ * using that file; a shared file prefers the selected row's graph when it
+ * owns it, else the topmost owner in list order. Clicking a file highlights
+ * its graph, expands its walkthroughs, and opens it in the preview pane.
  */
 function FilesPanel({
 	graphs,
 	selectedId,
 	width,
+	focusedRepo,
+	onFocusRepo,
 	onHighlightGraph,
+	onPreviewFile,
+	combinedActive,
+	onToggleCombined,
 }: {
 	graphs: SubsystemModelSummary[];
 	selectedId: string | null;
 	width: number;
-	onHighlightGraph: (graph: SubsystemModelSummary) => void;
+	focusedRepo: string | null;
+	onFocusRepo: (repoKey: string) => void;
+	combinedActive: boolean;
+	onToggleCombined: () => void;
+	onHighlightGraph: (
+		graph: SubsystemModelSummary,
+		file: { repoKey: string | undefined; displayPath: string },
+	) => void;
+	onPreviewFile: (
+		graph: SubsystemModelSummary,
+		file: { repoKey: string | undefined; displayPath: string },
+	) => void;
 }) {
 	const { theme } = useTheme();
 	const byId = useMemo(() => new Map(graphs.map((g) => [g.id, g])), [graphs]);
 
-	const { groups, owners } = useMemo(() => {
+	const { groups, owners, graphCountByRepo } = useMemo(() => {
 		const flat = graphs.flatMap((g) =>
 			(g.files ?? []).map((f) => ({ file: f.file, purl: f.purl })),
 		);
@@ -588,18 +791,30 @@ function FilesPanel({
 				b.entries.length - a.entries.length ||
 				(a.repo ?? "").localeCompare(b.repo ?? ""),
 		);
-		return { groups, owners };
+		const graphCountByRepo = new Map(
+			groups.map((g) => [g.repoKey ?? "", graphCount(g)]),
+		);
+		return { groups, owners, graphCountByRepo };
 	}, [graphs]);
 
-	const onSelectFile = useCallback(
+	const pickGraph = useCallback(
 		(repoKey: string | undefined, displayPath: string) => {
 			const ids = owners.get(`${repoKey ?? ""}\0${displayPath}`) ?? [];
 			const pick =
 				selectedId && ids.includes(selectedId) ? selectedId : ids[0];
-			const graph = pick ? byId.get(pick) : undefined;
-			if (graph) onHighlightGraph(graph);
+			return pick ? byId.get(pick) : undefined;
 		},
-		[owners, byId, selectedId, onHighlightGraph],
+		[owners, byId, selectedId],
+	);
+
+	const onSelectFile = useCallback(
+		(repoKey: string | undefined, displayPath: string) => {
+			const graph = pickGraph(repoKey, displayPath);
+			if (!graph) return;
+			onHighlightGraph(graph, { repoKey, displayPath });
+			onPreviewFile(graph, { repoKey, displayPath });
+		},
+		[pickGraph, onHighlightGraph, onPreviewFile],
 	);
 
 	return (
@@ -618,123 +833,37 @@ function FilesPanel({
 				style={{
 					flex: 1,
 					minHeight: 0,
-					overflowY: "auto",
 					display: "flex",
 					flexDirection: "column",
+					overflow: "hidden",
 				}}
 			>
-				{groups.map((group, i) => (
-					<RepoFilesGroup
-						key={group.repoKey ?? "__no-repo__"}
-						group={group}
-						bordered={i > 0}
-						onSelectFile={(displayPath) =>
-							onSelectFile(group.repoKey, displayPath)
-						}
-					/>
-				))}
+				<FilesDrilldown
+					groups={groups}
+					graphCountByRepo={graphCountByRepo}
+					focusedRepo={focusedRepo}
+					onFocusRepo={onFocusRepo}
+					onSelectFile={(group, displayPath) =>
+						onSelectFile(group.repoKey, displayPath)
+					}
+					combinedActive={combinedActive}
+					onToggleCombined={onToggleCombined}
+				/>
 			</div>
 		</div>
 	);
 }
 
-function RepoFilesGroup({
-	group,
-	bordered,
-	onSelectFile,
+export function SubsystemModelsView({
+	scope,
 }: {
-	group: RepoGroup;
-	bordered: boolean;
-	onSelectFile: (displayPath: string) => void;
-}) {
-	const { theme } = useTheme();
-	const [collapsed, setCollapsed] = useState(false);
-	const files = useMemo(
-		() => group.entries.map((e) => e.displayPath),
-		[group],
-	);
-	const avatar = group.repoKey
-		? repoAvatarUrl(group.repoKey)
-		: undefined;
-	const label = group.repo ?? "No repo";
-	// Definite height so the tree fills it; grows with file count, capped.
-	const height = Math.min(320, Math.max(120, files.length * 26 + 48));
-
-	return (
-		<div
-			style={{
-				flex: "0 0 auto",
-				height: collapsed ? undefined : height,
-				display: "flex",
-				flexDirection: "column",
-				borderTop: bordered
-					? `1px solid ${theme.colors.border ?? "#333"}`
-					: undefined,
-			}}
-		>
-			<button
-				type="button"
-				onClick={() => setCollapsed((v) => !v)}
-				title={collapsed ? "Expand repo files" : "Collapse repo files"}
-				aria-expanded={!collapsed}
-				onMouseEnter={(e) => {
-					e.currentTarget.style.background = theme.colors.border ?? "#333";
-				}}
-				onMouseLeave={(e) => {
-					e.currentTarget.style.background = "transparent";
-				}}
-				style={{
-					flexShrink: 0,
-					display: "flex",
-					alignItems: "center",
-					gap: 6,
-					padding: "8px 12px 4px",
-					border: "none",
-					borderRadius: 4,
-					background: "transparent",
-					cursor: "pointer",
-					fontFamily: theme.fonts.body,
-					textAlign: "left",
-					minWidth: 0,
-					transition: "background 120ms ease",
-				}}
-			>
-				{avatar && (
-					<img
-						src={avatar}
-						alt=""
-						width={28}
-						height={28}
-						style={{ borderRadius: 6, flexShrink: 0 }}
-					/>
-				)}
-				<span
-					style={{
-						fontSize: theme.fontSizes[2],
-						fontFamily: theme.fonts.monospace,
-						color: theme.colors.text,
-						fontWeight: 600,
-						whiteSpace: "nowrap",
-						overflow: "hidden",
-						textOverflow: "ellipsis",
-					}}
-					title={group.owner ? `${group.owner}/${label}` : label}
-				>
-					{label}
-				</span>
-			</button>
-			{!collapsed && (
-				<SubsystemFileTree
-					files={files}
-					onSelectFile={onSelectFile}
-					headerless
-				/>
-			)}
-		</div>
-	);
-}
-
-export function SubsystemModelsView() {
+	/**
+	 * Present for `subsystem-showcase` tabs: render only these model ids (in
+	 * this order) and hide the filter header. Absent for the permanent
+	 * Subsystems tab, which shows everything with filters.
+	 */
+	scope?: { ids: string[]; title?: string };
+} = {}) {
 	const { theme } = useTheme();
 	const [graphs, setGraphs] = useState<SubsystemModelSummary[] | null>(null);
 	const [lastLoadedAt, setLastLoadedAt] = useState<number | null>(null);
@@ -769,6 +898,44 @@ export function SubsystemModelsView() {
 	);
 	/** Selected row highlight (file-tree clicks land here, no new tab). */
 	const [selectedId, setSelectedId] = useState<string | null>(null);
+	/** Rows expanded to list all their walkthroughs (row click toggles). */
+	const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(
+		() => new Set(),
+	);
+	/** Rows showing their model description (info button toggles). */
+	const [descIds, setDescIds] = useState<ReadonlySet<string>>(
+		() => new Set(),
+	);
+	/** Clicked file driving row expansion (walkthroughs using it). */
+	const [selectedFile, setSelectedFile] = useState<{
+		graphId: string;
+		repoKey: string | undefined;
+		displayPath: string;
+	} | null>(null);
+	/** Double-clicked file shown in the right preview pane. */
+	const [previewFile, setPreviewFile] = useState<{
+		graphId: string;
+		repoKey: string | undefined;
+		displayPath: string;
+		/** 1-based line to highlight (first line the graph references). */
+		focusLine?: number | null;
+	} | null>(null);
+	/** While previewing, the list collapses to a rail; expanding the rail
+	 *  overlays the list back over the preview. */
+	const [listOverlay, setListOverlay] = useState(false);
+	/** Drilled-in repo in the file panel — the list filters to its models. */
+	const [focusedRepo, setFocusedRepo] = useState<string | null>(null);
+	/** Combined-graph mode: the list swaps for the merged repo graph. */
+	const [combinedActive, setCombinedActive] = useState(false);
+
+	const onFocusRepo = useCallback((repoKey: string) => {
+		setFocusedRepo((current) => (current === repoKey ? null : repoKey));
+		setCombinedActive(false);
+	}, []);
+
+	const onToggleCombined = useCallback(() => {
+		setCombinedActive((v) => !v);
+	}, []);
 
 	// Panel width (px). Draggable via the resize handle between the panel
 	// and the list — same pattern as the detail graph sidebar in
@@ -814,14 +981,26 @@ export function SubsystemModelsView() {
 		};
 	}, [panelDrag]);
 	const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	/** Defers row expand so a double-click can open instead. */
+	const rowClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 
 	useEffect(
 		() => () => {
 			if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+			if (rowClickTimerRef.current) clearTimeout(rowClickTimerRef.current);
 		},
 		[],
 	);
+
+	useEffect(() => {
+		if (!previewFile) return;
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") setPreviewFile(null);
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [previewFile]);
 
 	useEffect(() => {
 		let alive = true;
@@ -846,7 +1025,16 @@ export function SubsystemModelsView() {
 	const refresh = useCallback(async () => {
 		try {
 			const subResult = await electrobun.rpc!.request.listSubsystemModels({});
-			setGraphs(subResult.graphs);
+			// Keep the previous array identity when nothing changed — otherwise
+			// every 10s poll rebuilds the file-panel groups and the Pierre
+			// tree sees a new `files` prop, calling `resetPaths` and wiping
+			// folder expansion.
+			setGraphs((prev) =>
+				prev !== null &&
+				JSON.stringify(prev) === JSON.stringify(subResult.graphs)
+					? prev
+					: subResult.graphs,
+			);
 			setLastLoadedAt(Date.now());
 			setError(null);
 			setAuditByGraphId((prev) => {
@@ -938,20 +1126,134 @@ export function SubsystemModelsView() {
 		};
 	}, [refresh]);
 
-	const onOpen = useCallback(async (graph: SubsystemModelSummary) => {
-		setSelectedId(graph.id);
-		await electrobun.rpc!.request.openSubsystemModel({ graphId: graph.id });
-	}, []);
+	const onOpen = useCallback(
+		async (graph: SubsystemModelSummary, walkthroughId?: string) => {
+			setSelectedId(graph.id);
+			await electrobun.rpc!.request.openSubsystemModel({
+				graphId: graph.id,
+				...(walkthroughId ? { walkthroughId } : {}),
+			});
+		},
+		[],
+	);
 
-	/** File-tree click: highlight the owning row in place, no new tab. */
-	const onHighlightGraph = useCallback((graph: SubsystemModelSummary) => {
-		setSelectedId(graph.id);
-		requestAnimationFrame(() => {
-			document
-				.querySelector(`[data-subsystem-row="${CSS.escape(graph.id)}"]`)
-				?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-		});
-	}, []);
+	/** Row click: expand/collapse its walkthrough list (no new tab). When a
+	 *  file is open and the row is being expanded, focus the first line this
+	 *  graph references in the open file. */
+	const onToggleExpand = useCallback(
+		(graph: SubsystemModelSummary) => {
+			setSelectedId(graph.id);
+			setSelectedFile((current) =>
+				current?.graphId === graph.id ? null : current,
+			);
+			const isOpen =
+				expandedIds.has(graph.id) || selectedFile?.graphId === graph.id;
+			if (previewFile && !isOpen) {
+				const line = firstReferencedLine(
+					graph,
+					previewFile.repoKey,
+					previewFile.displayPath,
+				);
+				if (line != null) {
+					setPreviewFile((current) =>
+						current ? { ...current, focusLine: line } : current,
+					);
+				}
+			}
+			setExpandedIds((current) => {
+				const next = new Set(current);
+				if (next.has(graph.id)) next.delete(graph.id);
+				else next.add(graph.id);
+				return next;
+			});
+		},
+		[expandedIds, selectedFile, previewFile],
+	);
+
+	/**
+	 * Single click expands (deferred so a double-click can open instead);
+	 * double click opens the graph in a tab.
+	 */
+	const onRowClick = useCallback(
+		(graph: SubsystemModelSummary) => {
+			if (rowClickTimerRef.current) clearTimeout(rowClickTimerRef.current);
+			rowClickTimerRef.current = setTimeout(() => {
+				rowClickTimerRef.current = null;
+				onToggleExpand(graph);
+			}, 250);
+		},
+		[onToggleExpand],
+	);
+
+	const onRowDoubleClick = useCallback(
+		(graph: SubsystemModelSummary) => {
+			if (rowClickTimerRef.current) {
+				clearTimeout(rowClickTimerRef.current);
+				rowClickTimerRef.current = null;
+			}
+			void onOpen(graph);
+		},
+		[onOpen],
+	);
+
+	/** File-tree click: highlight the owning row in place (no new tab),
+	 *  expand the walkthroughs using that file, and open the preview pane.
+	 *  Re-clicking the same file collapses the expansion (preview stays). */
+	const onHighlightGraph = useCallback(
+		(
+			graph: SubsystemModelSummary,
+			file: { repoKey: string | undefined; displayPath: string },
+		) => {
+			setSelectedId(graph.id);
+			setSelectedFile((current) =>
+				current &&
+				current.graphId === graph.id &&
+				(current.repoKey ?? "") === (file.repoKey ?? "") &&
+				current.displayPath === file.displayPath
+					? null
+					: { graphId: graph.id, ...file },
+			);
+			requestAnimationFrame(() => {
+				document
+					.querySelector(`[data-subsystem-row="${CSS.escape(graph.id)}"]`)
+					?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+			});
+		},
+		[],
+	);
+
+	/** File-tree click: open the file in the preview pane, focused on the
+	 *  first line the owning graph references in it. */
+	const onPreviewFile = useCallback(
+		(
+			graph: SubsystemModelSummary,
+			file: { repoKey: string | undefined; displayPath: string },
+		) => {
+			setSelectedId(graph.id);
+			setListOverlay(true);
+			setPreviewFile({
+				graphId: graph.id,
+				...file,
+				focusLine: firstReferencedLine(graph, file.repoKey, file.displayPath),
+			});
+		},
+		[],
+	);
+
+	const readPreviewFile = useCallback(
+		async (_path: string): Promise<string> => {
+			if (!previewFile) throw new Error("No file selected");
+			const res = await electrobun.rpc!.request.readSubsystemFile({
+				purl: previewFile.repoKey,
+				file: previewFile.displayPath,
+			});
+			if (!res.ok || res.content == null) {
+				throw new Error(res.error ?? "Failed to read file");
+			}
+			return res.content;
+		},
+		[previewFile],
+	);
 
 
 	const onCopyPath = useCallback(
@@ -1053,6 +1355,18 @@ export function SubsystemModelsView() {
 			try {
 				await electrobun.rpc!.request.deleteSubsystemModel({ graphId: graph.id });
 				setGraphs((prev) => prev?.filter((g) => g.id !== graph.id) ?? null);
+				setExpandedIds((current) => {
+					if (!current.has(graph.id)) return current;
+					const next = new Set(current);
+					next.delete(graph.id);
+					return next;
+				});
+				setSelectedFile((current) =>
+					current?.graphId === graph.id ? null : current,
+				);
+				setPreviewFile((current) =>
+					current?.graphId === graph.id ? null : current,
+				);
 				setAuditByGraphId((prev) => {
 					if (!(graph.id in prev)) return prev;
 					const next = { ...prev };
@@ -1131,12 +1445,14 @@ export function SubsystemModelsView() {
 	if (error && graphs === null) {
 		return (
 			<SubsystemsTabShell>
-				<SubsystemsTabHeader
+				{!scope && (
+					<SubsystemsTabHeader
 				lastLoadedAt={lastLoadedAt}
 				sortBy={sortBy}
 				onSortChange={setSortBy}
 				regularAudit={regularAudit}
 			/>
+				)}
 				<SubsystemsTabBody>
 					<CenteredMessage title="Could not load subsystem graphs" detail={error} />
 				</SubsystemsTabBody>
@@ -1146,12 +1462,14 @@ export function SubsystemModelsView() {
 	if (graphs === null) {
 		return (
 			<SubsystemsTabShell>
-				<SubsystemsTabHeader
+				{!scope && (
+					<SubsystemsTabHeader
 				lastLoadedAt={lastLoadedAt}
 				sortBy={sortBy}
 				onSortChange={setSortBy}
 				regularAudit={regularAudit}
 			/>
+				)}
 				<SubsystemsTabBody>
 					<CenteredMessage title="Loading subsystem graphs…" />
 				</SubsystemsTabBody>
@@ -1161,12 +1479,14 @@ export function SubsystemModelsView() {
 	if (graphs.length === 0) {
 		return (
 			<SubsystemsTabShell>
-				<SubsystemsTabHeader
+				{!scope && (
+					<SubsystemsTabHeader
 				lastLoadedAt={lastLoadedAt}
 				sortBy={sortBy}
 				onSortChange={setSortBy}
 				regularAudit={regularAudit}
 			/>
+				)}
 				<SubsystemsTabBody>
 					<CenteredMessage
 						title="No subsystem graphs yet"
@@ -1180,11 +1500,73 @@ export function SubsystemModelsView() {
 	const now = Date.now();
 	const isRecent = (g: SubsystemModelSummary) =>
 		now - new Date(g.updatedAt).getTime() <= RECENT_MS;
+	// Showcase scope: an explicit, ordered id set. When present it wins over
+	// repo drilldown, recency hiding and sorting — the agent chose the set and
+	// its order.
+	const scopeOrder = scope?.ids ?? null;
+	const scopeRank = scopeOrder
+		? new Map(scopeOrder.map((id, i) => [id, i]))
+		: null;
+	const orderByScope = (list: SubsystemModelSummary[]) =>
+		scopeRank
+			? [...list].sort(
+					(a, b) =>
+						(scopeRank.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+						(scopeRank.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+				)
+			: list;
+	const visibleGraphs = scopeOrder
+		? graphs.filter((g) => scopeRank!.has(g.id))
+		: focusedRepo
+			? graphs.filter((g) =>
+					(g.files ?? []).some(
+						(f) =>
+							focusedRepo ===
+							drilldownRepoKey({ repoKey: purlRepoKey(f.purl) }),
+					),
+				)
+			: graphs;
+	// An open preview narrows the list to the models referencing that file.
+	const fileVisibleGraphs = previewFile
+		? visibleGraphs.filter((g) =>
+				graphReferencesFile(g, previewFile.repoKey, previewFile.displayPath),
+			)
+		: visibleGraphs;
 	const query = searchQuery.trim().toLowerCase();
+	// Search / issues / recency / sort apply identically to both chains; only
+	// the open-file narrowing differs (list vs panel).
+	const applyListFilters = (base: SubsystemModelSummary[]) => {
+		const searched =
+			query.length === 0
+				? base
+				: base.filter((g) => {
+						if (g.title.toLowerCase().includes(query)) return true;
+						if (g.description?.toLowerCase().includes(query)) return true;
+						if (g.id.toLowerCase().includes(query)) return true;
+						for (const r of g.repos ?? []) {
+							if (`${r.owner}/${r.name}`.toLowerCase().includes(query))
+								return true;
+						}
+						return false;
+					});
+		const issued = issuesOnly
+			? searched.filter((g) => {
+					const entry = auditByGraphId[g.id];
+					return entry?.status === "issues" || entry?.status === "error";
+				})
+			: searched;
+		const recent =
+			showAll || scopeOrder ? issued : issued.filter(isRecent);
+		return orderByScope(
+			[...recent].sort(
+				(a, b) => subsystemModelSortTime(b, sortBy) - subsystemModelSortTime(a, sortBy),
+			),
+		);
+	};
 	const searchedGraphs =
 		query.length === 0
-			? graphs
-			: graphs.filter((g) => {
+			? fileVisibleGraphs
+			: fileVisibleGraphs.filter((g) => {
 					if (g.title.toLowerCase().includes(query)) return true;
 					if (g.description?.toLowerCase().includes(query)) return true;
 					if (g.id.toLowerCase().includes(query)) return true;
@@ -1200,17 +1582,20 @@ export function SubsystemModelsView() {
 				return entry?.status === "issues" || entry?.status === "error";
 			})
 		: searchedGraphs;
-	const recentGraphs = showAll
-		? issueGraphs
-		: issueGraphs.filter(isRecent);
+	const recentGraphs =
+		showAll || scopeOrder
+			? issueGraphs
+			: issueGraphs.filter(isRecent);
 	const hiddenStaleCount = issueGraphs.length - recentGraphs.length;
-	const sortedGraphs = [...recentGraphs].sort(
-		(a, b) => subsystemModelSortTime(b, sortBy) - subsystemModelSortTime(a, sortBy),
-	);
+	const sortedGraphs = applyListFilters(fileVisibleGraphs);
+	// The file panel ignores the open-file narrowing so the tree stays stable
+	// while previewing; it still follows every other filter + sort.
+	const panelGraphs = applyListFilters(visibleGraphs);
 
 	return (
 		<SubsystemsTabShell>
-			<SubsystemsTabHeader
+			{!scope && (
+				<SubsystemsTabHeader
 				lastLoadedAt={lastLoadedAt}
 				sortBy={sortBy}
 				onSortChange={setSortBy}
@@ -1223,6 +1608,7 @@ export function SubsystemModelsView() {
 				searchQuery={searchQuery}
 				onSearchChange={setSearchQuery}
 			/>
+			)}
 			<SubsystemsTabBody>
 				<div
 					style={{
@@ -1230,14 +1616,20 @@ export function SubsystemModelsView() {
 						minHeight: 0,
 						display: "flex",
 						flexDirection: "row",
+						position: "relative",
 						userSelect: panelDrag ? "none" : undefined,
 					}}
 				>
 					<FilesPanel
-						graphs={sortedGraphs}
+						graphs={panelGraphs}
 						selectedId={selectedId}
 						width={panelWidth}
+						focusedRepo={focusedRepo}
+						onFocusRepo={onFocusRepo}
 						onHighlightGraph={onHighlightGraph}
+						onPreviewFile={onPreviewFile}
+						combinedActive={combinedActive}
+						onToggleCombined={onToggleCombined}
 					/>
 					<div
 						onMouseDown={onPanelResizeStart}
@@ -1259,8 +1651,67 @@ export function SubsystemModelsView() {
 							minHeight: 0,
 							overflowY: "auto",
 							padding: "16px 24px",
+							...(previewFile && listOverlay
+								? {
+										position: "absolute",
+										top: 0,
+										bottom: 0,
+										right: 0,
+										width: 400,
+										zIndex: 4,
+										flex: "none",
+										background: theme.colors.background,
+										borderLeft: `1px solid ${theme.colors.border ?? "#333"}`,
+									}
+								: null),
 						}}
 					>
+			{previewFile && listOverlay && (
+				<div
+					style={{
+						flexShrink: 0,
+						display: "flex",
+						alignItems: "center",
+						gap: 8,
+						padding: "0 0 8px",
+					}}
+				>
+					<span
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: theme.fontSizes[0],
+							color: muted,
+							textTransform: "uppercase",
+							letterSpacing: 0.3,
+						}}
+					>
+						<Boxes size={12} style={{ flexShrink: 0 }} aria-hidden="true" />
+						Subsystems
+					</span>
+					<span style={{ flex: 1 }} />
+					<button
+						type="button"
+						onClick={() => setListOverlay(false)}
+						title="Collapse list to rail"
+						aria-label="Collapse subsystem list"
+						style={{
+							flexShrink: 0,
+							border: "none",
+							background: "transparent",
+							color: muted,
+							cursor: "pointer",
+							fontSize: theme.fontSizes[1],
+							lineHeight: 1,
+							padding: "2px 6px",
+							borderRadius: 4,
+						}}
+					>
+						»
+					</button>
+				</div>
+			)}
 			{message && (
 				<div
 					style={{
@@ -1277,7 +1728,19 @@ export function SubsystemModelsView() {
 					{error}
 				</div>
 			)}
-			{recentGraphs.length === 0 ? (
+			{combinedActive && focusedRepo ? (
+				<ComposedGraphPane
+					repoKey={focusedRepo}
+					repoLabel={
+						focusedRepo === "__no-repo__"
+							? "No repo"
+							: focusedRepo.replace(/^pkg:github\//, "")
+					}
+					graphs={graphs}
+					modelIds={scopeOrder ?? undefined}
+					onPreviewFile={onPreviewFile}
+				/>
+			) : recentGraphs.length === 0 ? (
 				<div
 					style={{
 						fontSize: theme.fontSizes[1],
@@ -1287,11 +1750,13 @@ export function SubsystemModelsView() {
 				>
 					{query.length > 0 && searchedGraphs.length === 0
 						? `No graphs match "${searchQuery.trim()}".`
-						: issuesOnly && issueGraphs.length === 0
-							? "No graphs with verification issues."
-							: hiddenStaleCount > 0
-								? `No graphs edited in the last day — ${hiddenStaleCount} older hidden.`
-								: "No subsystem graphs."}
+						: previewFile && fileVisibleGraphs.length === 0
+							? `No models reference ${previewFile.displayPath}.`
+							: issuesOnly && issueGraphs.length === 0
+								? "No graphs with verification issues."
+								: hiddenStaleCount > 0
+									? `No graphs edited in the last day — ${hiddenStaleCount} older hidden.`
+									: "No subsystem graphs."}
 				</div>
 			) : (
 			<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -1305,70 +1770,114 @@ export function SubsystemModelsView() {
 					const maintainMode = maintainModeFromAuditEntry(auditEntry);
 					const maintainCopy = maintainButtonCopy(maintainMode);
 					const maintainDisabled = maintaining || !maintainMode;
+					const isExpanded = selectedFile?.graphId === graph.id;
+					const isRowExpanded = expandedIds.has(graph.id) && !isExpanded;
+					const isOpen = isExpanded || expandedIds.has(graph.id);
+					const fileWalkthroughs =
+						isExpanded && selectedFile
+							? walkthroughsUsingFile(
+									graph,
+									selectedFile.repoKey,
+									selectedFile.displayPath,
+								)
+							: [];
+					const fileComponents =
+						isExpanded && selectedFile && fileWalkthroughs.length === 0
+							? componentsInFile(
+									graph,
+									selectedFile.repoKey,
+									selectedFile.displayPath,
+								)
+							: [];
 
 					return (
 						<div
+							key={graph.id}
 							data-subsystem-row={graph.id}
-							onClick={() => onOpen(graph)}
+							onClick={() => onRowClick(graph)}
+							onDoubleClick={() => onRowDoubleClick(graph)}
 							onMouseEnter={(e) => {
 								e.currentTarget.style.borderColor = theme.colors.textMuted ?? "#555";
 							}}
 							onMouseLeave={(e) => {
 								e.currentTarget.style.borderColor =
-									graph.id === selectedId
-										? theme.colors.primary
-										: (theme.colors.border ?? "#333");
+									theme.colors.border ?? "#333";
 							}}
 							style={{
 								display: "flex",
-								alignItems: "center",
-								gap: 12,
+								flexDirection: "column",
+								alignItems: "stretch",
+								gap: isOpen || descIds.has(graph.id) ? 8 : 0,
 								padding: "8px 12px",
 								borderRadius: 4,
-								border: `1px solid ${
-									graph.id === selectedId
-										? theme.colors.primary
-										: (theme.colors.border ?? "#333")
-								}`,
+								border: `1px solid ${theme.colors.border ?? "#333"}`,
 								background: theme.colors.backgroundSecondary ?? "transparent",
 								cursor: "pointer",
 								fontSize: theme.fontSizes[2],
 								transition: "border-color 0.15s ease",
 							}}
 						>
-							<div style={{ flex: 1, minWidth: 0 }}>
+							<div
+								style={{
+									display: "flex",
+									alignItems: "center",
+									flexWrap: "wrap",
+									gap: 8,
+									rowGap: 8,
+								}}
+							>
+							<div style={{ flex: "1 1 180px", minWidth: 0 }}>
 								<div
 									style={{
-										whiteSpace: "nowrap",
-										overflow: "hidden",
-										textOverflow: "ellipsis",
+										whiteSpace: "normal",
+										overflowWrap: "break-word",
+										wordBreak: "break-word",
 									}}
 								>
 									{graph.title}
 								</div>
-								<div
+							</div>
+							{graph.description && (
+								<button
+									type="button"
+									onClick={(e) => {
+										e.stopPropagation();
+										setDescIds((current) => {
+											const next = new Set(current);
+											if (next.has(graph.id)) next.delete(graph.id);
+											else next.add(graph.id);
+											return next;
+										});
+									}}
+									title={
+										descIds.has(graph.id)
+											? "Hide description"
+											: "Show description"
+									}
+									aria-label={`Show description for ${graph.title}`}
+									aria-pressed={descIds.has(graph.id)}
 									style={{
-										marginTop: 4,
-										fontSize: theme.fontSizes[0],
-										color: muted,
-										whiteSpace: "nowrap",
-										overflow: "hidden",
-										textOverflow: "ellipsis",
+										flexShrink: 0,
+										display: "inline-flex",
+										alignItems: "center",
+										justifyContent: "center",
+										width: 22,
+										height: 22,
+										padding: 0,
+										border: "none",
+										borderRadius: 4,
+										background: descIds.has(graph.id)
+											? `${theme.colors.primary}22`
+											: "transparent",
+										color: descIds.has(graph.id)
+											? theme.colors.primary
+											: muted,
+										cursor: "pointer",
 									}}
 								>
-								{graph.componentCount === 1
-									? "1 component"
-									: `${graph.componentCount} components`}
-								{" · "}
-								{relativeTime(new Date(graph.updatedAt).getTime())}
-								{graph.lastOpenedAt && (
-									<>
-										{" · opened "}
-										{relativeTime(new Date(graph.lastOpenedAt).getTime())}
-									</>
-								)}
-								</div>
-							</div>
+									<Info size={13} />
+								</button>
+							)}
 							{auditBadge && (
 								<button
 									type="button"
@@ -1582,12 +2091,272 @@ export function SubsystemModelsView() {
 							>
 								{confirmId === graph.id ? "delete?" : "✕"}
 							</button>
+							</div>
+							{descIds.has(graph.id) && graph.description && (
+								<div
+									onClick={(e) => e.stopPropagation()}
+									style={{
+										fontSize: theme.fontSizes[1],
+									}}
+								>
+									<DocumentView
+										content={graph.description}
+										theme={theme}
+										transparentBackground
+										maxWidth="100%"
+									/>
+								</div>
+							)}
+							{isExpanded && selectedFile && (
+								<div
+									onClick={(e) => e.stopPropagation()}
+									style={{
+										borderTop: `1px solid ${theme.colors.border ?? "#333"}`,
+										paddingTop: 6,
+										display: "flex",
+										flexDirection: "column",
+										gap: 2,
+									}}
+								>
+									<div
+										style={{
+											display: "flex",
+											alignItems: "center",
+											gap: 6,
+											fontSize: theme.fontSizes[0],
+											color: muted,
+										}}
+									>
+										{fileWalkthroughs.length > 0 ? (
+											<RouteIcon size={12} style={{ flexShrink: 0 }} aria-hidden="true" />
+										) : (
+											<ComponentIcon size={12} style={{ flexShrink: 0 }} aria-hidden="true" />
+										)}
+										{fileWalkthroughs.length > 0 ? `Walkthroughs` : `Component`}
+									</div>
+									{fileWalkthroughs.length === 0 && fileComponents.length === 0 ? (
+										<div
+											style={{
+												fontSize: theme.fontSizes[1],
+												color: muted,
+											}}
+										>
+											No walkthroughs use this file.
+										</div>
+									) : fileWalkthroughs.length > 0 ? (
+										fileWalkthroughs.map((w) => (
+											<WalkthroughButton
+												key={w.id}
+												graphTitle={graph.title}
+												walkthrough={w}
+												openFile={previewFile}
+												onOpen={() => void onOpen(graph, w.id)}
+											/>
+										))
+									) : (
+										fileComponents.map((m) => (
+											<button
+												key={m.alias}
+												type="button"
+												onClick={(e) => {
+													e.stopPropagation();
+													setSelectedId(graph.id);
+													setListOverlay(true);
+													setPreviewFile({
+														graphId: graph.id,
+														repoKey: selectedFile.repoKey,
+														displayPath: selectedFile.displayPath,
+														focusLine: m.startLine ?? null,
+													});
+												}}
+												onMouseEnter={(e) => {
+													e.currentTarget.style.background =
+														theme.colors.border ?? "#333";
+												}}
+												onMouseLeave={(e) => {
+													e.currentTarget.style.background = "transparent";
+												}}
+												style={{
+													border: "none",
+													background: "transparent",
+													padding: "2px 4px",
+													cursor: "pointer",
+													color: "inherit",
+													font: "inherit",
+													textAlign: "left",
+													fontSize: theme.fontSizes[1],
+													whiteSpace: "nowrap",
+													overflow: "hidden",
+													textOverflow: "ellipsis",
+													borderRadius: 4,
+												}}
+											>
+												{m.name}
+												<span style={{ color: muted }}> · {m.construct}</span>
+											</button>
+										))
+									)}
+								</div>
+							)}
+							{isRowExpanded && (
+								<div
+									onClick={(e) => e.stopPropagation()}
+									style={{
+										borderTop: `1px solid ${theme.colors.border ?? "#333"}`,
+										paddingTop: 6,
+										display: "flex",
+										flexDirection: "column",
+										gap: 2,
+									}}
+								>
+									<div
+										style={{
+											display: "flex",
+											alignItems: "center",
+											gap: 6,
+											fontSize: theme.fontSizes[0],
+											color: muted,
+										}}
+									>
+										<RouteIcon size={12} style={{ flexShrink: 0 }} aria-hidden="true" />
+										Walkthroughs
+									</div>
+									{(graph.walkthroughs ?? []).length === 0 ? (
+										<div
+											style={{
+												fontSize: theme.fontSizes[1],
+												color: muted,
+											}}
+										>
+											No walkthroughs yet.
+										</div>
+									) : (
+										(graph.walkthroughs ?? []).map((w) => (
+											<WalkthroughButton
+												key={w.id}
+												graphTitle={graph.title}
+												walkthrough={w}
+												openFile={previewFile}
+												onOpen={() => void onOpen(graph, w.id)}
+											/>
+										))
+									)}
+								</div>
+							)}
 						</div>
 					);
 				})}
 			</div>
 			)}
 				</div>
+				{previewFile && (
+					<div
+						style={{
+							position: "absolute",
+							top: 0,
+							bottom: 0,
+							left: panelWidth + 3,
+							// The open list docks right — end the preview at its
+							// edge so the header (and its ✕) is never covered.
+							right: listOverlay ? 400 : 0,
+							zIndex: 2,
+							borderLeft: `1px solid ${theme.colors.border ?? "#333"}`,
+							background: theme.colors.background,
+							display: "flex",
+							flexDirection: "column",
+							minHeight: 0,
+						}}
+					>
+						<div
+							style={{
+								flexShrink: 0,
+								display: "flex",
+								alignItems: "center",
+								gap: 8,
+								padding: "8px 12px",
+								borderBottom: `1px solid ${theme.colors.border ?? "#333"}`,
+							}}
+						>
+							<span
+								style={{
+									flex: 1,
+									minWidth: 0,
+									fontSize: theme.fontSizes[1],
+									fontFamily: theme.fonts.monospace,
+									whiteSpace: "nowrap",
+									overflow: "hidden",
+									textOverflow: "ellipsis",
+								}}
+								title={previewFile.displayPath}
+							>
+								{previewFile.displayPath}
+							</span>
+							<button
+								type="button"
+								onClick={() => setPreviewFile(null)}
+								title="Close preview"
+								aria-label="Close file preview"
+								style={{
+									flexShrink: 0,
+									border: "none",
+									background: "transparent",
+									color: muted,
+									cursor: "pointer",
+									fontSize: theme.fontSizes[1],
+									lineHeight: 1,
+									padding: "2px 6px",
+									borderRadius: 4,
+								}}
+							>
+								✕
+							</button>
+						</div>
+						<div
+							style={{
+								flex: 1,
+								minHeight: 0,
+								overflow: "auto",
+							}}
+						>
+							<PierreFileView
+								key={`${previewFile.repoKey ?? ""}\0${previewFile.displayPath}\0${previewFile.focusLine ?? ""}`}
+								filePath={previewFile.displayPath}
+								fileName={
+									previewFile.displayPath.split("/").pop() ??
+									previewFile.displayPath
+								}
+								readFile={readPreviewFile}
+								background={theme.colors.background}
+								focusLine={previewFile.focusLine ?? undefined}
+							/>
+						</div>
+					</div>
+				)}
+				{previewFile && !listOverlay && (
+					<button
+						type="button"
+						onClick={() => setListOverlay(true)}
+						title="Show subsystem list"
+						aria-label="Show subsystem list"
+						style={{
+							position: "absolute",
+							top: 0,
+							bottom: 0,
+							right: 0,
+							width: 28,
+							zIndex: 3,
+							border: "none",
+							borderLeft: `1px solid ${theme.colors.border ?? "#333"}`,
+							background:
+								theme.colors.backgroundSecondary ?? theme.colors.background,
+							color: muted,
+							cursor: "pointer",
+							fontSize: theme.fontSizes[1],
+						}}
+					>
+						«
+					</button>
+				)}
 				</div>
 			</SubsystemsTabBody>
 			{auditModal && (

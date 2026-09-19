@@ -116,7 +116,7 @@ export interface ComponentDeclarationProps {
   /** Max width of the declaration panel (CSS value). Defaults to none. */
   maxWidth?: string | number;
   /** When set, shows a Verify control that calls back with the component id. */
-  onVerify?: (componentId: string) => void;
+  onVerify?: (componentAlias: string) => void;
   /** Live verification status for the selected component. */
   verification?: ComponentVerificationState | null;
   /** Start with the file path row visible (catalog / source-first views). */
@@ -411,7 +411,7 @@ export function ComponentDeclaration({
           disabled={verifyBusy}
           onClick={(e) => {
             e.stopPropagation();
-            onVerify(component.id);
+            onVerify(component.alias);
           }}
           style={{
             display: 'flex',

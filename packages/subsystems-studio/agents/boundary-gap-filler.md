@@ -50,13 +50,13 @@ The brief’s **Access** section is authoritative. Prefer **Studio HTTP (`curl`)
   "author": "boundary-gap-filler",
   "finding": {
     "kind": "boundary_module_file_mismatch",
-    "componentId": "parse",
+    "componentAlias": "parse",
     "message": "…"
   },
   "changes": [
     {
       "target": "augmentation",
-      "componentId": "parse",
+      "componentAlias": "parse",
       "field": "module",
       "value": "src/session/paths.ts"
     }
@@ -76,13 +76,13 @@ unit, or clear `process` on members that should sit outside.
   "author": "boundary-gap-filler",
   "finding": {
     "kind": "boundary_process_nest_disagree",
-    "componentId": "create",
+    "componentAlias": "create",
     "message": "…"
   },
   "changes": [
     {
       "target": "component",
-      "componentId": "create",
+      "componentAlias": "create",
       "field": "process",
       "value": "principal-studio/host"
     }
@@ -92,8 +92,8 @@ unit, or clear `process` on members that should sit outside.
 
 Allowed changes:
 
-- `{ "target": "augmentation", "componentId", "field": "module", "value": "<module key>" }`
-- `{ "target": "component", "componentId", "field": "module"|"process", "value": "<string>"|null }`
+- `{ "target": "augmentation", "componentAlias", "field": "module", "value": "<module key>" }`
+- `{ "target": "component", "componentAlias", "field": "module"|"process", "value": "<string>"|null }`
 
 5. **Verify.** List proposals. Do **not** accept or reject.
 
