@@ -325,10 +325,45 @@ async function finalizeResult(
 	return declaration ? { ...result, declaration } : result;
 }
 
+/**
+ * Per-audit-pass cache of parsed graphify graphs, keyed by purl. Without it the
+ * audit re-reads and re-parses the same repo graph once per component; one
+ * parse per purl per pass is enough (same semantics, far less IO).
+ */
+export type GraphifyPassCache = Map<string, Promise<GraphifyBundle | null>>;
+
+async function parseGraphifyBundle(
+	cached: Awaited<ReturnType<typeof getCachedGraphifyGraph>>,
+): Promise<GraphifyBundle | null> {
+	if (!cached) return null;
+	const smoke = loadGraphifyGraph(cached.path);
+	return {
+		nodes: (smoke.nodes ?? []) as GraphifyNode[],
+		edges: graphEdges(smoke),
+	};
+}
+
+async function loadGraphifyBundle(
+	cache: GraphifyPassCache | undefined,
+	purl: string,
+	repoRoot: string | undefined,
+): Promise<GraphifyBundle | null> {
+	if (!cache) {
+		return parseGraphifyBundle(await getCachedGraphifyGraph(purl, { repoRoot }));
+	}
+	const existing = cache.get(purl);
+	if (existing) return existing;
+	// Store the promise before awaiting so concurrent callers dedupe too.
+	const pending = (async () =>
+		parseGraphifyBundle(await getCachedGraphifyGraph(purl, { repoRoot })))();
+	cache.set(purl, pending);
+	return pending;
+}
+
 export async function verifySubsystemComponent(
 	graphId: string,
 	componentAlias: string,
-	opts?: { dryRun?: boolean },
+	opts?: { dryRun?: boolean; graphifyCache?: GraphifyPassCache },
 ): Promise<SubsystemComponentVerificationResult> {
 	const graph = await getSubsystemModel(graphId);
 	if (!graph) {
@@ -398,10 +433,12 @@ export async function verifySubsystemComponent(
 		return { ok: true, componentAlias, file: fileResult, cache };
 	}
 
-	const cached = await getCachedGraphifyGraph(purlKey, {
-		repoRoot: cache.repoRoot,
-	});
-	if (!cached) {
+	const bundle = await loadGraphifyBundle(
+		opts?.graphifyCache,
+		purlKey,
+		cache.repoRoot,
+	);
+	if (!bundle) {
 		return {
 			ok: true,
 			componentAlias,
@@ -410,9 +447,8 @@ export async function verifySubsystemComponent(
 		};
 	}
 
-	const smoke = loadGraphifyGraph(cached.path);
-	const nodes = (smoke.nodes ?? []) as GraphifyNode[];
-	const edges = graphEdges(smoke);
+	const nodes = bundle.nodes;
+	const edges = bundle.edges;
 	const anchor = resolveComponentAnchor(nodes, {
 		file: component.file,
 		symbol: component.symbol,
@@ -810,8 +846,12 @@ export async function verifySubsystemModel(
 
 	const results: SubsystemModelVerificationSummary["results"] = [];
 	const tally: Record<string, number> = {};
+	const graphifyCache: GraphifyPassCache = new Map();
 	for (const c of graph.components) {
-		const r = await verifySubsystemComponent(graphId, c.alias, opts);
+		const r = await verifySubsystemComponent(graphId, c.alias, {
+			...opts,
+			graphifyCache,
+		});
 		const { category, detail } = verifyVerdict(r);
 		tally[category] = (tally[category] ?? 0) + 1;
 		results.push({
@@ -879,6 +919,10 @@ export async function auditSubsystemModel(
 	const findings: SubsystemModelAuditFinding[] = [];
 	const checks: SubsystemModelAuditCheck[] = [];
 
+	// One parsed graphify graph per purl for the whole pass — shared by the
+	// per-component loop and the topology pass below.
+	const graphifyCache: GraphifyPassCache = new Map();
+
 	// missing_file findings are attached in the per-component loop so we can
 	// include a deterministic Graphify file-relocate fix when available.
 	// Symbol presence is graphify-only (exact anchor).
@@ -933,7 +977,10 @@ export async function auditSubsystemModel(
 			continue;
 		}
 
-		const r = await verifySubsystemComponent(graphId, c.alias, { dryRun: true });
+		const r = await verifySubsystemComponent(graphId, c.alias, {
+			dryRun: true,
+			graphifyCache,
+		});
 		let issue = seenComponentIssue.has(c.alias);
 
 		const check: SubsystemModelAuditCheck = {
@@ -1181,18 +1228,11 @@ export async function auditSubsystemModel(
 			topologyBundles.set(p.purl, null);
 			continue;
 		}
-		const cached = await getCachedGraphifyGraph(p.purl, {
-			repoRoot: p.repoRoot,
-		});
-		if (!cached) {
-			topologyBundles.set(p.purl, null);
-			continue;
-		}
-		const smoke = loadGraphifyGraph(cached.path);
-		topologyBundles.set(p.purl, {
-			nodes: (smoke.nodes ?? []) as GraphifyNode[],
-			edges: graphEdges(smoke),
-		});
+		// Reuse the per-pass parse from the component loop.
+		topologyBundles.set(
+			p.purl,
+			await loadGraphifyBundle(graphifyCache, p.purl, p.repoRoot),
+		);
 	}
 
 	const byComponentAlias = new Map(graph.components.map((c) => [c.alias, c]));

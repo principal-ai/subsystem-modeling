@@ -11,6 +11,7 @@ import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
 	AlertTriangle,
+	Bot,
 	Download,
 	ExternalLink,
 	GitBranch,
@@ -26,6 +27,7 @@ import { FileCityLogo } from "@principal-ai/logo-component";
 import type {
 	AnalysisSummary,
 	ConceptAnalysis,
+	MaintenanceOverview,
 	OpencodeServerStatus,
 	StudioVersionStatus,
 	UserIdentity,
@@ -35,8 +37,12 @@ import {
 	refreshLibrary,
 	reloadSubscribers,
 	studioVersionChangeSubscribers,
+	subsystemModelChangeSubscribers,
+	subsystemModelMaintainChangeSubscribers,
+	subsystemModelProposalsChangeSubscribers,
 } from "../rpc";
 import { FailuresModal } from "./FailuresModal";
+import { MaintenanceAgentModal } from "./MaintenanceAgentModal";
 import { PendingAnalysesModal } from "./PendingAnalysesModal";
 import { ServerSessionsModal } from "./ServerSessionsModal";
 import { SettingsModal } from "./SettingsModal";
@@ -99,6 +105,63 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 
 	// Header Settings gear — toggles which permanent tabs show by default.
 	const [showSettings, setShowSettings] = useState(false);
+
+	// Ambient Maintain agent surface — verification progress + pending proposals
+	// across every stored subsystem model. Refetched when the model store,
+	// proposals, or a run changes; a slow poll catches regular-audit passes.
+	const [maintenanceOverview, setMaintenanceOverview] =
+		useState<MaintenanceOverview | null>(null);
+	const [showMaintenance, setShowMaintenance] = useState(false);
+	const loadMaintenance = useCallback(() => {
+		void electrobun.rpc!.request
+			.getMaintenanceOverview({})
+			.then((res) => {
+				if (res.ok && res.overview) setMaintenanceOverview(res.overview);
+			})
+			.catch(() => {
+				/* best-effort ambient surface */
+			});
+	}, []);
+	useEffect(() => {
+		loadMaintenance();
+		const refresh = () => loadMaintenance();
+		subsystemModelChangeSubscribers.add(refresh);
+		subsystemModelProposalsChangeSubscribers.add(refresh);
+		subsystemModelMaintainChangeSubscribers.add(refresh);
+		const id = setInterval(refresh, 30_000);
+		return () => {
+			subsystemModelChangeSubscribers.delete(refresh);
+			subsystemModelProposalsChangeSubscribers.delete(refresh);
+			subsystemModelMaintainChangeSubscribers.delete(refresh);
+			clearInterval(id);
+		};
+	}, [loadMaintenance]);
+
+	const maintenancePending = maintenanceOverview?.pendingProposals.length ?? 0;
+	const maintenanceRunning = maintenanceOverview?.running.length ?? 0;
+	const maintenanceAuditing = maintenanceOverview?.auditing.length ?? 0;
+	const maintenanceBusy = maintenanceRunning + maintenanceAuditing;
+	// Always reachable: idle shows a compact icon so the panel can be opened
+	// even when there's nothing pending.
+	const maintenanceActive = maintenancePending > 0 || maintenanceBusy > 0;
+	const maintenanceLabel =
+		maintenanceRunning > 0
+			? "Maintaining…"
+			: maintenanceAuditing > 0
+				? "Auditing…"
+				: maintenancePending === 1
+					? "1 proposal"
+					: `${maintenancePending} proposals`;
+	const maintenanceTitle =
+		maintenanceRunning > 0
+			? "Maintainer is auditing subsystem models…"
+			: maintenanceAuditing > 0
+				? "Re-auditing after an accepted proposal…"
+				: maintenancePending > 0
+					? `${maintenancePending} proposal${
+							maintenancePending === 1 ? "" : "s"
+						} awaiting review — open Maintainer`
+					: "Open Maintainer — verification progress across subsystem models";
 
 	// Studio self-update — npm latest vs installed; button only when a newer
 	// published build is available (hidden for source checkouts).
@@ -591,6 +654,65 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 			)}
 			<button
 				type="button"
+				onClick={() => setShowMaintenance(true)}
+				title={maintenanceTitle}
+				aria-label="Open Maintainer"
+				aria-haspopup="dialog"
+				style={
+					maintenanceActive
+						? {
+								display: "flex",
+								alignItems: "center",
+								gap: 6,
+								height: 32,
+								padding: "0 12px",
+								borderRadius: 16,
+								background: theme.colors.background,
+								border: `1px solid ${theme.colors.primary}`,
+								color: theme.colors.text,
+								fontSize: theme.fontSizes[1],
+								fontFamily: theme.fonts.body,
+								cursor: "pointer",
+								flexShrink: 0,
+								maxWidth: 240,
+							}
+						: {
+								display: "flex",
+								alignItems: "center",
+								justifyContent: "center",
+								width: 32,
+								height: 32,
+								borderRadius: 6,
+								background: "transparent",
+								border: `1px solid ${theme.colors.border}`,
+								color: theme.colors.text,
+								cursor: "pointer",
+								flexShrink: 0,
+							}
+				}
+			>
+				{maintenanceBusy > 0 ? (
+					<Loader2 size={maintenanceActive ? 14 : 16} className="principal-studio-spin" />
+				) : (
+					<Bot
+						size={maintenanceActive ? 14 : 16}
+						style={{ color: theme.colors.primary }}
+					/>
+				)}
+				{maintenanceActive && (
+					<span
+						style={{
+							overflow: "hidden",
+							textOverflow: "ellipsis",
+							whiteSpace: "nowrap",
+						}}
+					>
+						{maintenanceLabel}
+					</span>
+				)}
+			</button>
+			<button
+				type="button"
 				onClick={() => setShowSettings(true)}
 				title="Viewer settings"
 				aria-label="Viewer settings"
@@ -668,6 +790,10 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 		)}
 		{showSettings && createPortal(
 			<SettingsModal onClose={() => setShowSettings(false)} />,
+			document.body,
+		)}
+		{showMaintenance && createPortal(
+			<MaintenanceAgentModal onClose={() => setShowMaintenance(false)} />,
 			document.body,
 		)}
 		</>

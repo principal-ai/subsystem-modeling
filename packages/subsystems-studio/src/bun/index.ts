@@ -40,6 +40,7 @@ import { parseTourOrThrow } from "@principal-ai/file-city-builder";
 import { readFileRemote as fetchRemoteSlice } from "./remote-files";
 import { handoffToRunning, startIpcServer, type LoadTrailMessage } from "./ipc";
 import { startHttpServer } from "./http-server";
+import { resolveSandboxed } from "./sandboxed-path";
 import { deleteSubsystemModel, getSubsystemModel, listSubsystemModels, purlRepoKey, resolveRepoRootForComponent, setSubsystemModelChangeListener, startSubsystemModelDirWatcher, subsystemModelFilePath, touchSubsystemModelOpened, updateSubsystemModel } from "./subsystem-model-store";
 import { mergeSubsystemModels, type MergeInputModel } from "./merge-submodel-models";
 import { publishSubsystemModelGist } from "./gist-publish";
@@ -53,13 +54,20 @@ import {
 	acceptSubsystemModelProposal as acceptProposalInStore,
 	createSubsystemModelProposal,
 	deleteSubsystemModelProposals,
+	getSubsystemModelProposal,
 	listSubsystemModelProposals,
 	pendingProposalCount,
 	rejectSubsystemModelProposal as rejectProposalInStore,
+	setProposalSecondOpinion,
 } from "./proposal-store";
 import { maintainSubsystemModel as runMaintainSubsystemModel } from "./maintain-model";
+import { evaluateProposalSecondOpinion } from "./jev-maintenance";
 import { listMaintainSessions } from "./maintain-sessions";
-import { resolveSubsystemMaintainerModel } from "./opencode-models";
+import {
+	modelProviderOf,
+	resolveSubsystemMaintainerModel,
+	type OpenCodeModelInfo,
+} from "./opencode-models";
 import { auditSubsystemModel, applySubsystemModelAuditFix, verifySubsystemComponent } from "./verify-subsystem-component";
 import {
 	getGraphifyStatus,
@@ -93,6 +101,7 @@ import {
 	subscribeOpencodeLiveFeeds,
 } from "./opencode-v2-live";
 import { ensureGraphifyGraph, listGraphifyGraphs, listGraphifyRepos, assessSubsystemGraphifyReadiness } from "./graphify-store";
+import { buildMaintenanceOverview } from "./maintenance-overview";
 import { ensurePackageLayers, listPackageLayers, listPackageLayerRepos } from "./package-layer-store";
 import {
 	walkLibrary,
@@ -107,6 +116,8 @@ import { analyzeBeats } from "./beat-analysis";
 import type {
 	DefaultTabFlags,
 	GraphifyCliStatus,
+	MaintenanceOverviewModel,
+	MaintenanceOverviewProposal,
 	OpencodeV2Status,
 	PayloadKind,
 	RepoInfo,
@@ -118,6 +129,7 @@ import type {
 	StudioMessages,
 	StudioRequests,
 	StudioVersionStatus,
+	SubsystemModelVerification,
 	ViewerMode,
 	ViewerSettings,
 } from "../shared/contract";
@@ -289,6 +301,7 @@ const LIBRARY_TAB_ID = "library";
 const AGENT_SESSIONS_TAB_ID = "agent-sessions";
 const MAINTENANCE_SESSIONS_TAB_ID = "maintenance-sessions";
 const SUBSYSTEMS_TAB_ID = "subsystems";
+const MAINTENANCE_TAB_ID = "maintenance";
 const GRAPHIFY_TAB_ID = "graphify";
 const PACKAGE_LAYERS_TAB_ID = "package-layers";
 const OPENCODE_V2_TAB_ID = "opencode-v2";
@@ -301,6 +314,7 @@ const PERMANENT_TAB_DEFS: Array<{
 		| "agent-sessions"
 		| "maintenance-sessions"
 		| "subsystems"
+		| "maintenance"
 		| "graphify"
 		| "package-layers"
 		| "library"
@@ -313,6 +327,12 @@ const PERMANENT_TAB_DEFS: Array<{
 		kind: "subsystems",
 		title: "Subsystems",
 		flag: "subsystems",
+	},
+	{
+		id: MAINTENANCE_TAB_ID,
+		kind: "maintenance",
+		title: "Maintenance",
+		flag: "maintenance",
 	},
 	{
 		id: AGENT_SESSIONS_TAB_ID,
@@ -450,6 +470,12 @@ interface SubsystemsTabState {
 	title: "Subsystems";
 }
 
+interface MaintenanceTabState {
+	id: typeof MAINTENANCE_TAB_ID;
+	kind: "maintenance";
+	title: "Maintenance";
+}
+
 interface GraphifyTabState {
 	id: typeof GRAPHIFY_TAB_ID;
 	kind: "graphify";
@@ -524,6 +550,7 @@ type TabState =
 	| AgentSessionsTabState
 	| MaintenanceSessionsTabState
 	| SubsystemsTabState
+	| MaintenanceTabState
 	| GraphifyTabState
 	| PackageLayersTabState
 	| OpencodeV2TabState
@@ -541,6 +568,7 @@ function permanentTabState(
 	| AgentSessionsTabState
 	| MaintenanceSessionsTabState
 	| SubsystemsTabState
+	| MaintenanceTabState
 	| GraphifyTabState
 	| PackageLayersTabState
 	| OpencodeV2TabState
@@ -557,6 +585,9 @@ function permanentTabState(
 	}
 	if (def.kind === "subsystems") {
 		return { id: SUBSYSTEMS_TAB_ID, kind: "subsystems", title: "Subsystems" };
+	}
+	if (def.kind === "maintenance") {
+		return { id: MAINTENANCE_TAB_ID, kind: "maintenance", title: "Maintenance" };
 	}
 	if (def.kind === "graphify") {
 		return { id: GRAPHIFY_TAB_ID, kind: "graphify", title: "Graphify" };
@@ -617,6 +648,8 @@ function ensurePermanentTab(id: string): void {
 				id === PACKAGE_LAYERS_TAB_ID || viewerSettings.defaultTabs.packageLayers,
 			subsystems:
 				id === SUBSYSTEMS_TAB_ID || viewerSettings.defaultTabs.subsystems,
+			maintenance:
+				id === MAINTENANCE_TAB_ID || viewerSettings.defaultTabs.maintenance,
 			opencodeV2:
 				id === OPENCODE_V2_TAB_ID || viewerSettings.defaultTabs.opencodeV2,
 		},
@@ -798,17 +831,6 @@ function loadTrailFile(path: string | null): LoadedTrail {
  * Resolve a marker's `sourcePath` against a tab's repoRoot, refusing path
  * traversal. Returns the absolute path on disk.
  */
-function resolveSandboxed(repoRoot: string, rawPath: string): string {
-	let cleaned = rawPath;
-	if (cleaned.startsWith("/")) cleaned = cleaned.slice(1);
-	if (cleaned.startsWith("GitHub/")) cleaned = cleaned.slice("GitHub/".length);
-	const absolute = resolve(repoRoot, cleaned);
-	if (!absolute.startsWith(repoRoot)) {
-		throw new Error(`Path escapes repo root: ${rawPath}`);
-	}
-	return absolute;
-}
-
 /**
  * The GitHub `owner/name` a tour was authored against, read from its (possibly
  * repaired) `repos[0].remote`. `extractTourPayload` guarantees this is present
@@ -1212,15 +1234,16 @@ function subsystemFilesFromComponents(
 /**
  * Per-walkthrough step sites for the Subsystems tab file → walkthrough
  * expansion. Step `file`s are repo-root-relative (same form as component
- * `file`); repo attribution reuses the step endpoint's purl (from ?? to),
- * mirroring file verification's resolution.
+ * `file`); repo attribution is the step's own `purl`, falling back to the
+ * step endpoint's purl (from ?? to) for older graphs, mirroring file
+ * verification's resolution.
  */
 function subsystemWalkthroughsFromModel(
 	components: ReadonlyArray<{ alias: string; file?: string; purl?: string }>,
 	walkthroughs?: ReadonlyArray<{
 		id: string;
 		title: string;
-		steps?: ReadonlyArray<{ file: string; line: number; from: string; to: string }>;
+		steps?: ReadonlyArray<{ file: string; line: number; from: string; to: string; purl?: string }>;
 	}>,
 ): Array<{
 	id: string;
@@ -1244,7 +1267,10 @@ function subsystemWalkthroughsFromModel(
 		const stepSites: Array<{ file: string; purl?: string; line?: number }> = [];
 		for (const s of steps) {
 			if (!s.file) continue;
-			const purl = byAlias.get(s.from)?.purl ?? byAlias.get(s.to)?.purl;
+			// Preferred: the step names its own site purl. Fall back to the
+			// endpoint components' purls for graphs written before step
+			// purls were required.
+			const purl = s.purl ?? byAlias.get(s.from)?.purl ?? byAlias.get(s.to)?.purl;
 			const key = `${purl ?? ""}\0${s.file}`;
 			let entry = byKey.get(key);
 			if (!entry) {
@@ -1463,6 +1489,7 @@ function isStaticTab(
 	| AgentSessionsTabState
 	| MaintenanceSessionsTabState
 	| SubsystemsTabState
+	| MaintenanceTabState
 	| GraphifyTabState
 	| PackageLayersTabState
 	| OpencodeV2TabState {
@@ -1471,6 +1498,7 @@ function isStaticTab(
 		tab.kind === "agent-sessions" ||
 		tab.kind === "maintenance-sessions" ||
 		tab.kind === "subsystems" ||
+		tab.kind === "maintenance" ||
 		tab.kind === "graphify" ||
 		tab.kind === "package-layers" ||
 		tab.kind === "opencode-v2"
@@ -1679,27 +1707,51 @@ const requests: RequestHandlers = {
 					return { ok: false, error: (err as Error).message };
 				}
 			},
-			readFile: async ({ tabId, path, repo }) => {
-				const tab = getTab(tabId);
-				if (!tab) return { ok: false, error: `unknown tab: ${tabId}` };
-				if (tab.kind === "subsystem-model") {
-					// Graph components carry repo-relative paths; reads are
-					// sandboxed to the component's repo checkout, resolved from
-					// Alexandria by the component's purl.
-					const graph = await getSubsystemModel(tab.graphId);
-					const component = graph?.components.find((c) => c.file === path);
-					const root = component
-						? resolveRepoRootForComponent(component.purl)
-						: undefined;
+		readFile: async ({ tabId, path, repo }) => {
+			const tab = getTab(tabId);
+			if (!tab) return { ok: false, error: `unknown tab: ${tabId}` };
+			if (tab.kind === "subsystem-model") {
+				// Preferred: the caller names the repo (step `purl` or repo
+				// key) — resolve the checkout straight from Alexandria and
+				// serve sandboxed, with no component lookup involved.
+				if (repo) {
+					const root = resolveRepoRootForComponent(repo);
 					if (!root) return { ok: false, error: "graph has no local root for this file" };
 					try {
 						const absolute = resolveSandboxed(root, path);
 						const content = await fs.readFile(absolute, "utf8");
 						return { ok: true, content };
-					} catch (err) {
-						return { ok: false, error: (err as Error).message };
+					} catch {
+						return { ok: false, error: `file not found in graph repos: ${path}` };
 					}
 				}
+				// Legacy bare-path reads: prefer the owning component's
+				// checkout, else fall back to the graph's other referenced
+				// checkouts (seam files with no exported symbol to anchor).
+				// Every candidate stays inside resolveSandboxed.
+				const graph = await getSubsystemModel(tab.graphId);
+				const component = graph?.components.find((c) => c.file === path);
+				const roots: string[] = [];
+				const pushRoot = (purl: string | undefined) => {
+					const root = purl
+						? resolveRepoRootForComponent(purl)
+						: undefined;
+					if (root && !roots.includes(root)) roots.push(root);
+				};
+				pushRoot(component?.purl);
+				for (const c of graph?.components ?? []) pushRoot(c.purl);
+				if (roots.length === 0) return { ok: false, error: "graph has no local root for this file" };
+				for (const root of roots) {
+					try {
+						const absolute = resolveSandboxed(root, path);
+						const content = await fs.readFile(absolute, "utf8");
+						return { ok: true, content };
+					} catch {
+						/* not under this root — try the next referenced checkout */
+					}
+				}
+				return { ok: false, error: `file not found in graph repos: ${path}` };
+			}
 				if (!isTrailTab(tab)) {
 					return { ok: false, error: `${tab.kind} tab does not serve files` };
 				}
@@ -2188,13 +2240,14 @@ const requests: RequestHandlers = {
 						const graphify = full
 							? assessSubsystemGraphifyReadiness(full, graphifyBuildingPurls)
 							: undefined;
-						let lastAudit:
+								let lastAudit:
 							| {
 									checkedAt: string;
 									needsUpdate: boolean;
 									issueCount: number;
 									verdict: "fully_verified" | "partially_verified" | "issues";
 									stale: boolean;
+									verification?: SubsystemModelVerification;
 							  }
 							| undefined;
 						if (full) {
@@ -2214,6 +2267,7 @@ const requests: RequestHandlers = {
 									issueCount: summary.issueCount,
 									verdict: summary.verdict,
 									stale: summary.stale,
+									verification: summary.verification,
 								};
 							}
 						}
@@ -2248,6 +2302,75 @@ const requests: RequestHandlers = {
 					}),
 				);
 				return { graphs };
+			},
+			getMaintenanceOverview: async () => {
+				const entries = await listSubsystemModels();
+				const models: MaintenanceOverviewModel[] = [];
+				const pendingProposals: MaintenanceOverviewProposal[] = [];
+				for (const e of entries) {
+					const full = await getSubsystemModel(e.id);
+					let verdict: MaintenanceOverviewModel["verdict"] = "unknown";
+					let verification: SubsystemModelVerification | undefined;
+					let stale = false;
+					let checkedAt: string | undefined;
+					if (full) {
+						const graphify = assessSubsystemGraphifyReadiness(
+							full,
+							graphifyBuildingPurls,
+						);
+						const fingerprint = buildAuditFingerprint({
+							updatedAt: full.updatedAt,
+							components: full.components,
+							graphify,
+						});
+						const summary = await getSubsystemModelAuditListSummary(
+							e.id,
+							fingerprint,
+						);
+						if (summary) {
+							verdict = summary.verdict;
+							verification = summary.verification;
+							stale = summary.stale;
+							checkedAt = summary.checkedAt;
+						}
+					}
+					const pending = await listSubsystemModelProposals(e.id);
+					for (const proposal of pending) {
+						pendingProposals.push({
+							graphId: e.id,
+							title: e.title,
+							proposal,
+						});
+					}
+					models.push({
+						graphId: e.id,
+						title: e.title,
+						verdict,
+						verified: verification?.verified ?? 0,
+						open: verification?.open ?? 0,
+						blocking: verification?.blocking ?? 0,
+						blocked: verification?.blocked ?? 0,
+						na: verification?.na ?? 0,
+						coverage: verification?.coverage ?? 0,
+						pendingProposalCount: pending.length,
+						stale,
+						checkedAt,
+						repos: githubReposFromComponents(full?.components ?? []),
+					});
+				}
+				return {
+					ok: true as const,
+					overview: buildMaintenanceOverview({
+						models,
+						pendingProposals,
+						running: entries
+							.filter((e) => maintainingGraphIds.has(e.id))
+							.map((e) => e.id),
+						auditing: entries
+							.filter((e) => auditingGraphIds.has(e.id))
+							.map((e) => e.id),
+					}),
+				};
 			},
 			openSubsystemModel: async ({ graphId, walkthroughId }) => {
 				const tabId = await openSubsystemModelTab(graphId, walkthroughId);
@@ -2348,7 +2471,8 @@ const requests: RequestHandlers = {
 				broadcastSubsystemModelProposalsChanged({ graphId, pendingCount });
 				if (autoAccepted) {
 					broadcastSubsystemModelChanged({ graphId, reason: "updated" });
-					await reauditSubsystemModelQuietly(graphId);
+					// Non-blocking: the write is done; recompute in the background.
+					void reauditSubsystemModelQuietly(graphId, { surface: true });
 				}
 				return { ok: true, proposal, autoAccepted };
 			},
@@ -2358,7 +2482,9 @@ const requests: RequestHandlers = {
 				const pendingCount = await pendingProposalCount(graphId);
 				broadcastSubsystemModelProposalsChanged({ graphId, pendingCount });
 				broadcastSubsystemModelChanged({ graphId, reason: "updated" });
-				await reauditSubsystemModelQuietly(graphId);
+				// Non-blocking: accepting applies the patch synchronously; the
+				// re-audit that refreshes badges/ledger runs in the background.
+				void reauditSubsystemModelQuietly(graphId, { surface: true });
 				return { ok: true, proposal: result.proposal };
 			},
 			rejectSubsystemModelProposal: async ({ graphId, proposalId }) => {
@@ -2367,6 +2493,19 @@ const requests: RequestHandlers = {
 				const pendingCount = await pendingProposalCount(graphId);
 				broadcastSubsystemModelProposalsChanged({ graphId, pendingCount });
 				return { ok: true, proposal: result.proposal };
+			},
+			scoreSubsystemModelProposal: async ({ graphId, proposalId, force }) => {
+				const existing = await getSubsystemModelProposal(graphId, proposalId);
+				if (!existing) return { ok: false, error: `unknown proposal: ${proposalId}` };
+				if (existing.secondOpinion && !existing.secondOpinion.error && !force) {
+					return { ok: true, proposal: existing, cached: true };
+				}
+				const opinion = await evaluateProposalSecondOpinion(existing);
+				const stored = await setProposalSecondOpinion(graphId, proposalId, opinion);
+				if (!stored.ok) return { ok: false, error: stored.error };
+				const pendingCount = await pendingProposalCount(graphId);
+				broadcastSubsystemModelProposalsChanged({ graphId, pendingCount });
+				return { ok: true, proposal: stored.proposal, cached: false };
 			},
 			maintainSubsystemModel: async ({ graphId, model, remember }) => {
 				const full = await getSubsystemModel(graphId);
@@ -2391,17 +2530,47 @@ const requests: RequestHandlers = {
 						configured: viewerSettings.subsystemMaintainerModel,
 						refresh: refresh === true,
 					});
+					const toRow = (m: OpenCodeModelInfo) => ({
+						ref: m.ref,
+						id: m.id,
+						providerID: m.providerID,
+						name: m.name,
+					});
+					const freeModels = resolved.freeModels.map(toRow);
+					const models = (resolved.candidates ?? resolved.freeModels).map(
+						toRow,
+					);
+					const credentialed = resolved.credentialedProviders;
+					let note: string | undefined;
+					const remembered = viewerSettings.subsystemMaintainerModel;
+					if (
+						credentialed &&
+						!credentialed.includes("opencode") &&
+						freeModels.length > 0 &&
+						!freeModels.some((m) => m.ref === resolved.model)
+					) {
+						note = `OpenCode Zen free models (opencode/*) need an OpenCode Zen credential, which is not configured here — using ${resolved.model} instead.`;
+					}
+					if (
+						credentialed &&
+						remembered &&
+						modelProviderOf(remembered) &&
+						!credentialed.includes(modelProviderOf(remembered)) &&
+						resolved.model !== remembered
+					) {
+						note = `Remembered model ${remembered} is unusable (no credential for its provider) — using ${resolved.model} instead.`;
+					}
 					return {
 						ok: true,
 						resolved: resolved.model,
 						source: resolved.source,
 						configured: viewerSettings.subsystemMaintainerModel,
-						freeModels: resolved.freeModels.map((m) => ({
-							ref: m.ref,
-							id: m.id,
-							providerID: m.providerID,
-							name: m.name,
-						})),
+						freeModels,
+						models:
+							models.length > 0
+								? models
+								: freeModels,
+						note,
 					};
 				} catch (err) {
 					return {
@@ -2918,21 +3087,47 @@ function broadcastRegularAuditChanged(
 /** Graphs with an in-flight Maintain agent run. */
 const maintainingGraphIds = new Set<string>();
 
-/** Re-run deterministic audit after model mutations so list badges aren't stale. */
-async function reauditSubsystemModelQuietly(graphId: string): Promise<void> {
+/**
+ * Graphs being re-audited after a confirmed proposal. Distinct from
+ * `maintainingGraphIds` (agent runs) and from the regular-audit pass; only
+ * user-visible re-audits land here so the Maintain panel can show a spinner.
+ */
+const auditingGraphIds = new Set<string>();
+
+/**
+ * Re-run deterministic audit after model mutations so list badges aren't stale.
+ *
+ * `surface: true` marks the graph as user-visible-auditing so the Maintain
+ * surface shows a spinner; the background regular-audit pass leaves it false.
+ * Callers that don't need the result should fire-and-forget so a full audit
+ * never blocks a user action.
+ */
+async function reauditSubsystemModelQuietly(
+	graphId: string,
+	opts?: { surface?: boolean },
+): Promise<void> {
+	const surface = opts?.surface === true;
+	if (surface) {
+		auditingGraphIds.add(graphId);
+		// Let the Maintain surface paint the "auditing" state immediately.
+		broadcastSubsystemModelChanged({ graphId, reason: "updated" });
+	}
 	try {
 		const audited = await auditSubsystemModel(graphId);
 		if (!audited.ok) {
 			console.warn(
 				`[principal-studio] re-audit after model change failed for ${graphId}: ${audited.error}`,
 			);
-			return;
 		}
-		broadcastSubsystemModelChanged({ graphId, reason: "updated" });
 	} catch (err) {
 		console.warn(
 			`[principal-studio] re-audit after model change failed for ${graphId}: ${(err as Error).message}`,
 		);
+	} finally {
+		// Clear the auditing flag *before* broadcasting so the surface paints the
+		// finished state (fresh report + spinner off) in one push.
+		if (surface) auditingGraphIds.delete(graphId);
+		broadcastSubsystemModelChanged({ graphId, reason: "updated" });
 	}
 }
 

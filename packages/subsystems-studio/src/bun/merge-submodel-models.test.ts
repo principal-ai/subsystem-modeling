@@ -41,7 +41,7 @@ describe("mergeSubsystemModels", () => {
 							id: "w1",
 							title: "Read",
 							steps: [
-								{ from: "reader", to: "outside", mechanism: "reads", file: "src/a.ts", line: 1 },
+								{ from: "reader", to: "outside", mechanism: "reads", file: "src/a.ts", line: 1, purl: "pkg:github/acme/app#src/a.ts", symbol: "reader" },
 							],
 						},
 					],
@@ -258,7 +258,7 @@ describe("mergeSubsystemModels", () => {
 						{
 							id: "w1",
 							title: "One",
-							steps: [{ from: "a", to: "b", mechanism: "calls", file: "src/a.ts", line: 1 }],
+							steps: [{ from: "a", to: "b", mechanism: "calls", file: "src/a.ts", line: 1, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" }],
 						},
 					],
 				}),
@@ -272,7 +272,7 @@ describe("mergeSubsystemModels", () => {
 						{
 							id: "w1",
 							title: "Two",
-							steps: [{ from: "c", to: "a", mechanism: "calls", file: "src/a.ts", line: 2 }],
+							steps: [{ from: "c", to: "a", mechanism: "calls", file: "src/a.ts", line: 2, purl: "pkg:github/acme/app#src/a.ts", symbol: "c" }],
 						},
 					],
 				}),

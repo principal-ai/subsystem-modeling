@@ -53,7 +53,7 @@ function studioHttpBase(): string {
 async function studioHttpUp(): Promise<boolean> {
   try {
     const res = await fetch(`${studioHttpBase()}/health`, {
-      signal: AbortSignal.timeout(400),
+      signal: AbortSignal.timeout(5_000),
     });
     return res.ok;
   } catch {
@@ -361,6 +361,19 @@ async function acceptAction(
   if (!ok) process.exit(2);
 }
 
+async function acceptAllAction(id: string | undefined): Promise<void> {
+  if (!id) {
+    process.stderr.write('Pass a model id.\n');
+    process.exit(2);
+  }
+  const { ok, json } = await studioFetch(
+    `/api/subsystem-model/${encodeURIComponent(id)}/proposals/accept-all`,
+    { method: 'POST', body: '{}' },
+  );
+  process.stdout.write(JSON.stringify(json, null, 2) + '\n');
+  if (!ok) process.exit(2);
+}
+
 async function rejectAction(
   id: string | undefined,
   proposalId: string | undefined,
@@ -481,6 +494,14 @@ export function createSubsystemModelCommand(): Command {
     .argument('<id>', 'Model id (sg-…)')
     .argument('<proposalId>', 'Proposal id (sp-…)')
     .action(acceptAction);
+
+  cmd
+    .command('accept-all')
+    .description(
+      'Accept every pending proposal for a model, then re-audit once (requires Studio HTTP)',
+    )
+    .argument('<id>', 'Model id (sg-…)')
+    .action(acceptAllAction);
 
   cmd
     .command('reject')

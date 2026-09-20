@@ -48,7 +48,8 @@ export interface PierreWalkthroughCodeViewProps {
   walkthrough: SubsystemWalkthrough;
   /** Focused step; `null` shows all snippets without scrolling to a step. */
   stepIndex: number | null;
-  readFile: (path: string) => Promise<string>;
+  /** Read a step site; `purl` names the seam site's repo for checkout resolution. */
+  readFile: (path: string, purl?: string) => Promise<string>;
   /** Context lines above/below each step site; defaults to 8. */
   contextLines?: number;
   /** Override Pierre's container background. */
@@ -122,19 +123,19 @@ export function PierreWalkthroughCodeView({
   const [load, setLoad] = useState<FileLoadState>({ status: 'loading' });
 
   const pathsKey = useMemo(() => {
-    const paths = [...new Set(walkthrough.steps.map((s) => s.file))];
-    paths.sort();
-    return paths.join('\0');
+    const keys = [...new Set(walkthrough.steps.map((s) => `${s.purl}\0${s.file}`))];
+    keys.sort();
+    return keys.join('\0');
   }, [walkthrough.steps]);
 
   useEffect(() => {
     let cancelled = false;
     setLoad({ status: 'loading' });
-    const paths = [...new Set(walkthrough.steps.map((s) => s.file))];
+    const sites = [...new Map(walkthrough.steps.map((s) => [`${s.purl}\0${s.file}`, s])).values()];
     void Promise.all(
-      paths.map(async (path) => {
-        const contents = await readFile(path);
-        return [path, contents] as const;
+      sites.map(async (step) => {
+        const contents = await readFile(step.file, step.purl);
+        return [`${step.purl}\0${step.file}`, contents] as const;
       }),
     )
       .then((entries) => {
@@ -156,7 +157,7 @@ export function PierreWalkthroughCodeView({
   const slices = useMemo((): SnippetSlice[] => {
     if (load.status !== 'ready') return [];
     return walkthrough.steps.map((step) => {
-      const contents = load.byPath.get(step.file) ?? '';
+      const contents = load.byPath.get(`${step.purl}\0${step.file}`) ?? '';
       return sliceSnippetWindow(
         contents,
         step.line,

@@ -27,6 +27,7 @@ const DEFAULT_TAB_FLAGS: DefaultTabFlags = {
 	graphify: true,
 	packageLayers: true,
 	subsystems: true,
+	maintenance: true,
 	opencodeV2: true,
 };
 
@@ -89,6 +90,7 @@ function normalize(raw: unknown): ViewerSettings {
 				defaults.defaultTabs.packageLayers,
 			),
 			subsystems: coerceBool(tabs["subsystems"], defaults.defaultTabs.subsystems),
+			maintenance: coerceBool(tabs["maintenance"], defaults.defaultTabs.maintenance),
 			opencodeV2: coerceBool(tabs["opencodeV2"], defaults.defaultTabs.opencodeV2),
 		},
 		autoAcceptSubsystemModelProposals: coerceBool(

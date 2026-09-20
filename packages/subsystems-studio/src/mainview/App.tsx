@@ -27,6 +27,7 @@ import { TabStrip } from "./components/TabStrip";
 import { AgentSessionsOverviewView } from "./views/AgentSessions";
 import { LibraryView } from "./views/LibraryView";
 import { SubsystemModelsView } from "./views/SubsystemModelsView";
+import { MaintenanceView } from "./views/MaintenanceView";
 import { GraphifyReposView } from "./views/GraphifyReposView";
 import { PackageLayersReposView } from "./views/PackageLayersReposView";
 import { OpencodeV2DebugView } from "./views/OpencodeV2DebugView";
@@ -89,6 +90,7 @@ const STATIC_TAB_IDS = new Set([
 	"agent-sessions",
 	"maintenance-sessions",
 	"subsystems",
+	"maintenance",
 	"graphify",
 	"package-layers",
 	"opencode-v2",
@@ -103,6 +105,7 @@ function staticTabState(tabId: string): TabState | null {
 	if (tabId === "agent-sessions") return { kind: "agent-sessions" };
 	if (tabId === "maintenance-sessions") return { kind: "maintenance-sessions" };
 	if (tabId === "subsystems") return { kind: "subsystems" };
+	if (tabId === "maintenance") return { kind: "maintenance" };
 	if (tabId === "graphify") return { kind: "graphify" };
 	if (tabId === "package-layers") return { kind: "package-layers" };
 	if (tabId === "opencode-v2") return { kind: "opencode-v2" };
@@ -121,6 +124,7 @@ function renderStaticView(tabId: string, active: boolean): ReactNode | null {
 	if (state.kind === "maintenance-sessions")
 		return <AgentSessionsOverviewView scope="maintain" active={active} />;
 	if (state.kind === "subsystems") return <SubsystemModelsView />;
+	if (state.kind === "maintenance") return <MaintenanceView />;
 	if (state.kind === "graphify") return <GraphifyReposView />;
 	if (state.kind === "package-layers") return <PackageLayersReposView />;
 	if (state.kind === "opencode-v2") return <OpencodeV2DebugView />;
@@ -433,9 +437,42 @@ export function App() {
 		void electrobun.rpc!.request.setActiveTab({ id });
 	}, []);
 
-	const onClose = useCallback((id: string) => {
-		void electrobun.rpc!.request.closeTab({ id });
-	}, []);
+	const onClose = useCallback(
+		(id: string) => {
+			userChoseRef.current = true;
+			if (!tabs.some((t) => t.id === id)) {
+				void electrobun.rpc!.request.closeTab({ id });
+				return;
+			}
+			// Remove immediately — the renderer owns the on-screen tabs and
+			// never waits on the host. The RPC just persists the close; the
+			// next tabsChanged/listTabs reconciles (restoring the tab if the
+			// host rejected the close).
+			historyRef.current = historyRef.current.filter((h) => h !== id);
+			const liveTabs = tabs.filter((t) => t.id !== id);
+			setTabs(liveTabs);
+			if (activeTabId === id) {
+				const liveIds = new Set(liveTabs.map((t) => t.id));
+				let mru: string | undefined;
+				const history = historyRef.current;
+				for (let i = history.length - 1; i >= 0; i--) {
+					const candidate = history[i]!;
+					if (liveIds.has(candidate)) {
+						mru = candidate;
+						break;
+					}
+				}
+				const next =
+					mru ?? liveTabs[liveTabs.length - 1]?.id ?? "library";
+				setActiveTabId(next);
+				// Fire-and-forget: the renderer already switched; this just
+				// keeps the host's resume suggestion in sync.
+				void electrobun.rpc!.request.setActiveTab({ id: next });
+			}
+			void electrobun.rpc!.request.closeTab({ id });
+		},
+		[tabs, activeTabId],
+	);
 
 	// Cmd+1..9 switches to the Nth tab in strip order.
 	useEffect(() => {

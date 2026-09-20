@@ -11,6 +11,11 @@ import {
 	type OpencodeConnection,
 } from "./server-sessions";
 import { resolveOpencode2Bin } from "./opencode-v2";
+import {
+	getMaintainerProbeRegistry,
+	maintainerProbeTimedOut,
+	type MaintainerProbeRegistry,
+} from "./maintainer-probe";
 
 const MAX_EVENTS = 400;
 
@@ -286,6 +291,15 @@ export interface RunOpencodeV2AgentSessionOpts {
 	graphId?: string;
 	/** Fired as soon as the session id exists (open a tab / attach UI). */
 	onSession?: (sessionId: string) => void;
+	/**
+	 * Liveness handshake: the session's first tool call must hit
+	 * `POST /api/maintainer/probe` with this token. If the token does not
+	 * land within `firstActivityTimeoutMs`, the run is aborted and reported
+	 * `unusable` (the model can't actually run tools headless).
+	 */
+	probeRunId?: string;
+	firstActivityTimeoutMs?: number;
+	probeRegistry?: import("./maintainer-probe").MaintainerProbeRegistry;
 }
 
 export async function runOpencodeV2AgentSession(
@@ -295,6 +309,7 @@ export async function runOpencodeV2AgentSession(
 	sessionId?: string;
 	summary?: string;
 	error?: string;
+	unusable?: boolean;
 	model: string;
 	agent: string;
 }> {
@@ -441,6 +456,16 @@ export async function runOpencodeV2AgentSession(
 		}
 
 		const deadline = Date.now() + 15 * 60_000;
+		const probe = opts.probeRunId
+			? {
+					token: opts.probeRunId,
+					startedAt: Date.now(),
+					timeoutMs: opts.firstActivityTimeoutMs ?? 60_000,
+					registry: (opts.probeRegistry ??
+						getMaintainerProbeRegistry()) as MaintainerProbeRegistry,
+					sawProbe: false,
+				}
+			: null;
 		while (Date.now() < deadline && !sawTerminal) {
 			await Bun.sleep(400);
 			const feed = feeds.get(sessionId);
@@ -454,6 +479,43 @@ export async function runOpencodeV2AgentSession(
 					model: opts.model,
 					agent: opts.agent,
 				};
+			}
+			if (probe) {
+				if (!probe.sawProbe && probe.registry.seenAt(probe.token) != null) {
+					probe.sawProbe = true;
+				}
+				if (
+					!probe.sawProbe &&
+					maintainerProbeTimedOut({
+						startedAt: probe.startedAt,
+						now: Date.now(),
+						receivedAt: null,
+						timeoutMs: probe.timeoutMs,
+					})
+				) {
+					controller.abort();
+					await feedTask.catch(() => undefined);
+					if (feed) {
+						upsertFeed(
+							{
+								...feed,
+								status: "error",
+								error: `maintainer probe timeout after ${probe.timeoutMs}ms`,
+							},
+							true,
+						);
+					}
+					return {
+						ok: false,
+						unusable: true,
+						error:
+							`no maintainer probe tool call within ${probe.timeoutMs}ms — ` +
+							`model likely cannot run tools headless`,
+						sessionId,
+						model: opts.model,
+						agent: opts.agent,
+					};
+				}
 			}
 		}
 

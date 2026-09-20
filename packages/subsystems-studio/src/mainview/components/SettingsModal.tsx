@@ -46,6 +46,11 @@ const TAB_TOGGLES: Array<{
 		description: "Saved subsystem component graphs",
 	},
 	{
+		key: "maintenance",
+		label: "Maintenance",
+		description: "Live Maintain overview: verification progress and proposals",
+	},
+	{
 		key: "opencodeV2",
 		label: "OpenCode V2",
 		description: "Debug detect/install for the Maintain V2 runtime",
@@ -70,6 +75,7 @@ const FALLBACK_SETTINGS: ViewerSettings = {
 		graphify: true,
 		packageLayers: true,
 		subsystems: true,
+		maintenance: true,
 		opencodeV2: true,
 	},
 	autoAcceptSubsystemModelProposals: false,

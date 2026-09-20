@@ -16,6 +16,7 @@ import {
 	subsystemModelFilePath,
 	verifyModelFiles,
 	type SubsystemComponent,
+	type SubsystemWalkthroughStep,
 } from "./subsystem-model-store";
 import { registerProjectInAlexandria } from "./alexandria";
 
@@ -311,16 +312,25 @@ describe("walkthrough verify pass", () => {
 					id: "wt",
 					title: "save",
 					steps: [
-						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 3 },
-						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 999 },
-						{ from: "a", to: "store", mechanism: "calls", file: "src/nope.ts", line: 1 },
-						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 4 },
+						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 3, purl: "pkg:github/a/repo-a#src/seam.ts", symbol: "a" },
+						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 999, purl: "pkg:github/a/repo-a#src/seam.ts", symbol: "a" },
+						{ from: "a", to: "store", mechanism: "calls", file: "src/nope.ts", line: 1, purl: "pkg:github/a/repo-a#src/nope.ts", symbol: "a" },
+						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 4, purl: "pkg:github/a/repo-a#src/seam.ts", symbol: "a" },
+					],
+				},
+				{
+					// Legacy graph: step purls predate the requirement, so the
+					// endpoint purl fallback resolves the site instead.
+					id: "wt-legacy",
+					title: "legacy",
+					steps: [
+						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 3, symbol: "a" } as SubsystemWalkthroughStep,
 					],
 				},
 			],
 		});
 
-		expect(result.walkthroughsChecked).toBe(1);
+		expect(result.walkthroughsChecked).toBe(2);
 		const reasons = result.walkthroughsFailed.map((f) => f.reason);
 		expect(reasons.some((r) => r.includes("out of range"))).toBe(true);
 		expect(reasons.some((r) => r.includes("not found"))).toBe(true);

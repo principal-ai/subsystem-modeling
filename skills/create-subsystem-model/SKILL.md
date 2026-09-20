@@ -115,6 +115,7 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
           "mechanism": "calls",                    // see mechanism list below
           "file": "packages/subsystems-studio/src/bun/server-sessions.ts",
           "line": 42,                              // 1-based site where the seam fires
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/server-sessions.ts",  // required: file-anchored purl of the seam site; readers resolve the checkout from this
           "symbol": "probeOpencodeServer",         // optional frame label in Walkthroughs UI
           "annotation": "Probe the server before listing sessions."  // optional codeview note
         }
@@ -130,7 +131,8 @@ Rules:
   own repo's checkout); `purl` subpaths carry the same path after `#`.
 - Portable documents carry only `$schema` / `title` / `description` /
   `components` / `relations` / `walkthroughs`. Repo identity lives on each
-  component's `purl` — there is no stored `repo` field. Local checkouts are
+  component's `purl` and each walkthrough step's `purl` — there is no stored
+  `repo` field. Local checkouts are
   resolved from the **Alexandria registry** (`~/.alexandria/projects.json`), so
   you normally pass nothing extra: registering the repo in Alexandria (opening
   it in Studio, or `repo add`) is what makes file reads work. A create/update
@@ -195,21 +197,26 @@ hops are **derived** from steps — you never author an `edges` array.
 | `mechanism` | yes | Runtime seam label (closed set below) |
 | `file` | yes | Repo-root-relative path of the seam site |
 | `line` | yes | 1-based line in `file` where that relationship fires |
-| `symbol` | no | Frame name shown in the Walkthroughs list (function/method at the site) |
+| `purl` | yes | File-anchored purl of the seam site (repo key + `#` + `file`, mirroring component `purl`). Readers resolve the checkout from this — the step must not rely on its endpoints' repos. The fragment after `#` must equal `file`. |
+| `symbol` | yes | Frame name shown in the Walkthroughs list — the function/method on the stack at the site. Required; there is no mechanism + filename fallback. |
 | `annotation` | no | Free-text note for this hop. Viewers show it in the codeview annotation column next to the highlighted line. Informative only — never verified against source. Prefer one short verb-first sentence (same voice as `purpose`). |
 
-Do **not** point `file:line` at a random nearby line: verification checks that
-the site line has **affinity** with the hop (mentions an endpoint symbol/name,
-lenient ≥4-char identifier match). Failed affinity
-shows up in `verification.walkthroughsFailed` (informational — does not block
-persist, but fix before considering the model done).
+Do **not** point `file:line` at a random nearby line: pick the line where the
+seam actually fires (a reviewer checks the hop against it). Site verification
+(`verification.walkthroughsChecked` / `walkthroughsFailed`) confirms the file
+resolves under the step's `purl` and the line is in range and non-blank — it
+does not check text affinity, so a wrong-but-plausible line passes
+verification and misleads readers. Get the line right anyway.
 
 **Authoring workflow**
 
 1. Lay components (+ optional topology `relations`).
 2. Name the walkthroughs the user cares about (titles humans will click).
 3. For each hop, open the real glue file, pick the call/emit/register line,
-   and record `{ from, to, mechanism, file, line, symbol?, annotation? }`.
+   and record `{ from, to, mechanism, file, line, purl, symbol?, annotation? }`
+   where `purl` is the file-anchored purl of that glue file (`<repo-key>#<file>`).
+   The seam file does NOT need an owning component — that is exactly what the
+   step `purl` is for.
    Default **on** for `annotation` when the hop needs a human-readable
    "what happens here" — the site line alone is often opaque without it.
 4. Create via CLI; if `walkthroughsFailed` is non-empty, correct the site lines

@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
+	buildMaintainerCandidates,
+	isUsableModelRef,
+	modelProviderOf,
+	parseCredentialedProvidersFromAuthJson,
 	parseOpenCodeModelsVerbose,
 	pickDefaultFreeModel,
+	pickDefaultMaintainerModel,
 	scoreFreeMaintainerModel,
 } from "./opencode-models";
 
@@ -64,5 +69,80 @@ describe("opencode-models", () => {
 				models.find((m) => m.id === "nemotron-3.5-lightning-free")!,
 			),
 		);
+	});
+
+	test("parses credentialed providers from auth.json", () => {
+		expect(
+			[...parseCredentialedProvidersFromAuthJson("[]")].sort(),
+		).toEqual([]);
+		expect(
+			[
+				...parseCredentialedProvidersFromAuthJson(
+					JSON.stringify({
+						openrouter: { type: "api", key: "sk-..." },
+						"opencode-go": { type: "api", key: "tok" },
+					}),
+				),
+			].sort(),
+		).toEqual(["opencode-go", "openrouter"]);
+		expect(
+			[...parseCredentialedProvidersFromAuthJson("not json")].sort(),
+		).toEqual([]);
+	});
+
+	test("drops free models when their provider has no credential", () => {
+		const models = parseOpenCodeModelsVerbose(SAMPLE);
+		const credentialed = new Set(["opencode-go"]);
+		const picked = pickDefaultMaintainerModel(models, credentialed);
+		expect(picked?.ref).toBe("opencode-go/deepseek-v4-flash");
+	});
+
+	test("keeps free pick when credentials unknown (null)", () => {
+		const models = parseOpenCodeModelsVerbose(SAMPLE);
+		const picked = pickDefaultMaintainerModel(models, null);
+		expect(picked?.ref).toBe("opencode/big-pickle");
+	});
+
+	test("returns null when no model matches credentialed providers", () => {
+		const models = parseOpenCodeModelsVerbose(SAMPLE);
+		const picked = pickDefaultMaintainerModel(
+			models,
+			new Set(["nvidia"]),
+		);
+		expect(picked).toBeNull();
+	});
+
+	test("candidate list prefers credentialed free, else credentialed pool", () => {
+		const models = parseOpenCodeModelsVerbose(SAMPLE);
+		const free = models.filter((m) => m.free);
+		const candidates = buildMaintainerCandidates(
+			models,
+			new Set(["opencode-go"]),
+			free,
+		);
+		expect(candidates.map((m) => m.ref)).toEqual([
+			"opencode-go/deepseek-v4-flash",
+		]);
+		expect(buildMaintainerCandidates(models, null, free)).toEqual(free);
+	});
+
+	test("modelProviderOf splits provider/id refs", () => {
+		expect(modelProviderOf("opencode-go/deepseek-v4-flash")).toBe(
+			"opencode-go",
+		);
+		expect(modelProviderOf("no-slash")).toBe("");
+		expect(modelProviderOf(undefined)).toBe("");
+	});
+
+	test("isUsableModelRef requires a credentialed provider", () => {
+		const creds = new Set(["opencode-go", "openrouter"]);
+		expect(isUsableModelRef("opencode-go/deepseek-v4-flash", creds)).toBe(
+			true,
+		);
+		expect(isUsableModelRef("opencode/muse-spark-1.3-contributor-free", creds)).toBe(
+			false,
+		);
+		expect(isUsableModelRef("opencode/big-pickle", null)).toBe(true);
+		expect(isUsableModelRef("", creds)).toBe(false);
 	});
 });

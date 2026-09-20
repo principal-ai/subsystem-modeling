@@ -371,8 +371,19 @@ export interface SubsystemWalkthroughStep {
   file: string;
   /** 1-based line within `file`. */
   line: number;
-  /** Frame name for this hop (function/method/symbol). Optional. */
-  symbol?: string;
+  /**
+   * File-anchored purl of the seam site (e.g.
+   * `pkg:github/owner/name#path/to/file.ts`), mirroring component `purl`.
+   * Required: readers resolve the checkout from this instead of guessing
+   * the repo from the step's endpoint components.
+   */
+  purl: string;
+  /**
+   * Frame name for this hop — the function/method on the stack at the site.
+   * Required: the Walkthroughs list shows this instead of a bare
+   * mechanism + filename fallback.
+   */
+  symbol: string;
   /**
    * Free-text note anchored to this hop's site line. Optional — informative
    * only, never verified against source; viewers surface it via the codeview's

@@ -11,15 +11,14 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { ChevronLeft as ChevronLeftIcon, Network as NetworkIcon } from "lucide-react";
+import { ChevronLeft as ChevronLeftIcon } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
 	repoAvatarUrl,
 	SubsystemFileTree,
 	type RepoGroup,
 } from "@principal-ai/subsystems-react";
-import { electrobun } from "../rpc";
-import { GithubMark } from "./TrailHeader";
+import { RepoRow } from "./RepoRow";
 
 export interface FilesDrilldownProps {
 	groups: RepoGroup[];
@@ -44,225 +43,6 @@ export interface FilesDrilldownProps {
 /** React + expansion key for a group (matches the caller's boost mapping). */
 export function drilldownRepoKey(group: Pick<RepoGroup, "repoKey">): string {
 	return group.repoKey ?? "__no-repo__";
-}
-
-function RepoHeaderRow({
-	group,
-	graphCount,
-	title,
-	onPress,
-	showGithub = false,
-	showCombinedToggle = false,
-	combinedActive = false,
-	onToggleCombined,
-}: {
-	group: RepoGroup;
-	graphCount?: number;
-	/** Row tooltip when clickable. */
-	title?: string;
-	/** When set the row renders as a button (hoverable, clickable). */
-	onPress?: () => void;
-	showGithub?: boolean;
-	/** Show the list ↔ combined-graph toggle next to the GitHub button. */
-	showCombinedToggle?: boolean;
-	combinedActive?: boolean;
-	onToggleCombined?: () => void;
-}) {
-	const { theme } = useTheme();
-	const avatar = group.repoKey ? repoAvatarUrl(group.repoKey) : undefined;
-	const label = group.repo ?? "No repo";
-	const github =
-		showGithub && group.owner && group.repo
-			? `https://github.com/${group.owner}/${group.repo}`
-			: undefined;
-
-	const identity = (
-		<>
-			{avatar && (
-				<img
-					src={avatar}
-					alt=""
-					width={28}
-					height={28}
-					style={{ borderRadius: 6, flexShrink: 0 }}
-				/>
-			)}
-			<span
-				style={{
-					fontSize: theme.fontSizes[2],
-					fontFamily: theme.fonts.monospace,
-					color: theme.colors.text,
-					fontWeight: 600,
-					whiteSpace: "nowrap",
-					overflow: "hidden",
-					textOverflow: "ellipsis",
-				}}
-				title={group.owner ? `${group.owner}/${label}` : label}
-			>
-				{label}
-			</span>
-			{graphCount != null && (
-				<span
-					style={{
-						marginLeft: "auto",
-						flexShrink: 0,
-						fontSize: theme.fontSizes[0],
-						fontFamily: theme.fonts.monospace,
-						color:
-							theme.colors.textMuted ?? theme.colors.textSecondary,
-					}}
-					title={`${graphCount} subsystem model${graphCount === 1 ? "" : "s"}`}
-				>
-					{graphCount}
-				</span>
-			)}
-		</>
-	);
-
-	return (
-		<div
-			onMouseEnter={
-				onPress
-					? (e) => {
-							e.currentTarget.style.background =
-								theme.colors.border ?? "#333";
-						}
-					: undefined
-			}
-			onMouseLeave={
-				onPress
-					? (e) => {
-							e.currentTarget.style.background = "transparent";
-						}
-					: undefined
-			}
-			style={{
-				flexShrink: 0,
-				display: "flex",
-				alignItems: "center",
-				gap: 6,
-				padding: "8px 8px 4px",
-				borderRadius: 4,
-				background: "transparent",
-				minWidth: 0,
-				cursor: onPress ? "pointer" : "default",
-				transition: "background 120ms ease",
-			}}
-		>
-			{onPress ? (
-				<button
-					type="button"
-					onClick={onPress}
-					title={title}
-					style={{
-						flex: 1,
-						minWidth: 0,
-						display: "flex",
-						alignItems: "center",
-						gap: 6,
-						padding: 0,
-						border: "none",
-						borderRadius: 4,
-						background: "transparent",
-						cursor: "pointer",
-						fontFamily: theme.fonts.body,
-						textAlign: "left",
-					}}
-				>
-					{identity}
-				</button>
-			) : (
-				<div
-					style={{
-						flex: 1,
-						minWidth: 0,
-						display: "flex",
-						alignItems: "center",
-						gap: 6,
-					}}
-				>
-					{identity}
-				</div>
-			)}
-			{showCombinedToggle && onToggleCombined && (
-				<button
-					type="button"
-					title={combinedActive ? "Show model list" : "Show combined graph"}
-					aria-label={combinedActive ? "Show model list" : "Show combined graph"}
-					aria-pressed={combinedActive}
-					onClick={(e) => {
-						e.stopPropagation();
-						onToggleCombined();
-					}}
-					onMouseEnter={(e) => {
-						e.currentTarget.style.background = theme.colors.border ?? "#333";
-						e.currentTarget.style.color = theme.colors.text;
-					}}
-					onMouseLeave={(e) => {
-						e.currentTarget.style.background = combinedActive
-							? (theme.colors.border ?? "#333")
-							: "transparent";
-						e.currentTarget.style.color = combinedActive
-							? theme.colors.text
-							: (theme.colors.textMuted ?? theme.colors.textSecondary);
-					}}
-					style={{
-						display: "flex",
-						alignItems: "center",
-						justifyContent: "center",
-						padding: 4,
-						flexShrink: 0,
-						border: "none",
-						borderRadius: 4,
-						background: combinedActive
-							? (theme.colors.border ?? "#333")
-							: "transparent",
-						cursor: "pointer",
-						color: combinedActive
-							? theme.colors.text
-							: (theme.colors.textMuted ?? theme.colors.textSecondary),
-						transition: "color 120ms ease",
-					}}
-				>
-					<NetworkIcon size={18} />
-				</button>
-			)}
-			{github && (
-				<button
-					type="button"
-					title={`Open ${group.owner}/${group.repo} on GitHub`}
-					onClick={(e) => {
-						e.stopPropagation();
-						void electrobun.rpc!.request.openExternal({ url: github });
-					}}
-					onMouseEnter={(e) => {
-						e.currentTarget.style.background = theme.colors.border ?? "#333";
-						e.currentTarget.style.color = theme.colors.text;
-					}}
-					onMouseLeave={(e) => {
-						e.currentTarget.style.background = "transparent";
-						e.currentTarget.style.color =
-							theme.colors.textMuted ?? theme.colors.textSecondary;
-					}}
-					style={{
-						display: "flex",
-						alignItems: "center",
-						justifyContent: "center",
-						padding: 4,
-						flexShrink: 0,
-						border: "none",
-						borderRadius: 4,
-						background: "transparent",
-						cursor: "pointer",
-						color: theme.colors.textMuted ?? theme.colors.textSecondary,
-						transition: "color 120ms ease",
-					}}
-				>
-					<GithubMark size={18} />
-				</button>
-			)}
-		</div>
-	);
 }
 
 function BackRow({ onBack }: { onBack: () => void }) {
@@ -443,10 +223,18 @@ export function FilesDrilldown({
 										: undefined,
 							}}
 						>
-							<RepoHeaderRow
-								group={group}
-								graphCount={graphCountByRepo?.get(group.repoKey ?? "")}
+							<RepoRow
+								avatarUrl={
+									group.repoKey ? repoAvatarUrl(group.repoKey) : undefined
+								}
+								label={group.repo ?? "No repo"}
 								title="Show this repo's files"
+								badge={graphCountByRepo?.get(group.repoKey ?? "")}
+								badgeTitle={
+									graphCountByRepo?.get(group.repoKey ?? "") != null
+										? `${graphCountByRepo!.get(group.repoKey ?? "")!} subsystem model${graphCountByRepo!.get(group.repoKey ?? "")! === 1 ? "" : "s"}`
+										: undefined
+								}
 								onPress={() => onFocusRepo(drilldownRepoKey(group))}
 							/>
 						</div>
@@ -460,9 +248,20 @@ export function FilesDrilldown({
 									onBack={() => focusedRepo && onFocusRepo(focusedRepo)}
 								/>
 							)}
-							<RepoHeaderRow
-								group={shown}
+							<RepoRow
+								avatarUrl={
+									shown.repoKey ? repoAvatarUrl(shown.repoKey) : undefined
+								}
+								label={shown.repo ?? "No repo"}
+								title={
+									shown.owner ? `${shown.owner}/${shown.repo}` : shown.repo
+								}
 								showGithub
+								githubUrl={
+									shown.owner && shown.repo
+										? `https://github.com/${shown.owner}/${shown.repo}`
+										: undefined
+								}
 								showCombinedToggle
 								combinedActive={combinedActive}
 								onToggleCombined={onToggleCombined}

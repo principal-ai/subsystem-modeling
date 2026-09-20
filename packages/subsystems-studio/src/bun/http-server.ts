@@ -44,6 +44,7 @@ import {
 	rejectSubsystemModelProposal,
 } from "./proposal-store";
 import { loadViewerSettings } from "./viewer-settings";
+import { getMaintainerProbeRegistry } from "./maintainer-probe";
 import { registerProjectInAlexandria } from "./alexandria";
 import type { SubsystemModelProposalChange } from "../shared/contract";
 const PORT = Number(process.env["PRINCIPAL_STUDIO_HTTP_PORT"] ?? 3045);
@@ -308,6 +309,16 @@ export async function handleSubsystemModelRequest(
 		return json({ status: "ok", graphify: getGraphifyStatus() });
 	}
 
+	// Maintainer liveness probe — the maintain agent's Step-0 tool call. Landing
+	// it proves the model can actually run tools headless before a long run.
+	if (path === "/api/maintainer/probe" && method === "POST") {
+		const body = (await parseBody(req)) as { runId?: unknown } | null;
+		const runId = typeof body?.runId === "string" && body.runId ? body.runId : "";
+		if (!runId) return error("runId is required", 400);
+		getMaintainerProbeRegistry().mark(runId);
+		return json({ ok: true });
+	}
+
 	const graphify = await handleGraphifyRequest(req, url, method);
 	if (graphify) return graphify;
 
@@ -435,10 +446,34 @@ export async function handleSubsystemModelRequest(
 			const pendingCount = await pendingProposalCount(id);
 			onProposalsChanged?.(id, pendingCount);
 			if (autoAccepted) {
-				await reauditSubsystemModelAfterHttpMutation(id);
+				// Fire-and-forget: re-auditing inline would block this single-
+				// threaded HTTP server on /health while the model re-verifies.
+				void reauditSubsystemModelAfterHttpMutation(id);
 			}
 			return json({ ok: true, proposal, autoAccepted }, 201);
 		}
+	}
+
+	// Bulk accept: apply every pending proposal, then re-audit once.
+	const acceptAllMatch = path.match(
+		/^\/api\/subsystem-model\/([^/]+)\/proposals\/accept-all$/,
+	);
+	if (acceptAllMatch && method === "POST") {
+		const id = acceptAllMatch[1]!;
+		const pending = await listSubsystemModelProposals(id);
+		const accepted: string[] = [];
+		const failed: { id: string; error: string }[] = [];
+		for (const proposal of pending) {
+			const res = await acceptSubsystemModelProposal(id, proposal.id);
+			if (res.ok) accepted.push(proposal.id);
+			else failed.push({ id: proposal.id, error: res.error });
+		}
+		const pendingCount = await pendingProposalCount(id);
+		onProposalsChanged?.(id, pendingCount);
+		if (accepted.length > 0) {
+			void reauditSubsystemModelAfterHttpMutation(id);
+		}
+		return json({ ok: true, accepted, failed, pendingCount });
 	}
 
 	// Accept / reject a proposal
@@ -457,7 +492,7 @@ export async function handleSubsystemModelRequest(
 		const pendingCount = await pendingProposalCount(id);
 		onProposalsChanged?.(id, pendingCount);
 		if (action === "accept") {
-			await reauditSubsystemModelAfterHttpMutation(id);
+			void reauditSubsystemModelAfterHttpMutation(id);
 		}
 		return json({ ok: true, proposal: result.proposal });
 	}

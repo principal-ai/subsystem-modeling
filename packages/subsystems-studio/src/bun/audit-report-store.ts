@@ -15,7 +15,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
 	SubsystemGraphifyReadiness,
+	SubsystemModelAuditBoundaryCheck,
+	SubsystemModelAuditCheck,
 	SubsystemModelAuditReport,
+	SubsystemModelAuditTopologyCheck,
+	SubsystemModelVerification,
+	SubsystemModelVerificationLayer,
 } from "../shared/contract";
 import { resolveCurrentGraphifySlot } from "./graphify-store";
 import { purlRepoKey } from "./subsystem-model-store";
@@ -56,6 +61,8 @@ export interface SubsystemModelAuditListSummary {
 	needsUpdate: boolean;
 	issueCount: number;
 	verdict: SubsystemModelAuditVerdict;
+	/** Claim-based progress ledger — see SubsystemModelVerification. */
+	verification: SubsystemModelVerification;
 	/** True when live inputs no longer match the saved fingerprint. */
 	stale: boolean;
 	fingerprint: string;
@@ -97,6 +104,167 @@ export function classifyAuditReport(
 	if (auditHasIssues(report)) return "issues";
 	if (auditHasPartialGaps(report)) return "partially_verified";
 	return "fully_verified";
+}
+
+interface VerificationTally {
+	verified: number;
+	open: number;
+	blocked: number;
+	na: number;
+	blocking: number;
+}
+
+function emptyTally(): VerificationTally {
+	return { verified: 0, open: 0, blocked: 0, na: 0, blocking: 0 };
+}
+
+function finalizeLayer(tally: VerificationTally): SubsystemModelVerificationLayer {
+	const adjudicable = tally.verified + tally.open;
+	const coverage =
+		adjudicable > 0
+			? tally.verified / adjudicable
+			: tally.blocked > 0
+				? 0
+				: 1;
+	return {
+		verified: tally.verified,
+		open: tally.open,
+		blocked: tally.blocked,
+		na: tally.na,
+		coverage,
+		blocking: tally.blocking,
+	};
+}
+
+function mergeTallies(...tallies: VerificationTally[]): VerificationTally {
+	const merged = emptyTally();
+	for (const t of tallies) {
+		merged.verified += t.verified;
+		merged.open += t.open;
+		merged.blocked += t.blocked;
+		merged.na += t.na;
+		merged.blocking += t.blocking;
+	}
+	return merged;
+}
+
+/**
+ * Bucket one construct-layer component check.
+ *
+ * `graphify: "skipped"` marks external / custom-entity / proposed components —
+ * no source claim to verify, so n/a. A missing repo root or an unbuilt cache is
+ * `blocked` (environment fix, not a proposal). Everything that is neither
+ * confirmed nor environment-blocked is `open`, i.e. the agent's work queue.
+ */
+function classifyConstructCheck(
+	c: SubsystemModelAuditCheck,
+	tally: VerificationTally,
+): void {
+	if (c.graphify === "skipped") {
+		tally.na++;
+		return;
+	}
+	if (c.verdict === "issue" || c.fileExists === false) {
+		tally.open++;
+		tally.blocking++;
+		return;
+	}
+	if (c.fileExists === null) {
+		tally.blocked++;
+		return;
+	}
+	if (c.graphify === "unavailable") {
+		tally.blocked++;
+		return;
+	}
+	if (
+		c.verdict === "ok" &&
+		c.graphify === "confirmed" &&
+		// Exact anchor is not enough: an unclassified construct (`null`) is a
+		// gap (`construct_unconfirmed`), not a confirmed claim.
+		c.constructMatch === true &&
+		c.signature !== "mismatch" &&
+		c.signature !== "skipped" &&
+		c.declarationFreshness !== "stale" &&
+		c.declarationFreshness !== "missing"
+	) {
+		tally.verified++;
+		return;
+	}
+	tally.open++;
+}
+
+function classifyTopologyCheck(
+	c: SubsystemModelAuditTopologyCheck,
+	tally: VerificationTally,
+): void {
+	if (c.verdict === "skipped" || c.graphify === "skipped") {
+		tally.na++;
+		return;
+	}
+	if (c.graphify === "unavailable") {
+		tally.blocked++;
+		return;
+	}
+	if (c.verdict === "issue") {
+		tally.open++;
+		tally.blocking++;
+		return;
+	}
+	if (c.verdict === "ok") {
+		tally.verified++;
+		return;
+	}
+	tally.open++;
+}
+
+function classifyBoundaryCheck(
+	c: SubsystemModelAuditBoundaryCheck,
+	tally: VerificationTally,
+): void {
+	if (c.kind === "skipped" || c.verdict === "skipped") {
+		tally.na++;
+		return;
+	}
+	if (c.verdict === "issue") {
+		tally.open++;
+		tally.blocking++;
+		return;
+	}
+	if (c.verdict === "ok") {
+		tally.verified++;
+		return;
+	}
+	tally.open++;
+}
+
+/**
+ * Derive the claim-based verification ledger from an audit report. Pure — the
+ * same report always yields the same ledger, so it can be recomputed on load
+ * instead of persisted.
+ */
+export function summarizeVerification(
+	report: SubsystemModelAuditReport,
+): SubsystemModelVerification {
+	const construct = emptyTally();
+	const boundary = emptyTally();
+	const topology = emptyTally();
+
+	for (const c of report.checks) classifyConstructCheck(c, construct);
+	for (const c of report.boundaryChecks ?? [])
+		classifyBoundaryCheck(c, boundary);
+	for (const c of report.topologyChecks ?? [])
+		classifyTopologyCheck(c, topology);
+
+	const total = finalizeLayer(mergeTallies(construct, boundary, topology));
+	return {
+		...total,
+		byLayer: {
+			construct: finalizeLayer(construct),
+			boundary: finalizeLayer(boundary),
+			topology: finalizeLayer(topology),
+		},
+	};
 }
 
 function auditPath(graphId: string): string {
@@ -197,6 +365,7 @@ export async function getSubsystemModelAuditListSummary(
 		needsUpdate: saved.report.needsUpdate,
 		issueCount: auditIssueCount(saved.report),
 		verdict: classifyAuditReport(saved.report),
+		verification: summarizeVerification(saved.report),
 		stale: saved.fingerprint !== liveFingerprint,
 		fingerprint: saved.fingerprint,
 	};

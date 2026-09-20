@@ -34,7 +34,7 @@ describe('validateSubsystemModelCrossField', () => {
         {
           id: 'w1',
           title: 'flow',
-          steps: [{ from: 'a', to: 'b', mechanism: 'calls', file: 'src/a.ts', line: 1 }],
+          steps: [{ from: 'a', to: 'b', mechanism: 'calls', file: 'src/a.ts', line: 1, purl: 'pkg:github/acme/app#src/a.ts', symbol: 'a' }],
         },
       ],
     });
@@ -68,13 +68,30 @@ describe('validateSubsystemModelCrossField', () => {
           {
             id: 'w1',
             title: 'flow',
-            steps: [{ from: 'ghost', to: 'a', mechanism: 'calls', file: 'src/a.ts', line: 1 }],
+            steps: [{ from: 'ghost', to: 'a', mechanism: 'calls', file: 'src/a.ts', line: 1, purl: 'pkg:github/acme/app#src/a.ts', symbol: 'ghost' }],
           },
         ],
       }),
     );
     expect(problems).toHaveLength(1);
     expect(problems[0]!.path).toBe('/walkthroughs/0/steps/0/from');
+  });
+
+  test('flags walkthrough step purl fragments that mismatch the step file', () => {
+    const problems = validateSubsystemModelCrossField(
+      doc({
+        components: [comp('a')],
+        walkthroughs: [
+          {
+            id: 'w1',
+            title: 'flow',
+            steps: [{ from: 'a', to: 'a', mechanism: 'calls', file: 'src/a.ts', line: 1, purl: 'pkg:github/acme/app#src/other.ts', symbol: 'a' }],
+          },
+        ],
+      }),
+    );
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!.path).toBe('/walkthroughs/0/steps/0/purl');
   });
 
   test('module implies file, exempting external/proposed', () => {

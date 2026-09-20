@@ -59,8 +59,8 @@
   "dependencies": {
     "@principal-ai/agent-monitoring": "^0.3.43",
     "@principal-ai/codebase-composition": "0.2.58",
-    "@principal-ai/subsystems-core": "0.35.0",
-    "@principal-ai/subsystems-react": "^0.26.1",
+    "@principal-ai/subsystems-core": "^0.37.0",
+    "@principal-ai/subsystems-react": "^0.28.0",
     "@xyflow/react": "^12.11.3",
     "ajv": "^8.20.0",
     "better-sqlite3": "^13.0.2"

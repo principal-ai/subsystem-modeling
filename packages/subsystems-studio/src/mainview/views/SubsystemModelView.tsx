@@ -122,9 +122,9 @@ export function SubsystemModelView({
 	}, [graphId, loadGraph, loadAudit]);
 
 	const readFile = useCallback(
-		(path: string) =>
+		(path: string, purl?: string) =>
 			electrobun.rpc!.request
-				.readFile({ tabId, path })
+				.readFile({ tabId, path, ...(purl ? { repo: purl } : {}) })
 				.then((res) => {
 					if (res.ok && res.content != null) return res.content;
 					throw new Error(res.error ?? "Failed to read file");

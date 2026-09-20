@@ -53,17 +53,19 @@ export function relations(
 export function walkthroughFromHops(
   id: string,
   title: string,
-  hops: Array<[from: string, to: string, mechanism: SubsystemWalkthroughMechanism, file: string, line: number]>,
+  hops: Array<[from: string, to: string, mechanism: SubsystemWalkthroughMechanism, file: string, line: number, symbol?: string]>,
 ): SubsystemWalkthrough {
   return {
     id,
     title,
-    steps: hops.map(([from, to, mechanism, file, line]) => ({
+    steps: hops.map(([from, to, mechanism, file, line, symbol]) => ({
       from,
       to,
       mechanism,
       file,
       line,
+      purl: `pkg:github/storybook/fixture#${file}`,
+      symbol: symbol ?? from,
     })),
   };
 }
@@ -103,6 +105,8 @@ export function graphSpecFromEdges(
         mechanism: mechanism as SubsystemWalkthroughMechanism,
         file: 'story-placeholder.ts',
         line: 1,
+        purl: 'pkg:github/storybook/fixture#story-placeholder.ts',
+        symbol: from,
       });
     }
   }

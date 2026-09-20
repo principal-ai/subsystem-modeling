@@ -2435,8 +2435,6 @@ function WalkthroughFlow({
           }}
         >
           {walkthrough.steps.map((step, i) => {
-            const mech = step.mechanism;
-            const color = mech ? MECHANISM_COLOR[mech] : muted;
             const stepActive = active !== null && active.stepIndex === i;
             return (
               <button
@@ -2476,54 +2474,33 @@ function WalkthroughFlow({
                 >
                   {i + 1}
                 </span>
-                {step.symbol ? (
-                  <span
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      fontSize: theme.fontSizes[1],
-                      fontFamily: theme.fonts.monospace,
-                      color: theme.colors.text,
-                    }}
-                  >
-                    {step.symbol}
-                  </span>
-                ) : (
-                  <>
-                    <span
-                      style={{
-                        flexShrink: 0,
-                        width: 74,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        fontSize: theme.fontSizes[0],
-                        fontFamily: theme.fonts.monospace,
-                        color,
-                      }}
-                    >
-                      {mech ?? step.mechanism}
-                    </span>
-                    <span
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        fontSize: theme.fontSizes[0],
-                        fontFamily: theme.fonts.monospace,
-                        color: theme.colors.text,
-                      }}
-                    >
-                      {step.file.split('/').pop()}
-                      <span style={{ opacity: 0.7 }}>:{step.line}</span>
-                    </span>
-                  </>
-                )}
+                <span
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    fontSize: theme.fontSizes[1],
+                    fontFamily: theme.fonts.monospace,
+                    color: theme.colors.text,
+                  }}
+                >
+                  {step.symbol}
+                </span>
+                <span
+                  style={{
+                    flexShrink: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    fontSize: theme.fontSizes[0],
+                    fontFamily: theme.fonts.monospace,
+                    color: muted,
+                  }}
+                >
+                  {step.file.split('/').pop()}:{step.line}
+                </span>
               </button>
             );
           })}

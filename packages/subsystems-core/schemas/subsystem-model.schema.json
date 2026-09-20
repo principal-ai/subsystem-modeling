@@ -257,7 +257,9 @@
         "to",
         "mechanism",
         "file",
-        "line"
+        "line",
+        "purl",
+        "symbol"
       ],
       "additionalProperties": false,
       "properties": {
@@ -284,10 +286,15 @@
           "minimum": 1,
           "description": "1-based line of the site within `file`."
         },
+        "purl": {
+          "type": "string",
+          "minLength": 1,
+          "description": "File-anchored purl of the seam site (e.g. `pkg:github/owner/name#path/to/file.ts`), mirroring component `purl`. Required: readers resolve the checkout from this instead of guessing the repo from the step's endpoint components."
+        },
         "symbol": {
           "type": "string",
           "minLength": 1,
-          "description": "Frame name for this hop (function/method/symbol). Optional; when omitted the viewer falls back to mechanism + filename."
+          "description": "Frame name for this hop — the function/method on the stack at the site. Required; the Walkthroughs list shows this instead of a bare mechanism + filename fallback."
         },
         "annotation": {
           "type": "string",

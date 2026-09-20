@@ -18,6 +18,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import type { SubsystemModelAuditReport } from "../shared/contract";
 import {
 	classifyAuditReport,
@@ -30,8 +31,13 @@ import {
 	type StoredSubsystemModel,
 } from "./subsystem-model-store";
 import { pendingProposalCount } from "./proposal-store";
-import { resolveSubsystemMaintainerModel } from "./opencode-models";
-import { loadViewerSettings } from "./viewer-settings";
+import { resolveSubsystemMaintainerModel, modelProviderOf, FALLBACK_MAINTAINER_MODEL } from "./opencode-models";
+import {
+	firstActivityTimeoutMsFor,
+	isModelUnusable,
+	rememberModelUnusable,
+} from "./maintainer-probe";
+import { loadViewerSettings, patchViewerSettings } from "./viewer-settings";
 import { runOpencodeV2AgentSession } from "./opencode-v2-live";
 
 export const ISSUE_FIXER_AGENT = "issue-fixer";
@@ -540,8 +546,10 @@ export function buildMaintainBrief(opts: {
 	graph: StoredSubsystemModel;
 	report: SubsystemModelAuditReport;
 	route: MaintainRoute;
+	/** Liveness token from this run; Step 0 makes the agent confirm it can call tools. */
+	probeRunId?: string;
 }): string {
-	const { graph, report, route } = opts;
+	const { graph, report, route, probeRunId } = opts;
 	const { agent, mode, layer } = route;
 	const id = graph.id;
 	const enc = encodeURIComponent(id);
@@ -558,6 +566,22 @@ export function buildMaintainBrief(opts: {
 	lines.push(
 		`- **Needs update**: ${report.needsUpdate ? "yes (verification failed)" : "no"}`,
 	);
+	if (probeRunId) {
+		lines.push("");
+		lines.push("## Step 0 · Confirm you're live (required first)");
+		lines.push("");
+		lines.push(
+			"Before anything else, make this one call and confirm it returns `{\"ok\":true}`:",
+		);
+		lines.push("");
+		lines.push(
+			`    curl -sS -X POST ${base}/api/maintainer/probe -H 'Content-Type: application/json' -d '{"runId":"${probeRunId}"}'`,
+		);
+		lines.push("");
+		lines.push(
+			"Do **not** begin the task until that call returns `{\"ok\":true}`.",
+		);
+	}
 	lines.push("");
 	lines.push("## Access");
 	lines.push("");
@@ -703,6 +727,8 @@ export async function runMaintainAgent(opts: {
 	graphId?: string;
 	title?: string;
 	onSession?: (sessionId: string) => void;
+	probeRunId?: string;
+	firstActivityTimeoutMs?: number;
 }): Promise<{
 	ok: boolean;
 	error?: string;
@@ -710,6 +736,7 @@ export async function runMaintainAgent(opts: {
 	model: string;
 	agent: MaintainAgentId;
 	sessionId?: string;
+	unusable?: boolean;
 }> {
 	const directory = opts.primaryRepoRoot?.trim() || process.cwd();
 	const run = await runOpencodeV2AgentSession({
@@ -720,6 +747,8 @@ export async function runMaintainAgent(opts: {
 		text: opts.task,
 		graphId: opts.graphId,
 		onSession: opts.onSession,
+		probeRunId: opts.probeRunId,
+		firstActivityTimeoutMs: opts.firstActivityTimeoutMs,
 	});
 	return {
 		ok: run.ok,
@@ -728,6 +757,7 @@ export async function runMaintainAgent(opts: {
 		model: run.model,
 		agent: opts.agent,
 		sessionId: run.sessionId,
+		unusable: run.unusable,
 	};
 }
 
@@ -775,6 +805,18 @@ export async function maintainSubsystemModel(
 		configured: override || settings.subsystemMaintainerModel,
 	});
 
+	// A remembered model whose provider has no credential (e.g. a free
+	// opencode/Zen model from the old picker) can never execute headless and
+	// would override the working credentialed default forever — drop it.
+	if (
+		!override &&
+		resolved.source !== "settings" &&
+		resolved.source !== "env" &&
+		settings.subsystemMaintainerModel
+	) {
+		patchViewerSettings(settings, { subsystemMaintainerModel: null });
+	}
+
 	const audit = await auditSubsystemModel(graphId);
 	if (!audit.ok) return { ok: false, error: audit.error };
 
@@ -794,17 +836,52 @@ export async function maintainSubsystemModel(
 	}
 
 	const { agent, mode, layer } = route;
-	writeMaintainBrief({ graph, report: audit.report, route });
-	const task = buildMaintainBrief({ graph, report: audit.report, route });
-	const run = await runMaintainAgent({
-		agent,
-		primaryRepoRoot: primaryRepoRoot(graph),
-		task,
-		model: resolved.model,
-		graphId,
-		title: `Maintain — ${graph.title}`,
-		onSession: opts?.onSession,
-	});
+	const root = primaryRepoRoot(graph);
+	const credentialed = resolved.credentialedProviders ?? null;
+
+	// Degraded-memory fast path: the free tier just proved unusable, so don't
+	// re-burn the 30s liveness timeout — go straight to the credentialed fallback.
+	let model = resolved.model;
+	if (
+		isModelUnusable(model) &&
+		modelProviderOf(model) === "opencode" &&
+		credentialed?.includes("opencode-go")
+	) {
+		model = FALLBACK_MAINTAINER_MODEL;
+	}
+
+	const runOnce = async (runModel: string, probeRunId: string) =>
+		runMaintainAgent({
+			agent,
+			primaryRepoRoot: root,
+			task: buildMaintainBrief({
+				graph,
+				report: audit.report,
+				route,
+				probeRunId,
+			}),
+			model: runModel,
+			graphId,
+			title: `Maintain — ${graph.title}`,
+			onSession: opts?.onSession,
+			probeRunId,
+			firstActivityTimeoutMs: firstActivityTimeoutMsFor(runModel),
+		});
+
+	let run = await runOnce(model, randomUUID());
+
+	// The model could not make its first tool call — it's unusable headless.
+	// Remember that, then retry once on the credentialed fallback if we have one.
+	if (!run.ok && run.unusable) {
+		rememberModelUnusable(run.model);
+		if (
+			modelProviderOf(run.model) === "opencode" &&
+			credentialed?.includes("opencode-go")
+		) {
+			run = await runOnce(FALLBACK_MAINTAINER_MODEL, randomUUID());
+		}
+	}
+
 	const pendingAfter = await pendingProposalCount(graphId);
 	if (!run.ok) {
 		return {

@@ -3,6 +3,9 @@
  * (issue-fixer / gap-filler, later extractors). Uses `opencode models --verbose`.
  */
 
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+
 import { OPENCODE_BIN } from "./opencode-bin";
 
 export interface OpenCodeModelInfo {
@@ -142,8 +145,105 @@ export function pickDefaultFreeModel(
 	)[0]!;
 }
 
-/** Hardcoded last resort when `opencode models` fails. */
-export const FALLBACK_FREE_MAINTAINER_MODEL = "opencode/big-pickle";
+function topScored(models: OpenCodeModelInfo[]): OpenCodeModelInfo | null {
+	return [...models].sort(
+		(a, b) => scoreFreeMaintainerModel(b) - scoreFreeMaintainerModel(a),
+	)[0] ?? null;
+}
+
+/**
+ * Pick the default Maintainer model. When the credentialed provider set is
+ * known, free models whose provider has no credential are unusable (e.g. the
+ * `opencode`/Zen provider fails headless without a Zen API key) and are
+ * skipped; the best credentialed tool-calling model is used instead. When
+ * credentials are unknown (null), fall back to free-only selection.
+ */
+export function pickDefaultMaintainerModel(
+	models: OpenCodeModelInfo[],
+	credentialed: Set<string> | null,
+): OpenCodeModelInfo | null {
+	const toolcap = models.filter((m) => m.toolcall);
+	if (toolcap.length === 0) return null;
+	if (credentialed === null) {
+		const free = toolcap.filter((m) => m.free);
+		return topScored(free.length > 0 ? free : toolcap);
+	}
+	const pool = toolcap.filter((m) => credentialed.has(m.providerID));
+	if (pool.length === 0) return null;
+	const free = pool.filter((m) => m.free);
+	return topScored(free.length > 0 ? free : pool);
+}
+
+/**
+ * Credential-aware list surfaced to the model picker: eligible free models
+ * when known, otherwise the credentialed tool-calling pool (or the free list
+ * when credentials are unknown).
+ */
+export function buildMaintainerCandidates(
+	models: OpenCodeModelInfo[],
+	credentialed: Set<string> | null,
+	freeModels: OpenCodeModelInfo[],
+): OpenCodeModelInfo[] {
+	if (credentialed === null) return freeModels;
+	const pool = models.filter(
+		(m) => m.toolcall && credentialed.has(m.providerID),
+	);
+	if (pool.length === 0) return freeModels;
+	const free = pool.filter((m) => m.free);
+	return [...(free.length > 0 ? free : pool)].sort(
+		(a, b) => scoreFreeMaintainerModel(b) - scoreFreeMaintainerModel(a),
+	);
+}
+
+/** Path to OpenCode's shared credential store (`auth list` reads it too). */
+export function resolveOpenCodeAuthJsonPath(): string | null {
+	const env = process.env as Record<string, string | undefined>;
+	if (env["OPENCODE_DATA_DIR"]) return `${env["OPENCODE_DATA_DIR"]}/opencode/auth.json`;
+	const xdgData = env["XDG_DATA_HOME"] || `${homedir()}/.local/share`;
+	return `${xdgData}/opencode/auth.json`;
+}
+
+/** Parse OpenCode `auth.json`: top-level keys = credentialed providers. */
+export function parseCredentialedProvidersFromAuthJson(
+	text: string,
+): Set<string> {
+	const out = new Set<string>();
+	try {
+		const obj = JSON.parse(text) as Record<string, unknown>;
+		for (const [key, val] of Object.entries(obj)) {
+			if (val !== null && typeof val === "object") out.add(key);
+		}
+	} catch {
+		/* malformed store — treat as empty */
+	}
+	return out;
+}
+
+/**
+ * Providers OpenCode has credentials for, or null when the store cannot be
+ * read (unknown — do not gate model selection on it).
+ */
+export async function getCredentialedProviders(): Promise<Set<string> | null> {
+	const path = resolveOpenCodeAuthJsonPath();
+	if (!path) return null;
+	try {
+		return parseCredentialedProvidersFromAuthJson(
+			readFileSync(path, "utf8"),
+		);
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Hardcoded last resort when `opencode models` fails or no eligible model can
+ * be auto-picked. Prefers a credentialed, tool-capable model because the
+ * `opencode`/Zen free tier currently cannot execute headless agent sessions.
+ */
+export const FALLBACK_MAINTAINER_MODEL = "opencode-go/deepseek-v4-flash";
+
+/** @deprecated Use FALLBACK_MAINTAINER_MODEL. */
+export const FALLBACK_FREE_MAINTAINER_MODEL = FALLBACK_MAINTAINER_MODEL;
 
 export async function listOpenCodeModels(opts?: {
 	refresh?: boolean;
@@ -185,9 +285,31 @@ export async function listFreeOpenCodeModels(opts?: {
 		.sort((a, b) => scoreFreeMaintainerModel(b) - scoreFreeMaintainerModel(a));
 }
 
+/** Provider part of a `provider/id` model ref, or "" when malformed. */
+export function modelProviderOf(ref: string | undefined): string {
+	if (!ref) return "";
+	const idx = ref.indexOf("/");
+	return idx > 0 ? ref.slice(0, idx) : "";
+}
+
+/**
+ * A `provider/id` ref is usable when we have no credential data (null —
+ * honor it) or when the ref's provider holds a credential.
+ */
+export function isUsableModelRef(
+	ref: string | undefined,
+	credentialed: Set<string> | null,
+): boolean {
+	if (!ref) return false;
+	if (credentialed === null) return true;
+	return credentialed.has(modelProviderOf(ref));
+}
+
 /**
  * Resolve which model the subsystem maintainer should use.
- * Order: explicit override → env → auto free discovery → fallback.
+ * Order: credentialed override → credentialed env → credentialed-aware auto →
+ * fallback. Overrides whose provider has no credential are skipped so a
+ * remembered free/Zen model never triggers an instant headless failure.
  */
 export async function resolveSubsystemMaintainerModel(opts?: {
 	/** From viewer settings when the user (later) picks one. */
@@ -197,45 +319,80 @@ export async function resolveSubsystemMaintainerModel(opts?: {
 	model: string;
 	source: "settings" | "env" | "auto" | "fallback";
 	freeModels: OpenCodeModelInfo[];
+	/** Credential-aware selectable maintainer models. */
+	candidates?: OpenCodeModelInfo[];
+	/** Providers with credentials, or null when unknown. */
+	credentialedProviders?: string[] | null;
 }> {
+	const credentialed = await getCredentialedProviders();
+
 	const configured = opts?.configured?.trim();
-	if (configured) {
-		let freeModels: OpenCodeModelInfo[] = [];
-		try {
-			freeModels = await listFreeOpenCodeModels({ refresh: opts?.refresh });
-		} catch {
-			/* ignore — still honor explicit setting */
-		}
-		return { model: configured, source: "settings", freeModels };
+	if (configured && isUsableModelRef(configured, credentialed)) {
+		const freeModels = await listFreeOpenCodeModelsOrEmpty({ refresh: opts?.refresh });
+		return {
+			model: configured,
+			source: "settings",
+			freeModels,
+			credentialedProviders: credentialed ? [...credentialed] : null,
+		};
 	}
 
 	const fromEnv = process.env["SUBSYSTEM_MAINTAINER_MODEL"]?.trim();
-	if (fromEnv) {
-		let freeModels: OpenCodeModelInfo[] = [];
-		try {
-			freeModels = await listFreeOpenCodeModels({ refresh: opts?.refresh });
-		} catch {
-			/* ignore */
-		}
-		return { model: fromEnv, source: "env", freeModels };
+	if (fromEnv && isUsableModelRef(fromEnv, credentialed)) {
+		const freeModels = await listFreeOpenCodeModelsOrEmpty({ refresh: opts?.refresh });
+		return {
+			model: fromEnv,
+			source: "env",
+			freeModels,
+			credentialedProviders: credentialed ? [...credentialed] : null,
+		};
 	}
 
 	try {
-		const freeModels = await listFreeOpenCodeModels({ refresh: opts?.refresh });
-		const picked = pickDefaultFreeModel(freeModels);
+		const all = await listOpenCodeModels({ refresh: opts?.refresh });
+		const picked = pickDefaultMaintainerModel(all, credentialed);
+		const freeModels = all
+			.filter((m) => m.free)
+			.sort(
+				(a, b) => scoreFreeMaintainerModel(b) - scoreFreeMaintainerModel(a),
+			);
+		const candidates = buildMaintainerCandidates(
+			all,
+			credentialed,
+			freeModels,
+		);
 		if (picked) {
-			return { model: picked.ref, source: "auto", freeModels };
+			return {
+				model: picked.ref,
+				source: "auto",
+				freeModels,
+				candidates,
+				credentialedProviders: credentialed ? [...credentialed] : null,
+			};
 		}
 		return {
-			model: FALLBACK_FREE_MAINTAINER_MODEL,
+			model: FALLBACK_MAINTAINER_MODEL,
 			source: "fallback",
 			freeModels,
+			candidates,
+			credentialedProviders: credentialed ? [...credentialed] : null,
 		};
 	} catch {
 		return {
-			model: FALLBACK_FREE_MAINTAINER_MODEL,
+			model: FALLBACK_MAINTAINER_MODEL,
 			source: "fallback",
 			freeModels: [],
+			credentialedProviders: credentialed ? [...credentialed] : null,
 		};
+	}
+}
+
+async function listFreeOpenCodeModelsOrEmpty(opts?: {
+	refresh?: boolean;
+}): Promise<OpenCodeModelInfo[]> {
+	try {
+		return await listFreeOpenCodeModels({ refresh: opts?.refresh });
+	} catch {
+		return [];
 	}
 }

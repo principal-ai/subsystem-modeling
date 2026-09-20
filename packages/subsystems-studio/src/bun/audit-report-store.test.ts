@@ -3,7 +3,16 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildAuditFingerprint } from "./audit-report-store";
+import type {
+	SubsystemModelAuditBoundaryCheck,
+	SubsystemModelAuditCheck,
+	SubsystemModelAuditReport,
+	SubsystemModelAuditTopologyCheck,
+} from "../shared/contract";
+import {
+	buildAuditFingerprint,
+	summarizeVerification,
+} from "./audit-report-store";
 import { cacheSlotDir } from "./graphify-store";
 
 function initRepo(): { repo: string; head: string } {
@@ -155,5 +164,265 @@ describe("buildAuditFingerprint", () => {
 		});
 		expect(after).toContain(head2);
 		expect(after).not.toBe(before);
+	});
+});
+
+function componentCheck(
+	over: Partial<SubsystemModelAuditCheck>,
+): SubsystemModelAuditCheck {
+	return {
+		componentAlias: "c",
+		fileExists: true,
+		symbolDeclared: true,
+		declarationFreshness: "fresh",
+		constructMatch: true,
+		signature: "match",
+		anchor: "exact",
+		graphify: "confirmed",
+		verdict: "ok",
+		...over,
+	};
+}
+
+function topologyCheck(
+	over: Partial<SubsystemModelAuditTopologyCheck>,
+): SubsystemModelAuditTopologyCheck {
+	return {
+		relationId: "r",
+		relationType: "calls",
+		from: "a",
+		to: "b",
+		graphify: "confirmed",
+		verdict: "ok",
+		...over,
+	};
+}
+
+function boundaryCheck(
+	over: Partial<SubsystemModelAuditBoundaryCheck>,
+): SubsystemModelAuditBoundaryCheck {
+	return {
+		componentAlias: "c",
+		kind: "module_file",
+		verdict: "ok",
+		...over,
+	};
+}
+
+function report(
+	over: Partial<SubsystemModelAuditReport> = {},
+): SubsystemModelAuditReport {
+	return {
+		graphId: "g",
+		title: "t",
+		checkedAt: "2026-01-01T00:00:00.000Z",
+		needsUpdate: false,
+		summary: {
+			components: 0,
+			filesVerified: 0,
+			symbolsVerified: 0,
+			declarationsFresh: 0,
+			constructsMatched: 0,
+			signaturesMatched: 0,
+			anchorsExact: 0,
+			graphifyConfirmed: 0,
+			externalsSkipped: 0,
+			missingFiles: 0,
+			missingSymbols: 0,
+			walkthroughFailures: 0,
+			staleDeclarations: 0,
+			constructMismatches: 0,
+			signatureMismatches: 0,
+			weakAnchors: 0,
+			unresolved: 0,
+			ok: 0,
+			relations: 0,
+			softChecked: 0,
+			softConfirmed: 0,
+			softUnconfirmed: 0,
+			importsChecked: 0,
+			importsConfirmed: 0,
+			importsUnconfirmed: 0,
+			brokenRelationEndpoints: 0,
+			modulesClaimed: 0,
+			moduleFileOk: 0,
+			moduleFileMismatch: 0,
+			processNestsChecked: 0,
+			processNestOk: 0,
+			processNestDisagree: 0,
+		},
+		checks: [],
+		findings: [],
+		...over,
+	};
+}
+
+describe("summarizeVerification", () => {
+	test("fully confirmed model reads 100% with no blocking", () => {
+		const v = summarizeVerification(
+			report({
+				checks: [componentCheck({}), componentCheck({ componentAlias: "c2" })],
+				topologyChecks: [topologyCheck({})],
+				boundaryChecks: [boundaryCheck({})],
+			}),
+		);
+		expect(v.verified).toBe(4);
+		expect(v.open).toBe(0);
+		expect(v.blocking).toBe(0);
+		expect(v.coverage).toBe(1);
+		expect(v.byLayer.construct.verified).toBe(2);
+		expect(v.byLayer.topology.verified).toBe(1);
+		expect(v.byLayer.boundary.verified).toBe(1);
+	});
+
+	test("unconfirmed construct claim is open, not blocking", () => {
+		const v = summarizeVerification(
+			report({
+				checks: [
+					componentCheck({}),
+					componentCheck({
+						componentAlias: "gap",
+						signature: "skipped",
+					}),
+				],
+			}),
+		);
+		expect(v.verified).toBe(1);
+		expect(v.open).toBe(1);
+		expect(v.blocking).toBe(0);
+		expect(v.coverage).toBe(0.5);
+		expect(v.byLayer.construct.open).toBe(1);
+	});
+
+	test("unclassified construct on an exact anchor is open, not verified", () => {
+		const v = summarizeVerification(
+			report({
+				checks: [
+					componentCheck({}),
+					componentCheck({
+						componentAlias: "unclassified",
+						constructInferred: "unknown",
+						constructMatch: null,
+					}),
+				],
+			}),
+		);
+		expect(v.verified).toBe(1);
+		expect(v.open).toBe(1);
+		expect(v.coverage).toBe(0.5);
+	});
+
+	test("hard failures count as blocking", () => {
+		const v = summarizeVerification(
+			report({
+				checks: [
+					componentCheck({}),
+					componentCheck({
+						componentAlias: "bad",
+						fileExists: false,
+						verdict: "issue",
+					}),
+				],
+				topologyChecks: [topologyCheck({ verdict: "issue" })],
+			}),
+		);
+		expect(v.open).toBe(2);
+		expect(v.blocking).toBe(2);
+		expect(v.coverage).toBe(1 / 3);
+	});
+
+	test("externals and proposed components are n/a and excluded", () => {
+		const v = summarizeVerification(
+			report({
+				checks: [
+					componentCheck({
+						componentAlias: "ext",
+						graphify: "skipped",
+						verdict: "skipped",
+						fileExists: null,
+						constructMatch: null,
+						signature: "n/a",
+						anchor: "n/a",
+					}),
+				],
+			}),
+		);
+		expect(v.na).toBe(1);
+		expect(v.verified).toBe(0);
+		expect(v.open).toBe(0);
+		expect(v.coverage).toBe(1);
+	});
+
+	test("unresolved repo and unbuilt cache are blocked, not open", () => {
+		const v = summarizeVerification(
+			report({
+				checks: [
+					componentCheck({ componentAlias: "c", fileExists: true }),
+					componentCheck({
+						componentAlias: "no-repo",
+						fileExists: null,
+						graphify: "unavailable",
+						verdict: "skipped",
+						constructMatch: null,
+						signature: "n/a",
+						anchor: "n/a",
+					}),
+					componentCheck({
+						componentAlias: "no-cache",
+						fileExists: true,
+						graphify: "unavailable",
+						constructMatch: null,
+						signature: "n/a",
+						anchor: "n/a",
+					}),
+				],
+			}),
+		);
+		expect(v.verified).toBe(1);
+		expect(v.blocked).toBe(2);
+		expect(v.open).toBe(0);
+		expect(v.coverage).toBe(1);
+	});
+
+	test("all-blocked model reads 0%, not 100%", () => {
+		const v = summarizeVerification(
+			report({
+				checks: [
+					componentCheck({
+						componentAlias: "no-repo",
+						fileExists: null,
+						graphify: "unavailable",
+						verdict: "skipped",
+						constructMatch: null,
+						signature: "n/a",
+						anchor: "n/a",
+					}),
+				],
+			}),
+		);
+		expect(v.verified).toBe(0);
+		expect(v.open).toBe(0);
+		expect(v.blocked).toBe(1);
+		expect(v.coverage).toBe(0);
+	});
+
+	test("topology and boundary gaps land in their layers", () => {
+		const v = summarizeVerification(
+			report({
+				topologyChecks: [
+					topologyCheck({}),
+					topologyCheck({ relationId: "r2", verdict: "gap" }),
+				],
+				boundaryChecks: [
+					boundaryCheck({}),
+					boundaryCheck({ componentAlias: "b2", verdict: "gap" }),
+				],
+			}),
+		);
+		expect(v.byLayer.topology.verified).toBe(1);
+		expect(v.byLayer.topology.open).toBe(1);
+		expect(v.byLayer.boundary.verified).toBe(1);
+		expect(v.byLayer.boundary.open).toBe(1);
+		expect(v.byLayer.construct.na).toBe(0);
 	});
 });

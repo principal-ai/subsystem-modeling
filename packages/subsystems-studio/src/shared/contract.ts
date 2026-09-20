@@ -65,6 +65,8 @@ export interface DefaultTabFlags {
 	packageLayers: boolean;
 	/** Subsystems list tab. */
 	subsystems: boolean;
+	/** Maintain overview tab (verification progress + proposals). */
+	maintenance: boolean;
 	/** OpenCode V2 debug / runtime tab. */
 	opencodeV2: boolean;
 }
@@ -386,6 +388,8 @@ export interface SubsystemModelSummary {
 		/** fully_verified | partially_verified (gaps only) | issues (verification failed). */
 		verdict: "fully_verified" | "partially_verified" | "issues";
 		stale: boolean;
+		/** Claim-based progress ledger — see SubsystemModelVerification. */
+		verification?: SubsystemModelVerification;
 	};
 	/** Pending agent correction proposals awaiting confirm. */
 	pendingProposalCount?: number;
@@ -680,6 +684,104 @@ export interface SubsystemModelAuditReport {
 	findings: SubsystemModelAuditFinding[];
 }
 
+/** Verification progress for one layer (construct / boundary / topology). */
+export interface SubsystemModelVerificationLayer {
+	verified: number;
+	open: number;
+	blocked: number;
+	na: number;
+	/** verified / (verified + open); 1 when nothing adjudicable is left. */
+	coverage: number;
+	/** Hard failures among open — must be 0 for fully_verified. */
+	blocking: number;
+}
+
+/**
+ * Claim-based verification ledger derived from an audit report.
+ *
+ * - `verified` — evidence confirms the claim
+ * - `open`     — claim is wrong (`blocking`) or unconfirmed (gap) → agent work
+ * - `blocked`  — cannot check yet (repo/cache unavailable) → environment fix
+ * - `na`       — external / proposed / skipped-by-design (excluded)
+ *
+ * `coverage` only counts adjudicable claims (verified + open); `blocked` and
+ * `na` are excluded from the ratio but still reported so a model can't read
+ * 100% while verifiable work remains stranded on an unbuilt cache.
+ */
+export interface SubsystemModelVerification {
+	verified: number;
+	open: number;
+	blocked: number;
+	na: number;
+	/** verified / (verified + open); 1 when nothing adjudicable is left. */
+	coverage: number;
+	/** Hard failures among open — must be 0 for fully_verified. */
+	blocking: number;
+	byLayer: {
+		construct: SubsystemModelVerificationLayer;
+		boundary: SubsystemModelVerificationLayer;
+		topology: SubsystemModelVerificationLayer;
+	};
+}
+
+/** Per-model row for the ambient Maintain agent surface. */
+export interface MaintenanceOverviewModel {
+	graphId: string;
+	title: string;
+	/** `unknown` = no audit persisted yet. */
+	verdict: "fully_verified" | "partially_verified" | "issues" | "unknown";
+	verified: number;
+	open: number;
+	blocking: number;
+	blocked: number;
+	na: number;
+	coverage: number;
+	pendingProposalCount: number;
+	stale: boolean;
+	checkedAt?: string;
+	/**
+	 * GitHub repos this model references (owner/name), derived from its
+	 * component purls. Drives the Maintain tab's repo filter.
+	 */
+	repos?: Array<{ owner: string; name: string }>;
+}
+
+/** A pending proposal tagged with the model it belongs to. */
+export interface MaintenanceOverviewProposal {
+	graphId: string;
+	title: string;
+	proposal: SubsystemModelProposal;
+}
+
+/**
+ * Aggregate Maintain overview backing the ambient header chip + panel:
+ * per-model verification progress, pending proposals across models, and which
+ * runs are in flight.
+ */
+export interface MaintenanceOverview {
+	/** Model ids with a Maintain run in flight. */
+	running: string[];
+	/** Model ids being re-audited after a confirmed proposal. */
+	auditing: string[];
+	/** Models that still have open (or blocking) claims. */
+	needsWork: number;
+	/** Models whose verdict is fully_verified. */
+	verified: number;
+	/** Summed ledger across all models. */
+	totals: {
+		verified: number;
+		open: number;
+		blocking: number;
+		blocked: number;
+		na: number;
+		coverage: number;
+	};
+	/** Sorted farthest-from-verified first. */
+	models: MaintenanceOverviewModel[];
+	/** Pending proposals across every model. */
+	pendingProposals: MaintenanceOverviewProposal[];
+}
+
 /** One field-level correction an agent proposes for user confirmation. */
 export type SubsystemModelProposalChange =
 	| {
@@ -780,6 +882,22 @@ export interface SubsystemModelProposalPreviewRow {
 }
 
 /**
+ * Jev second opinion attached to a proposal. Display-only in Phase 1;
+ * Phase 2 may gate auto-accept on verbatim thresholds. Optional so older
+ * proposal files without a score read as "not yet scored".
+ */
+export interface SubsystemModelSecondOpinion {
+	source: "jev-1.13" | "jev-1.13-free";
+	checkedAt: string;
+	verdict: "safe" | "needs-human" | "unsafe";
+	/** Calibrated Jev confidence 0-1 (choice confidence, noul-derived). */
+	confidence: number;
+	changeKind?: string;
+	risk?: string;
+	error?: string;
+}
+
+/**
  * Agent-authored correction awaiting (or after) human confirmation.
  * Persisted under ~/.principal/subsystem-model-proposals/<graphId>.json
  */
@@ -806,6 +924,8 @@ export interface SubsystemModelProposal {
 	preview: SubsystemModelProposalPreviewRow[];
 	/** Free-form author tag (e.g. agent name). */
 	author?: string;
+	/** Jev second opinion — absent means not yet scored. */
+	secondOpinion?: SubsystemModelSecondOpinion;
 }
 
 /** Cached graphify knowledge-graph slot under ~/.principal/graphify-graphs. */
@@ -996,7 +1116,7 @@ export interface AnalysisSummary {
 
 export interface TabSummary {
 	id: string;
-	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "analysis" | "session-events" | "prompt" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "graphify" | "package-layers" | "opencode-v2" | "maintain-events";
+	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "analysis" | "session-events" | "prompt" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "maintenance" | "graphify" | "package-layers" | "opencode-v2" | "maintain-events";
 	title: string;
 	mode?: ViewerMode;
 	payloadKind?: PayloadKind;
@@ -1008,7 +1128,7 @@ export interface TabFullState {
 	ok: boolean;
 	error?: string;
 	id: string;
-	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "analysis" | "session-events" | "prompt" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "graphify" | "package-layers" | "opencode-v2" | "maintain-events";
+	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "analysis" | "session-events" | "prompt" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "maintenance" | "graphify" | "package-layers" | "opencode-v2" | "maintain-events";
 	title: string;
 	mode?: ViewerMode;
 	payloadKind?: PayloadKind;
@@ -1290,6 +1410,15 @@ export type StudioRequests = {
 		response: { graphs: SubsystemModelSummary[] };
 	};
 	/**
+	 * Aggregate Maintain overview: per-model verification progress, pending
+	 * proposals across models, and in-flight Maintain runs. Backs the ambient
+	 * header chip + maintenance panel.
+	 */
+	getMaintenanceOverview: {
+		params: Record<string, never>;
+		response: { ok: boolean; error?: string; overview?: MaintenanceOverview };
+	};
+	/**
 	 * Compose every stored model touching one repo-key into a single graph.
 	 * The merge runs host-side over full documents; edges are rebased to
 	 * canonical aliases so the returned document renders as-is. Read-only —
@@ -1448,6 +1577,22 @@ export type StudioRequests = {
 		};
 	};
 	/**
+	 * Score a pending proposal with the Jev second-opinion gate and persist
+	 * the result on the proposal. Idempotent unless `force` — returns the
+	 * cached opinion when one already exists. Fail-open: Jev errors are
+	 * surfaced on `proposal.secondOpinion.error`, never as RPC failure
+	 * unless the proposal itself is missing.
+	 */
+	scoreSubsystemModelProposal: {
+		params: { graphId: string; proposalId: string; force?: boolean };
+		response: {
+			ok: boolean;
+			error?: string;
+			proposal?: SubsystemModelProposal;
+			cached?: boolean;
+		};
+	};
+	/**
 	 * Start a background Maintain OpenCode run for this model.
 	 * Host re-audits and routes: construct issues → issue-fixer, topology
 	 * broken endpoints → topology-fixer, construct gaps → gap-filler,
@@ -1473,8 +1618,10 @@ export type StudioRequests = {
 	};
 	/**
 	 * Free / configured OpenCode models for the subsystem maintainer.
-	 * Today Studio auto-picks a free model; `configured` is reserved for a
-	 * future explicit picker (`subsystemMaintainerModel` setting).
+	 * `models` is the credential-aware selectable list; `freeModels` is the
+	 * raw free list (may include `opencode/*` models that are unusable
+	 * without an OpenCode Zen credential). `configured` is the persisted
+	 * picker override (`subsystemMaintainerModel` setting).
 	 */
 	getSubsystemMaintainerModels: {
 		params: { refresh?: boolean };
@@ -1486,12 +1633,22 @@ export type StudioRequests = {
 			source?: "settings" | "env" | "auto" | "fallback";
 			/** Persisted override, or null when auto. */
 			configured?: string | null;
+			/** Raw free OpenCode models (not all usable headless). */
 			freeModels?: Array<{
 				ref: string;
 				id: string;
 				providerID: string;
 				name?: string;
 			}>;
+			/** Credential-aware selectable maintainer models. */
+			models?: Array<{
+				ref: string;
+				id: string;
+				providerID: string;
+				name?: string;
+			}>;
+			/** Optional explanatory hint (e.g. free Zen models skipped). */
+			note?: string;
 		};
 	};
 	getGraphifyStatus: {

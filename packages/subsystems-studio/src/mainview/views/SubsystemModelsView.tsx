@@ -25,6 +25,7 @@ import type {
 	RegularAuditStatus,
 	SubsystemModelAuditReport,
 	SubsystemModelSummary,
+	SubsystemModelVerification,
 	StudioMessages,
 } from "../../shared/contract";
 import {
@@ -49,6 +50,8 @@ const SUBSYSTEMS_POLL_MS = 10_000;
 const COPY_FEEDBACK_MS = 1500;
 /** Default view hides graphs not edited in the last day. */
 const RECENT_MS = 24 * 60 * 60 * 1000;
+/** Width of the model-list side panel shown beside the composed graph. */
+const COMBINED_LIST_WIDTH = 340;
 
 type ListAuditEntry =
 	| { status: "auditing" }
@@ -58,6 +61,7 @@ type ListAuditEntry =
 			stale?: boolean;
 			issueCount: number;
 			report?: SubsystemModelAuditReport;
+			verification?: SubsystemModelVerification;
 	  }
 	| {
 			status: "partially_verified";
@@ -65,6 +69,7 @@ type ListAuditEntry =
 			stale?: boolean;
 			issueCount: number;
 			report?: SubsystemModelAuditReport;
+			verification?: SubsystemModelVerification;
 	  }
 	| {
 			status: "issues";
@@ -72,6 +77,7 @@ type ListAuditEntry =
 			stale?: boolean;
 			issueCount: number;
 			report?: SubsystemModelAuditReport;
+			verification?: SubsystemModelVerification;
 	  }
 	| { status: "error"; error: string; title?: string };
 
@@ -102,6 +108,7 @@ function entryFromLastAudit(
 		stale: lastAudit.stale,
 		issueCount: lastAudit.issueCount,
 		report: keepReport,
+		verification: lastAudit.verification,
 	};
 }
 
@@ -195,14 +202,18 @@ function listAuditBadge(
 		};
 	}
 	const n = entry.issueCount;
+	const verification = entry.verification;
+	const pct = verification
+		? `${Math.round(verification.coverage * 100)}%`
+		: null;
 	const baseLabel =
 		entry.status === "fully_verified"
 			? "Fully verified"
 			: entry.status === "partially_verified"
-				? "Partially verified"
+				? `Partially verified${pct ? ` · ${pct}` : ""}`
 				: n === 1
-					? "Verification failed · 1 issue"
-					: `Verification failed · ${n} issues`;
+					? `Verification failed · 1 issue${pct ? ` · ${pct}` : ""}`
+					: `Verification failed · ${n} issues${pct ? ` · ${pct}` : ""}`;
 	const label = entry.stale ? `Stale · ${baseLabel}` : baseLabel;
 	const color = entry.stale
 		? (colors.warning ?? "#d4a017")
@@ -212,16 +223,21 @@ function listAuditBadge(
 				? (colors.textSecondary ?? muted)
 				: (colors.error ?? "#e5534b");
 	const when = new Date(entry.checkedAt).toLocaleString();
+	const ledger = verification
+		? ` · ${pct} verified, ${verification.open} open (${verification.blocking} blocking), ${verification.blocked} blocked, ${verification.na} n/a`
+		: "";
 	return {
 		label,
 		color,
-		title: entry.stale
-			? `Audit outdated (inputs changed) · ${when} — click for last report; regular audit will refresh`
-			: entry.status === "fully_verified"
-				? `All applicable checks confirmed · ${when} — click for report`
-				: entry.status === "partially_verified"
-					? `No failures, but some checks still need follow-up · ${when} — click for report`
-					: `Verification failed (${n === 1 ? "1 issue" : `${n} issues`}) · ${when} — click for report`,
+		title:
+			(entry.stale
+				? `Audit outdated (inputs changed) · ${when} — click for last report; regular audit will refresh`
+				: entry.status === "fully_verified"
+					? `All applicable checks confirmed · ${when} — click for report`
+					: entry.status === "partially_verified"
+						? `No failures, but some checks still need follow-up · ${when} — click for report`
+						: `Verification failed (${n === 1 ? "1 issue" : `${n} issues`}) · ${when} — click for report`) +
+			ledger,
 		clickable: true,
 		spinning: false,
 	};
@@ -1595,152 +1611,13 @@ export function SubsystemModelsView({
 	// The file panel ignores the open-file narrowing so the tree stays stable
 	// while previewing; it still follows every other filter + sort.
 	const panelGraphs = applyListFilters(visibleGraphs);
+	/** The composed graph is showing, with the model list docked right. */
+	const combinedPane = combinedActive && focusedRepo != null;
 
-	return (
-		<SubsystemsTabShell>
-			{!scope && (
-				<SubsystemsTabHeader
-				lastLoadedAt={lastLoadedAt}
-				sortBy={sortBy}
-				onSortChange={setSortBy}
-				showAll={showAll}
-				hiddenStaleCount={hiddenStaleCount}
-				onToggleShowAll={() => setShowAll((v) => !v)}
-				issuesOnly={issuesOnly}
-				onToggleIssuesOnly={() => setIssuesOnly((v) => !v)}
-				regularAudit={regularAudit}
-				searchQuery={searchQuery}
-				onSearchChange={setSearchQuery}
-			/>
-			)}
-			<SubsystemsTabBody>
-				<div
-					style={{
-						flex: 1,
-						minHeight: 0,
-						display: "flex",
-						flexDirection: "row",
-						position: "relative",
-						userSelect: panelDrag ? "none" : undefined,
-					}}
-				>
-					<FilesPanel
-						graphs={panelGraphs}
-						selectedId={selectedId}
-						width={panelWidth}
-						focusedRepo={focusedRepo}
-						onFocusRepo={onFocusRepo}
-						onHighlightGraph={onHighlightGraph}
-						onPreviewFile={onPreviewFile}
-						combinedActive={combinedActive}
-						onToggleCombined={onToggleCombined}
-						autoFocusSingleRepo={scope != null}
-					/>
-					<div
-						onMouseDown={onPanelResizeStart}
-						aria-label="Resize files panel"
-						title="Drag to resize"
-						style={{
-							width: 3,
-							flexShrink: 0,
-							cursor: "col-resize",
-							background: theme.colors.border,
-							transition: "background 120ms ease",
-							zIndex: 1,
-						}}
-					/>
-					<div
-						style={{
-							flex: 1,
-							minWidth: 0,
-							minHeight: 0,
-							overflowY: "auto",
-							padding: "16px 24px",
-							...(previewFile && listOverlay
-								? {
-										position: "absolute",
-										top: 0,
-										bottom: 0,
-										right: 0,
-										width: 400,
-										zIndex: 4,
-										flex: "none",
-										background: theme.colors.background,
-										borderLeft: `1px solid ${theme.colors.border ?? "#333"}`,
-									}
-								: null),
-						}}
-					>
-			{previewFile && listOverlay && (
-				<div
-					style={{
-						flexShrink: 0,
-						display: "flex",
-						alignItems: "center",
-						gap: 8,
-						padding: "0 0 8px",
-					}}
-				>
-					<span
-						style={{
-							display: "flex",
-							alignItems: "center",
-							gap: 6,
-							fontSize: theme.fontSizes[0],
-							color: muted,
-							textTransform: "uppercase",
-							letterSpacing: 0.3,
-						}}
-					>
-						<Boxes size={12} style={{ flexShrink: 0 }} aria-hidden="true" />
-						Subsystems
-					</span>
-					<span style={{ flex: 1 }} />
-					<button
-						type="button"
-						onClick={() => setListOverlay(false)}
-						title="Collapse list to rail"
-						aria-label="Collapse subsystem list"
-						style={{
-							flexShrink: 0,
-							border: "none",
-							background: "transparent",
-							color: muted,
-							cursor: "pointer",
-							fontSize: theme.fontSizes[1],
-							lineHeight: 1,
-							padding: "2px 6px",
-							borderRadius: 4,
-						}}
-					>
-						»
-					</button>
-				</div>
-			)}
-			{message && (
-				<div
-					style={{
-						fontSize: theme.fontSizes[1],
-						color: theme.colors.textSecondary,
-						marginBottom: 10,
-					}}
-				>
-					{message}
-				</div>
-			)}
-			{error && (
-				<div style={{ fontSize: theme.fontSizes[1], color: "#e5534b", marginBottom: 10 }}>
-					{error}
-				</div>
-			)}
-			{combinedActive && focusedRepo ? (
-				<ComposedGraphPane
-					repoKey={focusedRepo}
-					graphs={graphs}
-					modelIds={scopeOrder ?? undefined}
-					onPreviewFile={onPreviewFile}
-				/>
-			) : recentGraphs.length === 0 ? (
+	// The model list is rendered either as the main pane or as the
+	// composed-graph side panel — one JSX tree, two placements.
+	const modelList = (
+recentGraphs.length === 0 ? (
 				<div
 					style={{
 						fontSize: theme.fontSizes[1],
@@ -1770,6 +1647,25 @@ export function SubsystemModelsView({
 					const maintainMode = maintainModeFromAuditEntry(auditEntry);
 					const maintainCopy = maintainButtonCopy(maintainMode);
 					const maintainDisabled = maintaining || !maintainMode;
+					const verification =
+						auditEntry && "verification" in auditEntry
+							? auditEntry.verification
+							: undefined;
+					const verificationHint = verification
+						? `${Math.round(verification.coverage * 100)}% verified · ${verification.open} open${
+								verification.blocked > 0
+									? ` · ${verification.blocked} blocked on repo/cache`
+									: ""
+							}`
+						: null;
+					const maintainTitle =
+						maintainState?.status === "error"
+							? `${maintainCopy.agentName} failed: ${maintainState.error ?? "unknown"} — click to retry`
+							: maintaining
+								? `${maintainCopy.agentName} running…`
+								: verificationHint
+									? `${maintainCopy.title} — ${verificationHint}`
+									: maintainCopy.title;
 					const isExpanded = selectedFile?.graphId === graph.id;
 					const isRowExpanded = expandedIds.has(graph.id) && !isExpanded;
 					const isOpen = isExpanded || expandedIds.has(graph.id);
@@ -1952,13 +1848,7 @@ export function SubsystemModelsView({
 								type="button"
 								onClick={(e) => void onMaintain(e, graph)}
 								disabled={maintainDisabled}
-								title={
-									maintainState?.status === "error"
-										? `${maintainCopy.agentName} failed: ${maintainState.error ?? "unknown"} — click to retry`
-										: maintaining
-											? `${maintainCopy.agentName} running…`
-											: maintainCopy.title
-								}
+								title={maintainTitle}
 								aria-label={`${maintainCopy.label} ${graph.title}`}
 								style={{
 									flexShrink: 0,
@@ -2247,6 +2137,178 @@ export function SubsystemModelsView({
 					);
 				})}
 			</div>
+			)
+	);
+
+	return (
+		<SubsystemsTabShell>
+			{!scope && (
+				<SubsystemsTabHeader
+				lastLoadedAt={lastLoadedAt}
+				sortBy={sortBy}
+				onSortChange={setSortBy}
+				showAll={showAll}
+				hiddenStaleCount={hiddenStaleCount}
+				onToggleShowAll={() => setShowAll((v) => !v)}
+				issuesOnly={issuesOnly}
+				onToggleIssuesOnly={() => setIssuesOnly((v) => !v)}
+				regularAudit={regularAudit}
+				searchQuery={searchQuery}
+				onSearchChange={setSearchQuery}
+			/>
+			)}
+			<SubsystemsTabBody>
+				<div
+					style={{
+						flex: 1,
+						minHeight: 0,
+						display: "flex",
+						flexDirection: "row",
+						position: "relative",
+						userSelect: panelDrag ? "none" : undefined,
+					}}
+				>
+					<FilesPanel
+						graphs={panelGraphs}
+						selectedId={selectedId}
+						width={panelWidth}
+						focusedRepo={focusedRepo}
+						onFocusRepo={onFocusRepo}
+						onHighlightGraph={onHighlightGraph}
+						onPreviewFile={onPreviewFile}
+						combinedActive={combinedActive}
+						onToggleCombined={onToggleCombined}
+						autoFocusSingleRepo={scope != null}
+					/>
+					<div
+						onMouseDown={onPanelResizeStart}
+						aria-label="Resize files panel"
+						title="Drag to resize"
+						style={{
+							width: 3,
+							flexShrink: 0,
+							cursor: "col-resize",
+							background: theme.colors.border,
+							transition: "background 120ms ease",
+							zIndex: 1,
+						}}
+					/>
+					<div
+						style={{
+							flex: 1,
+							minWidth: 0,
+							minHeight: 0,
+							overflowY: "auto",
+							// The composed graph is a full-bleed canvas; the model
+							// list keeps the pane's inset.
+							padding: combinedPane ? 0 : "16px 24px",
+							// In composed mode the list is a persistent right
+							// panel, so the preview's dock-to-rail behavior is off.
+							...(previewFile && listOverlay && !combinedPane
+								? {
+										position: "absolute",
+										top: 0,
+										bottom: 0,
+										right: 0,
+										width: 400,
+										zIndex: 4,
+										flex: "none",
+										background: theme.colors.background,
+										borderLeft: `1px solid ${theme.colors.border ?? "#333"}`,
+									}
+								: null),
+						}}
+					>
+			{previewFile && listOverlay && !combinedPane && (
+				<div
+					style={{
+						flexShrink: 0,
+						display: "flex",
+						alignItems: "center",
+						gap: 8,
+						padding: "0 0 8px",
+					}}
+				>
+					<span
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: 6,
+							fontSize: theme.fontSizes[0],
+							color: muted,
+							textTransform: "uppercase",
+							letterSpacing: 0.3,
+						}}
+					>
+						<Boxes size={12} style={{ flexShrink: 0 }} aria-hidden="true" />
+						Subsystems
+					</span>
+					<span style={{ flex: 1 }} />
+					<button
+						type="button"
+						onClick={() => setListOverlay(false)}
+						title="Collapse list to rail"
+						aria-label="Collapse subsystem list"
+						style={{
+							flexShrink: 0,
+							border: "none",
+							background: "transparent",
+							color: muted,
+							cursor: "pointer",
+							fontSize: theme.fontSizes[1],
+							lineHeight: 1,
+							padding: "2px 6px",
+							borderRadius: 4,
+						}}
+					>
+						»
+					</button>
+				</div>
+			)}
+			{message && (
+				<div
+					style={{
+						fontSize: theme.fontSizes[1],
+						color: theme.colors.textSecondary,
+						marginBottom: 10,
+					}}
+				>
+					{message}
+				</div>
+			)}
+			{error && (
+				<div style={{ fontSize: theme.fontSizes[1], color: "#e5534b", marginBottom: 10 }}>
+					{error}
+				</div>
+			)}
+			{combinedActive && focusedRepo ? (
+				<div style={{ height: "100%", display: "flex", flexDirection: "row" }}>
+					<div style={{ flex: 1, minWidth: 0, height: "100%" }}>
+						<ComposedGraphPane
+							repoKey={focusedRepo}
+							graphs={graphs}
+							modelIds={scopeOrder ?? undefined}
+							onPreviewFile={onPreviewFile}
+						/>
+					</div>
+					<div
+						style={{
+							width: COMBINED_LIST_WIDTH,
+							flexShrink: 0,
+							height: "100%",
+							boxSizing: "border-box",
+							overflowY: "auto",
+							borderLeft: `1px solid ${theme.colors.border ?? "#333"}`,
+							background:
+								theme.colors.backgroundSecondary ?? theme.colors.background,
+							padding: "12px",
+						}}
+					>
+						{modelList}
+					</div>
+				</div>
+			) : (
+				modelList
 			)}
 				</div>
 				{previewFile && (
@@ -2258,7 +2320,12 @@ export function SubsystemModelsView({
 							left: panelWidth + 3,
 							// The open list docks right — end the preview at its
 							// edge so the header (and its ✕) is never covered.
-							right: listOverlay ? 400 : 0,
+							// Composed mode keeps the list panel visible instead.
+							right: combinedPane
+								? COMBINED_LIST_WIDTH
+								: listOverlay
+									? 400
+									: 0,
 							zIndex: 2,
 							borderLeft: `1px solid ${theme.colors.border ?? "#333"}`,
 							background: theme.colors.background,
@@ -2332,7 +2399,7 @@ export function SubsystemModelsView({
 						</div>
 					</div>
 				)}
-				{previewFile && !listOverlay && (
+				{previewFile && !listOverlay && !combinedPane && (
 					<button
 						type="button"
 						onClick={() => setListOverlay(true)}

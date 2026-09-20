@@ -414,6 +414,37 @@ export function resolveRepoRootForComponent(
 }
 
 /**
+ * Backfill file-anchored `purl`s on walkthrough steps written before step
+ * purls were required. Derives `repoKey(endpointPurl)#step.file` from the
+ * step's from ?? to component — the same attribution verification and the
+ * file panel already used. Mutates the passed record in place and returns
+ * true when any step was filled.
+ */
+export function backfillStepPurls(doc: {
+	components?: ReadonlyArray<{ alias: string; purl?: string }>;
+	walkthroughs?: Array<{
+		steps?: Array<{ file?: string; purl?: string; from?: string; to?: string }>;
+	}>;
+}): boolean {
+	const byAlias = new Map(
+		(doc.components ?? []).map((c) => [c.alias, c]),
+	);
+	let filled = false;
+	for (const w of doc.walkthroughs ?? []) {
+		for (const s of w.steps ?? []) {
+			if (s.purl || !s.file) continue;
+			const key = purlRepoKey(
+				byAlias.get(s.from ?? "")?.purl ?? byAlias.get(s.to ?? "")?.purl,
+			);
+			if (!key) continue;
+			s.purl = `${key}#${s.file}`;
+			filled = true;
+		}
+	}
+	return filled;
+}
+
+/**
  * @deprecated Prefer graphify exact-anchor checks. Kept only for older tests /
  * call sites; do not use for audit.
  */
@@ -493,11 +524,15 @@ export async function verifyModelFiles(
 						line: step.line,
 						reason,
 					});
-				const from = componentByAlias.get(step.from);
-				const to = componentByAlias.get(step.to);
-				const root =
-					resolveRepoRootForComponent(from?.purl) ??
-					resolveRepoRootForComponent(to?.purl);
+			const from = componentByAlias.get(step.from);
+			const to = componentByAlias.get(step.to);
+			// Preferred: the step names its own site purl. Fall back to the
+			// endpoint components' purls for graphs written before step
+			// purls were required.
+			const root =
+				resolveRepoRootForComponent(step.purl) ??
+				resolveRepoRootForComponent(from?.purl) ??
+				resolveRepoRootForComponent(to?.purl);
 				if (!root) continue;
 				const abs = join(root, step.file);
 				try {
@@ -736,6 +771,7 @@ export async function getSubsystemModel(id: string): Promise<StoredSubsystemMode
 		const record = JSON.parse(raw) as StoredSubsystemModel;
 		// Normalize provenance defaults + backfill renderer-required arrays on read.
 		normalizeDeclarationProvenance(record.components);
+		backfillStepPurls(record);
 		return record;
 	} catch {
 		return null;

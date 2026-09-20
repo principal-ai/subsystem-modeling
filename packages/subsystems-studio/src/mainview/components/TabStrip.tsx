@@ -69,6 +69,7 @@ export function TabStrip({
 					tab.kind === "agent-sessions" ||
 					tab.kind === "maintenance-sessions" ||
 					tab.kind === "subsystems" ||
+					tab.kind === "maintenance" ||
 					tab.kind === "graphify" ||
 					tab.kind === "package-layers" ||
 					tab.kind === "opencode-v2";

@@ -92,6 +92,18 @@ export function validateSubsystemModelCrossField(
           message: `walkthrough ${JSON.stringify(w.id)}: step ${si} to ${JSON.stringify(step.to)} does not match any component alias`,
         });
       }
+      // A file-anchored step purl names its own site: the fragment must be
+      // the step file. Repo-only purls still resolve, so only the anchored
+      // form is checked.
+      if (typeof step.purl === 'string' && step.purl.includes('#')) {
+        const fragment = step.purl.split('#').slice(1).join('#');
+        if (fragment !== step.file) {
+          problems.push({
+            path: `/walkthroughs/${wi}/steps/${si}/purl`,
+            message: `walkthrough ${JSON.stringify(w.id)}: step ${si} purl fragment ${JSON.stringify(fragment)} does not match step file ${JSON.stringify(step.file)}`,
+          });
+        }
+      }
     });
   });
 

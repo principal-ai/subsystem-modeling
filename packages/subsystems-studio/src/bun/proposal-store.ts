@@ -13,6 +13,7 @@ import type {
 	SubsystemModelProposal,
 	SubsystemModelProposalChange,
 	SubsystemModelProposalPreviewRow,
+	SubsystemModelSecondOpinion,
 } from "../shared/contract";
 import { upsertAcceptedConstructAugmentation, upsertAcceptedSignatureAugmentation, upsertAcceptedRelationAugmentation, upsertAcceptedModuleAugmentation } from "./augmentation-store";
 import {
@@ -519,6 +520,35 @@ export async function listSubsystemModelProposals(
 export async function pendingProposalCount(graphId: string): Promise<number> {
 	const pending = await listSubsystemModelProposals(graphId);
 	return pending.length;
+}
+
+export async function getSubsystemModelProposal(
+	graphId: string,
+	proposalId: string,
+): Promise<SubsystemModelProposal | null> {
+	const doc = await readFile(graphId);
+	return doc.proposals.find((p) => p.id === proposalId) ?? null;
+}
+
+export async function setProposalSecondOpinion(
+	graphId: string,
+	proposalId: string,
+	opinion: SubsystemModelSecondOpinion,
+): Promise<
+	| { ok: true; proposal: SubsystemModelProposal }
+	| { ok: false; error: string }
+> {
+	const doc = await readFile(graphId);
+	const idx = doc.proposals.findIndex((p) => p.id === proposalId);
+	if (idx < 0) return { ok: false, error: `unknown proposal: ${proposalId}` };
+	const current = doc.proposals[idx]!;
+	const updated: SubsystemModelProposal = {
+		...current,
+		secondOpinion: opinion,
+	};
+	doc.proposals[idx] = updated;
+	await writeFile(doc);
+	return { ok: true, proposal: updated };
 }
 
 export async function createSubsystemModelProposal(input: {

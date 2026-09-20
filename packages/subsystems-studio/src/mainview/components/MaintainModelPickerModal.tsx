@@ -1,5 +1,7 @@
 /**
- * Pick a free OpenCode model before starting Maintain (issue-fixer or gap-filler).
+ * Pick a model to run Maintain with: Auto (best available — free Zen when
+ * healthy, credentialed fallback otherwise), a credentialed model, or a free
+ * OpenCode Zen model.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -7,12 +9,14 @@ import { Loader2 } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import { electrobun } from "../rpc";
 
-type FreeModelRow = {
+type ModelRow = {
 	ref: string;
 	id: string;
 	providerID: string;
 	name?: string;
 };
+
+const AUTO = "__auto__";
 
 export function MaintainModelPickerModal({
 	graphId,
@@ -32,9 +36,12 @@ export function MaintainModelPickerModal({
 	const [loading, setLoading] = useState(true);
 	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [freeModels, setFreeModels] = useState<FreeModelRow[]>([]);
+	// Credentialed tool-capable models (e.g. opencode-go/*) vs free Zen (opencode/*).
+	const [credModels, setCredModels] = useState<ModelRow[]>([]);
+	const [freeModels, setFreeModels] = useState<ModelRow[]>([]);
 	const [resolved, setResolved] = useState<string | null>(null);
 	const [source, setSource] = useState<string | null>(null);
+	const [note, setNote] = useState<string | null>(null);
 	const [selected, setSelected] = useState<string | null>(null);
 	const [remember, setRemember] = useState(true);
 	const [starting, setStarting] = useState(false);
@@ -55,22 +62,37 @@ export function MaintainModelPickerModal({
 			});
 			if (!res.ok) {
 				setError(res.error ?? "Failed to list models");
+				setCredModels([]);
 				setFreeModels([]);
 				return;
 			}
-			const rows = res.freeModels ?? [];
-			setFreeModels(rows);
+			const all = [...(res.models ?? []), ...(res.freeModels ?? [])];
+			const seen = new Set<string>();
+			const nonZen: ModelRow[] = [];
+			const zen: ModelRow[] = [];
+			for (const r of all) {
+				if (seen.has(r.ref)) continue;
+				seen.add(r.ref);
+				// "opencode/*" = OpenCode Zen (free provider); everything else
+				// (opencode-go/*, etc.) is a credentialed tool-capable provider.
+				if (r.providerID === "opencode") zen.push(r);
+				else nonZen.push(r);
+			}
+			setCredModels(nonZen);
+			setFreeModels(zen);
 			setResolved(res.resolved ?? null);
 			setSource(res.source ?? null);
+			setNote(res.note ?? null);
 			setSelected((prev) => {
-				if (prev && rows.some((r) => r.ref === prev)) return prev;
-				if (res.configured && rows.some((r) => r.ref === res.configured)) {
-					return res.configured;
+				if (
+					prev &&
+					(prev === AUTO ||
+						nonZen.some((r) => r.ref === prev) ||
+						zen.some((r) => r.ref === prev))
+				) {
+					return prev;
 				}
-				if (res.resolved && rows.some((r) => r.ref === res.resolved)) {
-					return res.resolved;
-				}
-				return rows[0]?.ref ?? res.resolved ?? null;
+				return AUTO;
 			});
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
@@ -91,7 +113,8 @@ export function MaintainModelPickerModal({
 		try {
 			const res = await electrobun.rpc!.request.maintainSubsystemModel({
 				graphId,
-				model: selected,
+				// Auto = let the host resolve (free if healthy, else credentialed fallback).
+				model: selected === AUTO ? undefined : selected,
 				remember,
 			});
 			if (!res.ok) {
@@ -106,6 +129,8 @@ export function MaintainModelPickerModal({
 			setStarting(false);
 		}
 	}, [graphId, onClose, onStarted, remember, selected, starting]);
+
+	const hasAny = credModels.length > 0 || freeModels.length > 0;
 
 	return (
 		<div
@@ -127,8 +152,8 @@ export function MaintainModelPickerModal({
 			<div
 				onClick={(e) => e.stopPropagation()}
 				style={{
-					width: "min(440px, calc(100vw - 48px))",
-					maxHeight: "min(80vh, 640px)",
+					width: "min(460px, calc(100vw - 48px))",
+					maxHeight: "min(82vh, 680px)",
 					overflow: "auto",
 					background: theme.colors.surface,
 					border: `1px solid ${theme.colors.border}`,
@@ -151,7 +176,7 @@ export function MaintainModelPickerModal({
 						lineHeight: 1.5,
 					}}
 				>
-					{title} — pick a free OpenCode model for{" "}
+					{title} — pick a model for{" "}
 					<code
 						style={{
 							fontFamily: theme.fonts.monospace ?? "ui-monospace, monospace",
@@ -164,6 +189,23 @@ export function MaintainModelPickerModal({
 						? ` Default right now: ${resolved} (${source}).`
 						: null}
 				</p>
+
+				{note && (
+					<p
+						style={{
+							margin: "0 0 12px",
+							padding: "8px 10px",
+							borderRadius: 6,
+							background: theme.colors.background,
+							border: `1px solid ${theme.colors.border}`,
+							color: muted,
+							fontSize: theme.fontSizes[0],
+							lineHeight: 1.5,
+						}}
+					>
+						{note}
+					</p>
+				)}
 
 				{error && (
 					<p
@@ -188,11 +230,12 @@ export function MaintainModelPickerModal({
 						}}
 					>
 						<Loader2 size={14} className="principal-studio-spin" />
-						Loading free models…
+						Loading models…
 					</p>
-				) : freeModels.length === 0 ? (
+				) : !hasAny ? (
 					<p style={{ color: muted, fontSize: theme.fontSizes[1] }}>
-						No free models found. Refresh or set SUBSYSTEM_MAINTAINER_MODEL.
+						No eligible models found. Connect a provider in OpenCode,
+						refresh, or set SUBSYSTEM_MAINTAINER_MODEL.
 					</p>
 				) : (
 					<div
@@ -203,64 +246,111 @@ export function MaintainModelPickerModal({
 							marginBottom: 14,
 						}}
 					>
-						{freeModels.map((m) => {
-							const on = selected === m.ref;
-							return (
-								<label
-									key={m.ref}
+						<label
+							style={{
+								display: "flex",
+								alignItems: "flex-start",
+								gap: 10,
+								padding: "10px 12px",
+								borderRadius: 8,
+								background: theme.colors.background,
+								border: `1px solid ${
+									selected === AUTO ? theme.colors.primary : theme.colors.border
+								}`,
+								cursor: starting ? "default" : "pointer",
+							}}
+						>
+							<input
+								type="radio"
+								name="maintainer-model"
+								checked={selected === AUTO}
+								disabled={starting}
+								onChange={() => setSelected(AUTO)}
+								style={{
+									marginTop: 3,
+									accentColor: theme.colors.primary,
+									flexShrink: 0,
+								}}
+							/>
+							<span style={{ minWidth: 0, flex: 1 }}>
+								<span
 									style={{
-										display: "flex",
-										alignItems: "flex-start",
-										gap: 10,
-										padding: "10px 12px",
-										borderRadius: 8,
-										background: theme.colors.background,
-										border: `1px solid ${
-											on ? theme.colors.primary : theme.colors.border
-										}`,
-										cursor: starting ? "default" : "pointer",
+										display: "block",
+										fontSize: theme.fontSizes[1],
+										fontWeight: 600,
+										lineHeight: 1.3,
 									}}
 								>
-									<input
-										type="radio"
-										name="maintainer-model"
-										checked={on}
+									Auto — best available
+								</span>
+								<span
+									style={{
+										display: "block",
+										fontSize: theme.fontSizes[0],
+										color: muted,
+										marginTop: 2,
+									}}
+								>
+									Uses the free Zen model when it works; falls back to the
+									credentialed model (e.g. opencode-go) if the free tier is
+									down or unauthenticated.
+								</span>
+							</span>
+						</label>
+
+						{credModels.length > 0 && (
+							<>
+								<div
+									style={{
+										fontSize: theme.fontSizes[0],
+										textTransform: "uppercase",
+										letterSpacing: 0.3,
+										color: muted,
+										margin: "8px 2px 2px",
+									}}
+								>
+									Credentialed
+								</div>
+								{credModels.map((m) => (
+									<ModelRowRow
+										key={m.ref}
+										row={m}
+										selected={selected}
 										disabled={starting}
-										onChange={() => setSelected(m.ref)}
-										style={{
-											marginTop: 3,
-											accentColor: theme.colors.primary,
-											flexShrink: 0,
-										}}
+										theme={theme}
+										muted={muted}
+										onSelect={setSelected}
 									/>
-									<span style={{ minWidth: 0, flex: 1 }}>
-										<span
-											style={{
-												display: "block",
-												fontSize: theme.fontSizes[1],
-												fontWeight: 600,
-												lineHeight: 1.3,
-											}}
-										>
-											{m.name ?? m.id}
-										</span>
-										<span
-											style={{
-												display: "block",
-												fontSize: theme.fontSizes[0],
-												color: muted,
-												fontFamily:
-													theme.fonts.monospace ?? "ui-monospace, monospace",
-												marginTop: 2,
-												wordBreak: "break-all",
-											}}
-										>
-											{m.ref}
-										</span>
-									</span>
-								</label>
-							);
-						})}
+								))}
+							</>
+						)}
+
+						{freeModels.length > 0 && (
+							<>
+								<div
+									style={{
+										fontSize: theme.fontSizes[0],
+										textTransform: "uppercase",
+										letterSpacing: 0.3,
+										color: muted,
+										margin: "8px 2px 2px",
+									}}
+								>
+									Free — OpenCode Zen{note ? " (may be unavailable)" : ""}
+								</div>
+								{freeModels.map((m) => (
+									<ModelRowRow
+										key={m.ref}
+										row={m}
+										selected={selected}
+										disabled={starting}
+										theme={theme}
+										muted={muted}
+										onSelect={setSelected}
+									/>
+								))}
+							</>
+						)}
 					</div>
 				)}
 
@@ -362,5 +452,75 @@ export function MaintainModelPickerModal({
 				</div>
 			</div>
 		</div>
+	);
+}
+
+function ModelRowRow({
+	row,
+	selected,
+	disabled,
+	theme,
+	muted,
+	onSelect,
+}: {
+	row: ModelRow;
+	selected: string | null;
+	disabled: boolean;
+	theme: ReturnType<typeof useTheme>["theme"];
+	muted: string;
+	onSelect: (ref: string) => void;
+}) {
+	const on = selected === row.ref;
+	return (
+		<label
+			style={{
+				display: "flex",
+				alignItems: "flex-start",
+				gap: 10,
+				padding: "10px 12px",
+				borderRadius: 8,
+				background: theme.colors.background,
+				border: `1px solid ${on ? theme.colors.primary : theme.colors.border}`,
+				cursor: disabled ? "default" : "pointer",
+			}}
+		>
+			<input
+				type="radio"
+				name="maintainer-model"
+				checked={on}
+				disabled={disabled}
+				onChange={() => onSelect(row.ref)}
+				style={{
+					marginTop: 3,
+					accentColor: theme.colors.primary,
+					flexShrink: 0,
+				}}
+			/>
+			<span style={{ minWidth: 0, flex: 1 }}>
+				<span
+					style={{
+						display: "block",
+						fontSize: theme.fontSizes[1],
+						fontWeight: 600,
+						lineHeight: 1.3,
+					}}
+				>
+					{row.name ?? row.id}
+				</span>
+				<span
+					style={{
+						display: "block",
+						fontSize: theme.fontSizes[0],
+						color: muted,
+						fontFamily:
+							theme.fonts.monospace ?? "ui-monospace, monospace",
+						marginTop: 2,
+						wordBreak: "break-all",
+					}}
+				>
+					{row.ref}
+				</span>
+			</span>
+		</label>
 	);
 }

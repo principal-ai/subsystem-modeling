@@ -21,6 +21,31 @@ function formatValue(v: unknown): string {
 	}
 }
 
+function opinionBadge(
+	opinion: NonNullable<SubsystemModelProposal["secondOpinion"]>,
+	colors: { success?: string; error?: string; textSecondary?: string },
+	muted: string,
+): { text: string; color: string } {
+	if (opinion.error) {
+		return { text: `Second opinion unavailable — ${opinion.error}`, color: colors.error ?? "#e5534b" };
+	}
+	const pct = Math.round(opinion.confidence * 100);
+	const label =
+		opinion.verdict === "safe"
+			? "Safe"
+			: opinion.verdict === "unsafe"
+				? "Unsafe"
+				: "Needs human";
+	const color =
+		opinion.verdict === "safe"
+			? (colors.success ?? "#2da44e")
+			: opinion.verdict === "unsafe"
+				? (colors.error ?? "#e5534b")
+				: muted;
+	const extra = opinion.changeKind ? ` · ${opinion.changeKind}` : "";
+	return { text: `Second opinion · ${label} ${pct}%${extra}`, color };
+}
+
 export function ProposalsModal({
 	graphId,
 	title,
@@ -36,8 +61,9 @@ export function ProposalsModal({
 		null,
 	);
 	const [error, setError] = useState<string | null>(null);
-	const [busyId, setBusyId] = useState<string | null>(null);
-	const [busyAction, setBusyAction] = useState<"accept" | "reject" | null>(null);
+	// Per-card busy state so acting on one proposal never clears another's
+	// in-flight indicator.
+	const [busy, setBusy] = useState<Record<string, "accept" | "reject" | "scoring">>({});
 	const [notice, setNotice] = useState<
 		{ kind: "accepted" | "rejected"; changeCount: number } | null
 	>(null);
@@ -88,8 +114,7 @@ export function ProposalsModal({
 			const target = proposals?.find((p) => p.id === proposalId);
 			const changeCount =
 				target?.changes.length ?? target?.preview.length ?? 0;
-			setBusyId(proposalId);
-			setBusyAction("accept");
+			setBusy((prev) => ({ ...prev, [proposalId]: "accept" }));
 			setNotice(null);
 			try {
 				const res = await electrobun.rpc!.request.acceptSubsystemModelProposal({
@@ -109,8 +134,11 @@ export function ProposalsModal({
 			} catch (err) {
 				setError(err instanceof Error ? err.message : String(err));
 			} finally {
-				setBusyId(null);
-				setBusyAction(null);
+				setBusy((prev) => {
+					const next = { ...prev };
+					delete next[proposalId];
+					return next;
+				});
 			}
 		},
 		[graphId, proposals, refresh, scheduleClose],
@@ -121,8 +149,7 @@ export function ProposalsModal({
 			const target = proposals?.find((p) => p.id === proposalId);
 			const changeCount =
 				target?.changes.length ?? target?.preview.length ?? 0;
-			setBusyId(proposalId);
-			setBusyAction("reject");
+			setBusy((prev) => ({ ...prev, [proposalId]: "reject" }));
 			setNotice(null);
 			try {
 				const res = await electrobun.rpc!.request.rejectSubsystemModelProposal({
@@ -140,11 +167,41 @@ export function ProposalsModal({
 			} catch (err) {
 				setError(err instanceof Error ? err.message : String(err));
 			} finally {
-				setBusyId(null);
-				setBusyAction(null);
+				setBusy((prev) => {
+					const next = { ...prev };
+					delete next[proposalId];
+					return next;
+				});
 			}
 		},
 		[graphId, proposals, refresh, scheduleClose],
+	);
+
+	const onScore = useCallback(
+		async (proposalId: string) => {
+			setBusy((prev) => ({ ...prev, [proposalId]: "scoring" }));
+			setError(null);
+			try {
+				const res = await electrobun.rpc!.request.scoreSubsystemModelProposal({
+					graphId,
+					proposalId,
+				});
+				if (!res.ok) {
+					setError(res.error ?? "Second-opinion scoring failed");
+					return;
+				}
+				await refresh();
+			} catch (err) {
+				setError(err instanceof Error ? err.message : String(err));
+			} finally {
+				setBusy((prev) => {
+					const next = { ...prev };
+					delete next[proposalId];
+					return next;
+				});
+			}
+		},
+		[graphId, refresh],
 	);
 
 	return (
@@ -270,9 +327,10 @@ export function ProposalsModal({
 
 				<div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 					{(proposals ?? []).map((p) => {
-						const busy = busyId === p.id;
-						const accepting = busy && busyAction === "accept";
-						const rejecting = busy && busyAction === "reject";
+						const cardAction = busy[p.id];
+						const cardBusy = cardAction != null;
+						const accepting = cardAction === "accept";
+						const rejecting = cardAction === "reject";
 						return (
 							<article
 								key={p.id}
@@ -368,10 +426,52 @@ export function ProposalsModal({
 									))}
 								</div>
 
-								<div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+								{p.secondOpinion ? (
+									<p
+										title={`Jev ${p.secondOpinion.source} · ${p.secondOpinion.checkedAt}${p.secondOpinion.risk ? ` · risk ${p.secondOpinion.risk}` : ""}${p.secondOpinion.error ? ` · ${p.secondOpinion.error}` : ""}`}
+										style={{
+											margin: "0 0 12px",
+											fontSize: theme.fontSizes[0],
+											color: opinionBadge(p.secondOpinion, theme.colors, muted).color,
+											lineHeight: 1.45,
+										}}
+									>
+										{opinionBadge(p.secondOpinion, theme.colors, muted).text}
+									</p>
+								) : null}
+
+								<div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+									{(!p.secondOpinion || p.secondOpinion.error) && (
+										<button
+											type="button"
+											disabled={cardBusy}
+											onClick={() => void onScore(p.id)}
+											title="Ask Jev for a second opinion without accepting"
+											style={{
+												padding: "0 12px",
+												height: 32,
+												borderRadius: 6,
+												fontSize: theme.fontSizes[1],
+												fontFamily: theme.fonts.body,
+												background: "transparent",
+												color: theme.colors.primary,
+												border: `1px solid ${theme.colors.primary}`,
+												cursor: cardBusy ? "default" : "pointer",
+												opacity: cardBusy ? 0.6 : 1,
+												display: "inline-flex",
+												alignItems: "center",
+												gap: 6,
+											}}
+										>
+											{cardAction === "scoring" && (
+												<Loader2 size={12} className="principal-studio-spin" />
+											)}
+											{cardAction === "scoring" ? "Scoring…" : p.secondOpinion?.error ? "Retry scoring" : "Get second opinion"}
+										</button>
+									)}
 									<button
 										type="button"
-										disabled={busy}
+										disabled={cardBusy}
 										onClick={() => void onReject(p.id)}
 										style={{
 											padding: "0 12px",
@@ -382,8 +482,8 @@ export function ProposalsModal({
 											background: "transparent",
 											color: theme.colors.text,
 											border: `1px solid ${theme.colors.border}`,
-											cursor: busy ? "default" : "pointer",
-											opacity: busy ? 0.6 : 1,
+											cursor: cardBusy ? "default" : "pointer",
+											opacity: cardBusy ? 0.6 : 1,
 											display: "inline-flex",
 											alignItems: "center",
 											gap: 6,
@@ -396,7 +496,7 @@ export function ProposalsModal({
 									</button>
 									<button
 										type="button"
-										disabled={busy}
+										disabled={cardBusy}
 										onClick={() => void onAccept(p.id)}
 										style={{
 											padding: "0 12px",
@@ -408,8 +508,8 @@ export function ProposalsModal({
 											background: theme.colors.primary,
 											color: theme.colors.background,
 											border: `1px solid ${theme.colors.primary}`,
-											cursor: busy ? "default" : "pointer",
-											opacity: busy ? 0.6 : 1,
+											cursor: cardBusy ? "default" : "pointer",
+											opacity: cardBusy ? 0.6 : 1,
 											display: "inline-flex",
 											alignItems: "center",
 											gap: 6,
