@@ -14,8 +14,10 @@ import type {
 	SubsystemModelProposalChange,
 	SubsystemModelProposalPreviewRow,
 	SubsystemModelSecondOpinion,
+	SubsystemSignatureClaim,
 } from "../shared/contract";
 import { upsertAcceptedConstructAugmentation, upsertAcceptedSignatureAugmentation, upsertAcceptedRelationAugmentation, upsertAcceptedModuleAugmentation } from "./augmentation-store";
+import { deriveProposalLane } from "./proposal-lane";
 import {
 	getSubsystemModel,
 	purlRepoKey,
@@ -143,6 +145,25 @@ function resolveRelationAugmentationTarget(
 	};
 }
 
+/** Render an agent-extracted signature claim as `(a: T, b?: U) → R`. */
+function formatSignatureClaim(sig: SubsystemSignatureClaim): string {
+	const params = (Array.isArray(sig.parameters) ? sig.parameters : [])
+		.map((p) => {
+			const name = typeof p?.name === "string" ? p.name.trim() : "";
+			const type = typeof p?.type === "string" ? p.type.trim() : "";
+			const opt = p?.optional === true ? "?" : "";
+			if (name && type) return `${name}${opt}: ${type}`;
+			if (name) return `${name}${opt}`;
+			return type || "?";
+		})
+		.join(", ");
+	const ret =
+		typeof sig.returnType === "string" && sig.returnType.trim()
+			? ` → ${sig.returnType.trim()}`
+			: "";
+	return `(${params})${ret}`;
+}
+
 function buildPreview(
 	graph: StoredSubsystemModel,
 	changes: SubsystemModelProposalChange[],
@@ -218,7 +239,7 @@ function buildPreview(
 				rows.push({
 					label: `augment ${name}.signature (${where})`,
 					before: "unconfirmed (graphify no signature edges)",
-					after: `params [${(sig.parameterTypes ?? []).join(", ")}] → [${(sig.returnTypes ?? []).join(", ")}]`,
+					after: formatSignatureClaim(sig),
 				});
 			} else {
 				rows.push({
@@ -314,19 +335,22 @@ function validateChanges(
 				if (
 					!sig ||
 					typeof sig !== "object" ||
-					!Array.isArray(sig.parameterTypes) ||
-					!Array.isArray(sig.returnTypes)
+					!Array.isArray(sig.parameters)
 				) {
-					return "augmentation signature value must be { parameterTypes: string[], returnTypes: string[] }";
+					return "augmentation signature value must be { parameters: Array<{ name?, type, optional? }>, returnType? }";
 				}
-				const params = sig.parameterTypes.filter(
-					(t): t is string => typeof t === "string" && t.trim().length > 0,
+				const hasParam = sig.parameters.some(
+					(p) =>
+						p &&
+						typeof p === "object" &&
+						((typeof p.type === "string" && p.type.trim().length > 0) ||
+							(typeof p.name === "string" && p.name.trim().length > 0)),
 				);
-				const returns = sig.returnTypes.filter(
-					(t): t is string => typeof t === "string" && t.trim().length > 0,
-				);
-				if (params.length === 0 && returns.length === 0) {
-					return "augmentation signature must include at least one named type";
+				const hasReturn =
+					typeof sig.returnType === "string" &&
+					sig.returnType.trim().length > 0;
+				if (!hasParam && !hasReturn) {
+					return "augmentation signature must include at least one parameter or a return type";
 				}
 				if (!graph.components.some((c) => c.alias === ch.componentAlias)) {
 					return `unknown component: ${ch.componentAlias}`;
@@ -489,10 +513,7 @@ async function applyAugmentationChanges(
 				purl: resolved.purl,
 				file: resolved.file,
 				symbol: resolved.symbol,
-				signature: {
-					parameterTypes: ch.value.parameterTypes,
-					returnTypes: ch.value.returnTypes,
-				},
+				signature: ch.value,
 				source: proposal.author?.trim() || "proposal",
 				rationale: proposal.rationale,
 				evidence: [
@@ -574,6 +595,7 @@ export async function createSubsystemModelProposal(input: {
 		graphId: input.graphId,
 		status: "pending",
 		createdAt: new Date().toISOString(),
+		lane: deriveProposalLane({ changes: input.changes, finding: input.finding }),
 		rationale: input.rationale.trim(),
 		finding: input.finding,
 		changes: input.changes,

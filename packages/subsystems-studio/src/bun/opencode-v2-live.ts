@@ -19,6 +19,14 @@ import {
 
 const MAX_EVENTS = 400;
 
+/** Reconnect backoff for the `/api/event` SSE subscription. */
+const FEED_RECONNECT_MIN_MS = 500;
+const FEED_RECONNECT_MAX_MS = 5_000;
+/** A connection that survived this long counts as "stable" and resets the backoff. */
+const FEED_STABLE_MS = 10_000;
+/** If the event stream cannot be re-established within this window, fail the run. */
+const FEED_RECONNECT_GIVE_UP_MS = 120_000;
+
 export type OpencodeLiveFeedStatus =
 	| "starting"
 	| "running"
@@ -29,6 +37,8 @@ export interface OpencodeLiveFeedState {
 	sessionId: string;
 	status: OpencodeLiveFeedStatus;
 	events: OpencodeV2ProbeEvent[];
+	/** Every event ever seen for this session; `events` is only the last MAX_EVENTS. */
+	total: number;
 	error: string | null;
 	title?: string;
 	agent?: string;
@@ -91,6 +101,7 @@ function pushFeedEvent(sessionId: string, event: OpencodeV2ProbeEvent): void {
 	upsertFeed({
 		...feed,
 		events: [...feed.events, event].slice(-MAX_EVENTS),
+		total: feed.total + 1,
 	});
 }
 
@@ -209,6 +220,62 @@ function isTerminalEvent(type: string, data: Record<string, unknown> | undefined
 	return false;
 }
 
+/**
+ * Ask the daemon whether `sessionId` has already finished. Used to reconcile
+ * across an `/api/event` gap: SSE has no replay, so the terminal event is lost
+ * forever if the stream drops the moment it is emitted.
+ */
+async function fetchSessionFinished(
+	connection: OpencodeConnection,
+	sessionId: string,
+): Promise<boolean> {
+	try {
+		const res = await fetch(`${connection.url}/api/session/${sessionId}`, {
+			headers: serverAuthHeaders(connection.password),
+			signal: AbortSignal.timeout(5_000),
+		});
+		if (!res.ok) return false;
+		const body = (await res.json().catch(() => null)) as {
+			data?: {
+				status?: unknown;
+				outcome?: unknown;
+				time?: { idle?: unknown };
+			};
+		} | null;
+		const d = body?.data;
+		if (!d) return false;
+		if (d.outcome != null) return true;
+		if (typeof d.time?.idle === "number") return true;
+		if (d.status && typeof d.status === "object") {
+			const t = (d.status as { type?: string }).type;
+			if (typeof t === "string" && t !== "running" && t !== "queued") return true;
+		}
+		return false;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Backoff sleep between reconnect attempts. Returns false when the caller
+ * should give up (aborted, or the stream has been down longer than
+ * {@link FEED_RECONNECT_GIVE_UP_MS}).
+ */
+async function delayFeedReconnect(
+	controller: AbortController,
+	backoffMs: number,
+	lastConnectedAt: number,
+): Promise<boolean> {
+	if (controller.signal.aborted) return false;
+	if (Date.now() - lastConnectedAt > FEED_RECONNECT_GIVE_UP_MS) {
+		throw new Error(
+			`event stream unavailable for ${FEED_RECONNECT_GIVE_UP_MS}ms — giving up`,
+		);
+	}
+	await Bun.sleep(backoffMs);
+	return !controller.signal.aborted;
+}
+
 async function readSse(
 	connection: OpencodeConnection,
 	controller: AbortController,
@@ -218,55 +285,91 @@ async function readSse(
 		data?: Record<string, unknown>;
 		durable?: Record<string, unknown>;
 	}) => void,
+	onDrop?: () => void,
 ): Promise<void> {
-	const res = await fetch(`${connection.url}/api/event`, {
-		headers: serverAuthHeaders(connection.password),
-		signal: controller.signal,
-	});
-	if (!res.ok || !res.body) throw new Error(`event stream ${res.status}`);
-	const reader = res.body.getReader();
-	const decoder = new TextDecoder();
-	let buffer = "";
-	for (;;) {
-		const { done, value } = await reader.read();
-		if (done) break;
-		buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
-		const blocks = buffer.split("\n\n");
-		buffer = blocks.pop() ?? "";
-		for (const block of blocks) {
-			const dataLine = block.split("\n").find((line) => line.startsWith("data:"));
-			if (!dataLine) continue;
-			let parsed: {
-				type?: unknown;
-				created?: unknown;
-				data?: unknown;
-				properties?: unknown;
-				durable?: unknown;
-			};
-			try {
-				parsed = JSON.parse(dataLine.slice(5).trim()) as typeof parsed;
-			} catch {
-				continue;
-			}
-			const type = parsed.type;
-			if (typeof type !== "string") continue;
-			const data =
-				(typeof parsed.data === "object" && parsed.data !== null
-					? parsed.data
-					: typeof parsed.properties === "object" && parsed.properties !== null
-						? parsed.properties
-						: undefined) as Record<string, unknown> | undefined;
-			const durable =
-				typeof parsed.durable === "object" && parsed.durable !== null
-					? (parsed.durable as Record<string, unknown>)
-					: undefined;
-			onRaw({
-				type,
-				created: typeof parsed.created === "number" ? parsed.created : undefined,
-				data,
-				durable,
+	let backoff = FEED_RECONNECT_MIN_MS;
+	let lastConnectedAt = 0;
+	while (!controller.signal.aborted) {
+		let res: Response;
+		try {
+			res = await fetch(`${connection.url}/api/event`, {
+				headers: serverAuthHeaders(connection.password),
+				signal: controller.signal,
 			});
+		} catch {
+			if (controller.signal.aborted) return;
+			if (lastConnectedAt === 0) lastConnectedAt = Date.now();
+			if (!(await delayFeedReconnect(controller, backoff, lastConnectedAt))) return;
+			continue;
 		}
+		if (!res.ok || !res.body) {
+			throw new Error(`event stream ${res.status}`);
+		}
+		if (lastConnectedAt !== 0 && Date.now() - lastConnectedAt >= FEED_STABLE_MS) {
+			backoff = FEED_RECONNECT_MIN_MS;
+		} else {
+			backoff = Math.min(backoff * 2, FEED_RECONNECT_MAX_MS);
+		}
+		lastConnectedAt = Date.now();
+
+		const reader = res.body.getReader();
+		const decoder = new TextDecoder();
+		let buffer = "";
+		try {
+			for (;;) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				if (controller.signal.aborted) return;
+				buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+				const blocks = buffer.split("\n\n");
+				buffer = blocks.pop() ?? "";
+				for (const block of blocks) {
+					const dataLine = block.split("\n").find((line) => line.startsWith("data:"));
+					if (!dataLine) continue;
+					let parsed: {
+						type?: unknown;
+						created?: unknown;
+						data?: unknown;
+						properties?: unknown;
+						durable?: unknown;
+					};
+					try {
+						parsed = JSON.parse(dataLine.slice(5).trim()) as typeof parsed;
+					} catch {
+						continue;
+					}
+					const type = parsed.type;
+					if (typeof type !== "string") continue;
+					const data =
+						(typeof parsed.data === "object" && parsed.data !== null
+							? parsed.data
+							: typeof parsed.properties === "object" && parsed.properties !== null
+								? parsed.properties
+								: undefined) as Record<string, unknown> | undefined;
+					const durable =
+						typeof parsed.durable === "object" && parsed.durable !== null
+							? (parsed.durable as Record<string, unknown>)
+							: undefined;
+					if (controller.signal.aborted) return;
+					onRaw({
+						type,
+						created: typeof parsed.created === "number" ? parsed.created : undefined,
+						data,
+						durable,
+					});
+				}
+			}
+		} catch {
+			if (controller.signal.aborted) return;
+		} finally {
+			reader.releaseLock();
+		}
+		if (controller.signal.aborted) return;
+		// Stream ended without an abort — the subscription is gone. Re-subscribe
+		// (SSE only delivers to live connections) and tell the consumer so it can
+		// reconcile against the daemon in case the terminal event was lost.
+		if (onDrop) onDrop();
+		if (!(await delayFeedReconnect(controller, backoff, lastConnectedAt))) return;
 	}
 }
 
@@ -337,6 +440,9 @@ export async function runOpencodeV2AgentSession(
 
 	let sessionId: string | null = null;
 	let sawTerminal = false;
+	// Any session activity after creation means the model is alive and streaming
+	// — that satisfies the liveness gate even if the Step-0 probe call never lands.
+	let sawActivity = false;
 	const placeholderId = `pending-${Date.now()}`;
 
 	upsertFeed(
@@ -344,6 +450,7 @@ export async function runOpencodeV2AgentSession(
 			sessionId: placeholderId,
 			status: "starting",
 			events: [],
+			total: 0,
 			error: null,
 			title: opts.title,
 			agent: opts.agent,
@@ -352,18 +459,44 @@ export async function runOpencodeV2AgentSession(
 		true,
 	);
 
-	const feedTask = readSse(connection, controller, (raw) => {
-		if (!sessionId) return;
-		const sid = eventSessionId(raw.type, raw.data, raw.durable);
-		if (!isRelevant(sessionId, raw.type, sid)) return;
-		pushFeedEvent(sessionId, {
-			at: raw.created ?? Date.now(),
-			type: raw.type,
-			sessionId: sid,
-			summary: summarizeEvent(raw.type, raw.data),
-		});
-		if (isTerminalEvent(raw.type, raw.data)) sawTerminal = true;
-	}).catch((err) => {
+	const feedTask = readSse(
+		connection,
+		controller,
+		(raw) => {
+			if (!sessionId) return;
+			const sid = eventSessionId(raw.type, raw.data, raw.durable);
+			if (!isRelevant(sessionId, raw.type, sid)) return;
+			pushFeedEvent(sessionId, {
+				at: raw.created ?? Date.now(),
+				type: raw.type,
+				sessionId: sid,
+				summary: summarizeEvent(raw.type, raw.data),
+			});
+			if (raw.type !== "server.connected") sawActivity = true;
+			if (isTerminalEvent(raw.type, raw.data)) sawTerminal = true;
+		},
+		() => {
+			if (!sessionId || sawTerminal) return;
+			pushFeedEvent(sessionId, {
+				at: Date.now(),
+				type: "session.feed.dropped",
+				sessionId,
+				summary: "live event stream dropped — reconnecting and reconciling with server state",
+			});
+			// SSE has no replay: if the terminal event fired during the gap we will
+			// never see it, so trust the daemon's session state instead of hanging.
+			void fetchSessionFinished(connection, sessionId).then((finished) => {
+				if (!finished || !sessionId || sawTerminal) return;
+				sawTerminal = true;
+				pushFeedEvent(sessionId, {
+					at: Date.now(),
+					type: "session.feed.reconcile",
+					sessionId,
+					summary: "reconciled: server-side session is finished",
+				});
+			});
+		},
+	).catch((err) => {
 		if (err instanceof Error && err.name === "AbortError") return;
 		if (!sessionId) return;
 		const feed = feeds.get(sessionId);
@@ -416,6 +549,7 @@ export async function runOpencodeV2AgentSession(
 				sessionId,
 				status: "running",
 				events: [],
+				total: 0,
 				error: null,
 				title: opts.title,
 				agent: opts.agent,
@@ -486,6 +620,7 @@ export async function runOpencodeV2AgentSession(
 				}
 				if (
 					!probe.sawProbe &&
+					!sawActivity &&
 					maintainerProbeTimedOut({
 						startedAt: probe.startedAt,
 						now: Date.now(),
@@ -531,6 +666,7 @@ export async function runOpencodeV2AgentSession(
 				sessionId,
 				status: failed ? "error" : "done",
 				events,
+				total: feed?.total ?? events.length,
 				error: failed ? "session.execution.failed" : null,
 				title: opts.title,
 				agent: opts.agent,

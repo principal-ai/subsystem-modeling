@@ -11,9 +11,10 @@ import type {
 } from "../shared/contract";
 import {
 	buildAuditFingerprint,
+	summarizeLanes,
 	summarizeVerification,
 } from "./audit-report-store";
-import { cacheSlotDir } from "./graphify-store";
+import { cacheSlotDir, clearGitProbeCache } from "./graphify-store";
 
 function initRepo(): { repo: string; head: string } {
 	const repo = mkdtempSync(join(tmpdir(), "audit-fp-repo-"));
@@ -37,7 +38,7 @@ function initRepo(): { repo: string; head: string } {
 }
 
 describe("buildAuditFingerprint", () => {
-	test("includes current checkout slotKey, not an older slot", () => {
+	test("includes current checkout slotKey, not an older slot", async () => {
 		const storeRoot = mkdtempSync(join(tmpdir(), "audit-fp-store-"));
 		const { repo, head } = initRepo();
 		const purl = "pkg:github/acme/fp";
@@ -84,7 +85,7 @@ describe("buildAuditFingerprint", () => {
 			}),
 		);
 
-		const fp = buildAuditFingerprint({
+		const fp = await buildAuditFingerprint({
 			updatedAt: "2026-01-01T00:00:00.000Z",
 			components: [
 				{
@@ -108,7 +109,7 @@ describe("buildAuditFingerprint", () => {
 		expect(fp).not.toContain("2020-01-01");
 	});
 
-	test("changes when HEAD moves even if only an old slot exists", () => {
+	test("changes when HEAD moves even if only an old slot exists", async () => {
 		const storeRoot = mkdtempSync(join(tmpdir(), "audit-fp-store-"));
 		const { repo, head } = initRepo();
 		const purl = "pkg:github/acme/fp-move";
@@ -134,7 +135,7 @@ describe("buildAuditFingerprint", () => {
 			}),
 		);
 
-		const before = buildAuditFingerprint({
+		const before = await buildAuditFingerprint({
 			updatedAt: "2026-01-01T00:00:00.000Z",
 			components: [{ alias: "c1", purl }],
 			graphify: {
@@ -148,12 +149,13 @@ describe("buildAuditFingerprint", () => {
 		writeFileSync(join(repo, "b.txt"), "y\n");
 		spawnSync("git", ["add", "."], { cwd: repo, stdio: "ignore" });
 		spawnSync("git", ["commit", "-m", "two"], { cwd: repo, stdio: "ignore" });
+		clearGitProbeCache();
 		const head2 = spawnSync("git", ["rev-parse", "HEAD"], {
 			cwd: repo,
 			encoding: "utf8",
 		}).stdout.trim();
 
-		const after = buildAuditFingerprint({
+		const after = await buildAuditFingerprint({
 			updatedAt: "2026-01-01T00:00:00.000Z",
 			components: [{ alias: "c1", purl }],
 			graphify: {
@@ -424,5 +426,62 @@ describe("summarizeVerification", () => {
 		expect(v.byLayer.boundary.verified).toBe(1);
 		expect(v.byLayer.boundary.open).toBe(1);
 		expect(v.byLayer.construct.na).toBe(0);
+	});
+});
+
+describe("summarizeLanes", () => {
+	test("maps checks onto the four lanes", () => {
+		const lanes = summarizeLanes(
+			report({
+				checks: [componentCheck({})],
+				topologyChecks: [topologyCheck({})],
+				boundaryChecks: [
+					boundaryCheck({}),
+					boundaryCheck({ componentAlias: "p", kind: "process_nest" }),
+				],
+			}),
+			{ hasWalkthroughs: true },
+		);
+		expect(lanes).toEqual({
+			construct: "verified",
+			"static-topology": "verified",
+			"runtime-topology": "verified",
+			walkthrough: "verified",
+		});
+	});
+
+	test("gaps -> partial, hard fails -> issues, absent -> none", () => {
+		const lanes = summarizeLanes(
+			report({
+				checks: [
+					componentCheck({ componentAlias: "gap", signature: "skipped" }),
+				],
+				topologyChecks: [topologyCheck({ verdict: "issue" })],
+			}),
+			{ hasWalkthroughs: false },
+		);
+		expect(lanes.construct).toBe("partial");
+		expect(lanes["static-topology"]).toBe("issues");
+		expect(lanes["runtime-topology"]).toBe("none");
+		expect(lanes.walkthrough).toBe("none");
+	});
+
+	test("walkthrough failures -> issues when walkthroughs exist", () => {
+		const base = report();
+		const lanes = summarizeLanes(
+			report({ summary: { ...base.summary, walkthroughFailures: 2 } }),
+			{ hasWalkthroughs: true },
+		);
+		expect(lanes.walkthrough).toBe("issues");
+	});
+
+	test("construct is never none when the model has components", () => {
+		const base = report();
+		const lanes = summarizeLanes(
+			report({ summary: { ...base.summary, components: 3 } }),
+			{ hasWalkthroughs: false },
+		);
+		expect(lanes.construct).toBe("partial");
+		expect(lanes["static-topology"]).toBe("none");
 	});
 });

@@ -1,69 +1,47 @@
 /**
- * Jev second-opinion gate for subsystem proposals (Phase 1: display-only).
+ * Jev second-opinion gate for subsystem proposals.
  *
- * Calls the OpenCode Zen SystemOne endpoint with the proposal as state and
- * three atomic questions (safe_to_auto_accept:noul, change_kind:choice,
- * risk:score). Fail-open: transport or parse errors are returned as an
- * opinion with `verdict: "needs-human"` plus `error`, never thrown, so the
- * caller can persist and display without blocking accept/reject.
+ * Calls the TypeSafe AI SystemOne endpoint with the proposal as state and
+ * three atomic questions (accurate:noul, change_kind:choice, risk:score).
+ * Fail-open: transport or parse errors are returned as an opinion with
+ * `verdict: "uncertain"` plus `error`, never thrown, so the caller can
+ * persist and display without blocking accept/reject.
+ *
+ * Phase 1 displays the opinion in ProposalsModal; Phase 2 auto-accepts a
+ * proposal only when its calibrated confidence clears the configured
+ * threshold (`autoAcceptProposalIfConfident`).
+ *
+ * API docs: https://docs.typesafe.ai/api
  */
 
-import { promises as fs } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type {
 	SubsystemModelProposal,
+	SubsystemModelProposalChange,
 	SubsystemModelSecondOpinion,
+	SubsystemVerificationLane,
 } from "../shared/contract";
+import { deriveProposalLane } from "./proposal-lane";
+import {
+	acceptSubsystemModelProposal,
+	setProposalSecondOpinion,
+} from "./proposal-store";
 
-export const JEV_SYSTEMONE_URL = "https://opencode.ai/zen/v1/systemone";
-/** Free by default; set PRINCIPAL_JEV_MODEL=jev-1.13 for the paid tier. */
+export const JEV_SYSTEMONE_URL = "https://api.typesafe.ai/v1/systemone";
+/** Override with PRINCIPAL_JEV_MODEL (e.g. `jev-1.13.0`, `jev-preview`). */
 export const JEV_MODEL =
-	process.env["PRINCIPAL_JEV_MODEL"]?.trim() || "jev-1.13-free";
+	process.env["PRINCIPAL_JEV_MODEL"]?.trim() || "jev-latest";
 const JEV_TIMEOUT_MS = 15000;
 
-export const ZEN_KEY_HELP =
-	"Missing Zen API key — run /connect in opencode, choose OpenCode Zen (sign in at https://opencode.ai/auth), or set OPENCODE_API_KEY and restart Studio. Scoring uses jev-1.13-free, which is free.";
+export const TYPESAFE_KEY_HELP =
+	"Missing Jev API key — add your TypeSafe AI key in Settings → Jev, set TYPESAFE_API_KEY, or get one at https://console.typesafe.ai/keys.";
 
-function envZenKey(): string | null {
+/** Env fallback for the TypeSafe AI key. */
+function envTypesafeKey(): string | null {
 	const key =
-		process.env["OPENCODE_API_KEY"]?.trim() ||
-		process.env["PRINCIPAL_ZEN_API_KEY"]?.trim() ||
+		process.env["TYPESAFE_API_KEY"]?.trim() ||
+		process.env["PRINCIPAL_JEV_API_KEY"]?.trim() ||
 		"";
 	return key || null;
-}
-
-/**
- * Best-effort read of the Zen key opencode stores after `/connect` →
- * OpenCode Zen (`~/.local/share/opencode/auth.json`). Shapes vary by
- * opencode version, so probe defensively; never throws.
- */
-async function storedZenKey(): Promise<string | null> {
-	try {
-		const base =
-			process.env["XDG_DATA_HOME"]?.trim() ||
-			join(homedir(), ".local", "share");
-		const raw = await fs.readFile(join(base, "opencode", "auth.json"), "utf8");
-		const parsed = JSON.parse(raw) as Record<string, unknown>;
-		for (const provider of ["opencode", "opencode-zen", "zen"]) {
-			const entry = parsed[provider];
-			if (typeof entry === "string" && entry.trim()) return entry.trim();
-			if (entry && typeof entry === "object") {
-				const rec = entry as Record<string, unknown>;
-				for (const field of ["apiKey", "token", "key", "api_key"]) {
-					const v = rec[field];
-					if (typeof v === "string" && v.trim()) return v.trim();
-				}
-			}
-		}
-	} catch {
-		/* absent or unreadable — caller reports missing key */
-	}
-	return null;
-}
-
-async function zenApiKey(): Promise<string | null> {
-	return envZenKey() ?? (await storedZenKey());
 }
 
 function clamp01(n: unknown): number {
@@ -80,20 +58,124 @@ function previewText(p: SubsystemModelProposal): string {
 		.join("\n");
 }
 
-export function buildProposalState(p: SubsystemModelProposal): string {
+export function buildProposalState(
+	p: SubsystemModelProposal,
+	opts?: { sourceContext?: string },
+): string {
 	const finding = p.finding
 		? `Finding (${p.finding.kind ?? "unknown"}): ${p.finding.message ?? ""}`
 		: "Finding: none linked";
-	return [
+	const parts = [
 		`Proposal rationale: ${p.rationale}`,
 		finding,
 		`Author: ${p.author ?? "unknown"}`,
 		`Changes (${p.changes.length}):`,
 		previewText(p),
-	].join("\n");
+	];
+	const ctx = opts?.sourceContext?.trim();
+	if (ctx) {
+		parts.push("", "Source under review:", ctx);
+	}
+	return parts.join("\n");
 }
 
 type JevAnswers = Record<string, unknown>;
+
+/** Lane-level accuracy subject for non-construct lanes. */
+const LANE_SUBJECT: Record<SubsystemVerificationLane, string> = {
+	construct:
+		"The proposed construct correction is an accurate extraction of the declaration in the source under review.",
+	"static-topology":
+		"The proposed relation or containment (module) claim is accurate given the source under review.",
+	"runtime-topology":
+		"The proposed process (deployment-unit) membership is accurate given the source under review.",
+	walkthrough:
+		"The proposed walkthrough step is accurate given the source under review.",
+};
+
+/** Construct-lane wording, finer-grained by change. */
+function constructSubject(proposal: SubsystemModelProposal): string {
+	const c: SubsystemModelProposalChange | undefined = proposal.changes[0];
+	if (!c) return LANE_SUBJECT.construct;
+	if (c.target === "augmentation") {
+		if (c.field === "signature") {
+			return "The proposed signature is an accurate, complete extraction of the function/method declaration in the source under review.";
+		}
+		if (c.field === "construct") {
+			return "The proposed construct classification is accurate for the declaration in the source under review.";
+		}
+	}
+	if (c.target === "component") {
+		if (c.field === "declarationRef") {
+			return "The proposed declaration anchor (file + line) is correct for the source under review.";
+		}
+		return "The proposed component identity or field value is correct given the source under review.";
+	}
+	return LANE_SUBJECT.construct;
+}
+
+export function proposalLane(
+	proposal: SubsystemModelProposal,
+): SubsystemVerificationLane {
+	return proposal.lane ?? deriveProposalLane(proposal);
+}
+
+/**
+ * The primary question is an *accuracy* judgment — "does the source support
+ * this proposed value?" — not an accept-safety one (that is `risk`). Wording
+ * is chosen by verification lane, and finer-grained within the construct lane.
+ */
+export function accuracyInstruction(proposal: SubsystemModelProposal): string {
+	const lane = proposalLane(proposal);
+	const subject =
+		lane === "construct" ? constructSubject(proposal) : LANE_SUBJECT[lane];
+	return `${subject} Judge only whether the source supports it — ignore whether accepting it is risky.`;
+}
+
+/** Per-lane `change_kind` choice: instructions + option criteria. */
+export function changeKindQuestion(proposal: SubsystemModelProposal): {
+	instructions: string;
+	criteria: Record<string, string>;
+} {
+	switch (proposalLane(proposal)) {
+		case "static-topology":
+			return {
+				instructions: "What kind of static-topology correction is this?",
+				criteria: {
+					relation_augment: "Confirming a topology relation claim",
+					relation_fix: "Retargeting, retyping, or deleting a relation",
+					module_augment: "Confirming an intentional module grouping",
+					module_fix: "Correcting a component's module",
+				},
+			};
+		case "runtime-topology":
+			return {
+				instructions: "What kind of runtime-topology correction is this?",
+				criteria: {
+					process_fix: "Correcting a component's process (deployment unit)",
+				},
+			};
+		case "walkthrough":
+			return {
+				instructions: "What kind of walkthrough correction is this?",
+				criteria: {
+					walkthrough_fix:
+						"Correcting a walkthrough step (file, line, symbol, from/to, mechanism)",
+				},
+			};
+		default:
+			return {
+				instructions: "What kind of construct correction is this?",
+				criteria: {
+					signature_augment: "Confirming parameter or return types",
+					construct_augment: "Confirming a component construct classification",
+					identity_fix: "Correcting file, symbol, name, or purl",
+					construct_fix: "Correcting the model's construct",
+					declaration_ref: "Re-pinning a declaration anchor",
+				},
+			};
+	}
+}
 
 function asRecord(v: unknown): Record<string, unknown> | null {
 	if (!v || typeof v !== "object" || Array.isArray(v)) return null;
@@ -109,7 +191,7 @@ function str(v: unknown): string | null {
 }
 
 /**
- * Map raw Jev answers to a display verdict. `safe_to_auto_accept` noul is
+ * Map raw Jev answers to a display verdict. The `accurate` noul is
  * authoritative; choice/score echoes are informational.
  */
 export function verdictFromAnswers(answers: JevAnswers): {
@@ -118,11 +200,11 @@ export function verdictFromAnswers(answers: JevAnswers): {
 	changeKind?: string;
 	risk?: string;
 } {
-	const safeRaw = asRecord(answers["safe_to_auto_accept"]);
+	const accRaw = asRecord(answers["accurate"]);
 	const kindRaw = asRecord(answers["change_kind"]);
 	const riskRaw = asRecord(answers["risk"]);
 
-	const noul = safeRaw ? num(safeRaw["noul"]) : null;
+	const noul = accRaw ? num(accRaw["noul"]) : null;
 	const choiceConf = kindRaw ? num(kindRaw["confidence"]) : null;
 	const changeKind = kindRaw ? str(kindRaw["choice"]) : null;
 
@@ -140,12 +222,12 @@ export function verdictFromAnswers(answers: JevAnswers): {
 	const confidence = clamp01(noul ?? choiceConf ?? riskConf ?? 0);
 	const verdict =
 		noul == null
-			? "needs-human"
+			? "uncertain"
 			: noul >= 0.85
-				? "safe"
+				? "accurate"
 				: noul >= 0.5
-					? "needs-human"
-					: "unsafe";
+					? "uncertain"
+					: "inaccurate";
 
 	return {
 		verdict,
@@ -157,17 +239,22 @@ export function verdictFromAnswers(answers: JevAnswers): {
 
 export async function evaluateProposalSecondOpinion(
 	proposal: SubsystemModelProposal,
-	opts?: { model?: string; endpoint?: string; apiKey?: string },
+	opts?: {
+		model?: string;
+		endpoint?: string;
+		apiKey?: string;
+		sourceContext?: string;
+	},
 ): Promise<SubsystemModelSecondOpinion> {
 	const source = (opts?.model ?? JEV_MODEL) as SubsystemModelSecondOpinion["source"];
-	const apiKey = opts?.apiKey ?? (await zenApiKey());
+	const apiKey = opts?.apiKey?.trim() || envTypesafeKey();
 	if (!apiKey) {
 		return {
 			source,
 			checkedAt: new Date().toISOString(),
-			verdict: "needs-human",
+			verdict: "uncertain",
 			confidence: 0,
-			error: ZEN_KEY_HELP,
+			error: TYPESAFE_KEY_HELP,
 		};
 	}
 	const ctrl = new AbortController();
@@ -182,24 +269,17 @@ export async function evaluateProposalSecondOpinion(
 			signal: ctrl.signal,
 			body: JSON.stringify({
 				model: source,
-				state: buildProposalState(proposal),
+				state: buildProposalState(proposal, {
+					sourceContext: opts?.sourceContext,
+				}),
 				questions: {
-					safe_to_auto_accept: {
+					accurate: {
 						type: "noul",
-						instructions:
-							"This subsystem-model correction is supported by its rationale, finding, and before/after preview, and is safe to auto-accept without human review.",
+						instructions: accuracyInstruction(proposal),
 					},
 					change_kind: {
 						type: "choice",
-						instructions: "What kind of correction is this?",
-						criteria: {
-							construct_augment: "Confirming a component construct classification",
-							signature_augment: "Confirming parameter or return types",
-							relation_augment: "Confirming a topology relation claim",
-							module_augment: "Confirming an intentional module grouping",
-							field_fix: "Fixing a component field value",
-							relation_fix: "Retargeting, retyping, or deleting a relation",
-						},
+						...changeKindQuestion(proposal),
 					},
 					risk: {
 						type: "score",
@@ -219,7 +299,7 @@ export async function evaluateProposalSecondOpinion(
 			return {
 				source,
 				checkedAt: new Date().toISOString(),
-				verdict: "needs-human",
+				verdict: "uncertain",
 				confidence: 0,
 				error: `Jev HTTP ${res.status}${detail}`,
 			};
@@ -230,7 +310,7 @@ export async function evaluateProposalSecondOpinion(
 			return {
 				source,
 				checkedAt: new Date().toISOString(),
-				verdict: "needs-human",
+				verdict: "uncertain",
 				confidence: 0,
 				error: "Jev response had no answers",
 			};
@@ -246,11 +326,64 @@ export async function evaluateProposalSecondOpinion(
 		return {
 			source,
 			checkedAt: new Date().toISOString(),
-			verdict: "needs-human",
+			verdict: "uncertain",
 			confidence: 0,
 			error: msg.includes("abort") ? "Jev request timed out" : msg,
 		};
 	} finally {
 		clearTimeout(timer);
 	}
+}
+
+/**
+ * Pure gate predicate: an opinion qualifies only when it scored without error
+ * and its calibrated confidence is at or above the threshold. Missing opinions
+ * never qualify (the caller scores first).
+ */
+export function shouldAutoAcceptOnConfidence(
+	opinion: SubsystemModelSecondOpinion | undefined,
+	threshold: number,
+): boolean {
+	if (!opinion || opinion.error) return false;
+	return opinion.confidence >= threshold;
+}
+
+/**
+ * Phase 2 gate: score a fresh proposal with Jev and auto-accept only when the
+ * calibrated confidence clears `threshold`. Scoring errors and missing keys
+ * leave the proposal pending (never fail open into an auto-accept). The
+ * opinion is persisted either way so the modal can show why it was held back.
+ */
+export async function autoAcceptProposalIfConfident(
+	graphId: string,
+	proposal: SubsystemModelProposal,
+	opts: {
+		enabled: boolean;
+		threshold: number;
+		apiKey?: string;
+		sourceContext?: string;
+	},
+): Promise<{
+	accepted: boolean;
+	proposal: SubsystemModelProposal;
+	error?: string;
+}> {
+	if (!opts.enabled) return { accepted: false, proposal };
+	let current = proposal;
+	let opinion = current.secondOpinion;
+	if (!opinion || opinion.error) {
+		opinion = await evaluateProposalSecondOpinion(current, {
+			apiKey: opts.apiKey,
+			sourceContext: opts.sourceContext,
+		});
+		const stored = await setProposalSecondOpinion(graphId, current.id, opinion);
+		if (stored.ok) current = stored.proposal;
+	}
+	if (opinion.error) return { accepted: false, proposal: current, error: opinion.error };
+	if (!shouldAutoAcceptOnConfidence(opinion, opts.threshold)) {
+		return { accepted: false, proposal: current };
+	}
+	const accepted = await acceptSubsystemModelProposal(graphId, current.id);
+	if (!accepted.ok) return { accepted: false, proposal: current, error: accepted.error };
+	return { accepted: true, proposal: accepted.proposal };
 }

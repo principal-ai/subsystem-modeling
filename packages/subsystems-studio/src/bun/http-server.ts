@@ -43,22 +43,13 @@ import {
 	pendingProposalCount,
 	rejectSubsystemModelProposal,
 } from "./proposal-store";
+import { autoAcceptProposalIfConfident } from "./jev-maintenance";
+import { buildProposalSourceContext } from "./proposal-source-context";
 import { loadViewerSettings } from "./viewer-settings";
 import { getMaintainerProbeRegistry } from "./maintainer-probe";
 import { registerProjectInAlexandria } from "./alexandria";
 import type { SubsystemModelProposalChange } from "../shared/contract";
 const PORT = Number(process.env["PRINCIPAL_STUDIO_HTTP_PORT"] ?? 3045);
-
-async function reauditSubsystemModelAfterHttpMutation(graphId: string): Promise<void> {
-	try {
-		const { auditSubsystemModel } = await import("./verify-subsystem-component");
-		await auditSubsystemModel(graphId);
-	} catch (err) {
-		console.warn(
-			`[principal-studio] re-audit after model change failed for ${graphId}: ${(err as Error).message}`,
-		);
-	}
-}
 
 /** Callback invoked when an agent requests a graph be opened in a tab. */
 export type OpenGraphTabHandler = (id: string) => Promise<{ ok: boolean; error?: string; tabId?: string }>;
@@ -425,19 +416,27 @@ export async function handleSubsystemModelRequest(
 			let proposal = created.proposal;
 			let autoAccepted = false;
 			if (settings.autoAcceptSubsystemModelProposals) {
-				const accepted = await acceptSubsystemModelProposal(id, created.proposal.id);
-				if (accepted.ok) {
-					proposal = accepted.proposal;
-					autoAccepted = true;
-				} else {
+				const graph = await getSubsystemModel(id);
+				const sourceContext = graph
+					? await buildProposalSourceContext(graph, proposal)
+					: undefined;
+				const gate = await autoAcceptProposalIfConfident(id, proposal, {
+					enabled: true,
+					threshold: settings.autoAcceptSubsystemModelConfidenceThreshold,
+					apiKey: settings.typesafeApiKey ?? undefined,
+					sourceContext,
+				});
+				proposal = gate.proposal;
+				autoAccepted = gate.accepted;
+				if (gate.error) {
 					const pendingCount = await pendingProposalCount(id);
 					onProposalsChanged?.(id, pendingCount);
 					return json(
 						{
 							ok: true,
-							proposal: created.proposal,
+							proposal: gate.proposal,
 							autoAccepted: false,
-							autoAcceptError: accepted.error,
+							autoAcceptError: gate.error,
 						},
 						201,
 					);
@@ -445,16 +444,11 @@ export async function handleSubsystemModelRequest(
 			}
 			const pendingCount = await pendingProposalCount(id);
 			onProposalsChanged?.(id, pendingCount);
-			if (autoAccepted) {
-				// Fire-and-forget: re-auditing inline would block this single-
-				// threaded HTTP server on /health while the model re-verifies.
-				void reauditSubsystemModelAfterHttpMutation(id);
-			}
 			return json({ ok: true, proposal, autoAccepted }, 201);
 		}
 	}
 
-	// Bulk accept: apply every pending proposal, then re-audit once.
+	// Bulk accept: apply every pending proposal.
 	const acceptAllMatch = path.match(
 		/^\/api\/subsystem-model\/([^/]+)\/proposals\/accept-all$/,
 	);
@@ -470,9 +464,6 @@ export async function handleSubsystemModelRequest(
 		}
 		const pendingCount = await pendingProposalCount(id);
 		onProposalsChanged?.(id, pendingCount);
-		if (accepted.length > 0) {
-			void reauditSubsystemModelAfterHttpMutation(id);
-		}
 		return json({ ok: true, accepted, failed, pendingCount });
 	}
 
@@ -491,9 +482,6 @@ export async function handleSubsystemModelRequest(
 		if (!result.ok) return error(result.error, 400);
 		const pendingCount = await pendingProposalCount(id);
 		onProposalsChanged?.(id, pendingCount);
-		if (action === "accept") {
-			void reauditSubsystemModelAfterHttpMutation(id);
-		}
 		return json({ ok: true, proposal: result.proposal });
 	}
 

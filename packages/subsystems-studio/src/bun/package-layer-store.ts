@@ -303,10 +303,10 @@ export async function listPackageLayerRepos(
 		const purlKey = purlRepoKey(`pkg:github/${owner}/${name}`);
 		if (!purlKey) continue;
 
-		const headSha = gitHeadSha(info.root);
+		const headSha = await gitHeadSha(info.root);
 		if (!headSha) continue;
 
-		const dirtyHash = dirtyFingerprint(info.root);
+		const dirtyHash = await dirtyFingerprint(info.root);
 		const slotKey = cacheSlotKey(headSha, dirtyHash);
 
 		const want = purlKey.toLowerCase();
@@ -396,18 +396,18 @@ export type CurrentPackageLayerSlot = {
  * Live checkout identity + exact HEAD(+dirty) cache slot for a purl.
  * Returns null when there is no resolvable local git root / HEAD.
  */
-export function resolveCurrentPackageLayerSlot(
+export async function resolveCurrentPackageLayerSlot(
 	purl: string,
 	opts?: { repoRoot?: string; storeRoot?: string },
-): CurrentPackageLayerSlot | null {
+): Promise<CurrentPackageLayerSlot | null> {
 	const key = purlRepoKey(purl);
 	if (!key) return null;
 	const root = packageLayerStoreRoot(opts?.storeRoot);
 	const repoRoot = opts?.repoRoot?.trim() || resolveRepoRootForPurl(key);
 	if (!repoRoot || !existsSync(repoRoot)) return null;
-	const headSha = gitHeadSha(repoRoot);
+	const headSha = await gitHeadSha(repoRoot);
 	if (!headSha) return null;
-	const dirtyHash = dirtyFingerprint(repoRoot);
+	const dirtyHash = await dirtyFingerprint(repoRoot);
 	const slotKey = cacheSlotKey(headSha, dirtyHash);
 	const path = cachedPackagesJsonPath(key, headSha, dirtyHash, root);
 	const metaPath = cachedPackageLayerMetaPath(key, headSha, dirtyHash, root);
@@ -442,7 +442,7 @@ export async function getCachedPackageLayers(
 
 	let headSha = opts?.headSha;
 	if (!headSha && repoRoot) {
-		headSha = gitHeadSha(repoRoot) ?? undefined;
+		headSha = (await gitHeadSha(repoRoot)) ?? undefined;
 	}
 	if (!headSha) return null;
 
@@ -450,7 +450,7 @@ export async function getCachedPackageLayers(
 	if (opts && "dirtyHash" in opts) {
 		dirtyHash = opts.dirtyHash ?? null;
 	} else if (repoRoot) {
-		dirtyHash = dirtyFingerprint(repoRoot);
+		dirtyHash = await dirtyFingerprint(repoRoot);
 	} else {
 		dirtyHash = null;
 	}
@@ -511,7 +511,7 @@ export async function ensurePackageLayers(
 		};
 	}
 
-	const headSha = gitHeadSha(repoRoot);
+	const headSha = await gitHeadSha(repoRoot);
 	if (!headSha) {
 		return {
 			ok: false,
@@ -521,7 +521,7 @@ export async function ensurePackageLayers(
 		};
 	}
 
-	const dirtyHash = dirtyFingerprint(repoRoot);
+	const dirtyHash = await dirtyFingerprint(repoRoot);
 	const slotKey = cacheSlotKey(headSha, dirtyHash);
 
 	const lockKey = inflightKey(storeRoot, key, slotKey);

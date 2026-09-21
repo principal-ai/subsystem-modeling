@@ -152,6 +152,8 @@ export type {
 } from './subsystem/paths';
 export { SubsystemFileTree } from './subsystem/SubsystemFileTree';
 export type { SubsystemFileTreeProps } from './subsystem/SubsystemFileTree';
+export { WalkthroughsPanel, WALKTHROUGH_PLAY_PAUSE_MS } from './subsystem/WalkthroughsPanel';
+export type { WalkthroughsPanelProps } from './subsystem/WalkthroughsPanel';
 export { GraphLayoutCover } from './subsystem/GraphLayoutCover';
 export type { GraphLayoutCoverProps } from './subsystem/GraphLayoutCover';
 export type {
@@ -183,6 +185,8 @@ export {
   isConstructsOnlyModel,
   derivedGraphEdgeId,
   walkthroughStepGraphEdgeId,
+  reorderWalkthroughs,
+  reorderTargetIndex,
   isRelationMechanism,
   isWalkthroughMechanism,
   SUBSYSTEM_RELATION_TYPES,

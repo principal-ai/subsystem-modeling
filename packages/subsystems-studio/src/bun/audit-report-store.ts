@@ -21,6 +21,8 @@ import type {
 	SubsystemModelAuditTopologyCheck,
 	SubsystemModelVerification,
 	SubsystemModelVerificationLayer,
+	SubsystemVerificationLane,
+	VerificationLaneStatus,
 } from "../shared/contract";
 import { resolveCurrentGraphifySlot } from "./graphify-store";
 import { purlRepoKey } from "./subsystem-model-store";
@@ -63,6 +65,8 @@ export interface SubsystemModelAuditListSummary {
 	verdict: SubsystemModelAuditVerdict;
 	/** Claim-based progress ledger — see SubsystemModelVerification. */
 	verification: SubsystemModelVerification;
+	/** Coarse per-lane status for lane badges. */
+	lanes: Record<SubsystemVerificationLane, VerificationLaneStatus>;
 	/** True when live inputs no longer match the saved fingerprint. */
 	stale: boolean;
 	fingerprint: string;
@@ -267,6 +271,59 @@ export function summarizeVerification(
 	};
 }
 
+function laneStatus(t: VerificationTally): VerificationLaneStatus {
+	if (t.blocking > 0) return "issues";
+	if (t.open > 0) return "partial";
+	if (t.verified > 0) return "verified";
+	if (t.blocked > 0) return "blocked";
+	return "none";
+}
+
+/**
+ * Coarse per-lane status mapped onto the four model layers: construct (L1),
+ * static topology (L2 = relations + module containment), runtime topology
+ * (L3 = process), walkthrough (L4).
+ */
+export function summarizeLanes(
+	report: SubsystemModelAuditReport,
+	opts: { hasWalkthroughs: boolean },
+): Record<SubsystemVerificationLane, VerificationLaneStatus> {
+	const construct = emptyTally();
+	for (const c of report.checks) classifyConstructCheck(c, construct);
+
+	const staticTopology = emptyTally();
+	for (const c of report.topologyChecks ?? [])
+		classifyTopologyCheck(c, staticTopology);
+	for (const c of report.boundaryChecks ?? []) {
+		if (c.kind === "module_file") classifyBoundaryCheck(c, staticTopology);
+	}
+
+	const runtimeTopology = emptyTally();
+	for (const c of report.boundaryChecks ?? []) {
+		if (c.kind === "process_nest") classifyBoundaryCheck(c, runtimeTopology);
+	}
+
+	const walkthrough: VerificationLaneStatus = !opts.hasWalkthroughs
+		? "none"
+		: report.summary.walkthroughFailures > 0
+			? "issues"
+			: "verified";
+
+	// Every component carries a construct claim, so a model with components can
+	// never be "none" on the construct lane — an unchecked claim is open work.
+	const constructStatus: VerificationLaneStatus =
+		report.summary.components > 0 && laneStatus(construct) === "none"
+			? "partial"
+			: laneStatus(construct);
+
+	return {
+		construct: constructStatus,
+		"static-topology": laneStatus(staticTopology),
+		"runtime-topology": laneStatus(runtimeTopology),
+		walkthrough,
+	};
+}
+
 function auditPath(graphId: string): string {
 	return join(ROOT, `${graphId}.json`);
 }
@@ -279,7 +336,9 @@ async function ensureDir(): Promise<void> {
  * Stable fingerprint of model claims + current checkout graphify slot.
  * Changes when the model is edited, HEAD/dirty moves, or the exact slot rebuilds.
  */
-export function buildAuditFingerprint(source: AuditFingerprintSource): string {
+export async function buildAuditFingerprint(
+	source: AuditFingerprintSource,
+): Promise<string> {
 	const claims = [...source.components]
 		.map((c) =>
 			[
@@ -293,18 +352,21 @@ export function buildAuditFingerprint(source: AuditFingerprintSource): string {
 		.sort()
 		.join("\n");
 
-	const graphifyParts = (source.graphify?.purls ?? [])
-		.map((p) => {
-			const current = resolveCurrentGraphifySlot(p.purl, {
-				repoRoot: p.repoRoot,
-				storeRoot: source.storeRoot,
-			});
-			if (!current) {
-				return `${p.purl}:${p.status}:`;
-			}
-			const builtAt = current.cached?.meta.builtAt ?? "";
-			return `${p.purl}:${p.status}:${current.slotKey}:${builtAt}`;
-		})
+	const graphifyParts = (
+		await Promise.all(
+			(source.graphify?.purls ?? []).map(async (p) => {
+				const current = await resolveCurrentGraphifySlot(p.purl, {
+					repoRoot: p.repoRoot,
+					storeRoot: source.storeRoot,
+				});
+				if (!current) {
+					return `${p.purl}:${p.status}:`;
+				}
+				const builtAt = current.cached?.meta.builtAt ?? "";
+				return `${p.purl}:${p.status}:${current.slotKey}:${builtAt}`;
+			}),
+		)
+	)
 		.sort()
 		.join("|");
 
@@ -357,6 +419,7 @@ export async function deleteSubsystemModelAudit(graphId: string): Promise<void> 
 export async function getSubsystemModelAuditListSummary(
 	graphId: string,
 	liveFingerprint: string,
+	opts?: { hasWalkthroughs?: boolean },
 ): Promise<SubsystemModelAuditListSummary | null> {
 	const saved = await loadSubsystemModelAudit(graphId);
 	if (!saved) return null;
@@ -366,6 +429,9 @@ export async function getSubsystemModelAuditListSummary(
 		issueCount: auditIssueCount(saved.report),
 		verdict: classifyAuditReport(saved.report),
 		verification: summarizeVerification(saved.report),
+		lanes: summarizeLanes(saved.report, {
+			hasWalkthroughs: opts?.hasWalkthroughs === true,
+		}),
 		stale: saved.fingerprint !== liveFingerprint,
 		fingerprint: saved.fingerprint,
 	};

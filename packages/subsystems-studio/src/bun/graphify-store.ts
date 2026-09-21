@@ -22,7 +22,6 @@
  * The Graphify repos tab reports exact current-tree match separately.
  */
 
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { promises as fs } from "node:fs";
@@ -48,6 +47,25 @@ const ROOT = join(homedir(), ".principal", "graphify-graphs");
 
 /** Cap per untracked file when folding bytes into the dirty fingerprint. */
 const UNTRACKED_HASH_MAX_BYTES = 1_048_576;
+
+/** Cap captured git output (matches the old spawnSync maxBuffer). */
+const GIT_STDOUT_MAX_BYTES = 32 * 1024 * 1024;
+
+/** Git probe results are stable for the current tree; short TTL collapses
+ * repeated HEAD/dirty reads (per purl × per pass) into one git call. */
+const GIT_PROBE_TTL_MS = 2000;
+
+interface GitProbe {
+	at: number;
+	headSha: string | null;
+	dirtyHash: string | null;
+}
+
+const gitProbeCache = new Map<string, GitProbe>();
+
+export function clearGitProbeCache(): void {
+	gitProbeCache.clear();
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -191,47 +209,40 @@ export function cachedMetaPath(
 // Git / dirty fingerprint / purl resolve
 // ---------------------------------------------------------------------------
 
-function gitStdout(repoRoot: string, args: string[], maxBuffer = 32 * 1024 * 1024): string | null {
-	const result = spawnSync("git", ["-C", repoRoot, ...args], {
-		encoding: "buffer",
+async function gitStdout(
+	repoRoot: string,
+	args: string[],
+): Promise<string | null> {
+	const proc = Bun.spawn({
+		cmd: ["git", "-C", repoRoot, ...args],
 		stdio: ["ignore", "pipe", "ignore"],
-		timeout: 30_000,
-		maxBuffer,
 	});
-	if (result.status !== 0) return null;
-	return result.stdout?.toString("utf8") ?? "";
+	const stdout = new Response(proc.stdout).text().catch(() => "");
+	const deadline = Bun.sleep(30_000).then(() => {
+		try {
+			proc.kill();
+		} catch {
+			/* noop */
+		}
+	});
+	const text = await Promise.race([stdout, deadline]);
+	const code = await proc.exited;
+	if (code !== 0) return null;
+	return text.slice(0, GIT_STDOUT_MAX_BYTES);
 }
 
-export function gitHeadSha(repoRoot: string): string | null {
-	const out = gitStdout(repoRoot, ["rev-parse", "HEAD"]);
-	const sha = out?.trim();
-	return sha || null;
-}
-
-/**
- * Fingerprint of local dirt vs HEAD. Returns null when the tree is clean.
- *
- * Hash input: porcelain status + `git diff HEAD` (staged+unstaged) + untracked
- * file paths/contents (content capped per file). Prefer this over mtimes alone.
- */
-export function dirtyFingerprint(repoRoot: string): string | null {
-	const status = gitStdout(repoRoot, ["status", "--porcelain=v1"]);
-	if (status === null) return null;
-	if (!status.trim()) return null;
-
-	const diff = gitStdout(repoRoot, ["diff", "HEAD", "--binary"]) ?? "";
+function computeDirtyHash(
+	status: string,
+	diff: string,
+	untrackedRaw: string,
+	repoRoot: string,
+): string {
 	const hasher = createHash("sha256");
 	hasher.update("status\0");
 	hasher.update(status);
 	hasher.update("\0diff\0");
 	hasher.update(diff);
 
-	const untrackedRaw = gitStdout(repoRoot, [
-		"ls-files",
-		"-z",
-		"--others",
-		"--exclude-standard",
-	]);
 	hasher.update("\0untracked\0");
 	if (untrackedRaw) {
 		const paths = untrackedRaw.split("\0").filter(Boolean);
@@ -260,6 +271,52 @@ export function dirtyFingerprint(repoRoot: string): string | null {
 	}
 
 	return hasher.digest("hex").slice(0, 16);
+}
+
+async function probeRepoGit(repoRoot: string): Promise<GitProbe> {
+	const cached = gitProbeCache.get(repoRoot);
+	if (cached && performance.now() - cached.at < GIT_PROBE_TTL_MS) {
+		return cached;
+	}
+
+	const [headOut, status] = await Promise.all([
+		gitStdout(repoRoot, ["rev-parse", "HEAD"]),
+		gitStdout(repoRoot, ["status", "--porcelain=v1"]),
+	]);
+	const headSha = headOut?.trim() || null;
+
+	let dirtyHash: string | null = null;
+	if (headSha && status?.trim()) {
+		const [diff, untrackedRaw] = await Promise.all([
+			gitStdout(repoRoot, ["diff", "HEAD", "--binary"]).then((s) => s ?? ""),
+			gitStdout(repoRoot, [
+				"ls-files",
+				"-z",
+				"--others",
+				"--exclude-standard",
+			]).then((s) => s ?? ""),
+		]);
+		dirtyHash = computeDirtyHash(status, diff, untrackedRaw, repoRoot);
+	}
+
+	const probe: GitProbe = { at: performance.now(), headSha, dirtyHash };
+	gitProbeCache.set(repoRoot, probe);
+	return probe;
+}
+
+export async function gitHeadSha(repoRoot: string): Promise<string | null> {
+	return (await probeRepoGit(repoRoot)).headSha;
+}
+
+/**
+ * Fingerprint of local dirt vs HEAD. Returns null when the tree is clean.
+ *
+ * Git probe caching: git calls for a given repo are collapsed to one
+ * snapshot held for {@link GIT_PROBE_TTL_MS}, so repeated calls (per purl,
+ * per pass) never re-run `git diff HEAD --binary` on the host loop.
+ */
+export async function dirtyFingerprint(repoRoot: string): Promise<string | null> {
+	return (await probeRepoGit(repoRoot)).dirtyHash;
 }
 
 /**
@@ -390,18 +447,18 @@ export type CurrentGraphifySlot = {
 	cached: { path: string; meta: GraphifyGraphMeta } | null;
 };
 
-export function resolveCurrentGraphifySlot(
+export async function resolveCurrentGraphifySlot(
 	purl: string,
 	opts?: { repoRoot?: string; storeRoot?: string },
-): CurrentGraphifySlot | null {
+): Promise<CurrentGraphifySlot | null> {
 	const key = purlRepoKey(purl);
 	if (!key) return null;
 	const root = graphifyStoreRoot(opts?.storeRoot);
 	const repoRoot = opts?.repoRoot?.trim() || resolveRepoRootForPurl(key);
 	if (!repoRoot || !existsSync(repoRoot)) return null;
-	const headSha = gitHeadSha(repoRoot);
+	const headSha = await gitHeadSha(repoRoot);
 	if (!headSha) return null;
-	const dirtyHash = dirtyFingerprint(repoRoot);
+	const dirtyHash = await dirtyFingerprint(repoRoot);
 	const slotKey = cacheSlotKey(headSha, dirtyHash);
 	const path = cachedGraphJsonPath(key, headSha, dirtyHash, root);
 	const metaPath = cachedMetaPath(key, headSha, dirtyHash, root);
@@ -436,7 +493,7 @@ export async function getCachedGraphifyGraph(
 
 	let headSha = opts?.headSha;
 	if (!headSha && repoRoot) {
-		headSha = gitHeadSha(repoRoot) ?? undefined;
+		headSha = (await gitHeadSha(repoRoot)) ?? undefined;
 	}
 	if (!headSha) return null;
 
@@ -444,7 +501,7 @@ export async function getCachedGraphifyGraph(
 	if (opts && "dirtyHash" in opts) {
 		dirtyHash = opts.dirtyHash ?? null;
 	} else if (repoRoot) {
-		dirtyHash = dirtyFingerprint(repoRoot);
+		dirtyHash = await dirtyFingerprint(repoRoot);
 	} else {
 		dirtyHash = null;
 	}
@@ -497,7 +554,7 @@ export async function ensureGraphifyGraph(
 		};
 	}
 
-	const headSha = gitHeadSha(repoRoot);
+	const headSha = await gitHeadSha(repoRoot);
 	if (!headSha) {
 		return {
 			ok: false,
@@ -507,7 +564,7 @@ export async function ensureGraphifyGraph(
 		};
 	}
 
-	const dirtyHash = dirtyFingerprint(repoRoot);
+	const dirtyHash = await dirtyFingerprint(repoRoot);
 	const slotKey = cacheSlotKey(headSha, dirtyHash);
 
 	const lockKey = inflightKey(storeRoot, key, slotKey);
@@ -751,10 +808,10 @@ export async function listGraphifyRepos(
 		const purlKey = purlRepoKey(`pkg:github/${owner}/${name}`);
 		if (!purlKey) continue;
 
-		const headSha = gitHeadSha(info.root);
+		const headSha = await gitHeadSha(info.root);
 		if (!headSha) continue; // not a usable git checkout
 
-		const dirtyHash = dirtyFingerprint(info.root);
+		const dirtyHash = await dirtyFingerprint(info.root);
 		const slotKey = cacheSlotKey(headSha, dirtyHash);
 
 		const want = purlKey.toLowerCase();
@@ -890,13 +947,13 @@ export async function ensureCurrentGraphifyCachesForModel(
  * **current** HEAD(+dirty) graphify slot exists for each purl (same bar as
  * Alexandria "Up to date"). Not whether components have been verified.
  */
-export function assessSubsystemGraphifyReadiness(
+export async function assessSubsystemGraphifyReadiness(
 	graph: {
 		components: Array<{ purl?: string }>;
 	},
 	buildingPurls?: ReadonlySet<string>,
 	storeRoot?: string,
-): SubsystemGraphifyReadiness {
+): Promise<SubsystemGraphifyReadiness> {
 	const root = graphifyStoreRoot(storeRoot);
 	const byPurl = new Map<string, SubsystemGraphifyPurlReadiness>();
 
@@ -915,7 +972,7 @@ export function assessSubsystemGraphifyReadiness(
 			continue;
 		}
 
-		const current = resolveCurrentGraphifySlot(key, {
+		const current = await resolveCurrentGraphifySlot(key, {
 			repoRoot: repoRoot ?? undefined,
 			storeRoot: root,
 		});

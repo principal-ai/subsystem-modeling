@@ -7,6 +7,7 @@ import {
 	cacheSlotDir,
 	cacheSlotKey,
 	cachedGraphJsonPath,
+	clearGitProbeCache,
 	dirtyFingerprint,
 	ensureCurrentGraphifyCachesForModel,
 	getCachedGraphifyGraph,
@@ -79,29 +80,32 @@ describe("dirtyFingerprint", () => {
 		return dir;
 	}
 
-	test("null when clean", () => {
+	test("null when clean", async () => {
 		const dir = initRepo();
-		expect(dirtyFingerprint(dir)).toBeNull();
+		expect(await dirtyFingerprint(dir)).toBeNull();
 	});
 
-	test("stable for same dirt, changes when content changes", () => {
+	test("stable for same dirt, changes when content changes", async () => {
 		const dir = initRepo();
 		writeFileSync(join(dir, "a.ts"), "export const a = 2;\n");
-		const first = dirtyFingerprint(dir);
+		clearGitProbeCache();
+		const first = await dirtyFingerprint(dir);
 		expect(first).toBeTruthy();
-		expect(dirtyFingerprint(dir)).toBe(first);
+		expect(await dirtyFingerprint(dir)).toBe(first);
 
 		writeFileSync(join(dir, "a.ts"), "export const a = 3;\n");
-		const second = dirtyFingerprint(dir);
+		clearGitProbeCache();
+		const second = await dirtyFingerprint(dir);
 		expect(second).toBeTruthy();
 		expect(second).not.toBe(first);
 	});
 
-	test("picks up untracked files", () => {
+	test("picks up untracked files", async () => {
 		const dir = initRepo();
-		expect(dirtyFingerprint(dir)).toBeNull();
+		expect(await dirtyFingerprint(dir)).toBeNull();
 		writeFileSync(join(dir, "new.ts"), "export const n = 1;\n");
-		const fp = dirtyFingerprint(dir);
+		clearGitProbeCache();
+		const fp = await dirtyFingerprint(dir);
 		expect(fp).toBeTruthy();
 	});
 });
@@ -187,15 +191,15 @@ describe("getCachedGraphifyGraph", () => {
 });
 
 describe("assessSubsystemGraphifyReadiness", () => {
-	test("empty components → unavailable", () => {
-		const r = assessSubsystemGraphifyReadiness({ components: [] });
+	test("empty components → unavailable", async () => {
+		const r = await assessSubsystemGraphifyReadiness({ components: [] });
 		expect(r.status).toBe("unavailable");
 		expect(r.purls).toEqual([]);
 	});
 
-	test("building set marks running", () => {
+	test("building set marks running", async () => {
 		const purl = "pkg:github/acme/widget";
-		const r = assessSubsystemGraphifyReadiness(
+		const r = await assessSubsystemGraphifyReadiness(
 			{ components: [{ purl }] },
 			new Set([purl]),
 		);
@@ -203,10 +207,10 @@ describe("assessSubsystemGraphifyReadiness", () => {
 		expect(r.purls[0]?.status).toBe("building");
 	});
 
-	test("missing local root and no cache → unavailable", () => {
+	test("missing local root and no cache → unavailable", async () => {
 		const purl = "pkg:github/acme/does-not-exist-xyz";
 		const root = mkdtempSync(join(tmpdir(), "gf-store-"));
-		const r = assessSubsystemGraphifyReadiness(
+		const r = await assessSubsystemGraphifyReadiness(
 			{ components: [{ purl }] },
 			undefined,
 			root,
@@ -215,7 +219,7 @@ describe("assessSubsystemGraphifyReadiness", () => {
 		expect(r.purls[0]?.status).toBe("unavailable");
 	});
 
-	test("old cached slot without matching checkout → unavailable", () => {
+	test("old cached slot without matching checkout → unavailable", async () => {
 		const root = mkdtempSync(join(tmpdir(), "gf-store-"));
 		const purl = "pkg:github/acme/cached-only";
 		const slot = cacheSlotDir(purl, "oldhead", "olddirty", root);
@@ -238,7 +242,7 @@ describe("assessSubsystemGraphifyReadiness", () => {
 				edgeCount: 0,
 			}),
 		);
-		const r = assessSubsystemGraphifyReadiness(
+		const r = await assessSubsystemGraphifyReadiness(
 			{ components: [{ purl }] },
 			undefined,
 			root,
@@ -247,7 +251,7 @@ describe("assessSubsystemGraphifyReadiness", () => {
 		expect(r.purls[0]?.status).toBe("unavailable");
 	});
 
-	test("current HEAD slot present → ready", () => {
+	test("current HEAD slot present → ready", async () => {
 		const storeRoot = mkdtempSync(join(tmpdir(), "gf-store-"));
 		const repo = mkdtempSync(join(tmpdir(), "gf-repo-"));
 		spawnSync("git", ["init"], { cwd: repo, stdio: "ignore" });
@@ -291,7 +295,7 @@ describe("assessSubsystemGraphifyReadiness", () => {
 			}),
 		);
 
-		const r = assessSubsystemGraphifyReadiness(
+		const r = await assessSubsystemGraphifyReadiness(
 			{ components: [{ purl }] },
 			undefined,
 			storeRoot,
@@ -300,7 +304,7 @@ describe("assessSubsystemGraphifyReadiness", () => {
 		expect(r.purls[0]?.status).toBe("ready");
 	});
 
-	test("checkout present but only old slot → missing", () => {
+	test("checkout present but only old slot → missing", async () => {
 		const storeRoot = mkdtempSync(join(tmpdir(), "gf-store-"));
 		const repo = mkdtempSync(join(tmpdir(), "gf-repo-"));
 		spawnSync("git", ["init"], { cwd: repo, stdio: "ignore" });
@@ -339,7 +343,7 @@ describe("assessSubsystemGraphifyReadiness", () => {
 			}),
 		);
 
-		const r = assessSubsystemGraphifyReadiness(
+		const r = await assessSubsystemGraphifyReadiness(
 			{ components: [{ purl }] },
 			undefined,
 			storeRoot,
@@ -370,9 +374,9 @@ describe("ensureCurrentGraphifyCachesForModel", () => {
 		spawnSync("git", ["add", "."], { cwd: repo });
 		spawnSync("git", ["commit", "-m", "init"], { cwd: repo });
 
-		const head = gitHeadSha(repo);
+		const head = await gitHeadSha(repo);
 		expect(head).toBeTruthy();
-		const dirty = dirtyFingerprint(repo);
+		const dirty = await dirtyFingerprint(repo);
 		const storeRoot = mkdtempSync(join(tmpdir(), "gf-ensure-store-"));
 		const purl = "pkg:github/acme/ensure-hit";
 		registerProjectInAlexandria(repo, "https://github.com/acme/ensure-hit.git");

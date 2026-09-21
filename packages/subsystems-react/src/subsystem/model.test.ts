@@ -29,8 +29,10 @@ import {
   packageColor,
   subsystemGraphLayoutKey,
   describeConstructBreakdown,
+  reorderWalkthroughs,
+  reorderTargetIndex,
 } from './model';
-import type { SubsystemComponent, SubsystemComponentEdge } from './model';
+import type { SubsystemComponent, SubsystemComponentEdge, SubsystemWalkthrough } from './model';
 
 const comps: SubsystemComponent[] = [
   { alias: 'reader', name: 'SessionReader', construct: 'class', file: 'SessionReader.ts', purl: 'pkg:github/principal-ai/agent-monitoring' },
@@ -791,5 +793,78 @@ describe('module badge labels', () => {
 
   test('moduleBadgeWidth estimates a label strictly wider than its shorter precursor', () => {
     expect(moduleBadgeWidth('src/…/nodes.tsx')).toBeLessThan(moduleBadgeWidth('packages/…/nodes.tsx'));
+  });
+});
+
+describe('reorderWalkthroughs', () => {
+  const wts: SubsystemWalkthrough[] = [
+    { id: 'a', title: 'A', steps: [] },
+    { id: 'b', title: 'B', steps: [] },
+    { id: 'c', title: 'C', steps: [] },
+  ];
+  const ids = (list: SubsystemWalkthrough[]) => list.map((w) => w.id);
+
+  test('moves an item forward to the target index', () => {
+    expect(ids(reorderWalkthroughs(wts, 0, 2))).toEqual(['b', 'c', 'a']);
+  });
+
+  test('moves an item backward to the target index', () => {
+    expect(ids(reorderWalkthroughs(wts, 2, 0))).toEqual(['c', 'a', 'b']);
+  });
+
+  test('returns a new array and leaves the input untouched', () => {
+    const next = reorderWalkthroughs(wts, 1, 2);
+    expect(next).not.toBe(wts);
+    expect(ids(wts)).toEqual(['a', 'b', 'c']);
+    expect(ids(next)).toEqual(['a', 'c', 'b']);
+  });
+
+  test('no-op when source and target match', () => {
+    expect(ids(reorderWalkthroughs(wts, 1, 1))).toEqual(['a', 'b', 'c']);
+  });
+
+  test('out-of-range source returns a shallow copy unchanged', () => {
+    const next = reorderWalkthroughs(wts, 5, 0);
+    expect(next).not.toBe(wts);
+    expect(ids(next)).toEqual(['a', 'b', 'c']);
+  });
+
+  test('clamps a target beyond the end to the last slot', () => {
+    expect(ids(reorderWalkthroughs(wts, 0, 99))).toEqual(['b', 'c', 'a']);
+  });
+});
+
+describe('reorderTargetIndex', () => {
+  // Boundaries are the n+1 gaps between rows: 0 is above row 0, n is below
+  // the last row. Dragging row `from` to boundary `b` lands it at b, minus one
+  // when b is past from (removing the row shifts later gaps down).
+  test('dragging down past a row lands after it', () => {
+    expect(reorderTargetIndex(2, 0)).toBe(1);
+    expect(reorderTargetIndex(3, 0)).toBe(2);
+  });
+
+  test('dragging up lands at the boundary', () => {
+    expect(reorderTargetIndex(0, 2)).toBe(0);
+    expect(reorderTargetIndex(1, 2)).toBe(1);
+  });
+
+  test('the boundaries around the dragged row are no-ops', () => {
+    expect(reorderTargetIndex(1, 1)).toBe(1);
+    expect(reorderTargetIndex(2, 1)).toBe(1);
+  });
+
+  test('dropping the first row above itself is a no-op', () => {
+    expect(reorderTargetIndex(0, 0)).toBe(0);
+  });
+
+  test('composes with reorderWalkthroughs to match the indicator', () => {
+    const wts: SubsystemWalkthrough[] = [
+      { id: 'a', title: 'A', steps: [] },
+      { id: 'b', title: 'B', steps: [] },
+      { id: 'c', title: 'C', steps: [] },
+    ];
+    // Drag A onto the gap below B (boundary 2) → A lands between B and C.
+    const target = reorderTargetIndex(2, 0);
+    expect(reorderWalkthroughs(wts, 0, target).map((w) => w.id)).toEqual(['b', 'a', 'c']);
   });
 });

@@ -41,6 +41,7 @@ import type {
 	StoredSubsystemModel,
 	StudioMessages,
 	SubsystemModelAuditReport,
+	SubsystemWalkthrough,
 } from "../../shared/contract";
 
 // Disabled for now — Excalidraw edits don't save back to the store yet
@@ -85,6 +86,22 @@ export function SubsystemModelView({
 			})
 			.catch(() => setGraph(null));
 	}, [graphId]);
+
+	// Flows panel drag-reorder: apply the new order optimistically so the panel
+	// updates on drop, then persist. A failed write reloads the stored order;
+	// a successful one also pushes a change event that reloads every surface.
+	const onReorderWalkthroughs = useCallback(
+		(next: SubsystemWalkthrough[]) => {
+			setGraph((g) => (g ? { ...g, walkthroughs: next } : g));
+			void electrobun.rpc!.request
+				.updateSubsystemModel({ graphId, patch: { walkthroughs: next } })
+				.then((res: { ok: boolean; error?: string }) => {
+					if (!res.ok) loadGraph();
+				})
+				.catch(() => loadGraph());
+		},
+		[graphId, loadGraph],
+	);
 
 	const loadAudit = useCallback(() => {
 		void electrobun.rpc!.request
@@ -381,6 +398,7 @@ export function SubsystemModelView({
 				components={graph.components}
 				relations={graph.relations}
 				walkthroughs={graph.walkthroughs}
+				onReorderWalkthroughs={onReorderWalkthroughs}
 				initialWalkthroughId={focusWalkthroughId}
 				title={graph.title}
 				description={graph.description}

@@ -1,33 +1,145 @@
 import { describe, expect, test } from "bun:test";
 import {
+	accuracyInstruction,
 	buildProposalState,
+	changeKindQuestion,
+	shouldAutoAcceptOnConfidence,
 	verdictFromAnswers,
 } from "./jev-maintenance";
 
+const proposal = (lane: string, changes: unknown[]) =>
+	({
+		id: "p",
+		graphId: "g",
+		status: "pending",
+		createdAt: "",
+		lane,
+		rationale: "",
+		changes,
+		preview: [],
+	}) as never;
+
+describe("accuracyInstruction", () => {
+	test("signature augment uses extraction wording", () => {
+		const s = accuracyInstruction(
+			proposal("construct", [
+				{
+					target: "augmentation",
+					componentAlias: "a",
+					field: "signature",
+					value: { parameters: [] },
+				},
+			]),
+		);
+		expect(s).toContain("accurate, complete extraction");
+	});
+	test("static topology uses relation/containment wording", () => {
+		const s = accuracyInstruction(
+			proposal("static-topology", [
+				{ target: "relation", relationId: "r", field: "to", value: "b" },
+			]),
+		);
+		expect(s).toContain("relation or containment");
+	});
+	test("runtime topology uses process wording", () => {
+		const s = accuracyInstruction(
+			proposal("runtime-topology", [
+				{ target: "component", componentAlias: "a", field: "process", value: "web" },
+			]),
+		);
+		expect(s).toContain("process (deployment-unit)");
+	});
+	test("walkthrough uses step wording", () => {
+		const s = accuracyInstruction(
+			proposal("walkthrough", [
+				{
+					target: "walkthrough-step",
+					walkthroughId: "w",
+					stepIndex: 0,
+					field: "line",
+					value: 1,
+				},
+			]),
+		);
+		expect(s).toContain("walkthrough step");
+	});
+});
+
+describe("changeKindQuestion", () => {
+	test("construct offers signature + identity + construct", () => {
+		const q = changeKindQuestion(
+			proposal("construct", [
+				{
+					target: "augmentation",
+					componentAlias: "a",
+					field: "signature",
+					value: { parameters: [] },
+				},
+			]),
+		);
+		expect(Object.keys(q.criteria)).toContain("signature_augment");
+		expect(Object.keys(q.criteria)).toContain("identity_fix");
+	});
+	test("static topology offers relation + module", () => {
+		const q = changeKindQuestion(proposal("static-topology", []));
+		expect(Object.keys(q.criteria)).toContain("relation_fix");
+		expect(Object.keys(q.criteria)).toContain("module_fix");
+	});
+	test("walkthrough offers walkthrough_fix", () => {
+		const q = changeKindQuestion(proposal("walkthrough", []));
+		expect(Object.keys(q.criteria)).toContain("walkthrough_fix");
+	});
+});
+
 describe("verdictFromAnswers", () => {
-	test("high noul maps to safe with noul confidence", () => {
+	test("high noul maps to accurate with noul confidence", () => {
 		const v = verdictFromAnswers({
-			safe_to_auto_accept: { noul: 0.92 },
+			accurate: { noul: 0.92 },
 			change_kind: { choice: "construct_augment", confidence: 0.7 },
 			risk: { score: 0.1, confidence: 0.9 },
 		});
-		expect(v.verdict).toBe("safe");
+		expect(v.verdict).toBe("accurate");
 		expect(v.confidence).toBeCloseTo(0.92);
 		expect(v.changeKind).toBe("construct_augment");
 	});
-	test("mid noul maps to needs-human", () => {
-		const v = verdictFromAnswers({ safe_to_auto_accept: { noul: 0.6 } });
-		expect(v.verdict).toBe("needs-human");
+	test("mid noul maps to uncertain", () => {
+		const v = verdictFromAnswers({ accurate: { noul: 0.6 } });
+		expect(v.verdict).toBe("uncertain");
 		expect(v.confidence).toBeCloseTo(0.6);
 	});
-	test("low noul maps to unsafe", () => {
-		const v = verdictFromAnswers({ safe_to_auto_accept: { noul: 0.2 } });
-		expect(v.verdict).toBe("unsafe");
+	test("low noul maps to inaccurate", () => {
+		const v = verdictFromAnswers({ accurate: { noul: 0.2 } });
+		expect(v.verdict).toBe("inaccurate");
 	});
-	test("missing noul falls back to needs-human", () => {
+	test("missing noul falls back to uncertain", () => {
 		const v = verdictFromAnswers({});
-		expect(v.verdict).toBe("needs-human");
+		expect(v.verdict).toBe("uncertain");
 		expect(v.confidence).toBe(0);
+	});
+});
+
+describe("shouldAutoAcceptOnConfidence", () => {
+	const opinion = (confidence: number, error?: string) =>
+		({
+			source: "jev-latest",
+			checkedAt: "",
+			verdict: "accurate",
+			confidence,
+			error,
+		}) as never;
+
+	test("confidence at or above threshold qualifies", () => {
+		expect(shouldAutoAcceptOnConfidence(opinion(0.85), 0.85)).toBe(true);
+		expect(shouldAutoAcceptOnConfidence(opinion(0.9), 0.85)).toBe(true);
+	});
+	test("confidence below threshold is held back", () => {
+		expect(shouldAutoAcceptOnConfidence(opinion(0.84), 0.85)).toBe(false);
+	});
+	test("missing opinion never qualifies", () => {
+		expect(shouldAutoAcceptOnConfidence(undefined, 0.5)).toBe(false);
+	});
+	test("scoring error never qualifies, even with high confidence", () => {
+		expect(shouldAutoAcceptOnConfidence(opinion(0.99, "no key"), 0.5)).toBe(false);
 	});
 });
 
@@ -44,5 +156,38 @@ describe("buildProposalState", () => {
 		} as never);
 		expect(s).toContain("fix construct");
 		expect(s).toContain("a.b");
+	});
+
+	test("appends source context when provided", () => {
+		const s = buildProposalState(
+			{
+				id: "sp-1",
+				graphId: "sg-1",
+				status: "pending",
+				createdAt: new Date().toISOString(),
+				rationale: "claim types",
+				changes: [],
+				preview: [],
+			} as never,
+			{ sourceContext: "  10| function f() {}" },
+		);
+		expect(s).toContain("Source under review:");
+		expect(s).toContain("function f() {}");
+	});
+
+	test("omits source context when blank", () => {
+		const s = buildProposalState(
+			{
+				id: "sp-1",
+				graphId: "sg-1",
+				status: "pending",
+				createdAt: new Date().toISOString(),
+				rationale: "claim types",
+				changes: [],
+				preview: [],
+			} as never,
+			{ sourceContext: "   " },
+		);
+		expect(s).not.toContain("Source under review:");
 	});
 });

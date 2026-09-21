@@ -156,6 +156,60 @@ const rpc = Electroview.defineRPC<StudioRPC>({
 
 export const electrobun = new Electrobun.Electroview({ rpc });
 
+function describeRpcFailure(method: string, params: unknown): string {
+	let paramsSummary = "";
+	try {
+		const s = JSON.stringify(params ?? null);
+		paramsSummary = s.length > 240 ? s.slice(0, 237) + "..." : s;
+	} catch {
+		paramsSummary = "[unserializable]";
+	}
+	return `method="${method}" params=${paramsSummary}`;
+}
+
+function describeRpcCaller(): string {
+	const frames = (new Error().stack ?? "").split("\n").slice(2, 9);
+	for (const raw of frames) {
+		const f = raw.trim();
+		const named = f.match(/(?:^|@)([A-Za-z_$][\w$.]{1,40})(?:@|\s|\(|$)/);
+		if (named) {
+			const name = named[1];
+			if (name !== "anonymous" && !name.includes("describeRpcCaller"))
+				return name;
+		}
+		const pos = f.match(/:(\d+):\d+$/);
+		if (pos) return `line ${pos[1]}`;
+	}
+	return frames[0]?.trim().slice(0, 60) ?? "unknown";
+}
+
+const rawRequest = electrobun.rpc!.request as unknown as Record<
+	string,
+	(params?: unknown) => Promise<unknown>
+>;
+
+const enrichedRequest = new Proxy({} as Record<string, unknown>, {
+	get(_target, method: string) {
+		const fn = rawRequest[method];
+		if (typeof fn !== "function") return fn;
+		return (params?: unknown) => {
+			const caller = describeRpcCaller();
+			return Promise.resolve(fn(params)).catch((err: unknown) => {
+				const message = err instanceof Error ? err.message : String(err);
+				if (message.includes("RPC request timed out")) {
+					throw new Error(
+						`RPC request timed out. ${describeRpcFailure(method, params)} caller=${caller}`,
+					);
+				}
+				throw err;
+			});
+		};
+	},
+});
+
+(electrobun.rpc as unknown as { request: typeof rawRequest }).request =
+	enrichedRequest as typeof rawRequest;
+
 export function callReadFile(tabId: string, path: string): Promise<string> {
 	return electrobun.rpc!.request.readFile({ tabId, path }).then((res) => {
 		if (!res.ok) throw new Error(res.error ?? "readFile failed");

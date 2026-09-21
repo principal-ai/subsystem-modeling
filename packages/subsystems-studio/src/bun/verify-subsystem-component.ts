@@ -282,7 +282,7 @@ async function captureDeclaration(
 		startLine,
 		liveHash,
 	);
-	const ref = buildDeclarationRef({
+	const ref = await buildDeclarationRef({
 		file: component.file,
 		startLine,
 		lineHash: liveHash,
@@ -412,7 +412,7 @@ export async function verifySubsystemComponent(
 		};
 	}
 
-	const readiness = assessSubsystemGraphifyReadiness({
+	const readiness = await assessSubsystemGraphifyReadiness({
 		components: [{ purl: purlKey }],
 	});
 	const purlStatus = readiness.purls[0]?.status ?? "unavailable";
@@ -679,7 +679,11 @@ export async function verifySubsystemComponent(
 			inferred: sig.inferred,
 		};
 
-	// Graphify has no usable signature edges — accepted augmentation can confirm.
+	// Graphify has no usable signature edges. An accepted, agent-extracted
+	// augmentation IS the confirmation — there is nothing deterministic to
+	// compare against: Graphify is silent, and comparing to the model's own
+	// declaration would be circular. Trust it, and label it as agent-confirmed
+	// so it is never mistaken for a Graphify-verified match.
 	if (sig.skipped && component.file && component.symbol) {
 		const aug = await findAcceptedSignatureAugmentation({
 			purl: purlKey,
@@ -688,32 +692,14 @@ export async function verifySubsystemComponent(
 		});
 		const augSig = aug?.claims.signature;
 		if (augSig) {
-			const claimedEmpty =
-				sig.claimed.parameterTypes.length === 0 &&
-				sig.claimed.returnTypes.length === 0;
-			const typeBagsEqual = (a: string[], b: string[]) => {
-				if (a.length !== b.length) return false;
-				const sa = [...a].map((t) => t.trim()).filter(Boolean).sort();
-				const sb = [...b].map((t) => t.trim()).filter(Boolean).sort();
-				return sa.every((t, i) => t === sb[i]);
+			signature = {
+				match: true,
+				skipped: false,
+				reason: "augmented signature (agent-extracted, human-confirmed)",
+				claimed: sig.claimed,
+				inferred: sig.inferred,
+				augmented: augSig,
 			};
-			const bagsMatch =
-				typeBagsEqual(sig.claimed.parameterTypes, augSig.parameterTypes) &&
-				typeBagsEqual(sig.claimed.returnTypes, augSig.returnTypes);
-			if (claimedEmpty || bagsMatch) {
-				signature = {
-					match: true,
-					skipped: false,
-					reason: "augmented signature",
-					claimed: claimedEmpty
-						? {
-								parameterTypes: [...augSig.parameterTypes],
-								returnTypes: [...augSig.returnTypes],
-							}
-						: sig.claimed,
-					inferred: sig.inferred,
-				};
-			}
 		}
 	}
 
@@ -804,6 +790,12 @@ export function verifyVerdict(
 				default:
 					return { category: "signature_skipped", detail };
 			}
+		}
+		if (r.signature.augmented) {
+			return {
+				category: "signature_augmented",
+				detail: "agent-extracted, human-confirmed",
+			};
 		}
 		return r.signature.match
 			? { category: "signature_match" }
@@ -1119,7 +1111,10 @@ export async function auditSubsystemModel(
 
 		if (r.signature) {
 			if (r.signature.skipped) check.signature = "skipped";
-			else if (r.signature.match) {
+			else if (r.signature.augmented) {
+				check.signature = "augmented";
+				signaturesMatched++;
+			} else if (r.signature.match) {
 				check.signature = "match";
 				signaturesMatched++;
 			} else {
@@ -1222,7 +1217,7 @@ export async function auditSubsystemModel(
 
 	// --- Layer 2: topology relations ---
 	const topologyBundles = new Map<string, GraphifyBundle | null>();
-	const readiness = assessSubsystemGraphifyReadiness(graph);
+	const readiness = await assessSubsystemGraphifyReadiness(graph);
 	for (const p of readiness.purls) {
 		if (p.status !== "ready") {
 			topologyBundles.set(p.purl, null);
@@ -1349,8 +1344,8 @@ export async function auditSubsystemModel(
 		findings,
 	};
 
-	const graphify = assessSubsystemGraphifyReadiness(graph);
-	const fingerprint = buildAuditFingerprint({
+	const graphify = await assessSubsystemGraphifyReadiness(graph);
+	const fingerprint = await buildAuditFingerprint({
 		updatedAt: graph.updatedAt,
 		components: graph.components,
 		graphify,

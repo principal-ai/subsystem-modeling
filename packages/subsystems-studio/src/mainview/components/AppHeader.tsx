@@ -6,7 +6,7 @@
  * rather than jumping straight to GitHub).
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -112,7 +112,14 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 	const [maintenanceOverview, setMaintenanceOverview] =
 		useState<MaintenanceOverview | null>(null);
 	const [showMaintenance, setShowMaintenance] = useState(false);
+	const loadInFlight = useRef(false);
+	const loadQueued = useRef(false);
 	const loadMaintenance = useCallback(() => {
+		if (loadInFlight.current) {
+			loadQueued.current = true;
+			return;
+		}
+		loadInFlight.current = true;
 		void electrobun.rpc!.request
 			.getMaintenanceOverview({})
 			.then((res) => {
@@ -120,6 +127,13 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 			})
 			.catch(() => {
 				/* best-effort ambient surface */
+			})
+			.finally(() => {
+				loadInFlight.current = false;
+				if (loadQueued.current) {
+					loadQueued.current = false;
+					loadMaintenance();
+				}
 			});
 	}, []);
 	useEffect(() => {

@@ -6,13 +6,12 @@
  * clicking a file opens its owning graph.
  *
  * The list polls every 10s so graphs posted via the HTTP API appear without
- * reopening the viewer. Host-side regular audit (Settings) refreshes
- * verification badges; click a badge for the last report. Pending agent
- * proposals show a separate badge to review before/after + why.
+ * reopening the viewer. Verification and maintenance live in the Maintenance
+ * tab; the list no longer surfaces per-model audit state.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bot, Boxes, Check, Component as ComponentIcon, Copy, Info, Loader2, Route as RouteIcon, Share2 } from "lucide-react";
+import { Boxes, Check, Component as ComponentIcon, Copy, Info, Loader2, Route as RouteIcon, Share2 } from "lucide-react";
 import { DocumentView } from "themed-markdown";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
@@ -23,9 +22,7 @@ import {
 } from "@principal-ai/subsystems-react";
 import type {
 	RegularAuditStatus,
-	SubsystemModelAuditReport,
 	SubsystemModelSummary,
-	SubsystemModelVerification,
 	StudioMessages,
 } from "../../shared/contract";
 import {
@@ -33,17 +30,10 @@ import {
 	graphifyChangeSubscribers,
 	regularAuditChangeSubscribers,
 	subsystemModelChangeSubscribers,
-	subsystemModelMaintainChangeSubscribers,
 	subsystemModelProposalsChangeSubscribers,
 } from "../rpc";
-import {
-	AuditResultsModal,
-	type AuditModalState,
-} from "../components/AuditResultsModal";
-import { ProposalsModal } from "../components/ProposalsModal";
 import { FilesDrilldown, drilldownRepoKey } from "../components/FilesDrilldown";
 import { ComposedGraphPane } from "./ComposedGraphPane";
-import { MaintainModelPickerModal } from "../components/MaintainModelPickerModal";
 import { CenteredMessage, lastLoadedLabel } from "../ui";
 
 const SUBSYSTEMS_POLL_MS = 10_000;
@@ -52,196 +42,6 @@ const COPY_FEEDBACK_MS = 1500;
 const RECENT_MS = 24 * 60 * 60 * 1000;
 /** Width of the model-list side panel shown beside the composed graph. */
 const COMBINED_LIST_WIDTH = 340;
-
-type ListAuditEntry =
-	| { status: "auditing" }
-	| {
-			status: "fully_verified";
-			checkedAt: string;
-			stale?: boolean;
-			issueCount: number;
-			report?: SubsystemModelAuditReport;
-			verification?: SubsystemModelVerification;
-	  }
-	| {
-			status: "partially_verified";
-			checkedAt: string;
-			stale?: boolean;
-			issueCount: number;
-			report?: SubsystemModelAuditReport;
-			verification?: SubsystemModelVerification;
-	  }
-	| {
-			status: "issues";
-			checkedAt: string;
-			stale?: boolean;
-			issueCount: number;
-			report?: SubsystemModelAuditReport;
-			verification?: SubsystemModelVerification;
-	  }
-	| { status: "error"; error: string; title?: string };
-
-function entryFromLastAudit(
-	lastAudit: NonNullable<SubsystemModelSummary["lastAudit"]>,
-	existing?: ListAuditEntry,
-): Extract<
-	ListAuditEntry,
-	{ status: "fully_verified" | "partially_verified" | "issues" }
-> {
-	const status =
-		lastAudit.verdict ??
-		(lastAudit.needsUpdate || lastAudit.issueCount > 0
-			? "issues"
-			: "fully_verified");
-	const keepReport =
-		existing &&
-		(existing.status === "fully_verified" ||
-			existing.status === "partially_verified" ||
-			existing.status === "issues") &&
-		existing.report &&
-		existing.checkedAt === lastAudit.checkedAt
-			? existing.report
-			: undefined;
-	return {
-		status,
-		checkedAt: lastAudit.checkedAt,
-		stale: lastAudit.stale,
-		issueCount: lastAudit.issueCount,
-		report: keepReport,
-		verification: lastAudit.verification,
-	};
-}
-
-/** Map list audit status → Maintain mode (null = disabled). */
-function maintainModeFromAuditEntry(
-	entry: ListAuditEntry | undefined,
-): "issues" | "gaps" | null {
-	if (!entry) return null;
-	if (entry.status === "issues") return "issues";
-	if (entry.status === "partially_verified") return "gaps";
-	return null;
-}
-
-function maintainButtonCopy(mode: "issues" | "gaps" | null): {
-	label: string;
-	title: string;
-	agentName: string;
-} {
-	if (mode === "issues") {
-		return {
-			label: "Run maintenance",
-			title:
-				"Run maintenance — host picks construct / boundary / topology fixer by layer",
-			agentName: "Maintainer",
-		};
-	}
-	if (mode === "gaps") {
-		return {
-			label: "Run maintenance",
-			title:
-				"Run maintenance — host picks construct / boundary / topology gap-filler by layer",
-			agentName: "Maintainer",
-		};
-	}
-	return {
-		label: "Run maintenance",
-		title: "Audit first — maintenance runs when verification failed or partially verified",
-		agentName: "Maintainer",
-	};
-}
-
-function agentDisplayName(
-	agent:
-		| "issue-fixer"
-		| "gap-filler"
-		| "topology-fixer"
-		| "topology-gap-filler"
-		| "boundary-gap-filler"
-		| undefined,
-): string {
-	if (agent === "issue-fixer") return "Issue fixer";
-	if (agent === "gap-filler") return "Gap filler";
-	if (agent === "topology-fixer") return "Topology fixer";
-	if (agent === "topology-gap-filler") return "Topology gap filler";
-	if (agent === "boundary-gap-filler") return "Boundary gap filler";
-	return "Maintainer";
-}
-
-function listAuditBadge(
-	entry: ListAuditEntry,
-	colors: {
-		success?: string;
-		error?: string;
-		warning?: string;
-		textSecondary?: string;
-	},
-	muted: string,
-): {
-	label: string;
-	color: string;
-	title: string;
-	clickable: boolean;
-	spinning: boolean;
-} {
-	if (entry.status === "auditing") {
-		return {
-			label: "Auditing…",
-			color: colors.textSecondary ?? muted,
-			title: "Audit in progress",
-			clickable: false,
-			spinning: true,
-		};
-	}
-	if (entry.status === "error") {
-		return {
-			label: "Audit failed",
-			color: colors.error ?? "#e5534b",
-			title: entry.error,
-			clickable: true,
-			spinning: false,
-		};
-	}
-	const n = entry.issueCount;
-	const verification = entry.verification;
-	const pct = verification
-		? `${Math.round(verification.coverage * 100)}%`
-		: null;
-	const baseLabel =
-		entry.status === "fully_verified"
-			? "Fully verified"
-			: entry.status === "partially_verified"
-				? `Partially verified${pct ? ` · ${pct}` : ""}`
-				: n === 1
-					? `Verification failed · 1 issue${pct ? ` · ${pct}` : ""}`
-					: `Verification failed · ${n} issues${pct ? ` · ${pct}` : ""}`;
-	const label = entry.stale ? `Stale · ${baseLabel}` : baseLabel;
-	const color = entry.stale
-		? (colors.warning ?? "#d4a017")
-		: entry.status === "fully_verified"
-			? (colors.success ?? "#2da44e")
-			: entry.status === "partially_verified"
-				? (colors.textSecondary ?? muted)
-				: (colors.error ?? "#e5534b");
-	const when = new Date(entry.checkedAt).toLocaleString();
-	const ledger = verification
-		? ` · ${pct} verified, ${verification.open} open (${verification.blocking} blocking), ${verification.blocked} blocked, ${verification.na} n/a`
-		: "";
-	return {
-		label,
-		color,
-		title:
-			(entry.stale
-				? `Audit outdated (inputs changed) · ${when} — click for last report; regular audit will refresh`
-				: entry.status === "fully_verified"
-					? `All applicable checks confirmed · ${when} — click for report`
-					: entry.status === "partially_verified"
-						? `No failures, but some checks still need follow-up · ${when} — click for report`
-						: `Verification failed (${n === 1 ? "1 issue" : `${n} issues`}) · ${when} — click for report`) +
-			ledger,
-		clickable: true,
-		spinning: false,
-	};
-}
 
 /** Listing sort offered by the Subsystems tab header. */
 type SubsystemSortKey = "opened" | "edited" | "created";
@@ -473,8 +273,6 @@ function SubsystemsTabHeader({
 	showAll,
 	hiddenStaleCount,
 	onToggleShowAll,
-	issuesOnly,
-	onToggleIssuesOnly,
 	regularAudit,
 	searchQuery,
 	onSearchChange,
@@ -485,8 +283,6 @@ function SubsystemsTabHeader({
 	showAll?: boolean;
 	hiddenStaleCount?: number;
 	onToggleShowAll?: () => void;
-	issuesOnly?: boolean;
-	onToggleIssuesOnly?: () => void;
 	regularAudit?: RegularAuditStatus | null;
 	searchQuery?: string;
 	onSearchChange?: (query: string) => void;
@@ -576,7 +372,7 @@ function SubsystemsTabHeader({
 					);
 				})}
 				</div>
-				{(onToggleShowAll || onToggleIssuesOnly) && (
+				{onToggleShowAll && (
 					<>
 						<div
 							aria-hidden="true"
@@ -622,36 +418,6 @@ function SubsystemsTabHeader({
 								}}
 							>
 								Recent
-							</button>
-							)}
-							{onToggleIssuesOnly && (
-							<button
-								key="issues"
-								type="button"
-								title={
-									issuesOnly
-										? "Show all graphs"
-										: "Show only graphs with failed verification or failed audits"
-								}
-								aria-pressed={issuesOnly}
-								onClick={onToggleIssuesOnly}
-								style={{
-									fontSize: theme.fontSizes[0],
-									fontWeight: issuesOnly ? 600 : 400,
-									letterSpacing: 0.3,
-									textTransform: "uppercase",
-									padding: "1px 7px",
-									borderRadius: 4,
-									border: `1px solid ${
-										issuesOnly ? theme.colors.primary : (theme.colors.border ?? "#333")
-									}`,
-									background: issuesOnly ? `${theme.colors.primary}22` : "transparent",
-									color: issuesOnly ? theme.colors.primary : muted,
-									cursor: "pointer",
-									fontFamily: theme.fonts.body,
-								}}
-							>
-								Issues
 							</button>
 							)}
 						</div>
@@ -893,26 +659,8 @@ export function SubsystemModelsView({
 	const [sharingId, setSharingId] = useState<string | null>(null);
 	const [sortBy, setSortBy] = useState<SubsystemSortKey>("opened");
 	const [showAll, setShowAll] = useState(false);
-	const [issuesOnly, setIssuesOnly] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [message, setMessage] = useState<string | null>(null);
-	const [auditByGraphId, setAuditByGraphId] = useState<
-		Record<string, ListAuditEntry>
-	>({});
-	const [auditModal, setAuditModal] = useState<AuditModalState | null>(null);
-	const [proposalsModal, setProposalsModal] = useState<{
-		graphId: string;
-		title: string;
-	} | null>(null);
-	const [maintainPicker, setMaintainPicker] = useState<{
-		graphId: string;
-		title: string;
-		mode: "issues" | "gaps";
-	} | null>(null);
-	/** graphId → maintain agent in flight / last error */
-	const [maintainByGraphId, setMaintainByGraphId] = useState<
-		Record<string, { status: "running" | "error"; error?: string }>
-	>({});
 	const [regularAudit, setRegularAudit] = useState<RegularAuditStatus | null>(
 		null,
 	);
@@ -1057,16 +805,6 @@ export function SubsystemModelsView({
 			);
 			setLastLoadedAt(Date.now());
 			setError(null);
-			setAuditByGraphId((prev) => {
-				const next: Record<string, ListAuditEntry> = { ...prev };
-				for (const g of subResult.graphs) {
-					if (next[g.id]?.status === "auditing") continue;
-					if (g.lastAudit) {
-						next[g.id] = entryFromLastAudit(g.lastAudit, next[g.id]);
-					}
-				}
-				return next;
-			});
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
 		}
@@ -1092,57 +830,13 @@ export function SubsystemModelsView({
 		) => {
 			void refresh();
 		};
-		const onMaintain = (
-			payload: StudioMessages["subsystemModelMaintainChanged"],
-		) => {
-			setMaintainByGraphId((prev) => {
-				if (payload.status === "running") {
-					return {
-						...prev,
-						[payload.graphId]: { status: "running" },
-					};
-				}
-				const next = { ...prev };
-				if (payload.status === "error") {
-					next[payload.graphId] = {
-						status: "error",
-						error: payload.error,
-					};
-				} else {
-					delete next[payload.graphId];
-				}
-				return next;
-			});
-			if (payload.status === "done" || payload.status === "error") {
-				void refresh();
-				if (payload.status === "done") {
-					const who = agentDisplayName(payload.agent);
-					if (payload.skipped) {
-						setMessage(
-							payload.summary ??
-								`${who}: fully verified — nothing to propose`,
-						);
-					} else {
-						setMessage(
-							payload.pendingCount != null && payload.pendingCount > 0
-								? `${who} finished (${payload.model ?? "model"}) — ${payload.pendingCount} proposal${payload.pendingCount === 1 ? "" : "s"} to review`
-								: `${who} finished (${payload.model ?? "model"}) — no new proposals`,
-						);
-					}
-				} else if (payload.error) {
-					setError(payload.error);
-				}
-			}
-		};
 		graphifyChangeSubscribers.add(onGraphify);
 		subsystemModelChangeSubscribers.add(onSubsystem);
 		subsystemModelProposalsChangeSubscribers.add(onProposals);
-		subsystemModelMaintainChangeSubscribers.add(onMaintain);
 		return () => {
 			graphifyChangeSubscribers.delete(onGraphify);
 			subsystemModelChangeSubscribers.delete(onSubsystem);
 			subsystemModelProposalsChangeSubscribers.delete(onProposals);
-			subsystemModelMaintainChangeSubscribers.delete(onMaintain);
 		};
 	}, [refresh]);
 
@@ -1328,42 +1022,6 @@ export function SubsystemModelsView({
 		[refresh],
 	);
 
-	const onMaintain = useCallback(
-		(e: React.MouseEvent, graph: SubsystemModelSummary) => {
-			e.stopPropagation();
-			if (maintainByGraphId[graph.id]?.status === "running") return;
-			const mode = maintainModeFromAuditEntry(auditByGraphId[graph.id]);
-			if (!mode) return;
-			setError(null);
-			setMaintainPicker({ graphId: graph.id, title: graph.title, mode });
-		},
-		[auditByGraphId, maintainByGraphId],
-	);
-
-	const onMaintainStarted = useCallback(
-		(
-			graphId: string,
-			title: string,
-			info: {
-				model: string;
-				alreadyRunning?: boolean;
-				mode: "issues" | "gaps";
-			},
-		) => {
-			setMaintainByGraphId((prev) => ({
-				...prev,
-				[graphId]: { status: "running" },
-			}));
-			const who = maintainButtonCopy(info.mode).agentName;
-			if (info.alreadyRunning) {
-				setMessage(`${who} already running for ${title}`);
-			} else {
-				setMessage(`${who} running for ${title} (${info.model})…`);
-			}
-		},
-		[],
-	);
-
 	const onDelete = useCallback(
 		async (e: React.MouseEvent, graph: SubsystemModelSummary) => {
 			e.stopPropagation();
@@ -1387,79 +1045,12 @@ export function SubsystemModelsView({
 				setPreviewFile((current) =>
 					current?.graphId === graph.id ? null : current,
 				);
-				setAuditByGraphId((prev) => {
-					if (!(graph.id in prev)) return prev;
-					const next = { ...prev };
-					delete next[graph.id];
-					return next;
-				});
 				setSelectedId((current) => (current === graph.id ? null : current));
 			} catch (err) {
 				setError(err instanceof Error ? err.message : String(err));
 			}
 		},
 		[confirmId],
-	);
-
-	const onShowAuditReport = useCallback(
-		async (e: React.MouseEvent, graphId: string, entry: ListAuditEntry) => {
-			e.stopPropagation();
-			if (entry.status === "error") {
-				setAuditModal({
-					phase: "error",
-					title: entry.title,
-					error: entry.error,
-				});
-				return;
-			}
-			if (
-				entry.status !== "fully_verified" &&
-				entry.status !== "partially_verified" &&
-				entry.status !== "issues"
-			)
-				return;
-
-			if (entry.report) {
-				setAuditModal({ phase: "done", report: entry.report });
-				return;
-			}
-
-			setAuditModal({
-				phase: "auditing",
-				title: "Loading saved audit…",
-			});
-			try {
-				const res = await electrobun.rpc!.request.getSubsystemModelAudit({
-					graphId,
-				});
-				if (!res.ok || !res.report) {
-					setAuditModal({
-						phase: "error",
-						title: "Saved audit",
-						error: res.error ?? "No saved audit report",
-					});
-					return;
-				}
-				setAuditByGraphId((prev) => ({
-					...prev,
-					[graphId]: {
-						status: entry.status,
-						checkedAt: res.report!.checkedAt,
-						stale: res.stale === true,
-						issueCount: entry.issueCount,
-						report: res.report,
-					},
-				}));
-				setAuditModal({ phase: "done", report: res.report });
-			} catch (err) {
-				setAuditModal({
-					phase: "error",
-					title: "Saved audit",
-					error: err instanceof Error ? err.message : String(err),
-				});
-			}
-		},
-		[],
 	);
 
 	if (error && graphs === null) {
@@ -1553,8 +1144,8 @@ export function SubsystemModelsView({
 			)
 		: visibleGraphs;
 	const query = searchQuery.trim().toLowerCase();
-	// Search / issues / recency / sort apply identically to both chains; only
-	// the open-file narrowing differs (list vs panel).
+	// Search / recency / sort apply identically to both chains; only the
+	// open-file narrowing differs (list vs panel).
 	const applyListFilters = (base: SubsystemModelSummary[]) => {
 		const searched =
 			query.length === 0
@@ -1569,14 +1160,8 @@ export function SubsystemModelsView({
 						}
 						return false;
 					});
-		const issued = issuesOnly
-			? searched.filter((g) => {
-					const entry = auditByGraphId[g.id];
-					return entry?.status === "issues" || entry?.status === "error";
-				})
-			: searched;
 		const recent =
-			showAll || scopeOrder ? issued : issued.filter(isRecent);
+			showAll || scopeOrder ? searched : searched.filter(isRecent);
 		return orderByScope(
 			[...recent].sort(
 				(a, b) => subsystemModelSortTime(b, sortBy) - subsystemModelSortTime(a, sortBy),
@@ -1596,17 +1181,11 @@ export function SubsystemModelsView({
 					}
 					return false;
 				});
-	const issueGraphs = issuesOnly
-		? searchedGraphs.filter((g) => {
-				const entry = auditByGraphId[g.id];
-				return entry?.status === "issues" || entry?.status === "error";
-			})
-		: searchedGraphs;
 	const recentGraphs =
 		showAll || scopeOrder
-			? issueGraphs
-			: issueGraphs.filter(isRecent);
-	const hiddenStaleCount = issueGraphs.length - recentGraphs.length;
+			? searchedGraphs
+			: searchedGraphs.filter(isRecent);
+	const hiddenStaleCount = searchedGraphs.length - recentGraphs.length;
 	const sortedGraphs = applyListFilters(fileVisibleGraphs);
 	// The file panel ignores the open-file narrowing so the tree stays stable
 	// while previewing; it still follows every other filter + sort.
@@ -1629,43 +1208,13 @@ recentGraphs.length === 0 ? (
 						? `No graphs match "${searchQuery.trim()}".`
 						: previewFile && fileVisibleGraphs.length === 0
 							? `No models reference ${previewFile.displayPath}.`
-							: issuesOnly && issueGraphs.length === 0
-								? "No graphs with verification issues."
-								: hiddenStaleCount > 0
-									? `No graphs edited in the last day — ${hiddenStaleCount} older hidden.`
-									: "No subsystem graphs."}
+							: hiddenStaleCount > 0
+								? `No graphs edited in the last day — ${hiddenStaleCount} older hidden.`
+								: "No subsystem graphs."}
 				</div>
 			) : (
 			<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
 				{sortedGraphs.map((graph) => {
-					const auditEntry = auditByGraphId[graph.id];
-					const auditBadge = auditEntry
-						? listAuditBadge(auditEntry, theme.colors, muted)
-						: null;
-					const maintainState = maintainByGraphId[graph.id];
-					const maintaining = maintainState?.status === "running";
-					const maintainMode = maintainModeFromAuditEntry(auditEntry);
-					const maintainCopy = maintainButtonCopy(maintainMode);
-					const maintainDisabled = maintaining || !maintainMode;
-					const verification =
-						auditEntry && "verification" in auditEntry
-							? auditEntry.verification
-							: undefined;
-					const verificationHint = verification
-						? `${Math.round(verification.coverage * 100)}% verified · ${verification.open} open${
-								verification.blocked > 0
-									? ` · ${verification.blocked} blocked on repo/cache`
-									: ""
-							}`
-						: null;
-					const maintainTitle =
-						maintainState?.status === "error"
-							? `${maintainCopy.agentName} failed: ${maintainState.error ?? "unknown"} — click to retry`
-							: maintaining
-								? `${maintainCopy.agentName} running…`
-								: verificationHint
-									? `${maintainCopy.title} — ${verificationHint}`
-									: maintainCopy.title;
 					const isExpanded = selectedFile?.graphId === graph.id;
 					const isRowExpanded = expandedIds.has(graph.id) && !isExpanded;
 					const isOpen = isExpanded || expandedIds.has(graph.id);
@@ -1774,112 +1323,6 @@ recentGraphs.length === 0 ? (
 									<Info size={13} />
 								</button>
 							)}
-							{auditBadge && (
-								<button
-									type="button"
-									onClick={(e) => {
-										if (auditEntry && auditBadge.clickable) {
-											void onShowAuditReport(e, graph.id, auditEntry);
-										} else {
-											e.stopPropagation();
-										}
-									}}
-									title={auditBadge.title}
-									style={{
-										flexShrink: 0,
-										boxSizing: "border-box",
-										fontSize: theme.fontSizes[0],
-										fontWeight: 600,
-										letterSpacing: 0.3,
-										textTransform: "uppercase",
-										padding: "2px 7px",
-										borderRadius: 999,
-										background: `${auditBadge.color}22`,
-										color: auditBadge.color,
-										border: `1px solid ${auditBadge.color}55`,
-										whiteSpace: "nowrap",
-										cursor: auditBadge.clickable ? "pointer" : "default",
-										fontFamily: theme.fonts.body,
-										display: "inline-flex",
-										alignItems: "center",
-										gap: 5,
-									}}
-								>
-									{auditBadge.spinning && (
-										<Loader2 size={10} className="principal-studio-spin" />
-									)}
-									{auditBadge.label}
-								</button>
-							)}
-							{(graph.pendingProposalCount ?? 0) > 0 && (
-								<button
-									type="button"
-									onClick={(e) => {
-										e.stopPropagation();
-										setProposalsModal({
-											graphId: graph.id,
-											title: graph.title,
-										});
-									}}
-									title="Review agent proposed corrections"
-									style={{
-										flexShrink: 0,
-										boxSizing: "border-box",
-										fontSize: theme.fontSizes[0],
-										fontWeight: 600,
-										letterSpacing: 0.3,
-										textTransform: "uppercase",
-										padding: "2px 7px",
-										borderRadius: 999,
-										background: `${theme.colors.primary}22`,
-										color: theme.colors.primary,
-										border: `1px solid ${theme.colors.primary}55`,
-										whiteSpace: "nowrap",
-										cursor: "pointer",
-										fontFamily: theme.fonts.body,
-									}}
-								>
-									{graph.pendingProposalCount === 1
-										? "1 proposal"
-										: `${graph.pendingProposalCount} proposals`}
-								</button>
-							)}
-							<button
-								type="button"
-								onClick={(e) => void onMaintain(e, graph)}
-								disabled={maintainDisabled}
-								title={maintainTitle}
-								aria-label={`${maintainCopy.label} ${graph.title}`}
-								style={{
-									flexShrink: 0,
-									display: "inline-flex",
-									alignItems: "center",
-									gap: 4,
-									padding: "4px 8px",
-									borderRadius: 4,
-									border: `1px solid ${
-										maintainState?.status === "error"
-											? (theme.colors.error ?? "#e5534b")
-											: (theme.colors.border ?? "#333")
-									}`,
-									background: "transparent",
-									color:
-										maintainState?.status === "error"
-											? (theme.colors.error ?? "#e5534b")
-											: muted,
-									cursor: maintainDisabled ? "default" : "pointer",
-									opacity: maintainDisabled ? 0.55 : 1,
-									fontSize: theme.fontSizes[0],
-									fontFamily: theme.fonts.body,
-								}}
-							>
-								{maintaining ? (
-									<Loader2 size={12} className="principal-studio-spin" />
-								) : (
-									<Bot size={12} />
-								)}
-								{maintaining ? "Running…" : maintainCopy.label}
-							</button>
 							<button
 								type="button"
 								onClick={(e) => void onCopyPath(e, graph)}
@@ -2150,8 +1593,6 @@ recentGraphs.length === 0 ? (
 				showAll={showAll}
 				hiddenStaleCount={hiddenStaleCount}
 				onToggleShowAll={() => setShowAll((v) => !v)}
-				issuesOnly={issuesOnly}
-				onToggleIssuesOnly={() => setIssuesOnly((v) => !v)}
 				regularAudit={regularAudit}
 				searchQuery={searchQuery}
 				onSearchChange={setSearchQuery}
@@ -2426,60 +1867,6 @@ recentGraphs.length === 0 ? (
 				)}
 				</div>
 			</SubsystemsTabBody>
-			{auditModal && (
-				<AuditResultsModal
-					state={auditModal}
-					onClose={() => setAuditModal(null)}
-					onReportChange={(report) => {
-						setAuditModal({ phase: "done", report });
-						setAuditByGraphId((prev) => ({
-							...prev,
-							[report.graphId]: {
-								status: report.needsUpdate
-									? "issues"
-									: report.findings.some(
-												(f) => f.kind === "construct_unconfirmed",
-										  ) ||
-										  report.checks.some(
-												(c) =>
-													c.constructInferred === "unknown" ||
-													c.signature === "skipped",
-										  )
-										? "partially_verified"
-										: "fully_verified",
-								checkedAt: report.checkedAt,
-								stale: false,
-								issueCount: report.findings.filter(
-									(f) => f.severity === "error",
-								).length,
-								report,
-							},
-						}));
-					}}
-				/>
-			)}
-			{proposalsModal && (
-				<ProposalsModal
-					graphId={proposalsModal.graphId}
-					title={proposalsModal.title}
-					onClose={() => setProposalsModal(null)}
-				/>
-			)}
-			{maintainPicker && (
-				<MaintainModelPickerModal
-					graphId={maintainPicker.graphId}
-					title={maintainPicker.title}
-					mode={maintainPicker.mode}
-					onClose={() => setMaintainPicker(null)}
-					onStarted={(info) =>
-						onMaintainStarted(
-							maintainPicker.graphId,
-							maintainPicker.title,
-							{ ...info, mode: maintainPicker.mode },
-						)
-					}
-				/>
-			)}
 		</SubsystemsTabShell>
 	);
 }

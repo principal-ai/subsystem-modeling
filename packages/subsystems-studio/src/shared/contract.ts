@@ -79,6 +79,13 @@ export interface ViewerSettings {
 	 */
 	autoAcceptSubsystemModelProposals: boolean;
 	/**
+	 * Minimum Jev second-opinion confidence (0-1) required to auto-accept a
+	 * proposal. Only consulted when `autoAcceptSubsystemModelProposals` is on;
+	 * proposals scoring below the bar stay pending. A proposal with no Jev
+	 * opinion (or a scoring error) never auto-accepts. Default 0.85.
+	 */
+	autoAcceptSubsystemModelConfidenceThreshold: number;
+	/**
 	 * OpenCode model for Maintain agents (`provider/id`).
 	 * `null` = auto-pick a free-tier model from `opencode models`.
 	 */
@@ -93,6 +100,11 @@ export interface ViewerSettings {
 	 * Default 5.
 	 */
 	regularAuditIntervalMinutes: number;
+	/**
+	 * Jev API key for TypeSafe AI (`api.typesafe.ai`), used for proposal
+	 * second opinions. `null` = fall back to the `TYPESAFE_API_KEY` env var.
+	 */
+	typesafeApiKey: string | null;
 }
 
 /** Live status of the host regular-audit scheduler (for countdown UI). */
@@ -112,10 +124,14 @@ export interface RegularAuditStatus {
 export interface PartialViewerSettings {
 	defaultTabs?: Partial<DefaultTabFlags>;
 	autoAcceptSubsystemModelProposals?: boolean;
+	/** Minimum Jev confidence (0-1) required to auto-accept. Clamped on write. */
+	autoAcceptSubsystemModelConfidenceThreshold?: number;
 	/** Pass `null` to clear a manual pick and return to auto free-tier. */
 	subsystemMaintainerModel?: string | null;
 	regularAuditEnabled?: boolean;
 	regularAuditIntervalMinutes?: number;
+	/** Pass `null` to clear the stored Jev API key. */
+	typesafeApiKey?: string | null;
 }
 
 export interface RepoInfo {
@@ -497,6 +513,12 @@ export interface SubsystemComponentVerificationResult {
 			/** Graphify `inline_parameter` marker count (anonymous eager args). */
 			inlineParameters?: number;
 		};
+		/**
+		 * Agent-extracted, human-confirmed signature that cleared a
+		 * `signature_unconfirmed` gap when Graphify was silent. Present only on
+		 * the augmented path — not a Graphify-verified match.
+		 */
+		augmented?: SubsystemSignatureClaim;
 	};
 	/** Declaration start-line anchor + freshness (exact anchor + readable file). */
 	declaration?: {
@@ -595,7 +617,7 @@ export interface SubsystemModelAuditCheck {
 	constructInferred?: string;
 	/** Evidence strings from construct inference (when available). */
 	constructEvidence?: string[];
-	signature?: "match" | "mismatch" | "skipped" | "n/a";
+	signature?: "match" | "mismatch" | "skipped" | "augmented" | "n/a";
 	anchor?: "exact" | "file-only" | "ambiguous" | "missing" | "n/a";
 	/**
 	 * Whether graphify confirmed this component:
@@ -684,6 +706,14 @@ export interface SubsystemModelAuditReport {
 	findings: SubsystemModelAuditFinding[];
 }
 
+/** Coarse per-lane verification status for at-a-glance lane badges. */
+export type VerificationLaneStatus =
+	| "verified"
+	| "partial"
+	| "issues"
+	| "blocked"
+	| "none";
+
 /** Verification progress for one layer (construct / boundary / topology). */
 export interface SubsystemModelVerificationLayer {
 	verified: number;
@@ -739,6 +769,8 @@ export interface MaintenanceOverviewModel {
 	pendingProposalCount: number;
 	stale: boolean;
 	checkedAt?: string;
+	/** Per-lane verification status (construct / static / runtime / walkthrough). */
+	lanes: Record<SubsystemVerificationLane, VerificationLaneStatus>;
 	/**
 	 * GitHub repos this model references (owner/name), derived from its
 	 * component purls. Drives the Maintain tab's repo filter.
@@ -782,6 +814,27 @@ export interface MaintenanceOverview {
 	pendingProposals: MaintenanceOverviewProposal[];
 }
 
+/** One declared parameter in an agent-extracted signature. */
+export interface SubsystemSignatureParameter {
+	/** Parameter name when the language declares one. */
+	name?: string;
+	/** Declared type as written in source (empty string when untyped). */
+	type: string;
+	/** True for optional parameters (`?`, defaulted, keyword-only, …). */
+	optional?: boolean;
+}
+
+/**
+ * Language-agnostic declared signature extracted by an agent from source.
+ * Used to confirm a function/method when Graphify has no usable type edges.
+ * Not a named-type bag: positional params (with names/optionality) and the
+ * declared return type are preserved so the claim can be reviewed and checked.
+ */
+export interface SubsystemSignatureClaim {
+	parameters: SubsystemSignatureParameter[];
+	returnType?: string;
+}
+
 /** One field-level correction an agent proposes for user confirmation. */
 export type SubsystemModelProposalChange =
 	| {
@@ -821,13 +874,14 @@ export type SubsystemModelProposalChange =
 	  }
 	| {
 			/**
-			 * Confirm named param/return types when Graphify has no signature edges.
+			 * Confirm a function/method signature when Graphify has no usable type
+			 * edges. The agent reads source and records the real signature.
 			 * Accept writes the augmentation store.
 			 */
 			target: "augmentation";
 			componentAlias: string;
 			field: "signature";
-			value: { parameterTypes: string[]; returnTypes: string[] };
+			value: SubsystemSignatureClaim;
 			file?: string;
 			symbol?: string;
 			purl?: string;
@@ -887,10 +941,15 @@ export interface SubsystemModelProposalPreviewRow {
  * proposal files without a score read as "not yet scored".
  */
 export interface SubsystemModelSecondOpinion {
-	source: "jev-1.13" | "jev-1.13-free";
+	/** Jev model id that produced the opinion (e.g. `jev-latest`). */
+	source: string;
 	checkedAt: string;
-	verdict: "safe" | "needs-human" | "unsafe";
-	/** Calibrated Jev confidence 0-1 (choice confidence, noul-derived). */
+	/**
+	 * How well the evidence supports the proposed value — an accuracy
+	 * judgment, not an accept-safety one (that is `risk`).
+	 */
+	verdict: "accurate" | "uncertain" | "inaccurate";
+	/** Calibrated Jev confidence 0-1 (the accuracy noul). */
 	confidence: number;
 	changeKind?: string;
 	risk?: string;
@@ -901,12 +960,25 @@ export interface SubsystemModelSecondOpinion {
  * Agent-authored correction awaiting (or after) human confirmation.
  * Persisted under ~/.principal/subsystem-model-proposals/<graphId>.json
  */
+/**
+ * Verification lane a proposal belongs to — the four layers of the model:
+ * construct (L1), static topology (L2), runtime topology (L3), walkthrough (L4).
+ * Derived from the proposal's changes (+ finding kind) at creation.
+ */
+export type SubsystemVerificationLane =
+	| "construct"
+	| "static-topology"
+	| "runtime-topology"
+	| "walkthrough";
+
 export interface SubsystemModelProposal {
 	id: string;
 	graphId: string;
 	status: SubsystemModelProposalStatus;
 	createdAt: string;
 	resolvedAt?: string;
+	/** Which verification layer this proposal belongs to. */
+	lane: SubsystemVerificationLane;
 	/** Why the agent wants this change. */
 	rationale: string;
 	/** Optional link back to a deterministic audit finding. */
@@ -1405,6 +1477,23 @@ export type StudioRequests = {
 		params: { graphId: string };
 		response: { ok: boolean; error?: string; graph?: StoredSubsystemModel };
 	};
+	/**
+	 * Apply a partial patch to a stored model from the renderer — e.g. the
+	 * flows panel's drag-reorder writing the reordered `walkthroughs`. Only the
+	 * keys present are applied; the host merges, re-verifies, writes, and
+	 * broadcasts the change (so every surface reloads).
+	 */
+	updateSubsystemModel: {
+		params: {
+			graphId: string;
+			patch: {
+				title?: string;
+				description?: string;
+				walkthroughs?: SubsystemWalkthrough[];
+			};
+		};
+		response: { ok: boolean; error?: string; graph?: StoredSubsystemModel };
+	};
 	listSubsystemModels: {
 		params: Record<string, never>;
 		response: { graphs: SubsystemModelSummary[] };
@@ -1647,6 +1736,13 @@ export type StudioRequests = {
 				providerID: string;
 				name?: string;
 			}>;
+			/** Paid Zen Go (`opencode-go/*`) tool-call models for the Go tier. */
+			goModels?: Array<{
+				ref: string;
+				id: string;
+				providerID: string;
+				name?: string;
+			}>;
 			/** Optional explanatory hint (e.g. free Zen models skipped). */
 			note?: string;
 		};
@@ -1713,6 +1809,8 @@ export type StudioRequests = {
 			sessionId?: string;
 			status?: "starting" | "running" | "done" | "error";
 			events?: OpencodeV2ProbeEvent[];
+			/** Every event ever seen; `events` is only the rolling tail. */
+			total?: number;
 			error?: string | null;
 			title?: string;
 			agent?: string;
@@ -2066,6 +2164,8 @@ export type StudioMessages = {
 		sessionId: string;
 		status: "starting" | "running" | "done" | "error";
 		events: OpencodeV2ProbeEvent[];
+		/** Every event ever seen; `events` is only the rolling tail. */
+		total: number;
 		error?: string | null;
 		title?: string;
 		agent?: string;

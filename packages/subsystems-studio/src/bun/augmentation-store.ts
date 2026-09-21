@@ -11,16 +11,21 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { sanitizePurlDirName } from "./graphify-store";
 import { purlRepoKey } from "./subsystem-model-store";
+import type {
+	SubsystemSignatureClaim,
+	SubsystemSignatureParameter,
+} from "../shared/contract";
 
 const ROOT = join(homedir(), ".principal", "graphify-augmentations");
 
 export type GraphifyAugmentationStatus = "accepted" | "rejected";
 
-/** Named-type bags confirming a function/method signature when Graphify has no edges. */
-export type GraphifySignatureAugmentationClaim = {
-	parameterTypes: string[];
-	returnTypes: string[];
-};
+/**
+ * Agent-extracted declared signature confirming a function/method when
+ * Graphify has no usable type edges. Not a named-type bag — full positional
+ * params (name/type/optional) and the declared return type are preserved.
+ */
+export type SignatureAugmentationClaim = SubsystemSignatureClaim;
 
 /**
  * Confirm a model topology claim (from → to, relationType) when Graphify left
@@ -51,7 +56,7 @@ export interface GraphifyAugmentation {
 	symbol: string;
 	claims: {
 		construct?: string;
-		signature?: GraphifySignatureAugmentationClaim;
+		signature?: SignatureAugmentationClaim;
 		relation?: GraphifyRelationAugmentationClaim;
 		module?: GraphifyModuleAugmentationClaim;
 	};
@@ -226,23 +231,29 @@ export async function upsertAcceptedConstructAugmentation(input: {
 }
 
 function normalizeSignatureClaim(
-	raw: GraphifySignatureAugmentationClaim | undefined,
-): GraphifySignatureAugmentationClaim | null {
+	raw: SignatureAugmentationClaim | undefined,
+): SignatureAugmentationClaim | null {
 	if (!raw || typeof raw !== "object") return null;
-	const parameterTypes = Array.isArray(raw.parameterTypes)
-		? raw.parameterTypes
-				.filter((t): t is string => typeof t === "string")
-				.map((t) => t.trim())
-				.filter(Boolean)
-		: [];
-	const returnTypes = Array.isArray(raw.returnTypes)
-		? raw.returnTypes
-				.filter((t): t is string => typeof t === "string")
-				.map((t) => t.trim())
-				.filter(Boolean)
-		: [];
-	if (parameterTypes.length === 0 && returnTypes.length === 0) return null;
-	return { parameterTypes, returnTypes };
+	const rawParams = Array.isArray(raw.parameters) ? raw.parameters : [];
+	const parameters: SubsystemSignatureParameter[] = [];
+	for (const p of rawParams) {
+		if (!p || typeof p !== "object") continue;
+		const name = typeof p.name === "string" ? p.name.trim() : "";
+		const type = typeof p.type === "string" ? p.type.trim() : "";
+		if (!name && !type) continue;
+		const param: SubsystemSignatureParameter = { type };
+		if (name) param.name = name;
+		if (p.optional === true) param.optional = true;
+		parameters.push(param);
+	}
+	const returnType =
+		typeof raw.returnType === "string" && raw.returnType.trim()
+			? raw.returnType.trim()
+			: undefined;
+	if (parameters.length === 0 && !returnType) return null;
+	const claim: SignatureAugmentationClaim = { parameters };
+	if (returnType) claim.returnType = returnType;
+	return claim;
 }
 
 /**
@@ -279,7 +290,7 @@ export async function upsertAcceptedSignatureAugmentation(input: {
 	purl: string;
 	file: string;
 	symbol: string;
-	signature: GraphifySignatureAugmentationClaim;
+	signature: SignatureAugmentationClaim;
 	source: string;
 	rationale?: string;
 	evidence?: string[];

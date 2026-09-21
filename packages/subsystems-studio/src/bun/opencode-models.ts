@@ -285,6 +285,20 @@ export async function listFreeOpenCodeModels(opts?: {
 		.sort((a, b) => scoreFreeMaintainerModel(b) - scoreFreeMaintainerModel(a));
 }
 
+/**
+ * Paid Zen Go (`opencode-go/*`) tool-call models — the credentialed tier that
+ * currently runs headless agent sessions while the free Zen tier is gated.
+ * Surfaced separately so the picker can offer a one-click "Go" choice.
+ */
+export async function listGoOpenCodeModels(opts?: {
+	refresh?: boolean;
+}): Promise<OpenCodeModelInfo[]> {
+	const all = await listOpenCodeModels(opts);
+	return all
+		.filter((m) => m.toolcall && m.providerID === "opencode-go")
+		.sort((a, b) => a.ref.localeCompare(b.ref));
+}
+
 /** Provider part of a `provider/id` model ref, or "" when malformed. */
 export function modelProviderOf(ref: string | undefined): string {
 	if (!ref) return "";
@@ -319,6 +333,8 @@ export async function resolveSubsystemMaintainerModel(opts?: {
 	model: string;
 	source: "settings" | "env" | "auto" | "fallback";
 	freeModels: OpenCodeModelInfo[];
+	/** Paid Zen Go (`opencode-go/*`) tool-call models for the picker's Go tier. */
+	goModels?: OpenCodeModelInfo[];
 	/** Credential-aware selectable maintainer models. */
 	candidates?: OpenCodeModelInfo[];
 	/** Providers with credentials, or null when unknown. */
@@ -329,10 +345,12 @@ export async function resolveSubsystemMaintainerModel(opts?: {
 	const configured = opts?.configured?.trim();
 	if (configured && isUsableModelRef(configured, credentialed)) {
 		const freeModels = await listFreeOpenCodeModelsOrEmpty({ refresh: opts?.refresh });
+		const goModels = await listGoOpenCodeModelsOrEmpty({ refresh: opts?.refresh });
 		return {
 			model: configured,
 			source: "settings",
 			freeModels,
+			goModels,
 			credentialedProviders: credentialed ? [...credentialed] : null,
 		};
 	}
@@ -340,10 +358,12 @@ export async function resolveSubsystemMaintainerModel(opts?: {
 	const fromEnv = process.env["SUBSYSTEM_MAINTAINER_MODEL"]?.trim();
 	if (fromEnv && isUsableModelRef(fromEnv, credentialed)) {
 		const freeModels = await listFreeOpenCodeModelsOrEmpty({ refresh: opts?.refresh });
+		const goModels = await listGoOpenCodeModelsOrEmpty({ refresh: opts?.refresh });
 		return {
 			model: fromEnv,
 			source: "env",
 			freeModels,
+			goModels,
 			credentialedProviders: credentialed ? [...credentialed] : null,
 		};
 	}
@@ -356,6 +376,9 @@ export async function resolveSubsystemMaintainerModel(opts?: {
 			.sort(
 				(a, b) => scoreFreeMaintainerModel(b) - scoreFreeMaintainerModel(a),
 			);
+		const goModels = all
+			.filter((m) => m.toolcall && m.providerID === "opencode-go")
+			.sort((a, b) => a.ref.localeCompare(b.ref));
 		const candidates = buildMaintainerCandidates(
 			all,
 			credentialed,
@@ -366,6 +389,7 @@ export async function resolveSubsystemMaintainerModel(opts?: {
 				model: picked.ref,
 				source: "auto",
 				freeModels,
+				goModels,
 				candidates,
 				credentialedProviders: credentialed ? [...credentialed] : null,
 			};
@@ -374,6 +398,7 @@ export async function resolveSubsystemMaintainerModel(opts?: {
 			model: FALLBACK_MAINTAINER_MODEL,
 			source: "fallback",
 			freeModels,
+			goModels,
 			candidates,
 			credentialedProviders: credentialed ? [...credentialed] : null,
 		};
@@ -382,6 +407,7 @@ export async function resolveSubsystemMaintainerModel(opts?: {
 			model: FALLBACK_MAINTAINER_MODEL,
 			source: "fallback",
 			freeModels: [],
+			goModels: [],
 			credentialedProviders: credentialed ? [...credentialed] : null,
 		};
 	}
@@ -392,6 +418,16 @@ async function listFreeOpenCodeModelsOrEmpty(opts?: {
 }): Promise<OpenCodeModelInfo[]> {
 	try {
 		return await listFreeOpenCodeModels({ refresh: opts?.refresh });
+	} catch {
+		return [];
+	}
+}
+
+async function listGoOpenCodeModelsOrEmpty(opts?: {
+	refresh?: boolean;
+}): Promise<OpenCodeModelInfo[]> {
+	try {
+		return await listGoOpenCodeModels({ refresh: opts?.refresh });
 	} catch {
 		return [];
 	}

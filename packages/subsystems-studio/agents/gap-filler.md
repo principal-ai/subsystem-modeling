@@ -116,19 +116,29 @@ Model-construct correction example (only when the claim itself is wrong):
 
 Graphify has no usable `parameter_type` / `return_type` edges for this
 function/method. Read the source declaration and propose a **signature
-augmentation** with the named type bags (not primitives-only). That confirms
-the claim for the next audit.
+augmentation** carrying the **full signature**. That confirms the claim for
+the next audit.
 
-- Include only **named** types (classes, interfaces, type aliases, enums).
-  Skip bare `string` / `number` / `boolean` / inline `{…}` unless they are the
-  only story — then skip the gap rather than invent noise.
-- If the model already claims the same named bags, still propose the
-  augmentation (mirrors construct confirmation).
-- If you cannot name real types from source, skip — do not guess.
+Record it faithfully and in order — do not reduce it to named types:
+
+- Every parameter: `name` (when the language declares one), `type` as written,
+  and `optional: true` for optional/defaulted/rest params.
+- Include inline object types, primitives, unions, and wrappers
+  (`Promise<…>`, `Array<…>`, `ReadonlySet<…>`) exactly as written.
+- If the language does not declare a parameter type, set `"type": ""` and keep
+  the `name`; do not drop the parameter.
+- **Return type.** When the declaration states one, record it as written
+  (include the wrapper, e.g. `Promise<Session>`). When it is **not** declared,
+  **infer it from the implementation** and record the inferred type — do not
+  leave it blank. For example: a React component that returns JSX →
+  `JSX.Element`; a hook that returns an object literal → that shape.
+- **The rationale must say whether the return type was declared or inferred,
+  and on what basis.** Do not present an inferred type as if it were written.
+- If you cannot read the declaration, skip the gap — do not guess.
 
 ```json
 {
-  "rationale": "Source declares (req: HostInfo) => Promise<Session>; Graphify had no signature edges.",
+  "rationale": "Source declares `assessSubsystemGraphifyReadiness(graph: { components: Array<{ purl?: string }> }, buildingPurls?: ReadonlySet<string>, storeRoot?: string): Promise<SubsystemGraphifyReadiness>`; declared return type is Promise<SubsystemGraphifyReadiness>. Graphify has no signature edges.",
   "author": "gap-filler",
   "finding": {
     "kind": "signature_unconfirmed",
@@ -141,8 +151,39 @@ the claim for the next audit.
       "componentAlias": "…",
       "field": "signature",
       "value": {
-        "parameterTypes": ["HostInfo"],
-        "returnTypes": ["Session"]
+        "parameters": [
+          { "name": "graph", "type": "{ components: Array<{ purl?: string }> }" },
+          { "name": "buildingPurls", "type": "ReadonlySet<string>", "optional": true },
+          { "name": "storeRoot", "type": "string", "optional": true }
+        ],
+        "returnType": "Promise<SubsystemGraphifyReadiness>"
+      }
+    }
+  ]
+}
+```
+
+Inferred return type (no annotation in source):
+
+```json
+{
+  "rationale": "Source declares `SubsystemModelsView({ scope }: { scope?: { ids: string[]; title?: string } } = {})`. It has no declared return type; it returns JSX, so `JSX.Element` is inferred. Graphify has no signature edges.",
+  "author": "gap-filler",
+  "finding": {
+    "kind": "signature_unconfirmed",
+    "componentAlias": "…",
+    "message": "…"
+  },
+  "changes": [
+    {
+      "target": "augmentation",
+      "componentAlias": "…",
+      "field": "signature",
+      "value": {
+        "parameters": [
+          { "type": "{ scope?: { ids: string[]; title?: string } }", "optional": true }
+        ],
+        "returnType": "JSX.Element"
       }
     }
   ]

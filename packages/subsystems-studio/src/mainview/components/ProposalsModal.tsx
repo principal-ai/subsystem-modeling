@@ -6,8 +6,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
-import type { SubsystemModelProposal } from "../../shared/contract";
+import type {
+	SubsystemModelProposal,
+	SubsystemVerificationLane,
+} from "../../shared/contract";
 import { electrobun } from "../rpc";
+
+const LANE_LABEL: Record<SubsystemVerificationLane, string> = {
+	construct: "Construct",
+	"static-topology": "Static topology",
+	"runtime-topology": "Runtime topology",
+	walkthrough: "Walkthrough",
+};
 
 function formatValue(v: unknown): string {
 	if (v === undefined) return "—";
@@ -31,15 +41,15 @@ function opinionBadge(
 	}
 	const pct = Math.round(opinion.confidence * 100);
 	const label =
-		opinion.verdict === "safe"
-			? "Safe"
-			: opinion.verdict === "unsafe"
-				? "Unsafe"
-				: "Needs human";
+		opinion.verdict === "accurate"
+			? "Accurate"
+			: opinion.verdict === "inaccurate"
+				? "Inaccurate"
+				: "Uncertain";
 	const color =
-		opinion.verdict === "safe"
+		opinion.verdict === "accurate"
 			? (colors.success ?? "#2da44e")
-			: opinion.verdict === "unsafe"
+			: opinion.verdict === "inaccurate"
 				? (colors.error ?? "#e5534b")
 				: muted;
 	const extra = opinion.changeKind ? ` · ${opinion.changeKind}` : "";
@@ -114,25 +124,41 @@ export function ProposalsModal({
 			const target = proposals?.find((p) => p.id === proposalId);
 			const changeCount =
 				target?.changes.length ?? target?.preview.length ?? 0;
-			setBusy((prev) => ({ ...prev, [proposalId]: "accept" }));
+setBusy((prev) => ({ ...prev, [proposalId]: "accept" }));
 			setNotice(null);
+			setProposals((prev) =>
+				(prev ?? []).filter((p) => p.id !== proposalId),
+			);
 			try {
 				const res = await electrobun.rpc!.request.acceptSubsystemModelProposal({
 					graphId,
 					proposalId,
 				});
 				if (!res.ok) {
-					setError(res.error ?? "Accept failed");
-					return;
+					const alreadyResolved =
+						typeof res.error === "string" &&
+						res.error.startsWith("proposal is already ");
+					if (!alreadyResolved) {
+						setError(res.error ?? "Accept failed");
+						setProposals((prev) => {
+							if (!target) return prev;
+							const next = (prev ?? []).filter((p) => p.id !== proposalId);
+							return [target, ...next];
+						});
+						return;
+					}
 				}
 				const applied = res.proposal?.changes.length ?? changeCount;
 				setNotice({ kind: "accepted", changeCount: applied });
 				const remaining = await refresh();
-				// Single-proposal flow ends on an empty "No pending proposals."
-				// view — confirm the win, then get out of the way.
 				if (remaining.length === 0) scheduleClose(1600);
 			} catch (err) {
 				setError(err instanceof Error ? err.message : String(err));
+				setProposals((prev) => {
+					if (!target) return prev;
+					const next = (prev ?? []).filter((p) => p.id !== proposalId);
+					return [target, ...next];
+				});
 			} finally {
 				setBusy((prev) => {
 					const next = { ...prev };
@@ -157,8 +183,13 @@ export function ProposalsModal({
 					proposalId,
 				});
 				if (!res.ok) {
-					setError(res.error ?? "Reject failed");
-					return;
+					const alreadyResolved =
+						typeof res.error === "string" &&
+						res.error.startsWith("proposal is already ");
+					if (!alreadyResolved) {
+						setError(res.error ?? "Reject failed");
+						return;
+					}
 				}
 				const discarded = res.proposal?.changes.length ?? changeCount;
 				setNotice({ kind: "rejected", changeCount: discarded });
@@ -349,15 +380,38 @@ export function ProposalsModal({
 										marginBottom: 8,
 									}}
 								>
-									<code
+									<div
 										style={{
-											fontSize: theme.fontSizes[0],
-											color: muted,
+											display: "flex",
+											alignItems: "center",
+											gap: 8,
+											minWidth: 0,
 										}}
 									>
-										{p.id}
-										{p.author ? ` · ${p.author}` : ""}
-									</code>
+										<code
+											style={{
+												fontSize: theme.fontSizes[0],
+												color: muted,
+											}}
+										>
+											{p.id}
+											{p.author ? ` · ${p.author}` : ""}
+										</code>
+										{p.lane && (
+											<span
+												style={{
+													padding: "1px 6px",
+													borderRadius: 4,
+													border: `1px solid ${theme.colors.border}`,
+													fontSize: theme.fontSizes[0],
+													color: muted,
+													whiteSpace: "nowrap",
+												}}
+											>
+												{LANE_LABEL[p.lane]}
+											</span>
+										)}
+									</div>
 									<span style={{ fontSize: theme.fontSizes[0], color: muted }}>
 										{new Date(p.createdAt).toLocaleString()}
 									</span>

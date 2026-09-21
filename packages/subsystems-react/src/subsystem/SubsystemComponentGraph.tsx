@@ -32,7 +32,7 @@ import {
   applyNodeChanges,
 } from '@xyflow/react';
 import { useTheme } from '@principal-ade/industry-theme';
-import { FileText, Pause, Play, X } from 'lucide-react';
+import { FileText, X } from 'lucide-react';
 import { IndustryMarkdownSlide } from 'themed-markdown';
 import {
   buildSubsystemGraph,
@@ -63,14 +63,13 @@ import { ComponentDeclaration } from './ComponentDeclaration';
 import type { ComponentVerificationState } from './ComponentDeclaration';
 import { FileDrawer, FILE_DRAWER_HEIGHT_MS } from './FileDrawer';
 import { buildRepoGroups, repoAvatarUrl, type RepoGroup } from './paths';
+import { WalkthroughsPanel, WALKTHROUGH_PLAY_PAUSE_MS } from './WalkthroughsPanel';
 
 /** Cap screen-space edge labels to this fraction of the edge's on-screen length. */
 const EDGE_LABEL_MAX_EDGE_FRACTION = 0.55;
 /** Rough monospace width at fontSize 10 + horizontal padding/border. */
 const EDGE_LABEL_CHAR_PX = 6.2;
 const EDGE_LABEL_PAD_PX = 18;
-/** Pause (ms) between steps when a walkthrough autoplays. */
-const WALKTHROUGH_PLAY_PAUSE_MS = 2500;
 
 /** Context passed to `renderWalkthroughViewer` when a flow/step is focused. */
 export interface WalkthroughViewerContext {
@@ -107,6 +106,13 @@ export interface SubsystemComponentGraphProps {
    * graph.
    */
   initialWalkthroughId?: string | null;
+  /**
+   * Called with the next walkthrough order after a drag in the sidebar's
+   * flows panel. When set, each row grows a drag grip and a drop emits the
+   * reordered array — the host owns persisting it (the graph stays controlled
+   * and never reorders its own prop).
+   */
+  onReorderWalkthroughs?: (next: SubsystemWalkthrough[]) => void;
   onSelect?: (componentAlias: string) => void;
   /** Called when an edge is clicked (relationship / mechanism + refs seam). */
   onEdgeSelect?: (edge: SubsystemComponentEdge) => void;
@@ -313,7 +319,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, relations, walkthroughs, initialWalkthroughId, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, onVerifyComponent, componentVerification }: InnerProps) {
+function Inner({ components, relations, walkthroughs, initialWalkthroughId, onReorderWalkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, onVerifyComponent, componentVerification }: InnerProps) {
   const { theme } = useTheme();
   const { fitView } = useReactFlow();
   const viewport = useViewport();
@@ -980,6 +986,12 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onSe
   // own owner-avatar header. Clicking a header collapses that repo's tree.
   const repoGroups = useMemo(() => buildRepoGroups(components), [components]);
   const hasWalkthroughs = useMemo(() => (walkthroughs?.length ?? 0) > 0, [walkthroughs]);
+  // Aliases of proposed components — the flows panel tints walkthrough titles
+  // (and steps) that touch one.
+  const proposedAliases = useMemo(
+    () => new Set(components.filter((c) => c.proposed).map((c) => c.alias)),
+    [components],
+  );
   // Diagnostics view in the sidebar. Uncontrolled unless the host pins
   // `showIssues`: the title-row chip toggles it, seeded from issues presence.
   const [diagnosticsOpen, setDiagnosticsOpen] = useState<boolean>(
@@ -1684,40 +1696,26 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onSe
                 </div>
               )}
               {sidebarView === 'walkthroughs' && walkthroughs && walkthroughs.length > 0 ? (
-                <div
-                  style={{
-                    flex: 1,
-                    minHeight: 0,
-                    overflowY: 'auto',
-                    padding: '0 0 12px',
-                  }}
-                >
-                  {walkthroughs.map((tl) => (
-                    <WalkthroughFlow
-                      key={tl.id}
-                      walkthrough={tl}
-                      collapsed={!expandedWalkthroughs.has(tl.id)}
-                      active={
-                        focusedWalkthroughId === tl.id
-                          ? { stepIndex: focusedStepIndex }
-                          : hoveredWalkthroughStep?.walkthroughId === tl.id
-                            ? { stepIndex: hoveredWalkthroughStep.stepIndex }
-                            : null
-                      }
-                      onToggleCollapsed={toggleWalkthroughCollapsed}
-                      onFocusFlow={focusWalkthroughEdges}
-                      onClearFocus={clearWalkthroughFocus}
-                      onFocusStep={focusWalkthroughStep}
-                      onHoverStep={(tl, i) =>
-                        setHoveredWalkthroughStep({ walkthroughId: tl.id, stepIndex: i })
-                      }
-                      onHoverFlow={(tl) =>
-                        setHoveredWalkthroughStep({ walkthroughId: tl.id, stepIndex: null })
-                      }
-                      onLeaveStep={() => setHoveredWalkthroughStep(null)}
-                    />
-                  ))}
-                </div>
+                <WalkthroughsPanel
+                  walkthroughs={walkthroughs}
+                  expandedWalkthroughs={expandedWalkthroughs}
+                  focusedWalkthroughId={focusedWalkthroughId}
+                  focusedStepIndex={focusedStepIndex}
+                  hoveredWalkthroughStep={hoveredWalkthroughStep}
+                  onToggleCollapsed={toggleWalkthroughCollapsed}
+                  onFocusFlow={focusWalkthroughEdges}
+                  onClearFocus={clearWalkthroughFocus}
+                  onFocusStep={focusWalkthroughStep}
+                  onHoverStep={(tl, i) =>
+                    setHoveredWalkthroughStep({ walkthroughId: tl.id, stepIndex: i })
+                  }
+                  onHoverFlow={(tl) =>
+                    setHoveredWalkthroughStep({ walkthroughId: tl.id, stepIndex: null })
+                  }
+                  onLeaveStep={() => setHoveredWalkthroughStep(null)}
+                  onReorder={onReorderWalkthroughs}
+                  proposedAliases={proposedAliases}
+                />
               ) : treeFilePaths.length > 0 ? (
               <>
               {repoGroups.groups.map((group, i) => {
@@ -2212,300 +2210,6 @@ function RepoGroupHeader({
       >
         {label}
       </span>
-    </div>
-  );
-}
-
-/** One collapsible walkthrough in the sidebar's flows panel. Clicking the
- *  title: closed → open + select; open and unselected → select; open and
- *  selected → close + clear focus. The right-aligned close button collapses
- *  without selecting. A step row focuses that step's edge. */
-function WalkthroughFlow({
-  walkthrough,
-  collapsed,
-  active,
-  onToggleCollapsed,
-  onFocusFlow,
-  onClearFocus,
-  onFocusStep,
-  onHoverStep,
-  onHoverFlow,
-  onLeaveStep,
-}: {
-  walkthrough: SubsystemWalkthrough;
-  collapsed: boolean;
-  /** `{ stepIndex: null }` = whole flow focused; `{ stepIndex }` = one step. */
-  active: { stepIndex: number | null } | null;
-  onToggleCollapsed: (tlId: string) => void;
-  onFocusFlow: (tl: SubsystemWalkthrough) => void;
-  onClearFocus: () => void;
-  onFocusStep: (tl: SubsystemWalkthrough, stepIndex: number) => void;
-  onHoverStep: (tl: SubsystemWalkthrough, stepIndex: number) => void;
-  /** Preview the whole flow on the canvas (used while the row is collapsed). */
-  onHoverFlow: (tl: SubsystemWalkthrough) => void;
-  onLeaveStep: () => void;
-}) {
-  const { theme } = useTheme();
-  const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
-  const hoverBg = theme.colors.background;
-  const wholeFlowActive = active !== null && active.stepIndex === null;
-  const [headerHover, setHeaderHover] = useState(false);
-  const [closeHover, setCloseHover] = useState(false);
-  const [playHover, setPlayHover] = useState(false);
-  const [hoveredStep, setHoveredStep] = useState<number | null>(null);
-  const stepButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  // Autoplay: stepping through the flow's steps with a pause between each.
-  const [playing, setPlaying] = useState(false);
-  const playTimerRef = useRef<number | null>(null);
-
-  const stopPlaying = useCallback(() => {
-    if (playTimerRef.current != null) {
-      window.clearTimeout(playTimerRef.current);
-      playTimerRef.current = null;
-    }
-    setPlaying(false);
-  }, []);
-
-  // Clear any pending timer on unmount.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => () => stopPlaying(), []);
-
-  const startPlaying = useCallback(() => {
-    if (collapsed) onToggleCollapsed(walkthrough.id);
-    if (active === null || active.stepIndex !== null) onFocusFlow(walkthrough);
-    const stepCount = walkthrough.steps.length;
-    if (stepCount === 0) return;
-    setPlaying(true);
-    let i = 0;
-    const tick = () => {
-      if (i >= stepCount) {
-        playTimerRef.current = null;
-        setPlaying(false);
-        return;
-      }
-      onFocusStep(walkthrough, i);
-      i += 1;
-      playTimerRef.current = window.setTimeout(tick, WALKTHROUGH_PLAY_PAUSE_MS);
-    };
-    tick();
-  }, [collapsed, active, onToggleCollapsed, onFocusFlow, walkthrough, onFocusStep]);
-
-  const togglePlay = useCallback(() => {
-    if (playing) {
-      stopPlaying();
-    } else {
-      startPlaying();
-    }
-  }, [playing, stopPlaying, startPlaying]);
-
-  // Keep DOM focus on the active step so the browser focus ring (and
-  // subsequent arrow keys) follow arrow navigation, not the originally
-  // clicked button.
-  useEffect(() => {
-    if (active?.stepIndex == null) return;
-    stepButtonRefs.current[active.stepIndex]?.focus({ preventScroll: true });
-  }, [active?.stepIndex]);
-
-  return (
-    <div>
-      <div
-        onMouseEnter={() => {
-          setHeaderHover(true);
-          if (collapsed) onHoverFlow(walkthrough);
-        }}
-        onMouseLeave={() => {
-          setHeaderHover(false);
-          if (collapsed) onLeaveStep();
-        }}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
-          padding: '0 16px',
-          background: wholeFlowActive || headerHover ? hoverBg : 'transparent',
-          transition: 'background 120ms ease',
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => {
-            if (collapsed) {
-              onToggleCollapsed(walkthrough.id);
-              onFocusFlow(walkthrough);
-            } else if (active === null) {
-              onFocusFlow(walkthrough);
-            } else {
-              onToggleCollapsed(walkthrough.id);
-              onClearFocus();
-            }
-          }}
-          style={{
-            flex: 1,
-            display: 'flex',
-            alignItems: 'center',
-            minWidth: 0,
-            padding: '10px 0',
-            border: 'none',
-            background: 'transparent',
-            textAlign: 'left',
-            cursor: 'pointer',
-          }}
-        >
-          <span
-            style={{
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              fontSize: theme.fontSizes[1],
-              fontFamily: theme.fonts.monospace,
-              fontWeight: 600,
-              color: theme.colors.text,
-            }}
-          >
-            {walkthrough.title}
-          </span>
-        </button>
-        {!collapsed && (
-          <>
-          <button
-            type="button"
-            aria-label={playing ? `Pause ${walkthrough.title} autoplay` : `Play ${walkthrough.title}`}
-            title={playing ? 'Pause' : 'Play through steps'}
-            onMouseEnter={() => setPlayHover(true)}
-            onMouseLeave={() => setPlayHover(false)}
-            onClick={(e) => {
-              e.stopPropagation();
-              togglePlay();
-            }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              width: 22,
-              height: 22,
-              padding: 0,
-              border: 'none',
-              borderRadius: 4,
-              background: playing || playHover ? theme.colors.border : 'transparent',
-              color: playing || playHover ? theme.colors.text : muted,
-              cursor: 'pointer',
-              transition: 'background 120ms ease, color 120ms ease',
-            }}
-          >
-            {playing ? <Pause size={12} strokeWidth={2} /> : <Play size={12} strokeWidth={2} />}
-          </button>
-          <button
-            type="button"
-            aria-label={`Close ${walkthrough.title}`}
-            onMouseEnter={() => setCloseHover(true)}
-            onMouseLeave={() => setCloseHover(false)}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleCollapsed(walkthrough.id);
-              if (active !== null) onClearFocus();
-            }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              width: 22,
-              height: 22,
-              padding: 0,
-              border: 'none',
-              borderRadius: 4,
-              background: closeHover ? theme.colors.border : 'transparent',
-              color: closeHover ? theme.colors.text : muted,
-              cursor: 'pointer',
-              transition: 'background 120ms ease, color 120ms ease',
-            }}
-          >
-            <X size={12} strokeWidth={2} />
-          </button>
-          </>
-        )}
-      </div>
-      {!collapsed && (
-        <div
-          style={{ display: 'flex', flexDirection: 'column' }}
-          onMouseLeave={() => {
-            setHoveredStep(null);
-            onLeaveStep();
-          }}
-        >
-          {walkthrough.steps.map((step, i) => {
-            const stepActive = active !== null && active.stepIndex === i;
-            return (
-              <button
-                key={`${walkthroughStepGraphEdgeId(step)}-${i}`}
-                ref={(el) => {
-                  stepButtonRefs.current[i] = el;
-                }}
-                type="button"
-                onMouseEnter={() => {
-                  setHoveredStep(i);
-                  onHoverStep(walkthrough, i);
-                }}
-                onClick={() => onFocusStep(walkthrough, i)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  minWidth: 0,
-                  padding: '8px 8px 8px 12px',
-                  textAlign: 'left',
-                  borderRadius: 6,
-                  border: 'none',
-                  outline: 'none',
-                  background: stepActive || hoveredStep === i ? hoverBg : 'transparent',
-                  cursor: 'pointer',
-                  transition: 'background 120ms ease',
-                }}
-              >
-                <span
-                  style={{
-                    flexShrink: 0,
-                    width: 14,
-                    fontSize: theme.fontSizes[0],
-                    fontFamily: theme.fonts.monospace,
-                    color: stepActive ? theme.colors.text : muted,
-                  }}
-                >
-                  {i + 1}
-                </span>
-                <span
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    fontSize: theme.fontSizes[1],
-                    fontFamily: theme.fonts.monospace,
-                    color: theme.colors.text,
-                  }}
-                >
-                  {step.symbol}
-                </span>
-                <span
-                  style={{
-                    flexShrink: 0,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    fontSize: theme.fontSizes[0],
-                    fontFamily: theme.fonts.monospace,
-                    color: muted,
-                  }}
-                >
-                  {step.file.split('/').pop()}:{step.line}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }

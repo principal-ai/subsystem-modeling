@@ -10,6 +10,9 @@ export default {
 		version: "0.1.0",
 	},
 	build: {
+		// Pinned to bun for lowest-risk v1→v2 bridge (v2 defaults to cottontail).
+		// Migrating the main process to Cottontail can be a separate change.
+		mainProcess: "bun",
 		bun: {
 			entrypoint: "src/bun/index.ts",
 		},

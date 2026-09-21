@@ -26,7 +26,6 @@ Bin name: `principal-ai`.
 | `tour` | Introduction tours |
 | `topic` | Topics |
 | `inbox` | Inbox |
-| `starred-collections` | Starred GitHub collections |
 | `repo` | Repo helpers |
 | `opencode` | OpenCode session helpers |
 | `agent-sessions` / `agent-session` | Agent session views |

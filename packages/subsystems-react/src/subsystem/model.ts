@@ -349,6 +349,37 @@ export function walkthroughStepGraphEdgeId(
   return derivedGraphEdgeId(step.from, step.to, step.mechanism);
 }
 
+/**
+ * Move one walkthrough from `from` to `to`, returning a new array. Used by the
+ * flows panel's drag-to-reorder: the array order is the walkthroughs' display
+ * order, so a reorder is just an array splice. Out-of-range `from` returns a
+ * shallow copy unchanged; `to` is clamped into range.
+ */
+export function reorderWalkthroughs(
+  walkthroughs: readonly SubsystemWalkthrough[],
+  from: number,
+  to: number,
+): SubsystemWalkthrough[] {
+  const next = [...walkthroughs];
+  if (!Number.isInteger(from) || from < 0 || from >= next.length) return next;
+  const target = Math.max(0, Math.min(to, next.length - 1));
+  if (target === from) return next;
+  const [moved] = next.splice(from, 1);
+  if (moved) next.splice(target, 0, moved);
+  return next;
+}
+
+/**
+ * Final index for a drag-reorder given the insertion `boundary` (one of the
+ * `n + 1` gaps between rows) and the dragged row's `from` index. Removing the
+ * dragged row shifts every boundary after it down one, so a boundary past
+ * `from` maps to `boundary - 1`. Feed the result to `reorderWalkthroughs` as
+ * `to`; a result equal to `from` is a no-op.
+ */
+export function reorderTargetIndex(boundary: number, from: number): number {
+  return boundary - (boundary > from ? 1 : 0);
+}
+
 export function deriveGraphEdges(doc: {
   relations?: readonly SubsystemRelation[];
   walkthroughs?: readonly SubsystemWalkthrough[];

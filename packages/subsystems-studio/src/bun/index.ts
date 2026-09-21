@@ -61,7 +61,11 @@ import {
 	setProposalSecondOpinion,
 } from "./proposal-store";
 import { maintainSubsystemModel as runMaintainSubsystemModel } from "./maintain-model";
-import { evaluateProposalSecondOpinion } from "./jev-maintenance";
+import {
+	autoAcceptProposalIfConfident,
+	evaluateProposalSecondOpinion,
+} from "./jev-maintenance";
+import { buildProposalSourceContext } from "./proposal-source-context";
 import { listMaintainSessions } from "./maintain-sessions";
 import {
 	modelProviderOf,
@@ -655,9 +659,12 @@ function ensurePermanentTab(id: string): void {
 		},
 		autoAcceptSubsystemModelProposals:
 			viewerSettings.autoAcceptSubsystemModelProposals,
+		autoAcceptSubsystemModelConfidenceThreshold:
+			viewerSettings.autoAcceptSubsystemModelConfidenceThreshold,
 		subsystemMaintainerModel: viewerSettings.subsystemMaintainerModel,
 		regularAuditEnabled: viewerSettings.regularAuditEnabled,
 		regularAuditIntervalMinutes: viewerSettings.regularAuditIntervalMinutes,
+		typesafeApiKey: viewerSettings.typesafeApiKey,
 	};
 	syncPermanentTabs(forced);
 }
@@ -2209,6 +2216,11 @@ const requests: RequestHandlers = {
 				if (!graph) return { ok: false, error: `unknown graph: ${graphId}` };
 				return { ok: true, graph };
 			},
+			updateSubsystemModel: async ({ graphId, patch }) => {
+				const updated = await updateSubsystemModel(graphId, patch);
+				if (!updated) return { ok: false, error: `unknown graph: ${graphId}` };
+				return { ok: true, graph: updated };
+			},
 			getComposedSubsystemModel: async ({ repoKey, modelIds }) => {
 				const entries = await listSubsystemModels();
 				// A showcase tab passes its id set; without one, compose every
@@ -2238,7 +2250,7 @@ const requests: RequestHandlers = {
 					entries.map(async (e) => {
 						const full = await getSubsystemModel(e.id);
 						const graphify = full
-							? assessSubsystemGraphifyReadiness(full, graphifyBuildingPurls)
+							? await assessSubsystemGraphifyReadiness(full, graphifyBuildingPurls)
 							: undefined;
 								let lastAudit:
 							| {
@@ -2251,7 +2263,7 @@ const requests: RequestHandlers = {
 							  }
 							| undefined;
 						if (full) {
-							const fingerprint = buildAuditFingerprint({
+							const fingerprint = await buildAuditFingerprint({
 								updatedAt: full.updatedAt,
 								components: full.components,
 								graphify,
@@ -2259,6 +2271,7 @@ const requests: RequestHandlers = {
 							const summary = await getSubsystemModelAuditListSummary(
 								e.id,
 								fingerprint,
+								{ hasWalkthroughs: (full.walkthroughs?.length ?? 0) > 0 },
 							);
 							if (summary) {
 								lastAudit = {
@@ -2305,59 +2318,75 @@ const requests: RequestHandlers = {
 			},
 			getMaintenanceOverview: async () => {
 				const entries = await listSubsystemModels();
-				const models: MaintenanceOverviewModel[] = [];
-				const pendingProposals: MaintenanceOverviewProposal[] = [];
-				for (const e of entries) {
-					const full = await getSubsystemModel(e.id);
-					let verdict: MaintenanceOverviewModel["verdict"] = "unknown";
-					let verification: SubsystemModelVerification | undefined;
-					let stale = false;
-					let checkedAt: string | undefined;
-					if (full) {
-						const graphify = assessSubsystemGraphifyReadiness(
-							full,
-							graphifyBuildingPurls,
-						);
-						const fingerprint = buildAuditFingerprint({
-							updatedAt: full.updatedAt,
-							components: full.components,
-							graphify,
-						});
-						const summary = await getSubsystemModelAuditListSummary(
-							e.id,
-							fingerprint,
-						);
-						if (summary) {
-							verdict = summary.verdict;
-							verification = summary.verification;
-							stale = summary.stale;
-							checkedAt = summary.checkedAt;
+				const overviewRows = await Promise.all(
+					entries.map(async (e): Promise<
+						[MaintenanceOverviewModel, MaintenanceOverviewProposal[]]
+					> => {
+						const full = await getSubsystemModel(e.id);
+						let verdict: MaintenanceOverviewModel["verdict"] = "unknown";
+						let verification: SubsystemModelVerification | undefined;
+						let lanes: MaintenanceOverviewModel["lanes"] = {
+							construct: "none",
+							"static-topology": "none",
+							"runtime-topology": "none",
+							walkthrough: "none",
+						};
+						let stale = false;
+						let checkedAt: string | undefined;
+						if (full) {
+							const graphify = await assessSubsystemGraphifyReadiness(
+								full,
+								graphifyBuildingPurls,
+							);
+							const fingerprint = await buildAuditFingerprint({
+								updatedAt: full.updatedAt,
+								components: full.components,
+								graphify,
+							});
+							const summary = await getSubsystemModelAuditListSummary(
+								e.id,
+								fingerprint,
+								{ hasWalkthroughs: (full.walkthroughs?.length ?? 0) > 0 },
+							);
+							if (summary) {
+								verdict = summary.verdict;
+								verification = summary.verification;
+								lanes = summary.lanes;
+								stale = summary.stale;
+								checkedAt = summary.checkedAt;
+							}
 						}
-					}
-					const pending = await listSubsystemModelProposals(e.id);
-					for (const proposal of pending) {
-						pendingProposals.push({
+						const pending = await listSubsystemModelProposals(e.id);
+						const model: MaintenanceOverviewModel = {
 							graphId: e.id,
 							title: e.title,
-							proposal,
-						});
-					}
-					models.push({
-						graphId: e.id,
-						title: e.title,
-						verdict,
-						verified: verification?.verified ?? 0,
-						open: verification?.open ?? 0,
-						blocking: verification?.blocking ?? 0,
-						blocked: verification?.blocked ?? 0,
-						na: verification?.na ?? 0,
-						coverage: verification?.coverage ?? 0,
-						pendingProposalCount: pending.length,
-						stale,
-						checkedAt,
-						repos: githubReposFromComponents(full?.components ?? []),
-					});
-				}
+							verdict,
+							verified: verification?.verified ?? 0,
+							open: verification?.open ?? 0,
+							blocking: verification?.blocking ?? 0,
+							blocked: verification?.blocked ?? 0,
+							na: verification?.na ?? 0,
+							coverage: verification?.coverage ?? 0,
+							pendingProposalCount: pending.length,
+							stale,
+							checkedAt,
+							lanes,
+							repos: githubReposFromComponents(full?.components ?? []),
+						};
+						return [
+							model,
+							pending.map((proposal) => ({
+								graphId: e.id,
+								title: e.title,
+								proposal,
+							})),
+						];
+					}),
+				);
+				const models = overviewRows.map(([model]) => model);
+				const pendingProposals = overviewRows.flatMap(
+					([, props]) => props,
+				);
 				return {
 					ok: true as const,
 					overview: buildMaintenanceOverview({
@@ -2414,11 +2443,11 @@ const requests: RequestHandlers = {
 				if (!full) return { ok: false, error: `unknown graph: ${graphId}` };
 				const saved = await loadSubsystemModelAudit(graphId);
 				if (!saved) return { ok: false, error: `no audit saved for ${graphId}` };
-				const graphify = assessSubsystemGraphifyReadiness(
+				const graphify = await assessSubsystemGraphifyReadiness(
 					full,
 					graphifyBuildingPurls,
 				);
-				const live = buildAuditFingerprint({
+				const live = await buildAuditFingerprint({
 					updatedAt: full.updatedAt,
 					components: full.components,
 					graphify,
@@ -2458,21 +2487,28 @@ const requests: RequestHandlers = {
 				let proposal = created.proposal;
 				let autoAccepted = false;
 				if (viewerSettings.autoAcceptSubsystemModelProposals) {
-					const accepted = await acceptProposalInStore(
+					const graph = await getSubsystemModel(graphId);
+					const sourceContext = graph
+						? await buildProposalSourceContext(graph, proposal)
+						: undefined;
+					const gate = await autoAcceptProposalIfConfident(
 						graphId,
-						proposal.id,
+						proposal,
+						{
+							enabled: true,
+							threshold:
+								viewerSettings.autoAcceptSubsystemModelConfidenceThreshold,
+							apiKey: viewerSettings.typesafeApiKey ?? undefined,
+							sourceContext,
+						},
 					);
-					if (accepted.ok) {
-						proposal = accepted.proposal;
-						autoAccepted = true;
-					}
+					proposal = gate.proposal;
+					autoAccepted = gate.accepted;
 				}
 				const pendingCount = await pendingProposalCount(graphId);
 				broadcastSubsystemModelProposalsChanged({ graphId, pendingCount });
 				if (autoAccepted) {
 					broadcastSubsystemModelChanged({ graphId, reason: "updated" });
-					// Non-blocking: the write is done; recompute in the background.
-					void reauditSubsystemModelQuietly(graphId, { surface: true });
 				}
 				return { ok: true, proposal, autoAccepted };
 			},
@@ -2482,9 +2518,6 @@ const requests: RequestHandlers = {
 				const pendingCount = await pendingProposalCount(graphId);
 				broadcastSubsystemModelProposalsChanged({ graphId, pendingCount });
 				broadcastSubsystemModelChanged({ graphId, reason: "updated" });
-				// Non-blocking: accepting applies the patch synchronously; the
-				// re-audit that refreshes badges/ledger runs in the background.
-				void reauditSubsystemModelQuietly(graphId, { surface: true });
 				return { ok: true, proposal: result.proposal };
 			},
 			rejectSubsystemModelProposal: async ({ graphId, proposalId }) => {
@@ -2500,7 +2533,14 @@ const requests: RequestHandlers = {
 				if (existing.secondOpinion && !existing.secondOpinion.error && !force) {
 					return { ok: true, proposal: existing, cached: true };
 				}
-				const opinion = await evaluateProposalSecondOpinion(existing);
+				const graph = await getSubsystemModel(graphId);
+				const sourceContext = graph
+					? await buildProposalSourceContext(graph, existing)
+					: undefined;
+				const opinion = await evaluateProposalSecondOpinion(existing, {
+					apiKey: viewerSettings.typesafeApiKey ?? undefined,
+					sourceContext,
+				});
 				const stored = await setProposalSecondOpinion(graphId, proposalId, opinion);
 				if (!stored.ok) return { ok: false, error: stored.error };
 				const pendingCount = await pendingProposalCount(graphId);
@@ -2540,6 +2580,7 @@ const requests: RequestHandlers = {
 					const models = (resolved.candidates ?? resolved.freeModels).map(
 						toRow,
 					);
+					const goModels = (resolved.goModels ?? []).map(toRow);
 					const credentialed = resolved.credentialedProviders;
 					let note: string | undefined;
 					const remembered = viewerSettings.subsystemMaintainerModel;
@@ -2570,6 +2611,7 @@ const requests: RequestHandlers = {
 							models.length > 0
 								? models
 								: freeModels,
+						goModels,
 						note,
 					};
 				} catch (err) {
@@ -2618,6 +2660,7 @@ const requests: RequestHandlers = {
 					sessionId: feed.sessionId,
 					status: feed.status,
 					events: feed.events,
+					total: feed.total,
 					error: feed.error,
 					title: feed.title,
 					agent: feed.agent,
@@ -3268,6 +3311,7 @@ function ensureLiveFeedBroadcast(): void {
 			sessionId: feed.sessionId,
 			status: feed.status,
 			events: feed.events,
+			total: feed.total,
 			error: feed.error,
 			title: feed.title,
 			agent: feed.agent,

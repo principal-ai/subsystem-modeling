@@ -7,15 +7,17 @@
  * a modal overlay for the legacy AppHeader chip (`overlay=true`).
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bot, Boxes, Check, Loader2, Play } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Bot, Component, ListChecks, Loader2, Network, Play, Route, ScanSearch, Server } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import { repoAvatarUrl } from "@principal-ai/subsystems-react";
 import type {
 	MaintenanceOverview,
 	MaintenanceOverviewModel,
-	MaintenanceOverviewProposal,
 	StudioMessages,
+	SubsystemVerificationLane,
+	VerificationLaneStatus,
 } from "../../shared/contract";
 import {
 	electrobun,
@@ -24,21 +26,13 @@ import {
 	subsystemModelMaintainChangeSubscribers,
 	subsystemModelProposalsChangeSubscribers,
 } from "../rpc";
+import { runSubsystemModelAuditFlow } from "../auditSubsystemModelFlow";
 import { MaintainModelPickerModal } from "./MaintainModelPickerModal";
+import { MaintenanceAuditAllModal } from "./MaintenanceAuditAllModal";
+import { ProposalsModal } from "./ProposalsModal";
+import { AuditResultsModal, type AuditModalState } from "./AuditResultsModal";
 import { RepoRow } from "./RepoRow";
 import { buildMaintenanceOverview } from "../../bun/maintenance-overview";
-
-function formatValue(v: unknown): string {
-	if (v === undefined) return "—";
-	if (v === null) return "null";
-	if (typeof v === "string") return v;
-	if (typeof v === "number" || typeof v === "boolean") return String(v);
-	try {
-		return JSON.stringify(v);
-	} catch {
-		return String(v);
-	}
-}
 
 function verdictColor(
 	verdict: MaintenanceOverviewModel["verdict"],
@@ -55,6 +49,163 @@ function verdictLabel(verdict: MaintenanceOverviewModel["verdict"]): string {
 	if (verdict === "partially_verified") return "Partial";
 	if (verdict === "issues") return "Issues";
 	return "Not audited";
+}
+
+/** Lane badge order + icons for the four verification layers. */
+const LANE_META: Array<{
+	lane: SubsystemVerificationLane;
+	label: string;
+	Icon: typeof Component;
+}> = [
+	{ lane: "construct", label: "Construct", Icon: Component },
+	{ lane: "static-topology", label: "Static topology", Icon: Network },
+	{ lane: "runtime-topology", label: "Runtime topology", Icon: Server },
+	{ lane: "walkthrough", label: "Walkthrough", Icon: Route },
+];
+
+function laneStatusColor(
+	status: VerificationLaneStatus,
+	colors: {
+		success?: string;
+		error?: string;
+		warning?: string;
+		primary?: string;
+		textSecondary?: string;
+	},
+	fallback: string,
+): string {
+	if (status === "verified") return colors.success ?? "#2da44e";
+	if (status === "issues") return colors.error ?? "#e5534b";
+	// Yellow, not the theme's primary (orange) — partial must not read as "on".
+	if (status === "partial") return colors.warning ?? "#d4a017";
+	return colors.textSecondary ?? fallback;
+}
+
+/** Four lane icons, each colored by verified / partial / issues / blocked / none. */
+function LaneBadges({
+	lanes,
+	colors,
+	muted,
+}: {
+	lanes: Partial<Record<SubsystemVerificationLane, VerificationLaneStatus>>;
+	colors: {
+		success?: string;
+		error?: string;
+		warning?: string;
+		primary?: string;
+		textSecondary?: string;
+	};
+	muted: string;
+}) {
+	return (
+		<span
+			style={{
+				display: "inline-flex",
+				alignItems: "center",
+				gap: 5,
+				flexShrink: 0,
+			}}
+		>
+			{LANE_META.map(({ lane, label, Icon }) => {
+				const status = lanes[lane] ?? "none";
+				return (
+					<Icon
+						key={lane}
+						size={13}
+						aria-label={`${label}: ${status}`}
+						style={{
+							color: laneStatusColor(status, colors, muted),
+							opacity: status === "none" ? 0.35 : 1,
+						}}
+					/>
+				);
+			})}
+		</span>
+	);
+}
+
+/** What each verification lane checks (for the header help popover). */
+const LANE_HELP: Record<SubsystemVerificationLane, { name: string; blurb: string }> =
+	{
+		construct: {
+			name: "Construct verification",
+			blurb:
+				"Layer 1 — each component's source declaration: the file exists, the symbol is declared, the construct matches, and the signature types agree.",
+		},
+		"static-topology": {
+			name: "Static topology",
+			blurb:
+				"Layer 2 — how constructs are arranged in source: typed relations[] (imports, extends, …) and containment (package / module).",
+		},
+		"runtime-topology": {
+			name: "Runtime topology",
+			blurb:
+				"Layer 3 — deployment-unit membership via process: which unit each construct runs in.",
+		},
+		walkthrough: {
+			name: "Walkthrough verification",
+			blurb:
+				"Layer 4 — runtime file:line seams on walkthrough hops: each step's file, line, symbol, and mechanism.",
+		},
+	};
+
+const STATUS_LEGEND: Array<{
+	status: VerificationLaneStatus;
+	label: string;
+	desc: string;
+}> = [
+	{ status: "verified", label: "Verified", desc: "Evidence confirms every claim." },
+	{
+		status: "partial",
+		label: "Partial",
+		desc: "Some claims are unconfirmed — agent work remains.",
+	},
+	{ status: "issues", label: "Issues", desc: "A hard failure — must be fixed." },
+	{
+		status: "blocked",
+		label: "Blocked",
+		desc: "Cannot check yet (repo / graphify cache unavailable).",
+	},
+];
+
+/** Header lane-legend icon: theme-coloured hover background, no tooltip. */
+function LaneIconButton({
+	lane,
+	label,
+	Icon,
+	color,
+	hoverBackground,
+	onOpen,
+}: {
+	lane: SubsystemVerificationLane;
+	label: string;
+	Icon: typeof Component;
+	color: string;
+	hoverBackground: string;
+	onOpen: (lane: SubsystemVerificationLane) => void;
+}) {
+	const [hover, setHover] = useState(false);
+	return (
+		<button
+			type="button"
+			onClick={() => onOpen(lane)}
+			onMouseEnter={() => setHover(true)}
+			onMouseLeave={() => setHover(false)}
+			aria-label={`About ${label} verification`}
+			style={{
+				background: hover ? hoverBackground : "transparent",
+				border: "none",
+				borderRadius: 6,
+				padding: 3,
+				display: "inline-flex",
+				cursor: "pointer",
+				color,
+				transition: "background-color 120ms ease",
+			}}
+		>
+			<Icon size={22} />
+		</button>
+	);
 }
 
 /** Distinct owner/name repos referenced by any model's component purls, with model counts. */
@@ -77,20 +228,18 @@ function repoBreakdown(
 
 /**
  * Left sidebar repo filter — the same visual language as the Subsystems tab's
- * FilesPanel drilldown: repo avatar + owner/name + model count per row, with an
- * "All repos" row on top. Clicking a repo narrows the model/pending lists to
- * models referencing it; clicking again (or clicking All) unfilters.
+ * FilesPanel drilldown: repo avatar + owner/name + model count per row. One
+ * repo is always selected (the first by default); clicking a repo narrows the
+ * model/pending lists to models referencing it.
  */
 function MaintenanceRepoList({
-	totalModels,
 	repoBreaks,
 	selectedKey,
 	onSelect,
 }: {
-	totalModels: number;
 	repoBreaks: ReturnType<typeof repoBreakdown>;
 	selectedKey: string | null;
-	onSelect: (repoKey: string | null) => void;
+	onSelect: (repoKey: string) => void;
 }) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -119,14 +268,6 @@ function MaintenanceRepoList({
 			>
 				Repos
 			</span>
-			<RepoRow
-				avatarFallback={<Boxes size={16} aria-hidden="true" />}
-				label="All repos"
-				title="Show models across all repos"
-				badge={totalModels}
-				active={selectedKey == null}
-				onPress={() => onSelect(null)}
-			/>
 			{repoBreaks.map((r) => {
 				const repoKey = `${r.owner}/${r.name}`.toLowerCase();
 				const active = selectedKey === repoKey;
@@ -138,7 +279,7 @@ function MaintenanceRepoList({
 						title={`${r.owner}/${r.name} — ${r.count} model${r.count === 1 ? "" : "s"}`}
 						badge={r.count}
 						active={active}
-						onPress={() => onSelect(active ? null : repoKey)}
+						onPress={() => onSelect(repoKey)}
 					/>
 				);
 			})}
@@ -158,11 +299,26 @@ export function MaintenancePanel({
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 	const [overview, setOverview] = useState<MaintenanceOverview | null>(null);
 	const [error, setError] = useState<string | null>(null);
-	// Per-card busy state so acting on one proposal never clears another's
-	// in-flight indicator.
-	const [busy, setBusy] = useState<Record<string, "accept" | "reject" | "scoring">>({});
 	// Graph whose "Run maintenance" click opened the model picker.
 	const [pickTarget, setPickTarget] = useState<MaintenanceOverviewModel | null>(null);
+	// Single-model dry-run audit results (opens AuditResultsModal).
+	const [auditTarget, setAuditTarget] = useState<MaintenanceOverviewModel | null>(
+		null,
+	);
+	const [auditModalState, setAuditModalState] = useState<AuditModalState | null>(
+		null,
+	);
+	// Batch "Audit all" over visible models.
+	const [auditAllOpen, setAuditAllOpen] = useState(false);
+	// Model whose per-model proposals modal is open (from its row chip).
+	const [proposalsTarget, setProposalsTarget] = useState<{
+		graphId: string;
+		title: string;
+	} | null>(null);
+	// Which lane's "what does this mean" popover is open (header legend).
+	const [laneHelp, setLaneHelp] = useState<SubsystemVerificationLane | null>(
+		null,
+	);
 	type FeedEntry = {
 		status: string;
 		events: number;
@@ -179,7 +335,15 @@ export function MaintenancePanel({
 	// mirroring the Subsystems tab's repo drilldown.
 	const [repoKey, setRepoKey] = useState<string | null>(null);
 
+	const loadInFlight = useRef(false);
+	const loadQueued = useRef(false);
+
 	const load = useCallback(async () => {
+		if (loadInFlight.current) {
+			loadQueued.current = true;
+			return;
+		}
+		loadInFlight.current = true;
 		try {
 			const res = await electrobun.rpc!.request.getMaintenanceOverview({});
 			if (!res.ok) {
@@ -190,6 +354,12 @@ export function MaintenancePanel({
 			setOverview(res.overview ?? null);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			loadInFlight.current = false;
+			if (loadQueued.current) {
+				loadQueued.current = false;
+				void load();
+			}
 		}
 	}, []);
 
@@ -220,7 +390,7 @@ export function MaintenancePanel({
 				...prev,
 				[gid]: {
 					status: payload.status,
-					events: payload.events.length,
+					events: payload.total,
 					agent: payload.agent ?? prev[gid]?.agent,
 					title: payload.title ?? prev[gid]?.title,
 					last: last?.summary ?? prev[gid]?.last,
@@ -235,44 +405,6 @@ export function MaintenancePanel({
 		};
 	}, []);
 
-	const resolve = useCallback(
-		async (
-			entry: MaintenanceOverviewProposal,
-			action: "accept" | "reject",
-		) => {
-			const id = entry.proposal.id;
-			setBusy((prev) => ({ ...prev, [id]: action }));
-			setError(null);
-			try {
-				const req =
-					action === "accept"
-						? electrobun.rpc!.request.acceptSubsystemModelProposal({
-								graphId: entry.graphId,
-								proposalId: id,
-							})
-						: electrobun.rpc!.request.rejectSubsystemModelProposal({
-								graphId: entry.graphId,
-								proposalId: id,
-							});
-				const res = await req;
-				if (!res.ok) setError(res.error ?? `${action} failed`);
-			} catch (err) {
-				setError(err instanceof Error ? err.message : String(err));
-			} finally {
-				// Free the card as soon as the RPC settles; the overview reload
-				// below may be slow and shouldn't hold the indicator.
-				setBusy((prev) => {
-					const next = { ...prev };
-					delete next[id];
-					return next;
-				});
-			}
-			// Fire-and-forget: the host broadcast will also refresh us.
-			void load();
-		},
-		[load],
-	);
-
 	// The picker modal handled the start; reflect its outcome.
 	const onMaintainStarted = useCallback(
 		(info: { model: string; alreadyRunning?: boolean }) => {
@@ -285,30 +417,29 @@ export function MaintenancePanel({
 		[load],
 	);
 
-	const score = useCallback(
-		async (entry: MaintenanceOverviewProposal) => {
-			const id = entry.proposal.id;
-			setBusy((prev) => ({ ...prev, [id]: "scoring" }));
-			setError(null);
-			try {
-				const res = await electrobun.rpc!.request.scoreSubsystemModelProposal({
-					graphId: entry.graphId,
-					proposalId: id,
-				});
-				if (!res.ok) setError(res.error ?? "Second-opinion scoring failed");
-			} catch (err) {
-				setError(err instanceof Error ? err.message : String(err));
-			} finally {
-				setBusy((prev) => {
-					const next = { ...prev };
-					delete next[id];
-					return next;
+	// Dry-run deterministic audit for a single model.
+	const runAudit = useCallback(async (m: MaintenanceOverviewModel) => {
+		setAuditTarget(m);
+		setAuditModalState({ phase: "auditing", title: m.title });
+		try {
+			const res = await runSubsystemModelAuditFlow(m.graphId, {
+				onModal: setAuditModalState,
+			});
+			if (res.ok === false) {
+				setAuditModalState({
+					phase: "error",
+					title: m.title,
+					error: res.error,
 				});
 			}
-			void load();
-		},
-		[load],
-	);
+		} catch (err) {
+			setAuditModalState({
+				phase: "error",
+				title: m.title,
+				error: err instanceof Error ? err.message : String(err),
+			});
+		}
+	}, []);
 
 	const pending = overview?.pendingProposals ?? [];
 	const auditing = overview?.auditing ?? [];
@@ -323,6 +454,20 @@ export function MaintenancePanel({
 		return map;
 	}, [overview]);
 	const repoBreaks = useMemo(() => repoBreakdown(overview), [overview]);
+	// There is no "all repos" view — always keep one repo selected, defaulting
+	// to the first (and re-selecting if the current one disappears).
+	useEffect(() => {
+		if (repoBreaks.length === 0) return;
+		setRepoKey((current) => {
+			const exists =
+				current != null &&
+				repoBreaks.some(
+					(r) => `${r.owner}/${r.name}`.toLowerCase() === current,
+				);
+			if (exists) return current;
+			return `${repoBreaks[0].owner}/${repoBreaks[0].name}`.toLowerCase();
+		});
+	}, [repoBreaks]);
 	const matchesRepo = (m: MaintenanceOverviewModel) =>
 		repoKey == null ||
 		(m.repos ?? []).some(
@@ -461,22 +606,77 @@ export function MaintenancePanel({
 					>
 						<Bot size={18} style={{ color: theme.colors.primary }} />
 						Maintainer
-					</span>
-					{overlay && (
-						<button
-							type="button"
-							onClick={onClose}
+						<span
 							style={{
-								background: "transparent",
-								border: "none",
-								color: muted,
-								cursor: "pointer",
-								fontSize: theme.fontSizes[1],
+								display: "flex",
+								alignItems: "center",
+								gap: 2,
+								marginLeft: 6,
+								paddingLeft: 10,
+								borderLeft: `1px solid ${theme.colors.border}`,
 							}}
 						>
-							Close
+							{LANE_META.map(({ lane, label, Icon }) => (
+								<LaneIconButton
+									key={lane}
+									lane={lane}
+									label={label}
+									Icon={Icon}
+									color={theme.colors.primary}
+									hoverBackground={
+										theme.colors.backgroundTertiary ??
+										theme.colors.backgroundSecondary ??
+										theme.colors.border
+									}
+									onOpen={setLaneHelp}
+								/>
+							))}
+						</span>
+					</span>
+					<div
+						style={{
+							display: "flex",
+							alignItems: "baseline",
+							gap: 8,
+						}}
+					>
+						<button
+							type="button"
+							onClick={() => setAuditAllOpen(true)}
+							title="Dry-run deterministic audit of every visible model (no agent, no mutations)."
+							style={{
+								background: "transparent",
+								border: `1px solid ${theme.colors.border ?? "#333"}`,
+								color: theme.colors.text,
+								cursor: "pointer",
+								fontSize: theme.fontSizes[1],
+								fontFamily: theme.fonts.body,
+								display: "inline-flex",
+								alignItems: "center",
+								gap: 6,
+								padding: "4px 10px",
+								borderRadius: 6,
+							}}
+						>
+							<ScanSearch size={13} />
+							Audit all
 						</button>
-					)}
+						{overlay && (
+							<button
+								type="button"
+								onClick={onClose}
+								style={{
+									background: "transparent",
+									border: "none",
+									color: muted,
+									cursor: "pointer",
+									fontSize: theme.fontSizes[1],
+								}}
+							>
+								Close
+							</button>
+						)}
+					</div>
 				</div>
 				<p
 					style={{
@@ -517,7 +717,6 @@ export function MaintenancePanel({
 						}}
 					>
 						<MaintenanceRepoList
-							totalModels={overview.models.length}
 							repoBreaks={repoBreaks}
 							selectedKey={repoKey}
 							onSelect={setRepoKey}
@@ -698,233 +897,6 @@ export function MaintenancePanel({
 					</div>
 				)}
 
-				{overview && visiblePending.length > 0 && (
-					<>
-						<div
-							style={{
-								fontSize: theme.fontSizes[0],
-								textTransform: "uppercase",
-								letterSpacing: 0.3,
-								color: muted,
-								marginBottom: 8,
-							}}
-						>
-							Pending proposals
-						</div>
-						<div
-							style={{
-								display: "flex",
-								flexDirection: "column",
-								gap: 12,
-								marginBottom: 20,
-							}}
-						>
-							{visiblePending.map((entry) => {
-								const p = entry.proposal;
-								const cardAction = busy[p.id];
-								const cardBusy = cardAction != null;
-								const accepting = cardAction === "accept";
-								const rejecting = cardAction === "reject";
-								return (
-									<article
-										key={p.id}
-										style={{
-											padding: 14,
-											borderRadius: 8,
-											border: `1px solid ${theme.colors.border}`,
-											background: theme.colors.background,
-										}}
-									>
-										<div
-											style={{
-												display: "flex",
-												justifyContent: "space-between",
-												gap: 8,
-												marginBottom: 6,
-											}}
-										>
-											<span style={{ fontSize: theme.fontSizes[1], fontWeight: 600 }}>
-												{entry.title}
-											</span>
-											<code style={{ fontSize: theme.fontSizes[0], color: muted }}>
-												{p.author ? p.author : p.id}
-											</code>
-										</div>
-										<p
-											style={{
-												margin: "0 0 10px",
-												fontSize: theme.fontSizes[1],
-												lineHeight: 1.5,
-											}}
-										>
-											<strong>Why: </strong>
-											{p.rationale}
-										</p>
-										<div
-											style={{
-												display: "flex",
-												flexDirection: "column",
-												gap: 6,
-												marginBottom: 12,
-											}}
-										>
-											{p.preview.map((row, i) => (
-												<div
-													key={`${row.label}-${i}`}
-													style={{
-														fontSize: theme.fontSizes[0],
-														fontFamily:
-															theme.fonts.monospace ?? "ui-monospace, monospace",
-														lineHeight: 1.4,
-														padding: "6px 8px",
-														borderRadius: 6,
-														background: theme.colors.surface,
-														border: `1px solid ${theme.colors.border}`,
-													}}
-												>
-													<div style={{ color: muted, marginBottom: 2 }}>
-														{row.label}
-													</div>
-													<div>
-														<span style={{ color: theme.colors.error ?? "#e5534b" }}>
-															{formatValue(row.before)}
-														</span>
-														{" → "}
-														<span style={{ color: theme.colors.success ?? "#2da44e" }}>
-															{formatValue(row.after)}
-														</span>
-													</div>
-												</div>
-											))}
-										</div>
-										{p.secondOpinion ? (
-											<p
-												style={{
-													margin: "0 0 12px",
-													fontSize: theme.fontSizes[0],
-													color: p.secondOpinion.error
-														? (theme.colors.error ?? "#e5534b")
-														: p.secondOpinion.verdict === "safe"
-															? (theme.colors.success ?? "#2da44e")
-															: p.secondOpinion.verdict === "unsafe"
-																? (theme.colors.error ?? "#e5534b")
-																: muted,
-													lineHeight: 1.45,
-												}}
-											>
-												{p.secondOpinion.error ? (
-													<>Second opinion unavailable — {p.secondOpinion.error}</>
-												) : (
-													<>
-														Second opinion ·{" "}
-														{p.secondOpinion.verdict === "safe"
-															? "Safe"
-															: p.secondOpinion.verdict === "unsafe"
-																? "Unsafe"
-																: "Needs human"}{" "}
-														{Math.round(p.secondOpinion.confidence * 100)}%
-														{p.secondOpinion.changeKind ? ` · ${p.secondOpinion.changeKind}` : ""}
-													</>
-												)}
-											</p>
-										) : null}
-										<div
-											style={{
-												display: "flex",
-												gap: 8,
-												justifyContent: "flex-end",
-												flexWrap: "wrap",
-											}}
-										>
-											{(!p.secondOpinion || p.secondOpinion.error) && (
-												<button
-													type="button"
-													disabled={cardBusy}
-													onClick={() => void score(entry)}
-													title="Ask Jev for a second opinion without accepting"
-													style={{
-														padding: "0 12px",
-														height: 32,
-														borderRadius: 6,
-														fontSize: theme.fontSizes[1],
-														fontFamily: theme.fonts.body,
-														background: "transparent",
-														color: theme.colors.primary,
-														border: `1px solid ${theme.colors.primary}`,
-														cursor: cardBusy ? "default" : "pointer",
-														opacity: cardBusy ? 0.6 : 1,
-														display: "inline-flex",
-														alignItems: "center",
-														gap: 6,
-													}}
-												>
-													{cardAction === "scoring" && (
-														<Loader2 size={12} className="principal-studio-spin" />
-													)}
-													{cardAction === "scoring" ? "Scoring…" : p.secondOpinion?.error ? "Retry scoring" : "Get second opinion"}
-												</button>
-											)}
-											<button
-												type="button"
-												disabled={cardBusy}
-												onClick={() => void resolve(entry, "reject")}
-												style={{
-													padding: "0 12px",
-													height: 32,
-													borderRadius: 6,
-													fontSize: theme.fontSizes[1],
-													fontFamily: theme.fonts.body,
-													background: "transparent",
-													color: theme.colors.text,
-													border: `1px solid ${theme.colors.border}`,
-													cursor: cardBusy ? "default" : "pointer",
-													opacity: cardBusy ? 0.6 : 1,
-													display: "inline-flex",
-													alignItems: "center",
-													gap: 6,
-												}}
-											>
-												{rejecting && (
-													<Loader2 size={12} className="principal-studio-spin" />
-												)}
-												{rejecting ? "Rejecting…" : "Reject"}
-											</button>
-											<button
-												type="button"
-												disabled={cardBusy}
-												onClick={() => void resolve(entry, "accept")}
-												style={{
-													padding: "0 12px",
-													height: 32,
-													borderRadius: 6,
-													fontSize: theme.fontSizes[1],
-													fontWeight: 500,
-													fontFamily: theme.fonts.body,
-													background: theme.colors.primary,
-													color: theme.colors.background,
-													border: `1px solid ${theme.colors.primary}`,
-													cursor: cardBusy ? "default" : "pointer",
-													opacity: cardBusy ? 0.6 : 1,
-													display: "inline-flex",
-													alignItems: "center",
-													gap: 6,
-												}}
-											>
-												{accepting ? (
-													<Loader2 size={12} className="principal-studio-spin" />
-												) : (
-													<Check size={13} />
-												)}
-												{accepting ? "Accepting…" : "Accept"}
-											</button>
-										</div>
-									</article>
-								);
-							})}
-						</div>
-					</>
-				)}
-
 				{overview && (
 					<>
 						<div
@@ -975,15 +947,6 @@ const rowBusy =
 											/>
 										)}
 										<span style={{ flex: 1, minWidth: 0 }}>{m.title}</span>
-										<span
-											style={{
-												fontSize: theme.fontSizes[0],
-												color: muted,
-												fontVariantNumeric: "tabular-nums",
-											}}
-										>
-											{Math.round(m.coverage * 100)}%
-										</span>
 										{m.blocked > 0 && (
 											<span
 												title="Claims blocked on an unavailable repo or graphify cache. Run maintenance to rebuild caches; cloned repos still need the repo available locally."
@@ -995,30 +958,53 @@ const rowBusy =
 												{m.blocked} blocked
 											</span>
 										)}
-										<span
-											style={{
-												fontSize: theme.fontSizes[0],
-												fontWeight: 600,
-												textTransform: "uppercase",
-												letterSpacing: 0.3,
-												color: verdictColor(m.verdict, theme.colors, muted),
-											}}
-										>
-											{verdictLabel(m.verdict)}
-										</span>
-										{m.pendingProposalCount > 0 && (
+										{m.verdict !== "partially_verified" && (
 											<span
 												style={{
 													fontSize: theme.fontSizes[0],
-													padding: "1px 6px",
-													borderRadius: 999,
-													background: `${theme.colors.primary}22`,
-													color: theme.colors.primary,
+													fontWeight: 600,
+													textTransform: "uppercase",
+													letterSpacing: 0.3,
+													color: verdictColor(m.verdict, theme.colors, muted),
 												}}
 											>
+												{verdictLabel(m.verdict)}
+											</span>
+										)}
+										{m.pendingProposalCount > 0 && (
+											<button
+												type="button"
+												onMouseDown={(e) => e.stopPropagation()}
+												onClick={(e) => {
+													e.stopPropagation();
+													setProposalsTarget({
+														graphId: m.graphId,
+														title: m.title,
+													});
+												}}
+												aria-label={`Review ${m.pendingProposalCount} pending proposal${
+													m.pendingProposalCount === 1 ? "" : "s"
+												} for ${m.title}`}
+												style={{
+													padding: "0 10px",
+													height: 26,
+													borderRadius: 6,
+													fontSize: theme.fontSizes[0],
+													fontFamily: theme.fonts.body,
+													background: "transparent",
+													color: theme.colors.primary,
+													border: `1px solid ${theme.colors.primary}`,
+													cursor: "pointer",
+													display: "inline-flex",
+													alignItems: "center",
+													gap: 6,
+													flexShrink: 0,
+												}}
+											>
+												<ListChecks size={11} />
 												{m.pendingProposalCount} proposal
 												{m.pendingProposalCount === 1 ? "" : "s"}
-											</span>
+											</button>
 										)}
 										{showRun && (
 											<button
@@ -1051,6 +1037,36 @@ const rowBusy =
 												{rowBusy ? "Running…" : "Run maintenance"}
 											</button>
 										)}
+										<button
+											type="button"
+											disabled={rowBusy}
+											onClick={() => void runAudit(m)}
+											title="Dry-run deterministic audit of this model (no agent, no mutations)."
+											style={{
+												padding: "0 10px",
+												height: 26,
+												borderRadius: 6,
+												fontSize: theme.fontSizes[0],
+												fontFamily: theme.fonts.body,
+												background: "transparent",
+												color: muted,
+												border: `1px solid ${theme.colors.border ?? "#333"}`,
+												cursor: rowBusy ? "default" : "pointer",
+												opacity: rowBusy ? 0.6 : 1,
+												display: "inline-flex",
+												alignItems: "center",
+												gap: 6,
+												flexShrink: 0,
+											}}
+										>
+											<ScanSearch size={11} />
+											Audit
+										</button>
+										<LaneBadges
+											lanes={m.lanes ?? {}}
+											colors={theme.colors}
+											muted={muted}
+										/>
 									</div>
 								);
 							})}
@@ -1098,6 +1114,168 @@ const rowBusy =
 					onStarted={onMaintainStarted}
 				/>
 			)}
+			{auditTarget && auditModalState && (
+				<AuditResultsModal
+					state={auditModalState}
+					onClose={() => {
+						setAuditTarget(null);
+						setAuditModalState(null);
+					}}
+					onReportChange={() => void load()}
+				/>
+			)}
+			{auditAllOpen && (
+				<MaintenanceAuditAllModal
+					models={visibleModels}
+					onClose={() => {
+						setAuditAllOpen(false);
+						void load();
+					}}
+				/>
+			)}
+			{proposalsTarget &&
+				createPortal(
+					<ProposalsModal
+						graphId={proposalsTarget.graphId}
+						title={proposalsTarget.title}
+						onClose={() => {
+							setProposalsTarget(null);
+							void load();
+						}}
+					/>,
+					document.body,
+				)}
+			{laneHelp &&
+				(() => {
+					const meta = LANE_META.find((m) => m.lane === laneHelp)!;
+					const HelpIcon = meta.Icon;
+					return (
+						<div
+							role="dialog"
+							aria-modal
+							aria-label={`${LANE_HELP[laneHelp].name} — what this lane verifies`}
+							onClick={() => setLaneHelp(null)}
+							style={{
+								position: "fixed",
+								inset: 0,
+								zIndex: 2147483000,
+								display: "flex",
+								alignItems: "center",
+								justifyContent: "center",
+								background: "rgba(0,0,0,0.55)",
+								fontFamily: theme.fonts.body,
+							}}
+						>
+							<div
+								onClick={(e) => e.stopPropagation()}
+								style={{
+									width: "min(440px, calc(100vw - 48px))",
+									background: theme.colors.surface,
+									border: `1px solid ${theme.colors.border}`,
+									borderRadius: 12,
+									padding: 20,
+									boxShadow: "0 12px 48px rgba(0,0,0,0.4)",
+									color: theme.colors.text,
+								}}
+							>
+								<div
+									style={{
+										display: "flex",
+										alignItems: "center",
+										gap: 10,
+										marginBottom: 8,
+									}}
+								>
+									<HelpIcon
+										size={26}
+										style={{ color: theme.colors.primary }}
+									/>
+									<span style={{ fontSize: theme.fontSizes[2], fontWeight: 600 }}>
+										{LANE_HELP[laneHelp].name}
+									</span>
+								</div>
+								<p
+									style={{
+										margin: "0 0 14px",
+										fontSize: theme.fontSizes[1],
+										lineHeight: 1.5,
+										color: muted,
+									}}
+								>
+									{LANE_HELP[laneHelp].blurb}
+								</p>
+								<div
+									style={{
+										fontSize: theme.fontSizes[0],
+										textTransform: "uppercase",
+										letterSpacing: 0.3,
+										color: muted,
+										marginBottom: 6,
+									}}
+								>
+									Status colours
+								</div>
+								<div
+									style={{
+										display: "flex",
+										flexDirection: "column",
+										gap: 6,
+									}}
+								>
+									{STATUS_LEGEND.map(({ status, label, desc }) => (
+										<div
+											key={status}
+											style={{
+												display: "flex",
+												alignItems: "baseline",
+												gap: 8,
+												fontSize: theme.fontSizes[0],
+											}}
+										>
+											<span
+												style={{
+													width: 64,
+													flexShrink: 0,
+													fontWeight: 600,
+													color: laneStatusColor(status, theme.colors, muted),
+												}}
+											>
+												{label}
+											</span>
+											<span style={{ color: muted }}>{desc}</span>
+										</div>
+									))}
+								</div>
+								<div
+									style={{
+										display: "flex",
+										justifyContent: "flex-end",
+										marginTop: 16,
+									}}
+								>
+									<button
+										type="button"
+										onClick={() => setLaneHelp(null)}
+										style={{
+											padding: "0 14px",
+											height: 34,
+											borderRadius: 6,
+											fontSize: theme.fontSizes[1],
+											fontWeight: 500,
+											fontFamily: theme.fonts.body,
+											background: theme.colors.primary,
+											color: theme.colors.background,
+											border: `1px solid ${theme.colors.primary}`,
+											cursor: "pointer",
+										}}
+									>
+										Done
+									</button>
+								</div>
+							</div>
+						</div>
+					);
+				})()}
 		</div>
 	);
 }

@@ -35,13 +35,13 @@ export function hashDeclarationLineFromContent(
 	return hashDeclarationLine(raw);
 }
 
-export function buildDeclarationRef(input: {
+export async function buildDeclarationRef(input: {
 	file: string;
 	startLine: number;
 	lineHash: string;
 	graphifyNodeId?: string;
 	repoRoot?: string | null;
-}): SubsystemDeclarationRef {
+}): Promise<SubsystemDeclarationRef> {
 	const ref: SubsystemDeclarationRef = {
 		file: input.file,
 		startLine: input.startLine,
@@ -50,11 +50,11 @@ export function buildDeclarationRef(input: {
 	};
 	if (input.graphifyNodeId) ref.graphifyNodeId = input.graphifyNodeId;
 	if (input.repoRoot) {
-		const headSha = gitHeadSha(input.repoRoot);
+		const headSha = await gitHeadSha(input.repoRoot);
 		if (headSha) {
 			ref.revision = {
 				headSha,
-				dirtyHash: dirtyFingerprint(input.repoRoot),
+				dirtyHash: await dirtyFingerprint(input.repoRoot),
 			};
 		}
 	}

@@ -21,6 +21,7 @@ export function MaintainEventsView({
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 	const [status, setStatus] = useState<string>("starting");
 	const [events, setEvents] = useState<OpencodeV2ProbeEvent[]>([]);
+	const [total, setTotal] = useState<number>(0);
 	const [error, setError] = useState<string | null>(null);
 	const logRef = useRef<HTMLDivElement | null>(null);
 
@@ -32,6 +33,7 @@ export function MaintainEventsView({
 				if (cancelled || !res.ok) return;
 				if (res.status) setStatus(res.status);
 				if (res.events) setEvents(res.events);
+				if (typeof res.total === "number") setTotal(res.total);
 				if (res.error) setError(res.error);
 			})
 			.catch(() => {
@@ -47,6 +49,7 @@ export function MaintainEventsView({
 			if (payload.sessionId !== sessionId) return;
 			setStatus(payload.status);
 			setEvents(payload.events);
+			setTotal(payload.total);
 			setError(payload.error ?? null);
 		};
 		opencodeLiveFeedSubscribers.add(onPush);
@@ -94,7 +97,8 @@ export function MaintainEventsView({
 					{" · "}
 					<span style={{ fontWeight: 600 }}>{status}</span>
 					{" · "}
-					{events.length} events
+					{total} events
+					{events.length < total ? ` (showing last ${events.length})` : null}
 				</div>
 				{error ? (
 					<div style={{ marginTop: 8, color: theme.colors.error, fontSize: theme.fontSizes[0] }}>

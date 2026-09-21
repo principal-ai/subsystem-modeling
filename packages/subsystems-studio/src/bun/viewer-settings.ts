@@ -36,18 +36,35 @@ export const REGULAR_AUDIT_INTERVAL_MIN_MINUTES = 5;
 /** Default interval when the setting is missing or invalid. */
 export const REGULAR_AUDIT_INTERVAL_DEFAULT_MINUTES = 5;
 
+/** Default minimum Jev confidence (0-1) required to auto-accept a proposal. */
+export const AUTO_ACCEPT_CONFIDENCE_DEFAULT = 0.85;
+
 export function defaultViewerSettings(): ViewerSettings {
 	return {
 		defaultTabs: { ...DEFAULT_TAB_FLAGS },
 		autoAcceptSubsystemModelProposals: false,
+		autoAcceptSubsystemModelConfidenceThreshold: AUTO_ACCEPT_CONFIDENCE_DEFAULT,
 		subsystemMaintainerModel: null,
 		regularAuditEnabled: true,
 		regularAuditIntervalMinutes: REGULAR_AUDIT_INTERVAL_DEFAULT_MINUTES,
+		typesafeApiKey: null,
 	};
 }
 
 function coerceBool(value: unknown, fallback: boolean): boolean {
 	return typeof value === "boolean" ? value : fallback;
+}
+
+/** Clamp a Jev confidence threshold to the 0-1 range; NaN falls to default. */
+export function coerceConfidenceThreshold(value: unknown): number {
+	const n =
+		typeof value === "number"
+			? value
+			: typeof value === "string"
+				? Number(value)
+				: NaN;
+	if (!Number.isFinite(n)) return AUTO_ACCEPT_CONFIDENCE_DEFAULT;
+	return Math.min(1, Math.max(0, n));
 }
 
 function coerceModelRef(value: unknown): string | null {
@@ -97,6 +114,10 @@ function normalize(raw: unknown): ViewerSettings {
 			obj["autoAcceptSubsystemModelProposals"],
 			defaults.autoAcceptSubsystemModelProposals,
 		),
+		autoAcceptSubsystemModelConfidenceThreshold: coerceConfidenceThreshold(
+			obj["autoAcceptSubsystemModelConfidenceThreshold"] ??
+				defaults.autoAcceptSubsystemModelConfidenceThreshold,
+		),
 		subsystemMaintainerModel:
 			"subsystemMaintainerModel" in obj
 				? coerceModelRef(obj["subsystemMaintainerModel"])
@@ -109,6 +130,10 @@ function normalize(raw: unknown): ViewerSettings {
 			obj["regularAuditIntervalMinutes"] ??
 				defaults.regularAuditIntervalMinutes,
 		),
+		typesafeApiKey:
+			"typesafeApiKey" in obj
+				? coerceModelRef(obj["typesafeApiKey"])
+				: defaults.typesafeApiKey,
 	};
 }
 
@@ -128,7 +153,7 @@ export function saveViewerSettings(settings: ViewerSettings): ViewerSettings {
 		writeFileSync(
 			STORE_PATH,
 			`${JSON.stringify(normalized, null, 2)}\n`,
-			"utf8",
+			{ encoding: "utf8", mode: 0o600 },
 		);
 	} catch (err) {
 		console.error(
@@ -151,6 +176,12 @@ export function patchViewerSettings(
 		autoAcceptSubsystemModelProposals:
 			patch.autoAcceptSubsystemModelProposals ??
 			current.autoAcceptSubsystemModelProposals,
+		autoAcceptSubsystemModelConfidenceThreshold:
+			patch.autoAcceptSubsystemModelConfidenceThreshold !== undefined
+				? coerceConfidenceThreshold(
+						patch.autoAcceptSubsystemModelConfidenceThreshold,
+					)
+				: current.autoAcceptSubsystemModelConfidenceThreshold,
 		subsystemMaintainerModel:
 			patch.subsystemMaintainerModel !== undefined
 				? patch.subsystemMaintainerModel
@@ -161,6 +192,10 @@ export function patchViewerSettings(
 			patch.regularAuditIntervalMinutes !== undefined
 				? coerceRegularAuditIntervalMinutes(patch.regularAuditIntervalMinutes)
 				: current.regularAuditIntervalMinutes,
+		typesafeApiKey:
+			patch.typesafeApiKey !== undefined
+				? coerceModelRef(patch.typesafeApiKey)
+				: current.typesafeApiKey,
 	};
 	return saveViewerSettings(next);
 }

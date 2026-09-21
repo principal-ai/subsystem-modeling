@@ -108,8 +108,11 @@ describe("graphify augmentations", () => {
 				file: "src/rpc.ts",
 				symbol: "handle",
 				signature: {
-					parameterTypes: ["HostInfo"],
-					returnTypes: ["Session"],
+					parameters: [
+						{ name: "req", type: "HostInfo" },
+						{ name: "opts", type: "Options", optional: true },
+					],
+					returnType: "Promise<Session>",
 				},
 				source: "gap-filler",
 				storeRoot: root,
@@ -122,8 +125,11 @@ describe("graphify augmentations", () => {
 				symbol: "handle",
 				storeRoot: root,
 			});
-			expect(hit?.claims.signature?.parameterTypes).toEqual(["HostInfo"]);
-			expect(hit?.claims.signature?.returnTypes).toEqual(["Session"]);
+			expect(hit?.claims.signature?.parameters).toEqual([
+				{ name: "req", type: "HostInfo" },
+				{ name: "opts", type: "Options", optional: true },
+			]);
+			expect(hit?.claims.signature?.returnType).toBe("Promise<Session>");
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}

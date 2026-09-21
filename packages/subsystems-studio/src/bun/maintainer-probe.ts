@@ -4,9 +4,10 @@
  * The maintain brief opens with "Step 0 · Confirm you're live": the agent must
  * curl `POST /api/maintainer/probe` with a run token and expect `{ok:true}`.
  * The host just watches whether that token landed before a timeout — no SSE
- * event parsing, nothing fragile. A session that never makes the call is
- * treated as `unusable` (e.g. the opencode/Zen free tier dying headless), and
- * the runner falls back to a credentialed model.
+ * event parsing, nothing fragile. A session that never makes the call *and*
+ * streams no events is treated as `unusable` (e.g. the opencode/Zen free tier
+ * dying headless), and the runner falls back to a credentialed model. If any
+ * session events arrive, the model is clearly alive and the timeout is skipped.
  */
 
 import { modelProviderOf } from "./opencode-models";
