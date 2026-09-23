@@ -426,10 +426,10 @@ export const TOPOLOGY_MECHANICAL_CASES: AuditCase[] = [
     outcome: 'pass',
     remediation: 'none',
     snippet: `{
-  "id": "e-imports-xyflow",
+  "id": "e-ref-xyflow",
   "from": "component-node",
   "to": "xyflow",
-  "relationType": "imports"
+  "relationType": "references"
 }
 // both component-node and xyflow exist in components[]`,
   },
@@ -449,7 +449,7 @@ export const TOPOLOGY_MECHANICAL_CASES: AuditCase[] = [
   {
     example: 'relation corroborated',
     meaning:
-      'Graphify has a matching edge for this relationType between exact anchors (or toward an external label for imports). Soft pass — imports, method, extends/inherits, implements, mixes_in, references. Also pass when an accepted relation augmentation confirmed the claim.',
+      'Graphify has a matching edge for this relationType between exact anchors. Soft pass — method, extends/inherits, implements, mixes_in, references. Externals have no anchor and are never soft-confirmed; they are a gap for the agent to review. Also pass when an accepted relation augmentation confirmed the claim.',
     outcome: 'pass',
     remediation: 'none',
     snippet: `// model
@@ -660,13 +660,6 @@ export type CatalogEntry = {
  * relations[]. No file:line site required.
  */
 export const RELATION_TYPE_CATALOG: CatalogEntry[] = [
-  {
-    label: 'imports',
-    meaning:
-      'Module boundary: from depends on to — often an external library or package modeled as a node.',
-    example: `import { ReactFlow, useNodesState } from "@xyflow/react"
-// ← SubsystemComponentNode imports @xyflow/react`,
-  },
   {
     label: 'method',
     meaning: 'from is a class (or owner) and to is one of its methods as a separate node.',

@@ -539,7 +539,7 @@ export function SubsystemEdge({
   markerEnd,
 }: EdgeProps<SubsystemGraphEdge>) {
   const path = data?.elkPath ?? '';
-  const mechanism = data?.mechanism ?? 'imports';
+  const mechanism = data?.mechanism ?? 'uses';
   const color = MECHANISM_COLOR[mechanism] ?? '#888';
   // Dash style comes from the mechanism table (dashed = inverted-control or
   // observational relationships: hierarchy, registration, watches).

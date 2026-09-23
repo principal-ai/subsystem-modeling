@@ -6,9 +6,45 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTheme } from "@principal-ade/industry-theme";
+import {
+	Activity,
+	Bot,
+	Boxes,
+	Container,
+	FileText,
+	Gauge,
+	Layers,
+	LayoutGrid,
+	Library,
+	MessageSquare,
+	Route,
+	ScanSearch,
+	Share2,
+	Terminal,
+	Wrench,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type { TabSummary } from "../../shared/contract";
 
 const COPY_FEEDBACK_MS = 1500;
+
+const KIND_ICONS: Partial<Record<TabSummary["kind"], LucideIcon>> = {
+	library: Library,
+	trail: Route,
+	"agent-sessions": Bot,
+	"maintenance-sessions": Wrench,
+	analysis: ScanSearch,
+	"session-events": Activity,
+	prompt: MessageSquare,
+	"subsystem-model": Boxes,
+	"subsystem-showcase": LayoutGrid,
+	subsystems: Layers,
+	maintenance: Gauge,
+	graphify: Share2,
+	"package-layers": Container,
+	"opencode-v2": Terminal,
+	"maintain-events": Activity,
+};
 
 export function TabStrip({
 	tabs,
@@ -50,8 +86,9 @@ export function TabStrip({
 		<div
 			style={{
 				display: "flex",
+				alignItems: "stretch",
 				gap: 2,
-				padding: "4px 6px 0",
+				padding: 0,
 				background: theme.colors.backgroundSecondary ?? theme.colors.background,
 				borderBottom: `1px solid ${theme.colors.border ?? "#333"}`,
 				overflowX: "auto",
@@ -73,9 +110,10 @@ export function TabStrip({
 					tab.kind === "graphify" ||
 					tab.kind === "package-layers" ||
 					tab.kind === "opencode-v2";
-				const canCopyPath =
+const canCopyPath =
 					tab.kind === "subsystem-model" && typeof tab.path === "string";
-				const justCopied = copiedTabId === tab.id;
+			const justCopied = copiedTabId === tab.id;
+			const Icon = KIND_ICONS[tab.kind] ?? FileText;
 				return (
 					<div
 						key={tab.id}
@@ -118,9 +156,9 @@ export function TabStrip({
 						style={{
 							display: "flex",
 							alignItems: "center",
-							gap: 6,
-							padding: "6px 10px",
-							borderRadius: "6px 6px 0 0",
+							gap: 8,
+							padding: "8px 14px",
+							borderRadius: 0,
 							background: isActive
 								? theme.colors.background
 								: theme.colors.backgroundSecondary ?? "transparent",
@@ -129,11 +167,11 @@ export function TabStrip({
 								: isActive
 									? theme.colors.text
 									: theme.colors.textSecondary,
-							borderTop: `1px solid ${isActive ? theme.colors.border ?? "#444" : "transparent"}`,
+							borderTop: "transparent",
 							borderLeft: `1px solid ${isActive ? theme.colors.border ?? "#444" : "transparent"}`,
 							borderRight: `1px solid ${isActive ? theme.colors.border ?? "#444" : "transparent"}`,
 							cursor: "pointer",
-							fontSize: theme.fontSizes[1],
+							fontSize: theme.fontSizes[2],
 							fontFamily: theme.fonts.body,
 							// Natural width while the strip has room; when tabs
 							// collectively overflow, flex-shrink squeezes them and
@@ -144,6 +182,18 @@ export function TabStrip({
 							marginBottom: -1,
 						}}
 					>
+						<Icon
+							size={16}
+							style={{ flexShrink: 0 }}
+							color={
+								justCopied
+									? (theme.colors.success ?? theme.colors.text)
+									: isActive
+										? theme.colors.text
+										: theme.colors.textSecondary
+							}
+							aria-hidden="true"
+						/>
 						<span
 							style={{
 								position: "relative",

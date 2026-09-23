@@ -151,13 +151,13 @@ export const relations = [
     id: 'dao-room',
     from: 'note-dao',
     to: 'Room',
-    relationType: 'imports',
+    relationType: 'references',
   },
   {
     id: 'api-backend',
     from: 'notes-api',
     to: 'NotesBackend',
-    relationType: 'imports',
+    relationType: 'references',
   },
 ] as SubsystemRelation[];
 

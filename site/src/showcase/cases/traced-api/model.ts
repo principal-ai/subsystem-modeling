@@ -285,13 +285,13 @@ export const relations = [
     id: 'repo-pg',
     from: 'orders-repo',
     to: 'Postgres',
-    relationType: 'imports',
+    relationType: 'references',
   },
   {
     id: 'provider-otlp',
     from: 'tracer-provider',
     to: 'OTLPCollector',
-    relationType: 'imports',
+    relationType: 'references',
   },
 ] as SubsystemRelation[];
 

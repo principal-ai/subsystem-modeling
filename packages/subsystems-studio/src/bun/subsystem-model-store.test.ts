@@ -277,7 +277,6 @@ describe("declaration provenance", () => {
 describe("relation and walkthrough mechanism sets", () => {
 	test("pins the combined edge-mechanism union for drift checks", () => {
 		expect([...SUBSYSTEM_EDGE_MECHANISMS]).toEqual([
-			"imports",
 			"extends",
 			"inherits",
 			"implements",

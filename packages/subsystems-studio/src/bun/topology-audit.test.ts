@@ -3,8 +3,6 @@ import type { SubsystemComponent, SubsystemRelation } from "@principal-ai/subsys
 import type { GraphifyEdge, GraphifyNode } from "../../../subsystems-react/src/graphify/types";
 import {
 	auditTopologyRelations,
-	graphifyHasImportBetween,
-	graphifyHasImportTowardHints,
 	graphifyHasRelationBetween,
 } from "./topology-audit";
 
@@ -36,24 +34,6 @@ function edge(
 	};
 }
 
-describe("graphifyHasImportBetween", () => {
-	test("matches import-family edges in either direction", () => {
-		const edges = [edge("a", "b", "imports")];
-		expect(graphifyHasImportBetween(edges, "a", "b")).toBe(true);
-		expect(graphifyHasImportBetween(edges, "b", "a")).toBe(true);
-		expect(graphifyHasImportBetween(edges, "a", "c")).toBe(false);
-	});
-
-	test("ignores non-import relations", () => {
-		expect(
-			graphifyHasImportBetween([edge("a", "b", "calls")], "a", "b"),
-		).toBe(false);
-		expect(
-			graphifyHasImportBetween([edge("a", "b", "imports_from")], "a", "b"),
-		).toBe(true);
-	});
-});
-
 describe("graphifyHasRelationBetween", () => {
 	test("method is directed class → method", () => {
 		const allowed = new Set(["method"]);
@@ -77,25 +57,6 @@ describe("graphifyHasRelationBetween", () => {
 				false,
 			),
 		).toBe(true);
-	});
-});
-
-describe("graphifyHasImportTowardHints", () => {
-	test("matches external package labels", () => {
-		const nodes = [
-			node("src_App", "App", "src/App.tsx"),
-			node("pkg_xyflow", "@xyflow/react", ""),
-		];
-		const edges = [edge("src_App", "pkg_xyflow", "imports")];
-		expect(
-			graphifyHasImportTowardHints(edges, nodes, "src_App", [
-				"@xyflow/react",
-				"xyflow",
-			]),
-		).toBe(true);
-		expect(
-			graphifyHasImportTowardHints(edges, nodes, "src_App", ["lodash"]),
-		).toBe(false);
 	});
 });
 
@@ -173,56 +134,35 @@ describe("auditTopologyRelations", () => {
 		expect(r.checks[0]?.verdict).toBe("issue");
 	});
 
-	test("soft-confirms imports into externals via Graphify label", () => {
+	test("external targets are a soft gap, never fuzzy-confirmed", () => {
 		const relations: SubsystemRelation[] = [
 			{
-				id: "r-imp",
+				id: "r-ext",
 				from: "app",
 				to: "xyflow",
-				relationType: "imports",
+				relationType: "references",
 			},
 		];
+		// Even with a Graphify edge whose label matches the external, the audit
+		// does not fuzzy-match external targets — that judgment is the agent's.
 		const bundle = {
 			nodes: [
 				node("src_App", "App", "src/App.tsx"),
 				node("pkg_xyflow", "@xyflow/react", ""),
 			],
-			edges: [edge("src_App", "pkg_xyflow", "imports")],
+			edges: [edge("src_App", "pkg_xyflow", "references")],
 		};
 		const r = auditTopologyRelations(
 			components,
 			relations,
 			new Map([["pkg:github/acme/app", bundle]]),
 		);
-		expect(r.summary.importsConfirmed).toBe(1);
-		expect(r.summary.softConfirmed).toBe(1);
-		expect(r.checks[0]?.graphify).toBe("confirmed");
-		expect(r.findings).toEqual([]);
-	});
-
-	test("unconfirmed import is a soft gap, not an issue", () => {
-		const relations: SubsystemRelation[] = [
-			{
-				id: "r-imp",
-				from: "app",
-				to: "xyflow",
-				relationType: "imports",
-			},
-		];
-		const bundle = {
-			nodes: [node("src_App", "App", "src/App.tsx")],
-			edges: [] as GraphifyEdge[],
-		};
-		const r = auditTopologyRelations(
-			components,
-			relations,
-			new Map([["pkg:github/acme/app", bundle]]),
-		);
-		expect(r.summary.importsUnconfirmed).toBe(1);
+		expect(r.summary.softConfirmed).toBe(0);
 		expect(r.summary.softUnconfirmed).toBe(1);
 		expect(r.checks[0]?.verdict).toBe("gap");
-		expect(r.findings[0]?.severity).toBe("info");
+		expect(r.checks[0]?.note).toContain("external");
 		expect(r.findings[0]?.kind).toBe("topology_relation_unconfirmed");
+		expect(r.findings[0]?.severity).toBe("info");
 	});
 
 	test("soft-confirms method when Graphify has class → method", () => {

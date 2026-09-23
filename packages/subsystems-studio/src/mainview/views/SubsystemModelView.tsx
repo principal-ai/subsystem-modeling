@@ -20,6 +20,7 @@ import {
 	type ComponentVerificationState,
 	type SubsystemDiagnostic,
 	type SubsystemIssue,
+	type SubsystemIssueCategory,
 	type SubsystemOpenFileOptions,
 	type WalkthroughViewerContext,
 } from "@principal-ai/subsystems-react";
@@ -59,11 +60,17 @@ export function SubsystemModelView({
 	tabId,
 	graphId,
 	focusWalkthroughId,
+	showIssues: showIssuesOnOpen,
+	focusIssueCategory,
 }: {
 	tabId: string;
 	graphId: string;
 	/** Walkthrough to select on mount (opened from a row in the list). */
 	focusWalkthroughId?: string;
+	/** Open the sidebar's issues view on mount (opened from a row in the list). */
+	showIssues?: boolean;
+	/** With `showIssues`, land focused on this verification layer. */
+	focusIssueCategory?: string;
 }) {
 	const { theme } = useTheme();
 	const [graph, setGraph] = useState<StoredSubsystemModel | null | undefined>(undefined);
@@ -75,8 +82,9 @@ export function SubsystemModelView({
 	const [auditModal, setAuditModal] = useState<AuditModalState | null>(null);
 	const [auditReport, setAuditReport] = useState<SubsystemModelAuditReport | null>(null);
 	const [auditStale, setAuditStale] = useState(false);
-	/** Diagnostics list shown in the sidebar (toggled by the header chip). */
-	const [showIssues, setShowIssues] = useState(false);
+	/** Diagnostics list shown in the sidebar (toggled by the header chip).
+	 *  Seeded open when the tab was opened with the issues view requested. */
+	const [showIssues, setShowIssues] = useState(showIssuesOnOpen === true);
 
 	const loadGraph = useCallback(() => {
 		void electrobun.rpc!.request
@@ -138,6 +146,14 @@ export function SubsystemModelView({
 		};
 	}, [graphId, loadGraph, loadAudit]);
 
+	// A reopen of an already-mounted tab (fast path in the host) updates the
+	// tab's focus fields and re-broadcasts, but the mount-time seeds above
+	// don't re-run. Apply a requested issues focus when the props change so
+	// clicking a lane badge on an open model actually moves the sidebar.
+	useEffect(() => {
+		if (showIssuesOnOpen) setShowIssues(true);
+	}, [showIssuesOnOpen, focusIssueCategory]);
+
 	const readFile = useCallback(
 		(path: string, purl?: string) =>
 			electrobun.rpc!.request
@@ -178,13 +194,19 @@ export function SubsystemModelView({
 	);
 
 	const renderWalkthroughViewer = useCallback(
-		({ walkthrough, stepIndex, onOpenFile }: WalkthroughViewerContext) => (
+		({
+			walkthrough,
+			stepIndex,
+			onOpenFile,
+			proposedAliases,
+		}: WalkthroughViewerContext) => (
 			<PierreWalkthroughCodeView
 				walkthrough={walkthrough}
 				stepIndex={stepIndex}
 				readFile={readFile}
 				contextLines={8}
 				onOpenFile={onOpenFile}
+				proposedAliases={proposedAliases}
 			/>
 		),
 		[readFile],
@@ -398,6 +420,7 @@ export function SubsystemModelView({
 				components={graph.components}
 				relations={graph.relations}
 				walkthroughs={graph.walkthroughs}
+				persistKey={graphId}
 				onReorderWalkthroughs={onReorderWalkthroughs}
 				initialWalkthroughId={focusWalkthroughId}
 				title={graph.title}
@@ -410,6 +433,7 @@ export function SubsystemModelView({
 				diagnostic={diagnostic}
 				issues={auditIssues}
 				showIssues={showIssues}
+				focusIssueCategory={focusIssueCategory as SubsystemIssueCategory | undefined}
 				onSelectIssue={onSelectIssue}
 				onApplyIssueFix={onApplyIssueFix}
 				sidebarAfterDescription={

@@ -191,6 +191,8 @@ function ActiveTab({
 						id: tab.id,
 						graphId: tab.graphId ?? "",
 						walkthroughId: tab.focusWalkthroughId,
+						showIssues: tab.showIssues,
+						focusIssueCategory: tab.focusIssueCategory,
 					});
 					return;
 				}
@@ -319,6 +321,8 @@ function ActiveTab({
 				tabId={state.id}
 				graphId={state.graphId}
 				focusWalkthroughId={state.walkthroughId}
+				showIssues={state.showIssues}
+				focusIssueCategory={state.focusIssueCategory}
 			/>
 		);
 	}

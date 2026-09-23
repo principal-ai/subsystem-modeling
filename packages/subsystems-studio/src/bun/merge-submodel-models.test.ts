@@ -253,7 +253,7 @@ describe("mergeSubsystemModels", () => {
 				id: "sg-1",
 				document: doc({
 					components: [code("a"), code("b")],
-					relations: [{ id: "r1", from: "a", to: "b", relationType: "imports" }],
+					relations: [{ id: "r1", from: "a", to: "b", relationType: "references" }],
 					walkthroughs: [
 						{
 							id: "w1",

@@ -40,9 +40,9 @@ const comps: SubsystemComponent[] = [
 ];
 
 const relations = [
-  { id: 'e1', from: 'transcript', to: 'reader', relationType: 'imports' as const },
+  { id: 'e1', from: 'transcript', to: 'reader', relationType: 'references' as const },
   // 'host' is NOT a component — this is the cross-package external case.
-  { id: 'e2', from: 'reader', to: 'host', relationType: 'imports' as const, refs: ['bun/index.ts'] },
+  { id: 'e2', from: 'reader', to: 'host', relationType: 'references' as const, refs: ['bun/index.ts'] },
 ];
 
 const doc = { components: comps, relations };

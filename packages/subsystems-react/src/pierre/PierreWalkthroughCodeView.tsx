@@ -33,11 +33,15 @@ type CodeViewLineSelection = {
 /** Metadata carried on a walkthrough step's line annotation. */
 type WalkthroughStepAnnotation = { text: string };
 import { useTheme } from '@principal-ade/industry-theme';
-import type { SubsystemWalkthrough } from '../subsystem/model';
+import type {
+  SubsystemWalkthrough,
+  SubsystemWalkthroughStep,
+} from '../subsystem/model';
 import type { SubsystemOpenFileOptions } from '../subsystem/declarationRef';
 import { buildPierreOptions, PIERRE_FILE_STYLE } from './pierreBackground';
 import { pierreLangForPath } from './pierreFileLang';
 import { resolvePierreSyntaxThemeName } from './pierreSyntaxTheme';
+import { fileUnavailableNotice, isFileUnavailableError } from './fileAvailability';
 import {
   remapSnippetLineNumbers,
   sliceSnippetWindow,
@@ -56,15 +60,50 @@ export interface PierreWalkthroughCodeViewProps {
   background?: string;
   /** Open the step's full source file (header button or double-click snippet body). */
   onOpenFile?: (path: string, opts?: SubsystemOpenFileOptions) => void;
+  /**
+   * Aliases of components marked `proposed`. A step whose file can't be read
+   * but whose endpoint is proposed reads as "planned" rather than "missing".
+   */
+  proposedAliases?: ReadonlySet<string>;
 }
 
 type FileLoadState =
   | { status: 'loading' }
-  | { status: 'error'; message: string }
-  | { status: 'ready'; byPath: Map<string, string> };
+  | {
+      status: 'ready';
+      byPath: Map<string, string>;
+      /** Paths the host couldn't serve, keyed like `byPath`, with the reason. */
+      unavailable: Map<string, string>;
+    };
 
 function stepItemId(walkthroughId: string, index: number): string {
   return `${walkthroughId}:${index}`;
+}
+
+/** Stable key for a step's file within a repo (mirrors `pathsKey`). */
+function siteKey(step: Pick<SubsystemWalkthroughStep, 'purl' | 'file'>): string {
+  return `${step.purl}\0${step.file}`;
+}
+
+/** Notice shown in place of a snippet whose file the host couldn't read. */
+function unavailableNotice(
+  step: SubsystemWalkthroughStep,
+  error: string,
+  proposed: boolean,
+): string {
+  return isFileUnavailableError(error)
+    ? fileUnavailableNotice(step.file, proposed)
+    : `Couldn't load ${step.file}: ${error}`;
+}
+
+/** A single-line placeholder snippet standing in for an unreadable file. */
+function unavailableSlice(notice: string): SnippetSlice {
+  return {
+    contents: `// ${notice}`,
+    sliceStart: 1,
+    sliceEnd: 1,
+    focusOffset: 1,
+  };
 }
 
 function OpenFileHeaderButton({
@@ -117,38 +156,58 @@ export function PierreWalkthroughCodeView({
   contextLines = 8,
   background,
   onOpenFile,
+  proposedAliases,
 }: PierreWalkthroughCodeViewProps) {
   const { theme, mode } = useTheme();
   const viewRef = useRef<CodeViewHandle<undefined>>(null);
   const [load, setLoad] = useState<FileLoadState>({ status: 'loading' });
 
+  // A hop onto a proposed component is planned work; label its missing file
+  // accordingly instead of showing a bare "not found".
+  const isProposedStep = useCallback(
+    (step: SubsystemWalkthroughStep): boolean =>
+      proposedAliases != null &&
+      (proposedAliases.has(step.from) || proposedAliases.has(step.to)),
+    [proposedAliases],
+  );
+
   const pathsKey = useMemo(() => {
-    const keys = [...new Set(walkthrough.steps.map((s) => `${s.purl}\0${s.file}`))];
+    const keys = [...new Set(walkthrough.steps.map((s) => siteKey(s)))];
     keys.sort();
     return keys.join('\0');
   }, [walkthrough.steps]);
 
+  // Load each site independently: one unreadable step (a proposed seam whose
+  // file isn't implemented yet) must not blank the whole walkthrough. Failures
+  // are kept per-path and rendered as inline placeholders below.
   useEffect(() => {
     let cancelled = false;
     setLoad({ status: 'loading' });
-    const sites = [...new Map(walkthrough.steps.map((s) => [`${s.purl}\0${s.file}`, s])).values()];
+    const sites = [...new Map(walkthrough.steps.map((s) => [siteKey(s), s])).values()];
     void Promise.all(
       sites.map(async (step) => {
-        const contents = await readFile(step.file, step.purl);
-        return [`${step.purl}\0${step.file}`, contents] as const;
+        const key = siteKey(step);
+        try {
+          const contents = await readFile(step.file, step.purl);
+          return { key, contents, error: null as string | null };
+        } catch (err) {
+          return {
+            key,
+            contents: null,
+            error: err instanceof Error ? err.message : 'Failed to read file',
+          };
+        }
       }),
-    )
-      .then((entries) => {
-        if (cancelled) return;
-        setLoad({ status: 'ready', byPath: new Map(entries) });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setLoad({
-          status: 'error',
-          message: err instanceof Error ? err.message : 'Failed to read files',
-        });
-      });
+    ).then((results) => {
+      if (cancelled) return;
+      const byPath = new Map<string, string>();
+      const unavailable = new Map<string, string>();
+      for (const row of results) {
+        if (row.contents != null) byPath.set(row.key, row.contents);
+        else unavailable.set(row.key, row.error ?? 'Failed to read file');
+      }
+      setLoad({ status: 'ready', byPath, unavailable });
+    });
     return () => {
       cancelled = true;
     };
@@ -157,7 +216,14 @@ export function PierreWalkthroughCodeView({
   const slices = useMemo((): SnippetSlice[] => {
     if (load.status !== 'ready') return [];
     return walkthrough.steps.map((step) => {
-      const contents = load.byPath.get(`${step.purl}\0${step.file}`) ?? '';
+      const key = siteKey(step);
+      const failure = load.unavailable.get(key);
+      if (failure != null) {
+        return unavailableSlice(
+          unavailableNotice(step, failure, isProposedStep(step)),
+        );
+      }
+      const contents = load.byPath.get(key) ?? '';
       return sliceSnippetWindow(
         contents,
         step.line,
@@ -166,17 +232,24 @@ export function PierreWalkthroughCodeView({
         step.line,
       );
     });
-  }, [load, walkthrough.steps, contextLines]);
+  }, [load, walkthrough.steps, contextLines, isProposedStep]);
 
-const items = useMemo((): CodeViewItem<WalkthroughStepAnnotation>[] => {
+  const items = useMemo((): CodeViewItem<WalkthroughStepAnnotation>[] => {
     if (load.status !== 'ready' || slices.length === 0) return [];
     return walkthrough.steps.map((step, index) => {
       const slice = slices[index]!;
       const focus = slice.focusOffset;
+      const key = siteKey(step);
+      const failure = load.unavailable.get(key);
+      // The placeholder line already carries the reason, so it replaces any
+      // authored annotation rather than stacking with it.
       const annotations:
         | LineAnnotation<WalkthroughStepAnnotation>[]
         | undefined =
-        step.annotation != null && step.annotation.length > 0 && focus != null
+        failure == null &&
+        step.annotation != null &&
+        step.annotation.length > 0 &&
+        focus != null
           ? [
               {
                 lineNumber: focus,
@@ -193,11 +266,11 @@ const items = useMemo((): CodeViewItem<WalkthroughStepAnnotation>[] => {
           name: step.file,
           contents: slice.contents,
           lang: pierreLangForPath(step.file),
-          cacheKey: `${walkthrough.id}:${index}:${step.file}:${step.line}:${slice.sliceStart}-${slice.sliceEnd}`,
+          cacheKey: `${walkthrough.id}:${index}:${step.file}:${step.line}:${slice.sliceStart}-${slice.sliceEnd}${failure != null ? ':unavailable' : ''}`,
         },
       };
     });
-  }, [load, slices, walkthrough.id, walkthrough.steps]);
+  }, [load, slices, walkthrough.id, walkthrough.steps, isProposedStep]);
 
   const selectedLines = useMemo((): CodeViewLineSelection | null => {
     if (stepIndex == null || stepIndex < 0 || stepIndex >= slices.length) {
@@ -259,6 +332,10 @@ const items = useMemo((): CodeViewItem<WalkthroughStepAnnotation>[] => {
       const index = Number.parseInt(item.id.split(':').pop() ?? '', 10);
       const step = walkthrough.steps[index];
       if (!step) return null;
+      // Unreadable sites have nothing to open — say so instead of offering a
+      // button that would only fail again in the full-file overlay.
+      const unavailable =
+        load.status === 'ready' && load.unavailable.has(siteKey(step));
       return (
         <span
           style={{
@@ -271,18 +348,26 @@ const items = useMemo((): CodeViewItem<WalkthroughStepAnnotation>[] => {
             color: theme.colors.textSecondary,
           }}
         >
-          L{step.line}
-          {onOpenFile && (
-            <OpenFileHeaderButton
-              file={step.file}
-              line={step.line}
-              onOpenFile={onOpenFile}
-            />
+          {unavailable ? (
+            <span title="This file isn't in the local checkout">
+              not in checkout
+            </span>
+          ) : (
+            <>
+              L{step.line}
+              {onOpenFile && (
+                <OpenFileHeaderButton
+                  file={step.file}
+                  line={step.line}
+                  onOpenFile={onOpenFile}
+                />
+              )}
+            </>
           )}
         </span>
       );
     };
-  }, [walkthrough.steps, theme, onOpenFile]);
+  }, [walkthrough.steps, theme, onOpenFile, load]);
 
   const renderAnnotation = useMemo(() => {
     return (
@@ -324,9 +409,10 @@ const items = useMemo((): CodeViewItem<WalkthroughStepAnnotation>[] => {
       const index = Number.parseInt(id.split(':').pop() ?? '', 10);
       const step = walkthrough.steps[index];
       if (!step) return;
+      if (load.status === 'ready' && load.unavailable.has(siteKey(step))) return;
       onOpenFile(step.file, { startLine: step.line, fullFile: true });
     },
-    [onOpenFile, walkthrough.steps],
+    [onOpenFile, walkthrough.steps, load],
   );
 
   const options = useMemo((): CodeViewReactOptions => {
@@ -337,7 +423,7 @@ const items = useMemo((): CodeViewItem<WalkthroughStepAnnotation>[] => {
       },
       stickyHeaders: true,
       disableFileHeader: false,
-      layout: { paddingTop: 8, paddingBottom: 16, gap: 12 },
+      layout: { paddingTop: 0, paddingBottom: 0, gap: 4 },
       onPostRender,
       ...(onOpenFile ? { onLineClick } : {}),
       ...(background ? buildPierreOptions(background) : {}),
@@ -369,17 +455,17 @@ const items = useMemo((): CodeViewItem<WalkthroughStepAnnotation>[] => {
     items.length,
   ]);
 
-  if (load.status === 'error') {
-    return (
-      <div style={{ padding: 16, color: theme.colors.error ?? '#e5534b' }}>
-        {load.message}
-      </div>
-    );
-  }
-  if (load.status === 'loading' || items.length === 0) {
+  if (load.status === 'loading') {
     return (
       <div style={{ padding: 16, color: theme.colors.textSecondary }}>
         Loading…
+      </div>
+    );
+  }
+  if (items.length === 0) {
+    return (
+      <div style={{ padding: 16, color: theme.colors.textSecondary }}>
+        No steps in this walkthrough.
       </div>
     );
   }

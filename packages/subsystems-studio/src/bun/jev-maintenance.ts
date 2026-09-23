@@ -99,7 +99,7 @@ function constructSubject(proposal: SubsystemModelProposal): string {
 	if (!c) return LANE_SUBJECT.construct;
 	if (c.target === "augmentation") {
 		if (c.field === "signature") {
-			return "The proposed signature is an accurate, complete extraction of the function/method declaration in the source under review.";
+			return "The proposed signature is an accurate, complete extraction of the function/method declaration in the source under review. For a React component function (in a .tsx file) that destructures a single props object and returns JSX without a declared return type, an inferred JSX.Element return type is the correct and expected claim — treat the absence of an explicit return annotation as confirming JSX.Element whenever the body contains a `return ( ... )` or other JSX expression, and do not penalize the claim for inferring it.";
 		}
 		if (c.field === "construct") {
 			return "The proposed construct classification is accurate for the declaration in the source under review.";

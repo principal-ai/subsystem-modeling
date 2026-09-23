@@ -54,7 +54,11 @@ const storyFiles: Record<string, string> = {
 function readStoryFile(path: string): Promise<string> {
   const content = storyFiles[path];
   if (content == null) {
-    return Promise.reject(new Error(`No story fixture for ${path}`));
+    // Mirror the host's wording so the Pierre views exercise their
+    // "not in the local checkout" handling, not just any rejection.
+    return Promise.reject(
+      new Error(`file not found in graph repos: ${path}`),
+    );
   }
   return Promise.resolve(content);
 }
@@ -122,50 +126,59 @@ const drawingComponents: SubsystemComponent[] = [
   },
 ];
 
+const STORY_PURL = 'pkg:github/principal-ai/desktop-app';
+const stepPurl = (file: string) => `${STORY_PURL}#${file}`;
+
 const drawingWalkthroughs: SubsystemWalkthrough[] = [
   {
     id: 'tl-open-drawing',
     title: 'Open drawing',
     steps: [
-      { from: 'panel', to: 'storage', mechanism: 'calls', file: 'src/panels/DrawingsLeftPanel.tsx', line: 56, symbol: 'DrawingsLeftPanel.scan', annotation: 'Lists the drawings directory; each row feeds an open intent.' },
-      { from: 'panel', to: 'host', mechanism: 'produces', file: 'src/panels/DrawingsLeftPanel.tsx', line: 85, symbol: 'DrawingsLeftPanel.openDrawing', annotation: 'Emits the open intent up to the host.' },
-      { from: 'host', to: 'storage', mechanism: 'calls', file: 'src/hooks/useDrawingsHost.ts', line: 45, symbol: 'useDrawingsHost.openDrawing', annotation: 'Host resolves the path and delegates to storage.' },
-      { from: 'host', to: 'shell', mechanism: 'produces', file: 'src/workspace/WorkspaceShell.tsx', line: 369, symbol: 'WorkspaceShell.openTab', annotation: 'Asks the shell to surface the drawing as a tab.' },
-      { from: 'shell', to: 'tab', mechanism: 'feeds', file: 'src/workspace/WorkspaceShell.tsx', line: 372, symbol: 'WorkspaceShell.mountTab' },
-      { from: 'storage', to: 'fs', mechanism: 'calls', file: 'src/storage/drawingsStorage.ts', line: 90, symbol: 'DrawingsStorage.read', annotation: 'Reads the file through the sandboxed fs service.' },
-      { from: 'tab', to: 'fs', mechanism: 'calls', file: 'src/components/DrawingTabContent.tsx', line: 83, symbol: 'DrawingTabContent.load' },
+      { from: 'panel', to: 'storage', mechanism: 'calls', file: 'src/panels/DrawingsLeftPanel.tsx', line: 56, purl: stepPurl('src/panels/DrawingsLeftPanel.tsx'), symbol: 'DrawingsLeftPanel.scan', annotation: 'Lists the drawings directory; each row feeds an open intent.' },
+      { from: 'panel', to: 'host', mechanism: 'produces', file: 'src/panels/DrawingsLeftPanel.tsx', line: 85, purl: stepPurl('src/panels/DrawingsLeftPanel.tsx'), symbol: 'DrawingsLeftPanel.openDrawing', annotation: 'Emits the open intent up to the host.' },
+      { from: 'host', to: 'storage', mechanism: 'calls', file: 'src/hooks/useDrawingsHost.ts', line: 45, purl: stepPurl('src/hooks/useDrawingsHost.ts'), symbol: 'useDrawingsHost.openDrawing', annotation: 'Host resolves the path and delegates to storage.' },
+      { from: 'host', to: 'shell', mechanism: 'produces', file: 'src/workspace/WorkspaceShell.tsx', line: 369, purl: stepPurl('src/workspace/WorkspaceShell.tsx'), symbol: 'WorkspaceShell.openTab', annotation: 'Asks the shell to surface the drawing as a tab.' },
+      { from: 'shell', to: 'tab', mechanism: 'feeds', file: 'src/workspace/WorkspaceShell.tsx', line: 372, purl: stepPurl('src/workspace/WorkspaceShell.tsx'), symbol: 'WorkspaceShell.mountTab' },
+      { from: 'storage', to: 'fs', mechanism: 'calls', file: 'src/storage/drawingsStorage.ts', line: 90, purl: stepPurl('src/storage/drawingsStorage.ts'), symbol: 'DrawingsStorage.read', annotation: 'Reads the file through the sandboxed fs service.' },
+      { from: 'tab', to: 'fs', mechanism: 'calls', file: 'src/components/DrawingTabContent.tsx', line: 83, purl: stepPurl('src/components/DrawingTabContent.tsx'), symbol: 'DrawingTabContent.load' },
     ],
   },
   {
     id: 'tl-save-drawing',
     title: 'Save drawing',
     steps: [
-      { from: 'tab', to: 'fs', mechanism: 'calls', file: 'src/components/DrawingTabContent.tsx', line: 112, symbol: 'DrawingTabContent.save' },
-      { from: 'tab', to: 'host', mechanism: 'produces', file: 'src/components/DrawingTabContent.tsx', line: 121, symbol: 'DrawingTabContent.emitSaved' },
-      { from: 'host', to: 'panel', mechanism: 'produces', file: 'src/hooks/useDrawingsHost.ts', line: 64, symbol: 'useDrawingsHost.onSaved' },
-      { from: 'panel', to: 'storage', mechanism: 'calls', file: 'src/panels/DrawingsLeftPanel.tsx', line: 56, symbol: 'DrawingsLeftPanel.scan' },
+      { from: 'tab', to: 'fs', mechanism: 'calls', file: 'src/components/DrawingTabContent.tsx', line: 112, purl: stepPurl('src/components/DrawingTabContent.tsx'), symbol: 'DrawingTabContent.save' },
+      { from: 'tab', to: 'host', mechanism: 'produces', file: 'src/components/DrawingTabContent.tsx', line: 121, purl: stepPurl('src/components/DrawingTabContent.tsx'), symbol: 'DrawingTabContent.emitSaved' },
+      { from: 'host', to: 'panel', mechanism: 'produces', file: 'src/hooks/useDrawingsHost.ts', line: 64, purl: stepPurl('src/hooks/useDrawingsHost.ts'), symbol: 'useDrawingsHost.onSaved' },
+      { from: 'panel', to: 'storage', mechanism: 'calls', file: 'src/panels/DrawingsLeftPanel.tsx', line: 56, purl: stepPurl('src/panels/DrawingsLeftPanel.tsx'), symbol: 'DrawingsLeftPanel.scan' },
     ],
   },
   {
     id: 'tl-delete-drawing',
     title: 'Delete drawing',
     steps: [
-      { from: 'host', to: 'fs', mechanism: 'calls', file: 'src/hooks/useDrawingsHost.ts', line: 64, symbol: 'useDrawingsHost.deleteDrawing' },
-      { from: 'host', to: 'panel', mechanism: 'produces', file: 'src/hooks/useDrawingsHost.ts', line: 66, symbol: 'useDrawingsHost.refreshList' },
-      { from: 'panel', to: 'storage', mechanism: 'calls', file: 'src/panels/DrawingsLeftPanel.tsx', line: 56, symbol: 'DrawingsLeftPanel.scan' },
+      { from: 'host', to: 'fs', mechanism: 'calls', file: 'src/hooks/useDrawingsHost.ts', line: 64, purl: stepPurl('src/hooks/useDrawingsHost.ts'), symbol: 'useDrawingsHost.deleteDrawing' },
+      { from: 'host', to: 'panel', mechanism: 'produces', file: 'src/hooks/useDrawingsHost.ts', line: 66, purl: stepPurl('src/hooks/useDrawingsHost.ts'), symbol: 'useDrawingsHost.refreshList' },
+      { from: 'panel', to: 'storage', mechanism: 'calls', file: 'src/panels/DrawingsLeftPanel.tsx', line: 56, purl: stepPurl('src/panels/DrawingsLeftPanel.tsx'), symbol: 'DrawingsLeftPanel.scan' },
     ],
   },
 ];
 
 function FlowsDemo() {
   const renderWalkthroughViewer = useCallback(
-    ({ walkthrough, stepIndex, onOpenFile }: WalkthroughViewerContext) => (
+    ({
+      walkthrough,
+      stepIndex,
+      onOpenFile,
+      proposedAliases,
+    }: WalkthroughViewerContext) => (
       <PierreWalkthroughCodeView
         walkthrough={walkthrough}
         stepIndex={stepIndex}
         readFile={readStoryFile}
         contextLines={4}
         onOpenFile={onOpenFile}
+        proposedAliases={proposedAliases}
       />
     ),
     [],
@@ -203,4 +216,106 @@ function FlowsDemo() {
 
 export const ThreeFlows: Story = {
   render: () => <FlowsDemo />,
+};
+
+/**
+ * The proposed-seam failure mode: a walkthrough hop whose component is
+ * `proposed` points at a file that isn't in the checkout yet (no story
+ * fixture). The hop must render an inline "Proposed — … isn't in the local
+ * checkout yet." placeholder with no Open-file affordance, while the live hops
+ * around it still render their snippets — one bad step must not blank the flow.
+ */
+const proposedComponents: SubsystemComponent[] = [
+  ...drawingComponents,
+  {
+    alias: 'runs',
+    name: 'SubsystemModelRunStore',
+    construct: 'store',
+    file: 'src/runs/subsystemModelRuns.ts',
+    purl: 'pkg:github/principal-ai/desktop-app',
+    symbol: 'SubsystemModelRunStore',
+    purpose: 'proposed store associating maintain runs with a model',
+    proposed: true,
+    process: 'draw-host',
+  },
+];
+
+const proposedWalkthroughs: SubsystemWalkthrough[] = [
+  {
+    id: 'tl-associate-run',
+    title: 'Associate a finished run with its model (proposed)',
+    steps: [
+      {
+        from: 'host',
+        to: 'storage',
+        mechanism: 'calls',
+        file: 'src/hooks/useDrawingsHost.ts',
+        line: 45,
+        purl: stepPurl('src/hooks/useDrawingsHost.ts'),
+        symbol: 'useDrawingsHost.openDrawing',
+        annotation: 'Live hop — its snippet still renders.',
+      },
+      {
+        from: 'storage',
+        to: 'runs',
+        mechanism: 'writes',
+        file: 'src/runs/subsystemModelRuns.ts',
+        line: 1,
+        purl: stepPurl('src/runs/subsystemModelRuns.ts'),
+        symbol: 'SubsystemModelRunStore.write',
+        annotation: 'Proposed seam — the file is not in the checkout yet.',
+      },
+    ],
+  },
+];
+
+function ProposedMissingStepDemo() {
+  const renderWalkthroughViewer = useCallback(
+    ({
+      walkthrough,
+      stepIndex,
+      onOpenFile,
+      proposedAliases,
+    }: WalkthroughViewerContext) => (
+      <PierreWalkthroughCodeView
+        walkthrough={walkthrough}
+        stepIndex={stepIndex}
+        readFile={readStoryFile}
+        contextLines={4}
+        onOpenFile={onOpenFile}
+        proposedAliases={proposedAliases}
+      />
+    ),
+    [],
+  );
+
+  return (
+    <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <SubsystemComponentGraph
+        components={proposedComponents}
+        relations={[]}
+        walkthroughs={proposedWalkthroughs}
+        title="proposed seam with a missing file"
+        description="Expand **Associate a finished run with its model** and click either step. The proposed hop has no file in the checkout, so its snippet shows an inline *Proposed — … isn't in the local checkout yet.* placeholder instead of failing the whole flow."
+        renderWalkthroughViewer={renderWalkthroughViewer}
+        renderFileViewer={(file) => (
+          <div
+            style={{
+              padding: 12,
+              fontFamily: 'monospace',
+              fontSize: 12,
+              color: '#bbb',
+              whiteSpace: 'pre',
+            }}
+          >
+            {`// ${file}\n  …`}
+          </div>
+        )}
+      />
+    </div>
+  );
+}
+
+export const ProposedMissingStep: Story = {
+  render: () => <ProposedMissingStepDemo />,
 };

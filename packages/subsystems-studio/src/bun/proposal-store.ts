@@ -212,7 +212,7 @@ function buildPreview(
 			const resolved = resolveRelationAugmentationTarget(graph, ch.relationId);
 			rows.push({
 				label: `augment relation ${ch.relationId}`,
-				before: "unconfirmed (graphify thin)",
+				before: "not yet confirmed",
 				after: resolved
 					? `confirmed ${resolved.label}`
 					: `confirmed relation ${ch.relationId}`,
@@ -238,19 +238,39 @@ function buildPreview(
 				const sig = ch.value;
 				rows.push({
 					label: `augment ${name}.signature (${where})`,
-					before: "unconfirmed (graphify no signature edges)",
+					before: "not yet confirmed",
 					after: formatSignatureClaim(sig),
 				});
 			} else {
 				rows.push({
 					label: `augment ${name}.${ch.field} (${where})`,
-					before: "unconfirmed (graphify unknown)",
+					before: "not yet confirmed",
 					after: ch.value,
 				});
 			}
 		}
 	}
 	return rows;
+}
+
+/**
+ * An agent-declared declaration span: two 1-based integers with `end >= start`.
+ * Required on component-bearing augmentations so the host can hand Jev the
+ * exact slice the agent read.
+ */
+function validDeclarationSpan(ch: {
+	lines?: { start?: unknown; end?: unknown };
+}): boolean {
+	const start = ch.lines?.start;
+	const end = ch.lines?.end;
+	return (
+		typeof start === "number" &&
+		typeof end === "number" &&
+		Number.isInteger(start) &&
+		Number.isInteger(end) &&
+		start >= 1 &&
+		end >= start
+	);
 }
 
 function validateChanges(
@@ -310,6 +330,8 @@ function validateChanges(
 				ch.field !== "module"
 			) {
 				return `unsupported augmentation field: ${(ch as { field: string }).field}`;
+			} else if (!validDeclarationSpan(ch)) {
+				return `augmentation for ${ch.componentAlias} needs a lines span { start, end } (1-based, inclusive) of the declaration read from source`;
 			} else if (ch.field === "construct") {
 				if (typeof ch.value !== "string" || !ch.value.trim()) {
 					return "augmentation construct value must be a non-empty string";
@@ -578,6 +600,8 @@ export async function createSubsystemModelProposal(input: {
 	changes: SubsystemModelProposalChange[];
 	finding?: SubsystemModelProposal["finding"];
 	author?: string;
+	/** Maintain run this proposal was produced by. Optional so older callers keep working. */
+	runId?: string;
 }): Promise<
 	| { ok: true; proposal: SubsystemModelProposal }
 	| { ok: false; error: string }
@@ -593,6 +617,7 @@ export async function createSubsystemModelProposal(input: {
 	const proposal: SubsystemModelProposal = {
 		id: newProposalId(),
 		graphId: input.graphId,
+		runId: input.runId,
 		status: "pending",
 		createdAt: new Date().toISOString(),
 		lane: deriveProposalLane({ changes: input.changes, finding: input.finding }),
@@ -681,4 +706,34 @@ export async function deleteSubsystemModelProposals(
 	} catch {
 		/* absent is fine */
 	}
+}
+
+/**
+ * Delete every pending proposal across all stored models, keeping resolved
+ * history intact. Returns how many pending proposals were removed and the
+ * graph ids that had any.
+ */
+export async function deleteAllPendingSubsystemModelProposals(): Promise<{
+	deleted: number;
+	graphIds: string[];
+}> {
+	const entries = await fs.readdir(ROOT).catch((): string[] => []);
+	let deleted = 0;
+	const graphIds: string[] = [];
+	for (const entry of entries) {
+		if (!entry.endsWith(".json")) continue;
+		const graphId = entry.slice(0, -".json".length);
+		const doc = await readFile(graphId);
+		const pending = doc.proposals.filter((p) => p.status === "pending");
+		if (pending.length === 0) continue;
+		graphIds.push(graphId);
+		deleted += pending.length;
+		const remaining = doc.proposals.filter((p) => p.status !== "pending");
+		if (remaining.length === 0) {
+			await fs.unlink(proposalPath(graphId)).catch(() => {});
+		} else {
+			await writeFile({ ...doc, proposals: remaining });
+		}
+	}
+	return { deleted, graphIds };
 }

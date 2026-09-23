@@ -129,15 +129,44 @@ function componentAliases(proposal: SubsystemModelProposal): string[] {
 	return [...aliases];
 }
 
+/**
+ * Agent-declared line span for an augmentation on `alias`, when the change
+ * carries one. Later changes win; the first valid span found is returned.
+ */
+function declaredSpan(
+	proposal: SubsystemModelProposal,
+	alias: string,
+): { start: number; end: number } | undefined {
+	for (const change of proposal.changes) {
+		if (change.target !== "augmentation") continue;
+		if (!("componentAlias" in change) || change.componentAlias !== alias) continue;
+		const span = (change as { lines?: { start?: unknown; end?: unknown } }).lines;
+		const start = typeof span?.start === "number" ? span.start : null;
+		const end = typeof span?.end === "number" ? span.end : null;
+		if (start != null && end != null && start >= 1 && end >= start) {
+			return { start, end };
+		}
+	}
+	return undefined;
+}
+
 function sliceComponent(
 	content: string,
 	declarationLine: number | null,
 	typeLines: number[],
+	span?: { start: number; end: number },
 ): string {
 	const lines = splitLines(content);
 	const total = lines.length;
 	const ranges: LineRange[] = [];
-	if (declarationLine != null) {
+	if (span) {
+		// The agent told us exactly which lines it read. Union with the
+		// declaration anchor so the span can never exclude the declaration
+		// itself (guards against a too-narrow agent span).
+		const start = Math.max(1, Math.min(span.start, declarationLine ?? span.start));
+		const end = Math.min(total, Math.max(span.end, declarationLine ?? span.end));
+		ranges.push({ start, end });
+	} else if (declarationLine != null) {
 		ranges.push(windowAround(declarationLine, total));
 	}
 	for (const line of typeLines) {
@@ -188,11 +217,12 @@ export async function buildProposalSourceContext(
 			.map((t) => findSymbolLine(content, t))
 			.filter((l): l is number => l != null);
 
-		const rendered = sliceComponent(content, declarationLine, typeLines);
+		const span = declaredSpan(proposal, alias);
+		const rendered = sliceComponent(content, declarationLine, typeLines, span);
 		const block = [
 			`--- ${component.file}${
 				declarationLine != null ? `:${declarationLine}` : ""
-			} (symbol ${symbol}) ---`,
+			}${span ? ` (lines ${span.start}-${span.end})` : ""} (symbol ${symbol}) ---`,
 			rendered,
 		].join("\n");
 		if (total + block.length > MAX_TOTAL_CHARS) break;

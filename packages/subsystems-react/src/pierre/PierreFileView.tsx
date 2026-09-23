@@ -15,6 +15,7 @@ import {
 import { useTheme } from '@principal-ade/industry-theme';
 import { buildPierreOptions, PIERRE_FILE_STYLE } from './pierreBackground';
 import { pierreLangForPath } from './pierreFileLang';
+import { isFileUnavailableError } from './fileAvailability';
 import { scrollFocusLineIntoView } from './scrollAnchor';
 
 export interface PierreFileViewProps {
@@ -103,6 +104,27 @@ export function PierreFileView({
   );
 
   if (error) {
+    // A file with no local checkout is usually a proposed seam that isn't
+    // implemented yet — explain that instead of echoing the host error.
+    if (isFileUnavailableError(error)) {
+      return (
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ color: theme.colors.text }}>
+            This file isn't in the local checkout for this repo — it may be
+            proposed or not yet implemented.
+          </span>
+          <span
+            style={{
+              color: theme.colors.textSecondary,
+              fontFamily: theme.fonts.monospace,
+              fontSize: theme.fontSizes[0],
+            }}
+          >
+            {filePath}
+          </span>
+        </div>
+      );
+    }
     return (
       <div style={{ padding: 16, color: theme.colors.error ?? '#e5534b' }}>
         {error}

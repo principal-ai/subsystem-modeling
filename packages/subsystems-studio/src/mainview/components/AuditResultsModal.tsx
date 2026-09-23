@@ -653,10 +653,6 @@ function AuditDoneBody({
 		workBits.push(
 			`${s.softConfirmed} relation${s.softConfirmed === 1 ? "" : "s"} corroborated`,
 		);
-	else if (s.importsConfirmed)
-		workBits.push(
-			`${s.importsConfirmed} import${s.importsConfirmed === 1 ? "" : "s"} corroborated`,
-		);
 	if (s.externalsSkipped)
 		workBits.push(`${s.externalsSkipped} external skipped`);
 
@@ -684,10 +680,6 @@ function AuditDoneBody({
 	if (s.softUnconfirmed)
 		issueBits.push(
 			`${s.softUnconfirmed} relation${s.softUnconfirmed === 1 ? "" : "s"} unconfirmed`,
-		);
-	else if (s.importsUnconfirmed)
-		issueBits.push(
-			`${s.importsUnconfirmed} import${s.importsUnconfirmed === 1 ? "" : "s"} unconfirmed`,
 		);
 	if (s.unresolved)
 		issueBits.push(

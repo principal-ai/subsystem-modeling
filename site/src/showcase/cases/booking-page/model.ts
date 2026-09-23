@@ -314,25 +314,25 @@ export const relations = [
     id: 'capture-posthog',
     from: 'capture-event',
     to: 'PostHog',
-    relationType: 'imports',
+    relationType: 'references',
   },
   {
     id: 'list-db',
     from: 'list-slots',
     to: 'Database',
-    relationType: 'imports',
+    relationType: 'references',
   },
   {
     id: 'create-db',
     from: 'create-booking',
     to: 'Database',
-    relationType: 'imports',
+    relationType: 'references',
   },
   {
     id: 'cancel-db',
     from: 'cancel-booking',
     to: 'Database',
-    relationType: 'imports',
+    relationType: 'references',
   },
 ] as SubsystemRelation[];
 

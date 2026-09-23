@@ -27,10 +27,10 @@ type Story = StoryObj<typeof meta>;
 
 // ---------------------------------------------------------------------------
 // A graph that carries BOTH vocabularies between overlapping node pairs:
-//   svc --imports--> reader   (topology)
-//   svc --calls--> reader     (runtime hop)
-//   store --imports--> db     (topology)
-//   store --calls--> db       (runtime hop)
+//   svc --references--> reader (topology)
+//   svc --calls--> reader      (runtime hop)
+//   store --references--> db   (topology)
+//   store --calls--> db        (runtime hop)
 // so switching the label view visibly changes which labels appear.
 // ---------------------------------------------------------------------------
 const labelViewComponents = components([
@@ -43,9 +43,9 @@ const labelViewComponents = components([
 ]);
 
 const labelViewRelations = relations([
-  ['svc', 'reader', 'imports'],
+  ['svc', 'reader', 'references'],
   ['svc', 'event', 'references'],
-  ['store', 'db', 'imports'],
+  ['store', 'db', 'references'],
   ['reader', 'event', 'references'],
 ]);
 
@@ -121,7 +121,7 @@ function EdgeViewDemo() {
           relations={labelViewRelations}
           walkthroughs={labelViewWalkthroughs}
           title="edge views"
-          description="The relation and walkthrough vocabularies are disjoint and never shown together. Toggle the view: **Relations** draws `svc --imports--> reader`; **Walkthroughs** draws `svc --calls--> reader`. The model is the same either way."
+          description="The relation and walkthrough vocabularies are disjoint and never shown together. Toggle the view: **Relations** draws `svc --references--> reader`; **Walkthroughs** draws `svc --calls--> reader`. The model is the same either way."
           showEdgeLabels={showEdgeLabels}
           edgeView={view}
         />

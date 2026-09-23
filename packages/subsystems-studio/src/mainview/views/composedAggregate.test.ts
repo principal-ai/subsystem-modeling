@@ -248,7 +248,7 @@ describe("aggregateToFrames", () => {
 					comp("c", { module: "src/a.ts", process: "p1" }),
 				],
 				relations: [
-					{ id: "r1", from: "a", to: "b", relationType: "imports" },
+					{ id: "r1", from: "a", to: "b", relationType: "references" },
 					{ id: "r2", from: "a", to: "c", relationType: "references" },
 					{ id: "r3", from: "a", to: "ghost", relationType: "references" },
 				],
@@ -293,7 +293,7 @@ describe("aggregateToFrames", () => {
 		]);
 		// Cross-frame relation rebased; intra-frame + dangling dropped.
 		expect(g.document.relations).toEqual([
-			{ id: "r1", from: "module:src/a.ts", to: "module:src/b.ts", relationType: "imports" },
+			{ id: "r1", from: "module:src/a.ts", to: "module:src/b.ts", relationType: "references" },
 		]);
 		// Steps rebased with sites intact; emptied walkthrough dropped.
 		expect(g.document.walkthroughs).toEqual([

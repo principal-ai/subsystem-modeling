@@ -29,7 +29,7 @@ describe('validateSubsystemModelCrossField', () => {
   test('accepts a consistent document', () => {
     const d = doc({
       components: [comp('a'), comp('b')],
-      relations: [{ id: 'r1', from: 'a', to: 'b', relationType: 'imports' }],
+      relations: [{ id: 'r1', from: 'a', to: 'b', relationType: 'references' }],
       walkthroughs: [
         {
           id: 'w1',
@@ -53,7 +53,7 @@ describe('validateSubsystemModelCrossField', () => {
     const problems = validateSubsystemModelCrossField(
       doc({
         components: [comp('a')],
-        relations: [{ id: 'r1', from: 'a', to: 'ghost', relationType: 'imports' }],
+        relations: [{ id: 'r1', from: 'a', to: 'ghost', relationType: 'references' }],
       }),
     );
     expect(problems).toHaveLength(1);

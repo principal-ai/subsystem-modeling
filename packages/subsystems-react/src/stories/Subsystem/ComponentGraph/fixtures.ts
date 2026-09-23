@@ -28,7 +28,6 @@ export function components(
 }
 
 const RELATION_TYPES = new Set<string>([
-  'imports',
   'extends',
   'inherits',
   'implements',

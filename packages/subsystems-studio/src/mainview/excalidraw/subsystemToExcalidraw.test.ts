@@ -34,7 +34,7 @@ const components: SubsystemComponent[] = [
 ];
 
 const edges: SubsystemComponentEdge[] = [
-	{ id: "e0", from: "src", to: "dst", mechanism: "imports" },
+	{ id: "e0", from: "src", to: "dst", mechanism: "references" },
 ];
 
 describe("layoutSubsystemForExcalidraw", () => {
@@ -100,7 +100,7 @@ describe("layoutSubsystemForExcalidraw", () => {
 				id: "e0",
 				from: "src",
 				to: "dst",
-				mechanism: "imports",
+				mechanism: "references",
 				refs: ["parser.ts"],
 				points: [],
 			}),
@@ -109,7 +109,7 @@ describe("layoutSubsystemForExcalidraw", () => {
 			id: "e0",
 			from: "src",
 			to: "dst",
-			mechanism: "imports",
+			mechanism: "references",
 			refs: ["parser.ts"],
 		});
 	});

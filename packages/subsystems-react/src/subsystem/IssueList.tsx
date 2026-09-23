@@ -11,11 +11,17 @@
  * (e.g. focus the node on the graph, or apply the fix in the report).
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import {
   ChevronDown,
   ChevronRight,
   CircleCheck,
+  Component,
+  FolderGit2,
+  Network,
+  Route,
+  Server,
   Wrench,
 } from 'lucide-react';
 import { useTheme } from '@principal-ade/industry-theme';
@@ -49,6 +55,18 @@ export const SUBSYSTEM_ISSUE_CATEGORIES: SubsystemIssueCategory[] = [
   'runtime-topology',
   'walkthrough',
 ];
+
+/** Per-category header icon — mirrors the Maintainer tab's lane icons. */
+export const SUBSYSTEM_ISSUE_CATEGORY_ICON: Record<
+  SubsystemIssueCategory,
+  LucideIcon
+> = {
+  repo: FolderGit2,
+  construct: Component,
+  'static-topology': Network,
+  'runtime-topology': Server,
+  walkthrough: Route,
+};
 
 export const SUBSYSTEM_ISSUE_CATEGORY_LABEL: Record<
   SubsystemIssueCategory,
@@ -306,11 +324,11 @@ export function groupIssuesByCategory(
 
 function severityColor(
   severity: SubsystemIssueSeverity,
-  colors: { error: string; info: string },
-  muted: string,
+  colors: { error: string; info: string; warning: string },
 ): string {
   if (severity === 'error') return colors.error ?? '#e5534b';
-  return colors.info ?? muted;
+  // `info` severity = unconfirmed findings; amber, matching the lane icons.
+  return colors.warning ?? '#d4a017';
 }
 
 const TARGET_KIND_LABEL: Record<SubsystemIssueTargetKind, string> = {
@@ -342,7 +360,7 @@ export function SubsystemIssueCard({
   const [expanded, setExpanded] = useState(false);
   const showDetail = expanded;
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
-  const color = severityColor(issue.severity, theme.colors, muted);
+  const color = severityColor(issue.severity, theme.colors);
   const activate = () => {
     setExpanded((v) => !v);
     onSelect?.(issue);
@@ -481,6 +499,14 @@ export interface SubsystemIssueListProps {
   onSelectIssue?: (issue: SubsystemIssue) => void;
   onApplyFix?: (issue: SubsystemIssue) => void;
   onHoverIssue?: (issue: SubsystemIssue | null) => void;
+  /**
+   * Land the list focused on one verification layer: that category starts
+   * expanded and every other category starts collapsed. Used when the list is
+   * opened from a lane-specific entry point (e.g. the Maintainer tab's lane
+   * badges) so the caller's intent — "show me this layer's findings" — is
+   * honoured without an extra click.
+   */
+  focusCategory?: SubsystemIssueCategory;
 }
 
 export function SubsystemIssueList({
@@ -488,15 +514,32 @@ export function SubsystemIssueList({
   onSelectIssue,
   onApplyFix,
   onHoverIssue,
+  focusCategory,
 }: SubsystemIssueListProps) {
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const categories = groupIssuesByCategory(issues);
-  // Collapsed categories (by id). Everything starts expanded.
+  // Collapsed categories (by id). Everything starts expanded, unless the list
+  // was opened focused on a single layer — then every other layer starts
+  // collapsed so the focused category's findings are what you land on.
   const [collapsed, setCollapsed] = useState<Set<SubsystemIssueCategory>>(
-    () => new Set(),
+    () =>
+      focusCategory
+        ? new Set(
+            SUBSYSTEM_ISSUE_CATEGORIES.filter((c) => c !== focusCategory),
+          )
+        : new Set(),
   );
   const [hovered, setHovered] = useState<SubsystemIssueCategory | null>(null);
+  // Re-apply the focus when it changes on an already-mounted list (e.g. the
+  // host switches which lane the open model is focused on).
+  useEffect(() => {
+    setCollapsed(
+      focusCategory
+        ? new Set(SUBSYSTEM_ISSUE_CATEGORIES.filter((c) => c !== focusCategory))
+        : new Set(),
+    );
+  }, [focusCategory]);
   const toggleCollapsed = (category: SubsystemIssueCategory) => {
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -513,7 +556,7 @@ export function SubsystemIssueList({
         // the header, no count, no cards.
         const clean = category.count === 0;
         const accent = category.severity
-          ? severityColor(category.severity, theme.colors, muted)
+          ? severityColor(category.severity, theme.colors)
           : theme.colors.success;
         const isCollapsed = collapsed.has(category.category);
         const isHovered = hovered === category.category;
@@ -550,6 +593,20 @@ export function SubsystemIssueList({
                 fontFamily: theme.fonts.body,
               }}
             >
+              {(() => {
+                const Icon = SUBSYSTEM_ISSUE_CATEGORY_ICON[category.category];
+                if (Icon) {
+                  return (
+                    <Icon
+                      size={13}
+                      color={accent}
+                      style={{ flexShrink: 0 }}
+                      aria-hidden="true"
+                    />
+                  );
+                }
+                return null;
+              })()}
               <span
                 style={{
                   flex: 1,
@@ -573,7 +630,7 @@ export function SubsystemIssueList({
                     fontFamily: theme.fonts.monospace,
                     fontSize: theme.fontSizes[0],
                     fontWeight: 600,
-                    color: accent,
+                    color: muted,
                     flexShrink: 0,
                   }}
                 >

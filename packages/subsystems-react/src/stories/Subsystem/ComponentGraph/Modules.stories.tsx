@@ -261,8 +261,8 @@ const nestedComponents: SubsystemComponent[] = [
 ];
 
 const nestedEdges = graphSpecFromEdges([
-  ['boot', 'write-session', 'imports'],
-  ['trail-view', 'bridge', 'imports'],
+  ['boot', 'write-session', 'references'],
+  ['trail-view', 'bridge', 'references'],
   ['trail-view', 'use-trail', 'references'],
   ['boot', 'create-host', 'calls'],
   ['create-host', 'write-session', 'calls'],

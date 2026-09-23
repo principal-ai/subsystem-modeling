@@ -410,6 +410,7 @@ export async function handleSubsystemModelRequest(
 						? (body["finding"] as never)
 						: undefined,
 				author: typeof body["author"] === "string" ? body["author"] : undefined,
+				runId: typeof body["runId"] === "string" ? body["runId"] : undefined,
 			});
 			if (!created.ok) return error(created.error);
 			const settings = loadViewerSettings();

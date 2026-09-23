@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Check, Copy, Loader2 } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import type {
 	SubsystemModelProposal,
@@ -29,6 +29,84 @@ function formatValue(v: unknown): string {
 	} catch {
 		return String(v);
 	}
+}
+
+const COPY_FEEDBACK_MS = 1500;
+
+/**
+ * Build a paste-ready brief for an agent explaining a proposal and why its
+ * Jev second opinion came back low (uncertain / inaccurate / errored).
+ */
+function buildAgentPrompt(p: SubsystemModelProposal, title?: string): string {
+	const lines: string[] = [];
+	lines.push(
+		"You are reviewing a correction proposal for a subsystem model. Its Jev second opinion scored low, and I need to understand why.",
+	);
+	lines.push("");
+	lines.push("## Proposal");
+	if (title) lines.push(`Model: ${title}`);
+	lines.push(`Model id: ${p.graphId}`);
+	lines.push(`Proposal id: ${p.id}`);
+	if (p.author) lines.push(`Author: ${p.author}`);
+	if (p.lane) lines.push(`Lane: ${LANE_LABEL[p.lane]}`);
+	lines.push(`Created: ${p.createdAt}`);
+	lines.push("");
+	lines.push("### Rationale (why the agent wants this change)");
+	lines.push(p.rationale || "(none)");
+	if (p.finding?.message) {
+		lines.push("");
+		lines.push("### Audit finding");
+		if (p.finding.kind) lines.push(`Kind: ${p.finding.kind}`);
+		if (p.finding.severity) lines.push(`Severity: ${p.finding.severity}`);
+		if (p.finding.componentName || p.finding.componentAlias) {
+			lines.push(
+				`Component: ${p.finding.componentName ?? p.finding.componentAlias}`,
+			);
+		}
+		if (p.finding.relationId) lines.push(`Relation: ${p.finding.relationId}`);
+		if (p.finding.walkthroughId) {
+			lines.push(
+				`Walkthrough: ${p.finding.walkthroughId}${
+					p.finding.step != null ? ` step ${p.finding.step}` : ""
+				}`,
+			);
+		}
+		lines.push(p.finding.message);
+	}
+	if (p.preview.length > 0) {
+		lines.push("");
+		lines.push("### Proposed changes");
+		for (const row of p.preview) {
+			lines.push(
+				`- ${row.label}: ${formatValue(row.before)} -> ${formatValue(row.after)}`,
+			);
+		}
+	}
+	lines.push("");
+	lines.push("### Raw proposal JSON");
+	lines.push("```json");
+	lines.push(JSON.stringify(p, null, 2));
+	lines.push("```");
+	lines.push("");
+	lines.push("## Second opinion (Jev)");
+	if (!p.secondOpinion) {
+		lines.push("Not scored yet.");
+	} else {
+		const o = p.secondOpinion;
+		lines.push(`Source: ${o.source}`);
+		lines.push(`Checked at: ${o.checkedAt}`);
+		lines.push(`Verdict: ${o.verdict}`);
+		lines.push(`Confidence: ${Math.round(o.confidence * 100)}%`);
+		if (o.changeKind) lines.push(`Change kind: ${o.changeKind}`);
+		if (o.risk) lines.push(`Risk: ${o.risk}`);
+		if (o.error) lines.push(`Error: ${o.error}`);
+	}
+	lines.push("");
+	lines.push("## What I need from you");
+	lines.push(
+		"Explain why the second opinion scored as it did. Is Jev right or wrong? Point at the specific files, symbols, and lines that support or refute the change, and say what the proposal should have claimed instead.",
+	);
+	return lines.join("\n");
 }
 
 function opinionBadge(
@@ -77,7 +155,27 @@ export function ProposalsModal({
 	const [notice, setNotice] = useState<
 		{ kind: "accepted" | "rejected"; changeCount: number } | null
 	>(null);
+	const [copiedId, setCopiedId] = useState<string | null>(null);
 	const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	const onCopyForAgent = useCallback(
+		async (p: SubsystemModelProposal) => {
+			try {
+				await navigator.clipboard.writeText(buildAgentPrompt(p, title));
+				setCopiedId(p.id);
+				if (copyTimer.current) clearTimeout(copyTimer.current);
+				copyTimer.current = setTimeout(
+					() => setCopiedId(null),
+					COPY_FEEDBACK_MS,
+				);
+			} catch {
+				// clipboard may be denied — fail quietly
+			}
+		},
+		[title],
+	);
+
 
 	const refresh = useCallback(async () => {
 		try {
@@ -108,6 +206,7 @@ export function ProposalsModal({
 	useEffect(() => {
 		return () => {
 			if (closeTimer.current) clearTimeout(closeTimer.current);
+			if (copyTimer.current) clearTimeout(copyTimer.current);
 		};
 	}, []);
 
@@ -495,6 +594,33 @@ setBusy((prev) => ({ ...prev, [proposalId]: "accept" }));
 								) : null}
 
 								<div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+									<button
+										type="button"
+										onClick={() => void onCopyForAgent(p)}
+										title="Copy a prompt asking an agent why this second opinion was low"
+										style={{
+											padding: "0 12px",
+											height: 32,
+											borderRadius: 6,
+											fontSize: theme.fontSizes[1],
+											fontFamily: theme.fonts.body,
+											background: "transparent",
+											color: muted,
+											border: `1px solid ${theme.colors.border}`,
+											cursor: "pointer",
+											display: "inline-flex",
+											alignItems: "center",
+											gap: 6,
+											marginRight: "auto",
+										}}
+									>
+										{copiedId === p.id ? (
+											<Check size={12} />
+										) : (
+											<Copy size={12} />
+										)}
+										{copiedId === p.id ? "Copied" : "Copy for agent"}
+									</button>
 									{(!p.secondOpinion || p.secondOpinion.error) && (
 										<button
 											type="button"

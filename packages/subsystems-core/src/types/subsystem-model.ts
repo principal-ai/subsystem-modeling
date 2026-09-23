@@ -63,7 +63,6 @@ export type SubsystemStereotype = string;
  * components. Belongs on `relations[]`, not on walkthrough hops.
  */
 export type SubsystemRelationType =
-  | 'imports'
   | 'extends'
   | 'inherits'
   | 'implements'

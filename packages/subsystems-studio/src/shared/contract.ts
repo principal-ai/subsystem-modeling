@@ -680,14 +680,10 @@ export interface SubsystemModelAuditReport {
 		ok: number;
 		/** Topology relations inspected. */
 		relations: number;
-		/** Soft Graphify corroboration attempts (imports + method/inherits/…). */
+		/** Soft Graphify corroboration attempts (method/inherits/references/…). */
 		softChecked: number;
 		softConfirmed: number;
 		softUnconfirmed: number;
-		/** Imports subset of soft checks (legacy summary bits). */
-		importsChecked: number;
-		importsConfirmed: number;
-		importsUnconfirmed: number;
 		brokenRelationEndpoints: number;
 		/** Boundary (process/module) membership. */
 		modulesClaimed: number;
@@ -767,6 +763,12 @@ export interface MaintenanceOverviewModel {
 	na: number;
 	coverage: number;
 	pendingProposalCount: number;
+	/**
+	 * ISO timestamp of that model's most recent Maintain run (host-side rows
+	 * only — the renderer's repo-filtered re-sort reuses the value carried on
+	 * the row). Models with a newer run sort higher.
+	 */
+	recentRunAt?: string;
 	stale: boolean;
 	checkedAt?: string;
 	/** Per-lane verification status (construct / static / runtime / walkthrough). */
@@ -776,6 +778,38 @@ export interface MaintenanceOverviewModel {
 	 * component purls. Drives the Maintain tab's repo filter.
 	 */
 	repos?: Array<{ owner: string; name: string }>;
+}
+
+/**
+ * One persisted Maintain run for a subsystem model.
+ *
+ * The OpenCode `sessionId` comes back from the session-create POST (host-side)
+ * while the `graphId` is known before the run starts; this record is the
+ * durable form of that pairing, so run history can be scoped back to a model.
+ * Absent `sessionId` = the audit was fully verified (skipped) or the run failed
+ * before OpenCode handed back a session.
+ */
+export interface SubsystemModelRun {
+	/** Run-local id (stable row key across the running → finished transition). */
+	id: string;
+	graphId: string;
+	graphTitle: string;
+	/** OpenCode session id — the durable join key back to opencode.db. */
+	sessionId?: string;
+	/** Maintain agent that ran (or was selected). */
+	agent?: string;
+	layer?: "construct" | "topology" | "boundary";
+	mode?: "issues" | "gaps";
+	/** OpenCode model ref used for the run. */
+	model?: string;
+	status: "running" | "done" | "error" | "skipped";
+	startedAt: string;
+	endedAt?: string;
+	ok?: boolean;
+	error?: string;
+	summary?: string;
+	pendingCount?: number;
+	verdict?: "fully_verified" | "partially_verified" | "issues" | "unknown";
 }
 
 /** A pending proposal tagged with the model it belongs to. */
@@ -835,6 +869,16 @@ export interface SubsystemSignatureClaim {
 	returnType?: string;
 }
 
+/**
+ * 1-based inclusive line span of the declaration an augmentation was read from.
+ * Supplied by the agent (which already read the file) so the host can hand the
+ * exact slice to the Jev second opinion without language-specific parsing.
+ */
+export interface SubsystemDeclarationSpan {
+	start: number;
+	end: number;
+}
+
 /** One field-level correction an agent proposes for user confirmation. */
 export type SubsystemModelProposalChange =
 	| {
@@ -867,6 +911,8 @@ export type SubsystemModelProposalChange =
 			componentAlias: string;
 			field: "construct";
 			value: string;
+			/** 1-based inclusive span of the declaration read from source. */
+			lines: SubsystemDeclarationSpan;
 			/** Defaults from the component when omitted. */
 			file?: string;
 			symbol?: string;
@@ -882,6 +928,8 @@ export type SubsystemModelProposalChange =
 			componentAlias: string;
 			field: "signature";
 			value: SubsystemSignatureClaim;
+			/** 1-based inclusive span of the declaration read from source. */
+			lines: SubsystemDeclarationSpan;
 			file?: string;
 			symbol?: string;
 			purl?: string;
@@ -896,6 +944,8 @@ export type SubsystemModelProposalChange =
 			field: "module";
 			/** Claimed module frame key (defaults from component.module). */
 			value: string;
+			/** 1-based inclusive span of the declaration read from source. */
+			lines: SubsystemDeclarationSpan;
 			file?: string;
 			symbol?: string;
 			purl?: string;
@@ -974,6 +1024,8 @@ export type SubsystemVerificationLane =
 export interface SubsystemModelProposal {
 	id: string;
 	graphId: string;
+	/** Maintain run this proposal was produced by (stamped from the brief's runId). Absent for proposals created outside a run. */
+	runId?: string;
 	status: SubsystemModelProposalStatus;
 	createdAt: string;
 	resolvedAt?: string;
@@ -1216,6 +1268,10 @@ export interface TabFullState {
 	/** For `subsystem-model` tabs opened from a walkthrough row — the
 	 *  walkthrough to select when the view mounts. */
 	focusWalkthroughId?: string;
+	/** For `subsystem-model` tabs opened with the issues view — whether the
+	 *  sidebar starts on the issues list, and which layer it focuses. */
+	showIssues?: boolean;
+	focusIssueCategory?: string;
 	/** For `subsystem-showcase` tabs — the ordered model ids to display. */
 	showcaseIds?: string[];
 	payload?: unknown;
@@ -1369,6 +1425,18 @@ export type StudioRequests = {
 		response: {
 			sessions: SessionSummary[];
 			hasMore?: boolean;
+		};
+	};
+	/**
+	 * Persisted Maintain run log — the durable sessionId -> graphId association
+	 * per subsystem model. Omit `graphId` for every model's runs (newest first).
+	 */
+	listSubsystemModelRuns: {
+		params: { graphId?: string; days?: number; limit?: number };
+		response: {
+			ok: boolean;
+			error?: string;
+			runs: SubsystemModelRun[];
 		};
 	};
 	getSessionEvents: {
@@ -1533,7 +1601,14 @@ export type StudioRequests = {
 		};
 	};
 	openSubsystemModel: {
-		params: { graphId: string; walkthroughId?: string };
+		params: {
+			graphId: string;
+			walkthroughId?: string;
+			/** Force the sidebar's issues view open when the tab mounts. */
+			showIssues?: boolean;
+			/** With `showIssues`, land focused on this verification layer. */
+			focusIssueCategory?: string;
+		};
 		response: { ok: boolean; error?: string; tabId?: string };
 	};
 	deleteSubsystemModel: {
@@ -1640,6 +1715,8 @@ export type StudioRequests = {
 			changes: SubsystemModelProposalChange[];
 			finding?: SubsystemModelProposal["finding"];
 			author?: string;
+			/** Maintain run that produced this proposal (from the brief). Optional so older curls keep working. */
+			runId?: string;
 		};
 		response: {
 			ok: boolean;
@@ -1663,6 +1740,19 @@ export type StudioRequests = {
 			ok: boolean;
 			error?: string;
 			proposal?: SubsystemModelProposal;
+		};
+	};
+	/**
+	 * Delete every pending correction proposal across all stored models.
+	 * Resolved (accepted/rejected) proposals are kept; model files are not
+	 * mutated. Emits `subsystemModelProposalsChanged` for each affected graph.
+	 */
+	deleteAllSubsystemModelProposals: {
+		params: Record<string, never>;
+		response: {
+			ok: boolean;
+			error?: string;
+			deleted?: number;
 		};
 	};
 	/**
@@ -2117,6 +2207,10 @@ export type StudioMessages = {
 	subsystemModelProposalsChanged: {
 		graphId: string;
 		pendingCount: number;
+	};
+	/** The persisted Maintain run log for a model changed (start / finish). */
+	subsystemModelRunsChanged: {
+		graphId: string;
 	};
 	/** Maintain agent run started / finished (issue-fixer or gap-filler). */
 	subsystemModelMaintainChanged: {

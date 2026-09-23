@@ -131,7 +131,7 @@ const ISSUES: SubsystemIssue[] = [
     severity: 'info',
     kind: 'topology_import_unconfirmed',
     message: 'No import edge from checkoutApi to cartStore found in Graphify.',
-    target: { kind: 'relation', id: 'r1', label: 'checkoutApi → cartStore', detail: 'imports' },
+    target: { kind: 'relation', id: 'r1', label: 'checkoutApi → cartStore', detail: 'references' },
   },
   {
     id: 'i15',

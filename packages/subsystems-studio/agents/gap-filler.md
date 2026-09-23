@@ -127,6 +127,13 @@ Record it faithfully and in order — do not reduce it to named types:
   (`Promise<…>`, `Array<…>`, `ReadonlySet<…>`) exactly as written.
 - If the language does not declare a parameter type, set `"type": ""` and keep
   the `name`; do not drop the parameter.
+- **Destructured params are one parameter.** A component written
+  `function Foo({ a, b }: FooProps)` has a single callable parameter whose type
+  is the props type — do **not** flatten the destructure into one entry per
+  prop. Claim `{ "parameters": [{ "type": "FooProps" }] }` (omit `name` — the
+  source declares no name for the binding object). If the props type is
+  declared inline instead of by name, claim the whole inline object as the one
+  type, exactly as written.
 - **Return type.** When the declaration states one, record it as written
   (include the wrapper, e.g. `Promise<Session>`). When it is **not** declared,
   **infer it from the implementation** and record the inferred type — do not
@@ -134,6 +141,11 @@ Record it faithfully and in order — do not reduce it to named types:
   `JSX.Element`; a hook that returns an object literal → that shape.
 - **The rationale must say whether the return type was declared or inferred,
   and on what basis.** Do not present an inferred type as if it were written.
+- **Every signature augmentation must carry `lines`: the 1-based inclusive
+  line span of the declaration you read**, e.g. `"lines": { "start": 643, "end": 720 }`
+  for a declaration starting at line 643 and ending at its closing brace on
+  720. The span is forwarded to the Jev second opinion so it can read the
+  exact declaration you verified. `start` must be ≥ 1 and `end` ≥ `start`.
 - If you cannot read the declaration, skip the gap — do not guess.
 
 ```json
@@ -150,6 +162,7 @@ Record it faithfully and in order — do not reduce it to named types:
       "target": "augmentation",
       "componentAlias": "…",
       "field": "signature",
+      "lines": { "start": 60, "end": 118 },
       "value": {
         "parameters": [
           { "name": "graph", "type": "{ components: Array<{ purl?: string }> }" },
@@ -179,9 +192,38 @@ Inferred return type (no annotation in source):
       "target": "augmentation",
       "componentAlias": "…",
       "field": "signature",
+      "lines": { "start": 643, "end": 720 },
       "value": {
         "parameters": [
           { "type": "{ scope?: { ids: string[]; title?: string } }", "optional": true }
+        ],
+        "returnType": "JSX.Element"
+      }
+    }
+  ]
+}
+```
+
+Named props type (destructured params collapse to the one props param):
+
+```json
+{
+  "rationale": "Source declares `WalkthroughsPanel({ walkthroughs, … }: WalkthroughsPanelProps)`. The single destructurized param is the exported interface `WalkthroughsPanelProps` (lines 390-420); no declared return type, returns JSX, so `JSX.Element` is inferred. Graphify has no signature edges.",
+  "author": "gap-filler",
+  "finding": {
+    "kind": "signature_unconfirmed",
+    "componentAlias": "…",
+    "message": "…"
+  },
+  "changes": [
+    {
+      "target": "augmentation",
+      "componentAlias": "…",
+      "field": "signature",
+      "lines": { "start": 390, "end": 628 },
+      "value": {
+        "parameters": [
+          { "type": "WalkthroughsPanelProps" }
         ],
         "returnType": "JSX.Element"
       }

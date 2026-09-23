@@ -47,6 +47,48 @@ describe("buildMaintenanceOverview", () => {
 		]);
 	});
 
+	test("sorts proposals, then recent runs, ahead of work", () => {
+		const overview = buildMaintenanceOverview({
+			models: [
+				model({ title: "most-work-no-run", open: 5, coverage: 0.1 }),
+				model({
+					title: "with-proposal",
+					open: 1,
+					coverage: 0.5,
+					pendingProposalCount: 2,
+				}),
+				model({
+					title: "older-run",
+					open: 3,
+					coverage: 0.1,
+					recentRunAt: "2026-01-01T00:00:00.000Z",
+				}),
+				model({
+					title: "newer-run",
+					open: 2,
+					coverage: 0.5,
+					recentRunAt: "2026-06-01T00:00:00.000Z",
+				}),
+				model({
+					title: "with-proposal-and-run",
+					open: 4,
+					coverage: 0.2,
+					pendingProposalCount: 1,
+					recentRunAt: "2026-03-01T00:00:00.000Z",
+				}),
+			],
+			pendingProposals: [],
+			running: [],
+		});
+		expect(overview.models.map((m) => m.title)).toEqual([
+			"with-proposal-and-run",
+			"with-proposal",
+			"newer-run",
+			"older-run",
+			"most-work-no-run",
+		]);
+	});
+
 	test("sums the ledger and derives aggregate coverage", () => {
 		const overview = buildMaintenanceOverview({
 			models: [

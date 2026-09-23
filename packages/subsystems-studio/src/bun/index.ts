@@ -53,6 +53,7 @@ import {
 import {
 	acceptSubsystemModelProposal as acceptProposalInStore,
 	createSubsystemModelProposal,
+	deleteAllPendingSubsystemModelProposals,
 	deleteSubsystemModelProposals,
 	getSubsystemModelProposal,
 	listSubsystemModelProposals,
@@ -67,6 +68,10 @@ import {
 } from "./jev-maintenance";
 import { buildProposalSourceContext } from "./proposal-source-context";
 import { listMaintainSessions } from "./maintain-sessions";
+import {
+	deleteSubsystemModelRuns,
+	listSubsystemModelRuns,
+} from "./subsystem-model-runs";
 import {
 	modelProviderOf,
 	resolveSubsystemMaintainerModel,
@@ -335,7 +340,7 @@ const PERMANENT_TAB_DEFS: Array<{
 	{
 		id: MAINTENANCE_TAB_ID,
 		kind: "maintenance",
-		title: "Maintenance",
+		title: "Maintainer",
 		flag: "maintenance",
 	},
 	{
@@ -477,7 +482,7 @@ interface SubsystemsTabState {
 interface MaintenanceTabState {
 	id: typeof MAINTENANCE_TAB_ID;
 	kind: "maintenance";
-	title: "Maintenance";
+	title: "Maintainer";
 }
 
 interface GraphifyTabState {
@@ -535,6 +540,10 @@ interface SubsystemModelTabState {
 	graphId: string;
 	/** Walkthrough to select when the view mounts (opened from a row). */
 	focusWalkthroughId?: string;
+	/** Open the sidebar's issues view on mount (opened from a row). */
+	showIssues?: boolean;
+	/** With `showIssues`, land focused on this verification layer. */
+	focusIssueCategory?: string;
 }
 
 /**
@@ -591,7 +600,7 @@ function permanentTabState(
 		return { id: SUBSYSTEMS_TAB_ID, kind: "subsystems", title: "Subsystems" };
 	}
 	if (def.kind === "maintenance") {
-		return { id: MAINTENANCE_TAB_ID, kind: "maintenance", title: "Maintenance" };
+		return { id: MAINTENANCE_TAB_ID, kind: "maintenance", title: "Maintainer" };
 	}
 	if (def.kind === "graphify") {
 		return { id: GRAPHIFY_TAB_ID, kind: "graphify", title: "Graphify" };
@@ -1055,6 +1064,7 @@ function openAnalysisTab(analysisId: string): string {
 async function openSubsystemModelTab(
 	graphId: string,
 	walkthroughId?: string,
+	focus?: { showIssues?: boolean; focusIssueCategory?: string },
 ): Promise<string | null> {
 	// Fast path: already open — no I/O. Broadcast first so the tab switches
 	// immediately; stamp last-opened in the background. The detail view owns
@@ -1064,6 +1074,12 @@ async function openSubsystemModelTab(
 			// Keep the deep-link target current: reopening from a walkthrough
 			// row selects it; a plain open (row double-click) clears it.
 			existing.focusWalkthroughId = walkthroughId;
+			// The issues focus is sticky-on-open only: a reopen that asks for it
+			// sets it, a reopen that doesn't clears it so stale focus doesn't
+			// linger on a tab the user is revisiting for something else. The
+			// view re-reads these when the tab is (re)broadcast.
+			existing.showIssues = focus?.showIssues;
+			existing.focusIssueCategory = focus?.focusIssueCategory;
 			suggestedTabId = existing.id;
 			console.log(`[principal-studio] subsystem-model tab ${existing.id} focused (already open): ${graphId}`);
 			broadcastTabsChanged(existing.id);
@@ -1105,6 +1121,10 @@ async function openSubsystemModelTab(
 		title,
 		graphId,
 		...(walkthroughId ? { focusWalkthroughId: walkthroughId } : {}),
+		...(focus?.showIssues ? { showIssues: true } : {}),
+		...(focus?.focusIssueCategory
+			? { focusIssueCategory: focus.focusIssueCategory }
+			: {}),
 	});
 	suggestedTabId = id;
 	console.log(`[principal-studio] subsystem-model tab ${id} added: ${graphId}`);
@@ -1155,6 +1175,7 @@ async function deleteGraphAndCloseTabs(graphId: string): Promise<{ ok: boolean; 
 	if (deleted) {
 		await deleteSubsystemModelAudit(graphId);
 		await deleteSubsystemModelProposals(graphId);
+		await deleteSubsystemModelRuns(graphId);
 		return { ok: true };
 	}
 	return { ok: false, error: `unknown graph: ${graphId}` };
@@ -1601,6 +1622,8 @@ function fullState(tab: TabState): TabFullState {
 			title: tab.title,
 			graphId: tab.graphId,
 			focusWalkthroughId: tab.focusWalkthroughId,
+			showIssues: tab.showIssues,
+			focusIssueCategory: tab.focusIssueCategory,
 		};
 	}
 	if (tab.kind === "subsystem-showcase") {
@@ -1792,6 +1815,10 @@ const requests: RequestHandlers = {
 			listSessions: async ({ days }) => buildSessionIndex({ days }),
 			listMaintainSessions: async ({ days, limit }) =>
 				listMaintainSessions({ days, limit }),
+			listSubsystemModelRuns: async ({ graphId, days, limit }) => ({
+				ok: true as const,
+				runs: await listSubsystemModelRuns({ graphId, days, limit }),
+			}),
 
 			createTrailNote: ({ tabId, draft }) => {
 				const tab = getTab(tabId);
@@ -2357,6 +2384,9 @@ const requests: RequestHandlers = {
 							}
 						}
 						const pending = await listSubsystemModelProposals(e.id);
+						const lastRun = (
+							await listSubsystemModelRuns({ graphId: e.id, limit: 1 })
+						)[0];
 						const model: MaintenanceOverviewModel = {
 							graphId: e.id,
 							title: e.title,
@@ -2368,6 +2398,7 @@ const requests: RequestHandlers = {
 							na: verification?.na ?? 0,
 							coverage: verification?.coverage ?? 0,
 							pendingProposalCount: pending.length,
+							recentRunAt: lastRun?.startedAt,
 							stale,
 							checkedAt,
 							lanes,
@@ -2401,8 +2432,16 @@ const requests: RequestHandlers = {
 					}),
 				};
 			},
-			openSubsystemModel: async ({ graphId, walkthroughId }) => {
-				const tabId = await openSubsystemModelTab(graphId, walkthroughId);
+			openSubsystemModel: async ({
+				graphId,
+				walkthroughId,
+				showIssues,
+				focusIssueCategory,
+			}) => {
+				const tabId = await openSubsystemModelTab(graphId, walkthroughId, {
+					showIssues,
+					focusIssueCategory,
+				});
 				if (!tabId) return { ok: false, error: `unknown graph: ${graphId}` };
 				return { ok: true, tabId };
 			},
@@ -2475,6 +2514,7 @@ const requests: RequestHandlers = {
 				changes,
 				finding,
 				author,
+				runId,
 			}) => {
 				const created = await createSubsystemModelProposal({
 					graphId,
@@ -2482,6 +2522,7 @@ const requests: RequestHandlers = {
 					changes,
 					finding,
 					author,
+					runId,
 				});
 				if (!created.ok) return { ok: false, error: created.error };
 				let proposal = created.proposal;
@@ -2526,6 +2567,13 @@ const requests: RequestHandlers = {
 				const pendingCount = await pendingProposalCount(graphId);
 				broadcastSubsystemModelProposalsChanged({ graphId, pendingCount });
 				return { ok: true, proposal: result.proposal };
+			},
+			deleteAllSubsystemModelProposals: async () => {
+				const result = await deleteAllPendingSubsystemModelProposals();
+				for (const graphId of result.graphIds) {
+					broadcastSubsystemModelProposalsChanged({ graphId, pendingCount: 0 });
+				}
+				return { ok: true, deleted: result.deleted };
 			},
 			scoreSubsystemModelProposal: async ({ graphId, proposalId, force }) => {
 				const existing = await getSubsystemModelProposal(graphId, proposalId);
@@ -3099,6 +3147,20 @@ function broadcastSubsystemModelProposalsChanged(
 	}
 }
 
+function broadcastSubsystemModelRunsChanged(
+	payload: StudioMessages["subsystemModelRunsChanged"],
+): void {
+	try {
+		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
+			"subsystemModelRunsChanged"
+		](payload);
+	} catch (err) {
+		console.warn(
+			`[principal-studio] could not notify renderer (subsystemModelRunsChanged): ${(err as Error).message}`,
+		);
+	}
+}
+
 function broadcastSubsystemModelMaintainChanged(
 	payload: StudioMessages["subsystemModelMaintainChanged"],
 ): void {
@@ -3208,6 +3270,8 @@ function maintainSubsystemModelInBackground(
 						title: feed?.title,
 						agent: feed?.agent,
 					});
+					// The run log now has the sessionId -> graphId pair.
+					broadcastSubsystemModelRunsChanged({ graphId });
 				},
 			});
 			const pendingCount =
@@ -3242,6 +3306,9 @@ function maintainSubsystemModelInBackground(
 			});
 		} finally {
 			maintainingGraphIds.delete(graphId);
+			// The run log's running entry was closed out (or a skipped/error
+			// entry appended) — let any open Subsystems row re-read it.
+			broadcastSubsystemModelRunsChanged({ graphId });
 		}
 	})();
 }

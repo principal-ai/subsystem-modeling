@@ -870,6 +870,7 @@ export function ConstructsCatalog({
       </aside>
       <div
         style={{
+          position: 'relative',
           flex: 1,
           minWidth: 0,
           minHeight: 0,

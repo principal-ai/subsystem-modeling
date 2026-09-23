@@ -47,7 +47,7 @@ const TAB_TOGGLES: Array<{
 	},
 	{
 		key: "maintenance",
-		label: "Maintenance",
+		label: "Maintainer",
 		description: "Live Maintain overview: verification progress and proposals",
 	},
 	{

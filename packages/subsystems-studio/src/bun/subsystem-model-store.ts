@@ -273,7 +273,6 @@ interface IndexFile {
  * exact list as a runtime check.
  */
 export const SUBSYSTEM_RELATION_TYPES = [
-	"imports",
 	"extends",
 	"inherits",
 	"implements",
@@ -378,6 +377,24 @@ export function normalizeDeclarationProvenance(components: unknown): void {
 		};
 		for (const key of arrays[String(kind)] ?? []) {
 			if (!Array.isArray(declaration[key])) declaration[key] = [];
+		}
+	}
+}
+
+/**
+ * Drop retired `imports` relations in place on read/write.
+ *
+ * `imports` was removed from `SubsystemRelationType`: the static layer models
+ * internal construct shape, not code-level dependencies, and externals live in
+ * flows. Models authored before the change may still carry `imports` edges —
+ * strip them so the record validates against the current vocabulary.
+ */
+export function dropRetiredRelationTypes(relations: unknown): void {
+	if (!Array.isArray(relations)) return;
+	for (let i = relations.length - 1; i >= 0; i--) {
+		const rel = relations[i] as Record<string, unknown> | null;
+		if (rel && typeof rel === "object" && rel["relationType"] === "imports") {
+			relations.splice(i, 1);
 		}
 	}
 }
@@ -771,6 +788,7 @@ export async function getSubsystemModel(id: string): Promise<StoredSubsystemMode
 		const record = JSON.parse(raw) as StoredSubsystemModel;
 		// Normalize provenance defaults + backfill renderer-required arrays on read.
 		normalizeDeclarationProvenance(record.components);
+		dropRetiredRelationTypes(record.relations);
 		backfillStepPurls(record);
 		return record;
 	} catch {
@@ -788,6 +806,7 @@ export async function createSubsystemModel(
 ): Promise<StoredSubsystemModel> {
 	await ensureDir();
 	normalizeDeclarationProvenance(doc.components);
+	dropRetiredRelationTypes(doc.relations);
 	const now = new Date().toISOString();
 	const record: StoredSubsystemModel = {
 		...doc,
@@ -821,6 +840,7 @@ export async function updateSubsystemModel(
 	const existing = await getSubsystemModel(id);
 	if (!existing) return null;
 	if (patch.components !== undefined) normalizeDeclarationProvenance(patch.components);
+	if (patch.relations !== undefined) dropRetiredRelationTypes(patch.relations);
 	const updated: StoredSubsystemModel = {
 		...existing,
 		...patch,

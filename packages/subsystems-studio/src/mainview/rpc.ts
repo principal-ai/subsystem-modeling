@@ -97,6 +97,11 @@ export const subsystemModelMaintainChangeSubscribers = new Set<
 	(payload: StudioMessages["subsystemModelMaintainChanged"]) => void
 >();
 
+/** Persisted Maintain run log changes push `subsystemModelRunsChanged`. */
+export const subsystemModelRunsChangeSubscribers = new Set<
+	(payload: StudioMessages["subsystemModelRunsChanged"]) => void
+>();
+
 /** Regular audit scheduler status push (`regularAuditChanged`). */
 export const regularAuditChangeSubscribers = new Set<
 	(payload: StudioMessages["regularAuditChanged"]) => void
@@ -146,6 +151,9 @@ const rpc = Electroview.defineRPC<StudioRPC>({
 			},
 			subsystemModelMaintainChanged: (payload) => {
 				for (const fn of subsystemModelMaintainChangeSubscribers) fn(payload);
+			},
+			subsystemModelRunsChanged: (payload) => {
+				for (const fn of subsystemModelRunsChangeSubscribers) fn(payload);
 			},
 			regularAuditChanged: (payload) => {
 				for (const fn of regularAuditChangeSubscribers) fn(payload);

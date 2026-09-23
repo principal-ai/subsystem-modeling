@@ -42,9 +42,6 @@ function emptyReport(
 			softChecked: 0,
 			softConfirmed: 0,
 			softUnconfirmed: 0,
-			importsChecked: 0,
-			importsConfirmed: 0,
-			importsUnconfirmed: 0,
 			brokenRelationEndpoints: 0,
 			modulesClaimed: 0,
 			moduleFileOk: 0,
@@ -154,7 +151,7 @@ describe("selectMaintainRoute", () => {
 			topologyChecks: [
 				{
 					relationId: "r1",
-					relationType: "imports",
+					relationType: "references",
 					from: "a",
 					to: "b",
 					graphify: "unconfirmed",

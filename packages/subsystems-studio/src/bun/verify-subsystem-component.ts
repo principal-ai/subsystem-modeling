@@ -878,13 +878,13 @@ export async function verifySubsystemModel(
  * Dry-run deterministic audit focused on component currency: files exist,
  * symbols declare, declaration freshness, and (when graphify is ready)
  * construct/signature/anchor checks — plus topology endpoint integrity and
- * soft Graphify corroboration for `imports` relations. Walkthrough site
+ * soft Graphify corroboration for covered relation types. Walkthrough site
  * affinity is intentionally omitted — that seam check is heuristic and better
  * suited to an agent pass.
  *
  * Always returns a per-component `checks` checklist so a clean run still shows
  * what was inspected. Layer 2 topology: endpoint integrity + soft Graphify
- * corroboration for `imports` relations.
+ * corroboration for covered relation types.
  */
 export async function auditSubsystemModel(
 	graphId: string,
@@ -1089,7 +1089,7 @@ export async function auditSubsystemModel(
 				severity: "info",
 				componentAlias: c.alias,
 				componentName: c.name,
-				message: `Construct unclassified — claimed ${r.construct?.claimed ?? c.construct ?? "?"}, graphify inferred unknown${
+				message: `Construct unclassified — claimed ${r.construct?.claimed ?? c.construct ?? "?"}; classify it from source.${
 					r.construct?.evidence?.length
 						? ` (${r.construct.evidence.join("; ")})`
 						: ""
@@ -1127,9 +1127,8 @@ export async function auditSubsystemModel(
 				severity: "info",
 				componentAlias: c.alias,
 				componentName: c.name,
-				message: `Signature not in cache — Graphify has no usable type edges${
-					r.signature.reason ? ` (${r.signature.reason})` : ""
-				}`,
+				message:
+					"Signature could not be confirmed automatically — claim the declared signature from source.",
 			});
 		}
 		if (!r.ok && r.code === "signature_mismatch") {
@@ -1318,9 +1317,6 @@ export async function auditSubsystemModel(
 		softChecked: topology.summary.softChecked,
 		softConfirmed: topology.summary.softConfirmed,
 		softUnconfirmed: topology.summary.softUnconfirmed,
-		importsChecked: topology.summary.importsChecked,
-		importsConfirmed: topology.summary.importsConfirmed,
-		importsUnconfirmed: topology.summary.importsUnconfirmed,
 		brokenRelationEndpoints: topology.summary.brokenEndpoints,
 		modulesClaimed: boundary.summary.modulesClaimed,
 		moduleFileOk: boundary.summary.moduleFileOk,

@@ -55,7 +55,11 @@ import { ConstructsCatalog } from './ConstructsCatalog';
 import type { SubsystemOpenFileOptions } from './declarationRef';
 import { SubsystemComponentNode, SubsystemGroupNode, SubsystemEdge, SUBSYSTEM_CALLBACKS, hexWithAlpha, EDGE_DIM_ALPHA, fileMatchForNode, flowElementVisibility } from './nodes';
 import { SubsystemDiagnosticToggle, type SubsystemDiagnostic } from './DiagnosticToggle';
-import { SubsystemIssueList, type SubsystemIssue } from './IssueList';
+import {
+  SubsystemIssueList,
+  type SubsystemIssue,
+  type SubsystemIssueCategory,
+} from './IssueList';
 import { SubsystemFileTree } from './SubsystemFileTree';
 import { GraphLayoutCover } from './GraphLayoutCover';
 import { GRAPH_NAV_PROPS, GraphChrome } from './graphChrome';
@@ -78,11 +82,58 @@ export interface WalkthroughViewerContext {
   stepIndex: number | null;
   /** Open a step's full source file over the walkthrough drawer (keeps snippets mounted). */
   onOpenFile: (path: string, opts?: SubsystemOpenFileOptions) => void;
+  /**
+   * Aliases of components marked `proposed`. A step whose file can't be read
+   * but whose endpoint is proposed can be labelled as planned, not missing.
+   */
+  proposedAliases: ReadonlySet<string>;
 }
 
 type DrawerTarget =
   | { kind: 'file'; file: string; startLine?: number }
   | { kind: 'walkthrough'; walkthroughId: string; stepIndex: number | null };
+
+/**
+ * Per-model UI state persisted to `localStorage`, keyed by `persistKey`.
+ * Only the walkthrough working set is stored — which flows are expanded and
+ * which flow/step is selected — so tabbing away from a model and back lands
+ * you where you left off. Transient things (hover, drag, camera) are not saved.
+ */
+interface PersistedViewState {
+  expandedWalkthroughs?: string[];
+  focusedWalkthroughId?: string | null;
+  focusedStepIndex?: number | null;
+  sidebarWidth?: number;
+}
+
+const VIEW_STATE_PREFIX = 'principal.subsystems.viewState.';
+
+function readViewState(key: string | undefined): PersistedViewState {
+  if (!key || typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(VIEW_STATE_PREFIX + key);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === 'object'
+      ? (parsed as PersistedViewState)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeViewState(
+  key: string | undefined,
+  patch: PersistedViewState,
+): void {
+  if (!key || typeof window === 'undefined') return;
+  try {
+    const merged = { ...readViewState(key), ...patch };
+    window.localStorage.setItem(VIEW_STATE_PREFIX + key, JSON.stringify(merged));
+  } catch {
+    // Best-effort: private mode / quota — view state is non-critical.
+  }
+}
 
 export interface SubsystemComponentGraphProps {
   components: SubsystemComponent[];
@@ -125,7 +176,7 @@ export interface SubsystemComponentGraphProps {
    * Which edge vocabulary the canvas draws. The relation and walkthrough
    * vocabularies are disjoint, so a graph carrying both shows one or the
    * other — never both. Edges outside the view are hidden (labels go too).
-   * - `relations`: topology relation edges (`imports`, `extends`, …)
+   * - `relations`: topology relation edges (`extends`, `implements`, …)
    * - `walkthroughs`: walkthrough hop edges (`calls`, `feeds`, …), including
    *   step numbers when a flow is focused/hovered
    * Leave unset to let the sidebar's Files / Walkthroughs tab drive it: Files
@@ -199,6 +250,12 @@ export interface SubsystemComponentGraphProps {
    * diagnostics on iff `issues` is non-empty, and the title-row chip toggles it.
    */
   showIssues?: boolean;
+  /**
+   * When the issues list is active, land it focused on this verification
+   * layer: that category expands, the rest start collapsed. Optional — the
+   * plain issues view expands everything.
+   */
+  focusIssueCategory?: SubsystemIssueCategory;
   /** Click an issue — focus its target on the graph / open detail. */
   onSelectIssue?: (issue: SubsystemIssue) => void;
   /** Apply an issue's deterministic fix. */
@@ -232,6 +289,13 @@ export interface SubsystemComponentGraphProps {
   onVerifyComponent?: (componentAlias: string) => void;
   /** Live verification status for the selected component. */
   componentVerification?: ComponentVerificationState | null;
+  /**
+   * When set, the graph's walkthrough working set — expanded flows and the
+   * selected flow/step — is persisted to `localStorage` under this key and
+   * restored on mount. Hosts key it by the model id so each model remembers
+   * where the user left off. Omit to keep the state purely in-memory.
+   */
+  persistKey?: string;
 }
 
 const nodeTypes: NodeTypes = {
@@ -306,23 +370,28 @@ const WalkthroughDrawerContent = memo(function WalkthroughDrawerContent({
   walkthrough,
   stepIndex,
   onOpenFile,
+  proposedAliases,
 }: {
   render: (ctx: WalkthroughViewerContext) => ReactNode;
   walkthrough: SubsystemWalkthrough;
   stepIndex: number | null;
   onOpenFile: (path: string, opts?: SubsystemOpenFileOptions) => void;
+  proposedAliases: ReadonlySet<string>;
 }) {
-  return <>{render({ walkthrough, stepIndex, onOpenFile })}</>;
+  return <>{render({ walkthrough, stepIndex, onOpenFile, proposedAliases })}</>;
 });
 
 interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, relations, walkthroughs, initialWalkthroughId, onReorderWalkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, onVerifyComponent, componentVerification }: InnerProps) {
+function Inner({ components, relations, walkthroughs, initialWalkthroughId, onReorderWalkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, onVerifyComponent, componentVerification, persistKey }: InnerProps) {
   const { theme } = useTheme();
   const { fitView } = useReactFlow();
   const viewport = useViewport();
+  // Restored once per mount from `localStorage` (see `readViewState`). Each
+  // graph is its own tab/mount, so `persistKey` is stable for a mount.
+  const persisted = useMemo(() => readViewState(persistKey), [persistKey]);
   const graphEdges = useMemo(
     () => deriveGraphEdges({ relations, walkthroughs }),
     [relations, walkthroughs],
@@ -350,9 +419,14 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
   const [hoveredComponentAlias, setHoveredComponentId] = useState<string | null>(null);
   // Walkthrough focus — selected flow (or step) is full strength; other
   // opened-flow members stay visible but dimmed; everything else is hidden.
-  const [focusedWalkthroughId, setFocusedWalkthroughId] = useState<string | null>(null);
+  // Restored from the persisted view state when a `persistKey` is set.
+  const [focusedWalkthroughId, setFocusedWalkthroughId] = useState<string | null>(
+    persisted.focusedWalkthroughId ?? null,
+  );
   // `null` = whole flow focused; a number = that single step's edge focused.
-  const [focusedStepIndex, setFocusedStepIndex] = useState<number | null>(null);
+  const [focusedStepIndex, setFocusedStepIndex] = useState<number | null>(
+    persisted.focusedStepIndex ?? null,
+  );
   // Hovered walkthrough in the flows panel: dims every canvas node/edge not
   // involved in the hover preview (or selected ∪ hovered when a step is
   // focused). `stepIndex: null` = whole flow (collapsed title hover);
@@ -381,7 +455,10 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
         : 'relations');
   // Walkthrough flows the user has expanded (via the title row). Closed by
   // default so a graph with several flows doesn't dump every step list at once.
-  const [expandedWalkthroughs, setExpandedWalkthroughs] = useState<Set<string>>(new Set());
+  // Restored from the persisted view state when a `persistKey` is set.
+  const [expandedWalkthroughs, setExpandedWalkthroughs] = useState<Set<string>>(
+    () => new Set(persisted.expandedWalkthroughs ?? []),
+  );
   // Sidebar description visibility. Hidden by default so the files/flows
   // panel gets the vertical room; the title-row toggle reveals it.
   const [descriptionVisible, setDescriptionVisible] = useState(false);
@@ -389,11 +466,16 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
   // `true` only when a description exists AND the user opened it.
   const showDesc = !!description && descriptionVisible;
   // Sidebar width (px). Draggable via the resize handle between the sidebar
-  // and the graph canvas; clamps to sensible bounds while dragging.
-  const [sidebarWidth, setSidebarWidth] = useState(340);
+  // and the graph canvas; clamps to sensible bounds while dragging. Restored
+  // from the persisted view state when a `persistKey` is set.
+  const [sidebarWidth, setSidebarWidth] = useState(persisted.sidebarWidth ?? 450);
   const [sidebarDrag, setSidebarDrag] = useState(false);
   const sidebarDragStartX = useRef(0);
-  const sidebarDragStartWidth = useRef(340);
+  const sidebarDragStartWidth = useRef(450);
+  // Mirror of `sidebarWidth` for the drag-end persist (the mouseup listener
+  // closes over the drag-start render).
+  const sidebarWidthRef = useRef(sidebarWidth);
+  sidebarWidthRef.current = sidebarWidth;
   const sidebarMinWidth = 240;
   const sidebarMaxWidth = useMemo(
     () => Math.max(Math.min((_measured?.w ?? 680) * 0.5, 600), sidebarMinWidth),
@@ -422,6 +504,8 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
     };
     const onUp = () => {
       setSidebarDrag(false);
+      // Persist only on drag end — not on every mousemove.
+      writeViewState(persistKey, { sidebarWidth: sidebarWidthRef.current });
       // Re-fit the canvas so the graph re-centers in the new available space.
       requestAnimationFrame(() => fitView());
     };
@@ -431,7 +515,23 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     };
-  }, [sidebarDrag, sidebarMaxWidth, fitView]);
+  }, [sidebarDrag, sidebarMaxWidth, fitView, persistKey]);
+  // Persist the walkthrough working set per model. Each write merges into the
+  // stored blob, so the three fields never clobber one another.
+  useEffect(() => {
+    if (!persistKey) return;
+    writeViewState(persistKey, {
+      expandedWalkthroughs: Array.from(expandedWalkthroughs),
+    });
+  }, [persistKey, expandedWalkthroughs]);
+  useEffect(() => {
+    if (!persistKey) return;
+    writeViewState(persistKey, { focusedWalkthroughId });
+  }, [persistKey, focusedWalkthroughId]);
+  useEffect(() => {
+    if (!persistKey) return;
+    writeViewState(persistKey, { focusedStepIndex });
+  }, [persistKey, focusedStepIndex]);
   // Ref mirror of `selected` so the SUBSYSTEM_CALLBACKS click handler (a
   // closure over the effect deps) can toggle without a stale value.
   const selectedRef = useRef<SubsystemComponent | null>(null);
@@ -882,7 +982,7 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
     };
     // Edges outside the selected view are hidden entirely (labels included).
     const edgeInView = (e: Edge): boolean => {
-      const mechanism = (e.data as { mechanism?: string } | undefined)?.mechanism ?? 'imports';
+      const mechanism = (e.data as { mechanism?: string } | undefined)?.mechanism ?? 'uses';
       return resolvedEdgeView === 'relations'
         ? isRelationMechanism(mechanism)
         : isWalkthroughMechanism(mechanism);
@@ -1470,7 +1570,7 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
         } | undefined;
         return {
           id: e.id,
-          mechanism: d?.mechanism ?? 'imports',
+          mechanism: d?.mechanism ?? 'uses',
           dimmed: d?.dimmed === true,
           midX: d?.labelX ?? 0,
           midY: d?.labelY ?? 0,
@@ -1648,6 +1748,7 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
               {issuesActive ? (
                 <SubsystemIssueList
                   issues={issues ?? []}
+                  focusCategory={focusIssueCategory}
                   onSelectIssue={onSelectIssue}
                   onApplyFix={onApplyIssueFix}
                   onHoverIssue={onHoverIssue}
@@ -2069,6 +2170,7 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
             walkthrough={focusedWalkthrough}
             stepIndex={drawerTarget.stepIndex}
             onOpenFile={onOpenFileFromWalkthrough}
+            proposedAliases={proposedAliases}
           />
         ) : drawerTarget?.kind === 'file' ? (
           <FileDrawerContent

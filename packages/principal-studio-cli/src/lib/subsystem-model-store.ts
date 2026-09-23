@@ -17,7 +17,6 @@ const ROOT = join(homedir(), '.principal', 'subsystem-models');
 const INDEX_PATH = join(ROOT, '_index.json');
 
 export const SUBSYSTEM_EDGE_MECHANISMS = [
-  'imports',
   'calls',
   'extends',
   'inherits',

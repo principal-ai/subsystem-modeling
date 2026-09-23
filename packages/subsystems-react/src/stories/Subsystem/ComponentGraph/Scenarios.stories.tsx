@@ -138,8 +138,8 @@ const multiRepoComponents = components([
 ]);
 
 const multiRepoEdges = graphSpecFromEdges([
-  ['detail', 'reftypes', 'imports'],
-  ['resolver', 'reftypes', 'imports'],
+  ['detail', 'reftypes', 'references'],
+  ['resolver', 'reftypes', 'references'],
   ['resolver', 'engine', 'references'],
   ['rewire', 'resolver', 'calls'],
 ]);

@@ -91,7 +91,6 @@ export interface SubsystemDeclToken {
  * Belongs on `relations[]`, not on walkthrough hops.
  */
 export type SubsystemRelationType =
-  | 'imports'
   | 'extends'
   | 'inherits'
   | 'implements'
@@ -120,7 +119,7 @@ export type SubsystemEdgeMechanism =
 /**
  * Which edge vocabulary the canvas draws. The two vocabularies are disjoint;
  * a view shows only edges (and their labels) from the selected source.
- * - `relations`: only topology relation edges (`imports`, `extends`, …)
+ * - `relations`: only topology relation edges (`extends`, `implements`, …)
  * - `walkthroughs`: only walkthrough hop edges (`calls`, `feeds`, …)
  */
 export type SubsystemEdgeView = 'relations' | 'walkthroughs';
@@ -945,7 +944,6 @@ export type SubsystemGraphEdge = Edge<SubsystemGraphEdgeData>;
  * source (the two unions are disjoint).
  */
 export const SUBSYSTEM_RELATION_TYPES = [
-  'imports',
   'extends',
   'inherits',
   'implements',
@@ -986,7 +984,6 @@ export function isWalkthroughMechanism(
 }
 
 export const MECHANISM_COLOR: Record<SubsystemEdgeMechanism, string> = {
-  imports: '#0893d2', // blue
   calls: '#4ec9b0', // teal
   extends: '#b48ead', // purple
   inherits: '#9b6fd0', // purple
@@ -1004,7 +1001,6 @@ export const MECHANISM_COLOR: Record<SubsystemEdgeMechanism, string> = {
 };
 
 export const MECHANISM_STYLE: Record<SubsystemEdgeMechanism, 'solid' | 'dashed' | 'dotted'> = {
-  imports: 'solid',
   calls: 'solid',
   extends: 'dashed',
   inherits: 'dashed',
@@ -1024,7 +1020,6 @@ export const MECHANISM_STYLE: Record<SubsystemEdgeMechanism, 'solid' | 'dashed' 
 /** Mechanism → [description, verifiable-with-graphify]. Drives the "not
  *  directly verifiable" styling of edge labels. */
 export const MECHANISM_DESCRIPTIONS: [SubsystemEdgeMechanism, string, boolean][] = [
-  ['imports', 'import statement (code-level dependency)', true],
   ['calls', 'function/method call (call graph edge)', true],
   ['extends', 'class inheritance', true],
   ['inherits', 'class inheritance', true],

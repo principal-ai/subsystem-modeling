@@ -96,7 +96,6 @@
       "type": "string",
       "description": "Topology relation type — structural / module / type claim between components.",
       "enum": [
-        "imports",
         "extends",
         "inherits",
         "implements",

@@ -38,14 +38,14 @@ const v2ReaderComponents = components([
 ]);
 
 const v2ReaderEdges = graphSpecFromEdges([
-  ['transcript', 'reader', 'imports'],
-  ['paths', 'reader', 'imports'],
+  ['transcript', 'reader', 'references'],
+  ['paths', 'reader', 'references'],
   ['capture', 'reader', 'calls'],
   ['reader', 'registry', 'registers-into', ['supported-agents.ts']],
   // Consumer packages - cross-package edges leave the subgraph
-  ['reader', 'principal-studio-host', 'imports'],
-  ['reader', 'core-sessions', 'imports'],
-  ['reader', 'cli-session', 'imports'],
+  ['reader', 'principal-studio-host', 'references'],
+  ['reader', 'core-sessions', 'references'],
+  ['reader', 'cli-session', 'references'],
 ]);
 
 function V2ReaderDemo() {
@@ -192,7 +192,7 @@ const investigationComponents: SubsystemComponent[] = [
 ];
 
 const investigationEdges = graphSpecFromEdges([
-  ['adapter', 'contracts', 'imports'],
+  ['adapter', 'contracts', 'references'],
   ['ingestion', 'adapter', 'uses'],
   ['ingestion', 'contracts', 'references'],
 ]);
