@@ -209,6 +209,11 @@ export {
   extractDeclarationLine,
   DECLARATION_HASH_ALGO,
 } from './subsystem/declarationRef';
+export {
+  setPrettierProvider,
+  getPrettierProvider,
+} from './subsystem/prettierProvider';
+export type { PrettierBundle } from './subsystem/prettierProvider';
 
 // Pierre code views (@pierre/diffs wrappers)
 export { PierreFileView, PierreSnippetView, PierreWalkthroughCodeView, sliceSnippetWindow, resolvePierreSyntaxThemeName } from './pierre';

@@ -17,6 +17,7 @@ import {
 import type { SubsystemComponent, SubsystemDeclToken } from './model';
 import { generateDeclarationString } from './formatDeclaration';
 import { tokenizeFormatted } from './tokenizeFormatted';
+import { getPrettierProvider } from './prettierProvider';
 
 // Lazy-loaded Prettier to avoid startup cost.
 let prettierPromise: Promise<typeof import('prettier/standalone')> | null = null;
@@ -28,6 +29,10 @@ let prettierPluginsPromise: Promise<{
 let prettierFailureLogged = false;
 
 async function getPrettier() {
+  // A host-provided bundle wins — used when the host's own bundler mangles the
+  // bundled Prettier (see prettierProvider.ts).
+  const injected = getPrettierProvider();
+  if (injected) return injected;
   if (!prettierPromise) {
     prettierPromise = import('prettier/standalone');
   }

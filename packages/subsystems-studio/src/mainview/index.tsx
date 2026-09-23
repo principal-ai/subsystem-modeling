@@ -25,6 +25,34 @@ import {
 	slateNeonTheme,
 } from "@principal-ade/industry-theme";
 import { App, ErrorBoundary } from "./App";
+import {
+	setPrettierProvider,
+	type PrettierBundle,
+} from "@principal-ai/subsystems-react";
+
+// Register the esbuild-vendored Prettier (loaded as a classic <script> in
+// index.html, outside the Cottontail bundle). Cottontail mangles the in-bundle
+// copy so `prettier.format` throws; this restores correct declaration
+// formatting in the renderer. Absent script → provider stays unset and the
+// in-bundle path is used (dev without the vendor build).
+const prettierVendor = (
+	globalThis as {
+		__SUBSYSTEM_PRETTIER__?: {
+			prettier: PrettierBundle["prettier"];
+			typescript: PrettierBundle["plugins"]["typescript"];
+			estree: PrettierBundle["plugins"]["estree"];
+		};
+	}
+).__SUBSYSTEM_PRETTIER__;
+if (prettierVendor) {
+	setPrettierProvider({
+		prettier: prettierVendor.prettier,
+		plugins: {
+			typescript: prettierVendor.typescript,
+			estree: prettierVendor.estree,
+		},
+	});
+}
 
 // Themed-markdown's IndustryMermaidDiagram renders through `window.mermaid` —
 // the host app is expected to register the singleton. Without this, mermaid

@@ -25,6 +25,9 @@ export default {
 			"src/mainview/index.html": "views/mainview/index.html",
 			"src/mainview/index.css": "views/mainview/index.css",
 			"src/mainview/agent-logos": "views/mainview/agent-logos",
+			// esbuild-vendored Prettier, loaded outside the Cottontail bundle
+			// (see scripts/build-prettier-vendor.ts).
+			"src/mainview/vendor/prettier.js": "views/mainview/vendor/prettier.js",
 		},
 		mac: {
 			bundleCEF: false,

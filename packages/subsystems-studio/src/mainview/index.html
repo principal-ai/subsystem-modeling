@@ -11,6 +11,9 @@
 </head>
 <body>
 	<div id="root"></div>
+	<!-- Prettier vendored outside the Cottontail bundle (esbuild output). Classic
+	     script runs before the deferred module below. See prettier-vendor.ts. -->
+	<script src="vendor/prettier.js"></script>
 	<script type="module" src="index.js"></script>
 </body>
 </html>
