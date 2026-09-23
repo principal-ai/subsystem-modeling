@@ -3,6 +3,7 @@ import {
 	accuracyInstruction,
 	buildProposalState,
 	changeKindQuestion,
+	riskInstruction,
 	shouldAutoAcceptOnConfidence,
 	verdictFromAnswers,
 } from "./jev-maintenance";
@@ -33,6 +34,21 @@ describe("accuracyInstruction", () => {
 		);
 		expect(s).toContain("accurate, complete extraction");
 	});
+	test("signature augment blesses declared named/union returns and structural params", () => {
+		const s = accuracyInstruction(
+			proposal("construct", [
+				{
+					target: "augmentation",
+					componentAlias: "a",
+					field: "signature",
+					value: { parameters: [] },
+				},
+			]),
+		);
+		expect(s).toContain("explicit return annotation");
+		expect(s).toContain("named or union return type");
+		expect(s).toContain("structural object parameter");
+	});
 	test("static topology uses relation/containment wording", () => {
 		const s = accuracyInstruction(
 			proposal("static-topology", [
@@ -62,6 +78,43 @@ describe("accuracyInstruction", () => {
 			]),
 		);
 		expect(s).toContain("walkthrough step");
+	});
+});
+
+describe("riskInstruction", () => {
+	const signatureAugment = () =>
+		proposal("construct", [
+			{
+				target: "augmentation",
+				componentAlias: "a",
+				field: "signature",
+				value: { parameters: [] },
+			},
+		]);
+
+	test("source-backed signature augment steers toward Safe", () => {
+		const s = riskInstruction(signatureAugment(), { hasSourceContext: true });
+		expect(s).toContain("does not rewrite the model JSON");
+		expect(s).toContain("Score Safe");
+	});
+
+	test("signature augment without source context keeps generic wording", () => {
+		expect(riskInstruction(signatureAugment(), { hasSourceContext: false })).toBe(
+			"Risk of auto-accepting this correction",
+		);
+		expect(riskInstruction(signatureAugment())).toBe(
+			"Risk of auto-accepting this correction",
+		);
+	});
+
+	test("non-signature change keeps generic wording even with source", () => {
+		const s = riskInstruction(
+			proposal("construct", [
+				{ target: "component", componentAlias: "a", field: "construct", value: "class" },
+			]),
+			{ hasSourceContext: true },
+		);
+		expect(s).toBe("Risk of auto-accepting this correction");
 	});
 });
 

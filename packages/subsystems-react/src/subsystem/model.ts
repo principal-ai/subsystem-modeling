@@ -26,6 +26,27 @@ import { purlOwnerName, purlRepoKey } from './paths';
 export type SubsystemConstructDeclaration = GraphifyComponentDetail;
 export type SubsystemDeclarationProvenance = 'verified' | 'authored';
 
+/** One declared parameter in an agent-extracted (augmented) signature. */
+export interface SubsystemSignatureParameter {
+  /** Parameter name when the language declares one. */
+  name?: string;
+  /** Declared type as written in source (empty string when untyped). */
+  type: string;
+  /** True for optional parameters (`?`, defaulted, rest, …). */
+  optional?: boolean;
+}
+
+/**
+ * Language-agnostic declared signature extracted by an agent from source and
+ * accepted as a graphify augmentation. Confirms a function/method when Graphify
+ * has no usable signature edges. Distinct from `declaration` (the model's own
+ * structured shape) and from a graphify-derived signature.
+ */
+export interface SubsystemSignatureClaim {
+  parameters: SubsystemSignatureParameter[];
+  returnType?: string;
+}
+
 export type SubsystemComponentConstruct =
   | 'class'
   | 'function'
@@ -250,6 +271,14 @@ export interface SubsystemComponent {
    * a different language just needs a different tokenizer and text joiner.
    */
   tokens?: SubsystemDeclToken[];
+  /**
+   * Accepted agent-extracted signature (from the graphify augmentation store)
+   * confirming this function/method when Graphify has no usable signature
+   * edges. Populated by the host when serving an enriched graph — never
+   * persisted in the model document. Rendered as the declaration when the
+   * component has no own `declaration`; no marker distinguishes the source.
+   */
+  signatureAugmentation?: SubsystemSignatureClaim;
   /**
    * Anchored declaration location: graphify start line + hash of that line's
    * content at capture time. Populated by verify when an exact anchor resolves.

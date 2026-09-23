@@ -285,8 +285,6 @@ export interface SubsystemComponentGraphProps {
    * path). The tree is derived from the components' `file` values.
    */
   onFileSelect?: (file: string) => void;
-  /** Verify the selected component against graphify (declaration panel). */
-  onVerifyComponent?: (componentAlias: string) => void;
   /** Live verification status for the selected component. */
   componentVerification?: ComponentVerificationState | null;
   /**
@@ -385,7 +383,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, relations, walkthroughs, initialWalkthroughId, onReorderWalkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, onVerifyComponent, componentVerification, persistKey }: InnerProps) {
+function Inner({ components, relations, walkthroughs, initialWalkthroughId, onReorderWalkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, componentVerification, persistKey }: InnerProps) {
   const { theme } = useTheme();
   const { fitView } = useReactFlow();
   const viewport = useViewport();
@@ -2138,7 +2136,6 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
               component={selected}
               onOpenFile={onOpenDeclarationFile}
               onRelatedSelect={resolveRelatedComponent}
-              onVerify={onVerifyComponent}
               verification={componentVerification}
               fileOpen={
                 drawerTarget?.kind === 'file' &&
@@ -2367,7 +2364,6 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
             renderFileViewer={props.renderFileViewer}
             renderFileView={props.renderFileView}
             onFileSelect={props.onFileSelect}
-            onVerifyComponent={props.onVerifyComponent}
             componentVerification={props.componentVerification}
           />
         ) : (

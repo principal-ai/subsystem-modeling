@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+	attachSignatureAugmentations,
 	augmentationKey,
 	findAcceptedConstructAugmentation,
 	findAcceptedModuleAugmentation,
@@ -227,6 +228,45 @@ describe("graphify augmentations", () => {
 			});
 			expect(hit?.id).toBe(written.augmentation.id);
 			expect(hit?.claims.module?.module).toBe("src/session/paths.ts");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("attachSignatureAugmentations", () => {
+	test("overlays accepted signatures by purl + file#symbol, leaves others untouched", async () => {
+		const root = mkdtempSync(join(tmpdir(), "ga-store-"));
+		try {
+			await upsertAcceptedSignatureAugmentation({
+				purl: "pkg:github/acme/widget",
+				file: "src/rpc.ts",
+				symbol: "handle",
+				signature: {
+					parameters: [{ name: "req", type: "HostInfo" }],
+					returnType: "Promise<Session>",
+				},
+				source: "gap-filler",
+				storeRoot: root,
+			});
+
+			const components = [
+				{ purl: "pkg:github/acme/widget#src/rpc.ts", file: "src/rpc.ts", symbol: "handle" },
+				{ purl: "pkg:github/acme/widget", file: "src/rpc.ts", symbol: "other" },
+				{ purl: "pkg:github/acme/widget", file: "src/rpc.ts" },
+				{ purl: "pkg:github/acme/other", file: "src/rpc.ts", symbol: "handle" },
+			];
+			const out = await attachSignatureAugmentations(components, { storeRoot: root });
+
+			expect(out[0]?.signatureAugmentation).toEqual({
+				parameters: [{ name: "req", type: "HostInfo" }],
+				returnType: "Promise<Session>",
+			});
+			expect(out[1]?.signatureAugmentation).toBeUndefined();
+			expect(out[2]?.signatureAugmentation).toBeUndefined();
+			expect(out[3]?.signatureAugmentation).toBeUndefined();
+			// Inputs are not mutated.
+			expect("signatureAugmentation" in components[0]!).toBe(false);
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}

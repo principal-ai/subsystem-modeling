@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { AlignLeft, FileText, ShieldCheck } from 'lucide-react';
+import { AlignLeft, FileText } from 'lucide-react';
 import { useTheme } from '@principal-ade/industry-theme';
 import { resolvePierreSyntaxThemeName } from '../pierre/pierreSyntaxTheme';
 import {
@@ -115,8 +115,6 @@ export interface ComponentDeclarationProps {
   onRelatedSelect?: (ref: string) => void;
   /** Max width of the declaration panel (CSS value). Defaults to none. */
   maxWidth?: string | number;
-  /** When set, shows a Verify control that calls back with the component id. */
-  onVerify?: (componentAlias: string) => void;
   /** Live verification status for the selected component. */
   verification?: ComponentVerificationState | null;
   /** Start with the file path row visible (catalog / source-first views). */
@@ -270,7 +268,6 @@ export function ComponentDeclaration({
   onOpenFile,
   onRelatedSelect: _onRelatedSelect,
   maxWidth,
-  onVerify,
   verification,
   defaultShowFile = false,
   fileOpen = false,
@@ -400,39 +397,8 @@ export function ComponentDeclaration({
       <Icon size={13} />
     </button>
   );
-  const verifyBusy = verification?.phase === 'checking';
   const headerActions = (
     <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2 }}>
-      {onVerify && (
-        <button
-          type="button"
-          title="Verify against graphify"
-          aria-label="Verify against graphify"
-          disabled={verifyBusy}
-          onClick={(e) => {
-            e.stopPropagation();
-            onVerify(component.alias);
-          }}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            height: 20,
-            padding: '0 6px',
-            border: `1px solid ${theme.colors.border}`,
-            borderRadius: 4,
-            background: 'transparent',
-            color: verifyBusy ? muted : theme.colors.textSecondary,
-            cursor: verifyBusy ? 'wait' : 'pointer',
-            fontSize: theme.fontSizes[0],
-            fontFamily: theme.fonts.body,
-            opacity: verifyBusy ? 0.7 : 1,
-          }}
-        >
-          <ShieldCheck size={12} />
-          {verifyBusy ? '…' : 'Verify'}
-        </button>
-      )}
       {!inlineChrome &&
         toggleBtn(showFile, () => setShowFile((v) => !v), 'Toggle file path', FileText)}
       {!inlineChrome && lineLocationLabel}
@@ -501,7 +467,7 @@ export function ComponentDeclaration({
         'purl',
       ),
     );
-  } else if (onVerify || (!showRepoIdentity && !inlineChrome)) {
+  } else if (!showRepoIdentity && !inlineChrome) {
     lines.push(line(headerActions, 'actions'));
   }
 
@@ -748,9 +714,17 @@ export function ComponentDeclaration({
       return;
     }
     let cancelled = false;
-    tokenizeComponent(component, printWidth, pierreSyntaxTheme).then((t) => {
-      if (!cancelled) setTokens(t);
-    });
+    tokenizeComponent(component, printWidth, pierreSyntaxTheme)
+      .then((t) => {
+        if (!cancelled) setTokens(t);
+      })
+      .catch((err) => {
+        console.error(
+          '[subsystem-declaration] tokenize failed',
+          component.alias,
+          err,
+        );
+      });
     return () => {
       cancelled = true;
     };
@@ -778,8 +752,10 @@ export function ComponentDeclaration({
       <div
         key={`decl-${li}`}
         style={{
-          display: 'flex',
-          alignItems: 'center',
+          // Block (not flex): tokens flow inline and wrap at spaces. A flex
+          // row lets each token span shrink and break mid-word when a line
+          // overflows (e.g. the unformatted prettier-fallback declaration).
+          display: 'block',
           whiteSpace: 'pre-wrap',
           overflowWrap: 'anywhere',
           minWidth: 0,

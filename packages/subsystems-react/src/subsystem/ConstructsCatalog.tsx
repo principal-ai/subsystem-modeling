@@ -39,7 +39,6 @@ export interface ConstructsCatalogProps {
   renderFileViewer?: (file: string, opts?: SubsystemOpenFileOptions) => ReactNode;
   renderFileView?: (component: SubsystemComponent) => ReactNode;
   onFileSelect?: (file: string) => void;
-  onVerifyComponent?: (componentAlias: string) => void;
   componentVerification?: ComponentVerificationState | null;
 }
 
@@ -145,7 +144,6 @@ export function ConstructsCatalog({
   renderFileViewer,
   renderFileView,
   onFileSelect,
-  onVerifyComponent,
   componentVerification,
 }: ConstructsCatalogProps) {
   const { theme, mode } = useTheme();
@@ -950,7 +948,6 @@ export function ConstructsCatalog({
                         onOpenFile={fileViewer ? onOpenFile : undefined}
                         defaultShowFile={!!fileViewer}
                         onRelatedSelect={onRelatedSelect}
-                        onVerify={onVerifyComponent}
                         fileOpen={fileOpen}
                         declarationOpen={lineOpen}
                         showRepoIdentity={false}

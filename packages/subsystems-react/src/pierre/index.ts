@@ -11,6 +11,11 @@ export {
   pierreLangForPath,
 } from './pierreFileLang';
 export {
+  isPrettierSourceLang,
+  sourceLangForPath,
+} from './sourceLang';
+export type { SourceSyntaxLang } from './sourceLang';
+export {
   PIERRE_DEFAULT_SYNTAX_THEMES,
   resolvePierreSyntaxThemeName,
 } from './pierreSyntaxTheme';

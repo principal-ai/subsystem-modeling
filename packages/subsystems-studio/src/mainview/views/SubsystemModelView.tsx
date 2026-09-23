@@ -17,7 +17,6 @@ import {
 	PierreFileView,
 	PierreSnippetView,
 	PierreWalkthroughCodeView,
-	type ComponentVerificationState,
 	type SubsystemDiagnostic,
 	type SubsystemIssue,
 	type SubsystemIssueCategory,
@@ -26,11 +25,6 @@ import {
 } from "@principal-ai/subsystems-react";
 import { electrobun, reloadSubscribers, subsystemModelChangeSubscribers } from "../rpc";
 import { CenteredMessage } from "../ui";
-import {
-	AuditResultsModal,
-	type AuditModalState,
-} from "../components/AuditResultsModal";
-import { runSubsystemModelAuditFlow } from "../auditSubsystemModelFlow";
 import {
 	auditReportToIssues,
 	diagnosticIssueCount,
@@ -76,10 +70,6 @@ export function SubsystemModelView({
 	const [graph, setGraph] = useState<StoredSubsystemModel | null | undefined>(undefined);
 	const [excalidrawOpen, setExcalidrawOpen] = useState(false);
 	const [selection, setSelection] = useState<ExcalidrawSelectionInfo | null>(null);
-	const [verification, setVerification] = useState<ComponentVerificationState | null>(null);
-	const [verifyComponentId, setVerifyComponentId] = useState<string | null>(null);
-	const [auditBusy, setAuditBusy] = useState(false);
-	const [auditModal, setAuditModal] = useState<AuditModalState | null>(null);
 	const [auditReport, setAuditReport] = useState<SubsystemModelAuditReport | null>(null);
 	const [auditStale, setAuditStale] = useState(false);
 	/** Diagnostics list shown in the sidebar (toggled by the header chip).
@@ -212,149 +202,12 @@ export function SubsystemModelView({
 		[readFile],
 	);
 
-	const onVerifyComponent = useCallback(
-		async (componentAlias: string) => {
-			setVerifyComponentId(componentAlias);
-			setVerification({
-				phase: "checking",
-				message: "Checking filesystem + graphify cache…",
-			});
-			try {
-				const result = await electrobun.rpc!.request.verifySubsystemComponent({
-					graphId,
-					componentAlias,
-				});
-				const structured =
-					result.file != null ||
-					result.cache != null ||
-					result.anchor != null ||
-					result.construct != null ||
-					result.signature != null;
-				if (!result.ok && !structured) {
-					setVerification({
-						phase: "error",
-						ok: false,
-						message: result.error ?? "Verification failed",
-						code: result.code,
-					});
-					return;
-				}
-				setVerification({
-					phase: "done",
-					ok: result.ok,
-					code: result.code,
-					message: result.error,
-					file: result.file
-						? {
-								exists: result.file.exists,
-								symbolDeclared: result.file.symbolDeclared,
-							}
-						: undefined,
-					cache: result.cache
-						? { status: result.cache.status, purl: result.cache.purl }
-						: undefined,
-					anchor: result.anchor
-						? {
-								resolution: result.anchor.resolution,
-								nodeId: result.anchor.nodeId,
-								label: result.anchor.label,
-								source_file: result.anchor.source_file,
-								source_location: result.anchor.source_location,
-								candidates: result.anchor.candidates,
-							}
-						: undefined,
-					construct: result.construct
-						? {
-								claimed: result.construct.claimed,
-								inferred: result.construct.inferred,
-								match: result.construct.match,
-								evidence: result.construct.evidence,
-							}
-						: undefined,
-					signature: result.signature
-						? {
-								match: result.signature.match,
-								skipped: result.signature.skipped,
-								skipCode: result.signature.skipCode,
-								reason: result.signature.reason,
-								claimed: result.signature.claimed,
-								inferred: result.signature.inferred,
-								inlineParameters: result.signature.inferred.inlineParameters,
-							}
-						: undefined,
-					declaration: result.declaration
-						? {
-								freshness: result.declaration.freshness,
-								ref: result.declaration.ref
-									? {
-											startLine: result.declaration.ref.startLine,
-											lineHash: result.declaration.ref.lineHash,
-										}
-									: undefined,
-							}
-						: undefined,
-				});
-				if (result.declaration?.ref) {
-					setGraph((g) =>
-						g
-							? {
-									...g,
-									components: g.components.map((c) =>
-										c.alias === componentAlias
-											? { ...c, declarationRef: result.declaration!.ref }
-											: c,
-									),
-								}
-							: g,
-					);
-				}
-			} catch (err) {
-				setVerification({
-					phase: "error",
-					ok: false,
-					message: err instanceof Error ? err.message : String(err),
-				});
-			}
-		},
-		[graphId],
-	);
-
-	const onSelect = useCallback(
-		(componentAlias: string) => {
-			if (verifyComponentId && verifyComponentId !== componentAlias) {
-				setVerifyComponentId(null);
-				setVerification(null);
-			}
-		},
-		[verifyComponentId],
-	);
-
-	const onAudit = useCallback(async () => {
-		if (!graph || auditBusy) return;
-		setAuditBusy(true);
-		try {
-			const res = await runSubsystemModelAuditFlow(graphId, {
-				graph,
-				onModal: setAuditModal,
-			});
-			if (res.ok) {
-				setAuditReport(res.report);
-				setAuditStale(false);
-				setShowIssues(true);
-			}
-		} finally {
-			setAuditBusy(false);
-		}
-	}, [graph, graphId, auditBusy]);
-
-	// Chip: run when there's no report or it's stale, otherwise toggle the list.
+	// Chip: toggle the diagnostics list. Findings come from the persisted audit
+	// report (kept fresh by the regular-audit pass and model-change broadcasts);
+	// there is no separate on-demand audit here — Run maintenance audits.
 	const onDiagnosticToggle = useCallback(() => {
-		if (!auditReport || auditStale) {
-			void onAudit();
-			return;
-		}
 		setShowIssues((v) => !v);
-	}, [auditReport, auditStale, onAudit]);
+	}, []);
 
 	const { issues: auditIssues, byId: auditFindingById } = useMemo(
 		() => auditReportToIssues(auditReport, graph ?? EMPTY_MODEL),
@@ -365,18 +218,8 @@ export function SubsystemModelView({
 		status: diagnosticStatus(auditReport),
 		issueCount: diagnosticIssueCount(auditReport),
 		stale: auditStale,
-		busy: auditBusy,
 		onToggle: onDiagnosticToggle,
 	};
-
-	const onSelectIssue = useCallback(
-		(issue: SubsystemIssue) => {
-			if (issue.target?.kind === "component" && issue.target.id) {
-				onSelect(issue.target.id);
-			}
-		},
-		[onSelect],
-	);
 
 	const onApplyIssueFix = useCallback(
 		(issue: SubsystemIssue) => {
@@ -427,14 +270,10 @@ export function SubsystemModelView({
 				description={graph.description}
 				renderFileViewer={renderFileViewer}
 				renderWalkthroughViewer={renderWalkthroughViewer}
-				onSelect={onSelect}
-				onVerifyComponent={(id) => void onVerifyComponent(id)}
-				componentVerification={verification}
 				diagnostic={diagnostic}
 				issues={auditIssues}
 				showIssues={showIssues}
 				focusIssueCategory={focusIssueCategory as SubsystemIssueCategory | undefined}
-				onSelectIssue={onSelectIssue}
 				onApplyIssueFix={onApplyIssueFix}
 				sidebarAfterDescription={
 					excalidrawOpen ? <SelectionInspector selection={selection} /> : undefined
@@ -506,17 +345,6 @@ export function SubsystemModelView({
 					</>
 				}
 			/>
-			{auditModal && (
-				<AuditResultsModal
-					state={auditModal}
-					onClose={() => setAuditModal(null)}
-					onReportChange={(report) => {
-						setAuditModal({ phase: "done", report });
-						setAuditReport(report);
-						setAuditStale(false);
-					}}
-				/>
-			)}
 		</div>
 	);
 }

@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { BadgeCheck, Bot, Check, Component, Copy, History, ListChecks, Loader2, Network, Play, Route, ScanSearch, Server, Trash2 } from "lucide-react";
+import { BadgeCheck, Bot, Check, Component, Copy, History, ListChecks, Loader2, Network, Play, Puzzle, Route, ScanSearch, Server, Trash2, Waypoints, Wrench, type LucideIcon } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import { repoAvatarUrl } from "@principal-ai/subsystems-react";
 import type {
@@ -30,15 +30,26 @@ import {
 	subsystemModelProposalsChangeSubscribers,
 	subsystemModelRunsChangeSubscribers,
 } from "../rpc";
-import { runSubsystemModelAuditFlow } from "../auditSubsystemModelFlow";
 import { MaintainModelPickerModal } from "./MaintainModelPickerModal";
 import { MaintenanceAuditAllModal } from "./MaintenanceAuditAllModal";
 import { ProposalsModal } from "./ProposalsModal";
-import { AuditResultsModal, type AuditModalState } from "./AuditResultsModal";
 import { RepoRow } from "./RepoRow";
 
 /** Copy-feedback flash duration for a run row's copy button. */
 const RUN_COPY_FEEDBACK_MS = 1500;
+
+/**
+ * The Maintain agents, in routing priority order (construct → topology →
+ * boundary), each with a badge icon. Mirrors the host's `MaintainAgentId` set;
+ * drives the per-row "which agent is running" badge strip.
+ */
+const AGENT_META: Array<{ agent: string; label: string; Icon: LucideIcon }> = [
+	{ agent: "issue-fixer", label: "Issue Fixer", Icon: Wrench },
+	{ agent: "gap-filler", label: "Gap Filler", Icon: Puzzle },
+	{ agent: "topology-fixer", label: "Topology Fixer", Icon: Network },
+	{ agent: "topology-gap-filler", label: "Topology Gaps", Icon: Waypoints },
+	{ agent: "boundary-gap-filler", label: "Boundary Gaps", Icon: Server },
+];
 
 /** Compact copyable context for one run — mirrors the agent-sessions row copy. */
 function formatRunContext(run: SubsystemModelRun, graphTitle: string): string {
@@ -512,13 +523,6 @@ export function MaintenancePanel({
 	const [error, setError] = useState<string | null>(null);
 	// Graph whose "Run maintenance" click opened the model picker.
 	const [pickTarget, setPickTarget] = useState<MaintenanceOverviewModel | null>(null);
-	// Single-model dry-run audit results (opens AuditResultsModal).
-	const [auditTarget, setAuditTarget] = useState<MaintenanceOverviewModel | null>(
-		null,
-	);
-	const [auditModalState, setAuditModalState] = useState<AuditModalState | null>(
-		null,
-	);
 	// Batch "Audit all" over visible models.
 	const [auditAllOpen, setAuditAllOpen] = useState(false);
 	// Batch "Accept confident" over visible pending proposals at/above the
@@ -691,30 +695,6 @@ export function MaintenancePanel({
 		},
 		[load],
 	);
-
-	// Dry-run deterministic audit for a single model.
-	const runAudit = useCallback(async (m: MaintenanceOverviewModel) => {
-		setAuditTarget(m);
-		setAuditModalState({ phase: "auditing", title: m.title });
-		try {
-			const res = await runSubsystemModelAuditFlow(m.graphId, {
-				onModal: setAuditModalState,
-			});
-			if (res.ok === false) {
-				setAuditModalState({
-					phase: "error",
-					title: m.title,
-					error: res.error,
-				});
-			}
-		} catch (err) {
-			setAuditModalState({
-				phase: "error",
-				title: m.title,
-				error: err instanceof Error ? err.message : String(err),
-			});
-		}
-	}, []);
 
 	// Sequentially accept the confident pending proposals, then refresh so the
 	// ledger and proposal counts land in their post-accept state.
@@ -1278,6 +1258,18 @@ const rowBusy =
 									m.pendingProposalCount === 0;
 								const modelRuns = runsByGraph.get(m.graphId) ?? [];
 								const runsOpen = expandedRunsIds.has(m.graphId);
+								// Which agent is running right now: the live feed's agent
+								// while a session streams, else the newest running run row.
+								const maintainRunning = overview.running.includes(m.graphId);
+								const feed = feeds[m.graphId];
+								const feedAgent =
+									feed && (feed.status === "running" || feed.status === "starting")
+										? feed.agent
+										: undefined;
+								const activeAgent = maintainRunning
+									? (feedAgent ??
+										modelRuns.find((r) => r.status === "running")?.agent)
+									: undefined;
 								return (
 									<div
 										key={m.graphId}
@@ -1398,31 +1390,6 @@ const rowBusy =
 												{m.pendingProposalCount === 1 ? "" : "s"}
 											</button>
 										)}
-										<button
-											type="button"
-											disabled={rowBusy}
-											onClick={() => void runAudit(m)}
-											title="Dry-run deterministic audit of this model (no agent, no mutations)."
-											style={{
-												padding: "0 10px",
-												height: 26,
-												borderRadius: 6,
-												fontSize: theme.fontSizes[0],
-												fontFamily: theme.fonts.body,
-												background: "transparent",
-												color: muted,
-												border: `1px solid ${theme.colors.border ?? "#333"}`,
-												cursor: rowBusy ? "default" : "pointer",
-												opacity: rowBusy ? 0.6 : 1,
-												display: "inline-flex",
-												alignItems: "center",
-												gap: 6,
-												flexShrink: 0,
-											}}
-										>
-											<ScanSearch size={11} />
-											Audit
-										</button>
 										{showRun && (
 											<button
 												type="button"
@@ -1461,6 +1428,61 @@ const rowBusy =
 											onOpenLane={(lane) => onModelOpen(m, lane)}
 										/>
 										</div>
+										{maintainRunning && (
+											<div
+												style={{
+													display: "flex",
+													flexWrap: "wrap",
+													gap: 5,
+													padding: "0 10px 8px",
+												}}
+											>
+												{AGENT_META.map(({ agent, label, Icon }) => {
+													const active = agent === activeAgent;
+													return (
+														<span
+															key={agent}
+															title={
+																active
+																	? `Running: ${agent}`
+																	: activeAgent
+																		? `${agent} — not running (current: ${activeAgent})`
+																		: `${agent} — waiting for the current stage`
+															}
+															style={{
+																display: "inline-flex",
+																alignItems: "center",
+																justifyContent: "center",
+																gap: 5,
+																width: 132,
+																height: 26,
+																padding: "0 8px",
+																borderRadius: 6,
+																fontSize: theme.fontSizes[0],
+																fontFamily: theme.fonts.body,
+																whiteSpace: "nowrap",
+																border: `1px solid ${
+																	active
+																		? theme.colors.primary
+																		: (theme.colors.border ?? "#333")
+																}`,
+																background: active
+																	? theme.colors.primary
+																	: "transparent",
+																color: active
+																	? theme.colors.background
+																	: muted,
+																opacity: active ? 1 : 0.5,
+																flexShrink: 0,
+															}}
+														>
+															<Icon size={12} />
+															{label}
+														</span>
+													);
+												})}
+											</div>
+										)}
 										{runsOpen && (
 											<div
 												style={{
@@ -1536,16 +1558,6 @@ const rowBusy =
 					mode={pickTarget.verdict === "issues" ? "issues" : "gaps"}
 					onClose={() => setPickTarget(null)}
 					onStarted={onMaintainStarted}
-				/>
-			)}
-			{auditTarget && auditModalState && (
-				<AuditResultsModal
-					state={auditModalState}
-					onClose={() => {
-						setAuditTarget(null);
-						setAuditModalState(null);
-					}}
-					onReportChange={() => void load()}
 				/>
 			)}
 			{auditAllOpen && (

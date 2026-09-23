@@ -18,7 +18,11 @@ const TYPE_FAMILY_CONSTRUCTS: ReadonlySet<string> = new Set([
 ]);
 
 export function generateDeclarationString(component: SubsystemComponent): string {
-  const declaration = component.declaration;
+  // An accepted signature augmentation stands in for the model's own
+  // `declaration` when there isn't one — the panel shows the same declaration
+  // either way, with no marker distinguishing the source.
+  const declaration =
+    component.declaration ?? declarationFromAugmentation(component);
   // Type-family constructs own their rendering even when the declaration
   // payload is the shared `type` shape — the construct says which keyword is honest.
   const construct = TYPE_FAMILY_CONSTRUCTS.has(component.construct)
@@ -65,6 +69,43 @@ export function generateDeclarationString(component: SubsystemComponent): string
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Build a structured declaration from an accepted signature augmentation when
+ * the component has no own `declaration`. Only function/method constructs carry
+ * an augmentation signature; other constructs return undefined so their
+ * generators run unchanged.
+ */
+function declarationFromAugmentation(
+  component: SubsystemComponent,
+): GraphifyComponentDetail | undefined {
+  const aug = component.signatureAugmentation;
+  if (!aug) return undefined;
+  const parameters = aug.parameters.map((p) =>
+    p.name ? { name: p.name, type: p.type } : { type: p.type },
+  );
+  if (component.construct === 'method') {
+    const hostClass = component.symbol?.includes('.')
+      ? component.symbol.split('.')[0]!
+      : 'Host';
+    return {
+      kind: 'method',
+      hostClass,
+      parameters,
+      returnType: aug.returnType,
+    };
+  }
+  if (component.construct === 'function') {
+    return {
+      kind: 'function',
+      parameters,
+      returnType: aug.returnType,
+      callers: [],
+      callees: [],
+    };
+  }
+  return undefined;
+}
 
 /** Format parameters, synthesising names for unnamed positionals. */
 function formatParams(params: { name?: string; type: string }[]): string {

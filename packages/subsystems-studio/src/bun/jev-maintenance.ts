@@ -99,7 +99,7 @@ function constructSubject(proposal: SubsystemModelProposal): string {
 	if (!c) return LANE_SUBJECT.construct;
 	if (c.target === "augmentation") {
 		if (c.field === "signature") {
-			return "The proposed signature is an accurate, complete extraction of the function/method declaration in the source under review. For a React component function (in a .tsx file) that destructures a single props object and returns JSX without a declared return type, an inferred JSX.Element return type is the correct and expected claim — treat the absence of an explicit return annotation as confirming JSX.Element whenever the body contains a `return ( ... )` or other JSX expression, and do not penalize the claim for inferring it.";
+			return "The proposed signature is an accurate, complete extraction of the function/method declaration in the source under review. For a React component function (in a .tsx file) that destructures a single props object and returns JSX without a declared return type, an inferred JSX.Element return type is the correct and expected claim — treat the absence of an explicit return annotation as confirming JSX.Element whenever the body contains a `return ( ... )` or other JSX expression, and do not penalize the claim for inferring it. When the declaration has an explicit return annotation, that declared type is authoritative and complete: a named or union return type (for example `Promise<MaintainModelResult>` or `MaintainRoute | null`) is the correct claim whenever it matches the source — do not penalize the claim for referencing a project-local type whose definition you cannot see in full. Likewise a structural object parameter type (for example `opts?: { model?: string; onSession?: (sessionId: string) => void }`) is the correct claim when it matches the source verbatim; do not treat structural, optional, or function-typed members as unverifiable.";
 		}
 		if (c.field === "construct") {
 			return "The proposed construct classification is accurate for the declaration in the source under review.";
@@ -130,6 +130,28 @@ export function accuracyInstruction(proposal: SubsystemModelProposal): string {
 	const subject =
 		lane === "construct" ? constructSubject(proposal) : LANE_SUBJECT[lane];
 	return `${subject} Judge only whether the source supports it — ignore whether accepting it is risky.`;
+}
+
+/**
+ * Risk wording for auto-accept. A signature augmentation that was checked
+ * against the declaration in the source under review is a low-risk, reversible
+ * claim (it records a confirmation in the augmentation store; it does not
+ * rewrite model JSON), so steer Jev toward Safe rather than the generic
+ * "Needs human" default for augmentations.
+ */
+export function riskInstruction(
+	proposal: SubsystemModelProposal,
+	opts?: { hasSourceContext?: boolean },
+): string {
+	const base = "Risk of auto-accepting this correction";
+	const c = proposal.changes[0];
+	const isSourceBackedSignatureAugment =
+		opts?.hasSourceContext === true &&
+		proposalLane(proposal) === "construct" &&
+		c?.target === "augmentation" &&
+		c.field === "signature";
+	if (!isSourceBackedSignatureAugment) return base;
+	return `${base}. This is a signature augmentation verified against the declaration in the source under review; it records a confirmation and does not rewrite the model JSON. Score Safe when the proposed signature matches the source, Needs human only when the source is ambiguous, and Unsafe only when the source contradicts it.`;
 }
 
 /** Per-lane `change_kind` choice: instructions + option criteria. */
@@ -283,7 +305,9 @@ export async function evaluateProposalSecondOpinion(
 					},
 					risk: {
 						type: "score",
-						instructions: "Risk of auto-accepting this correction",
+						instructions: riskInstruction(proposal, {
+							hasSourceContext: Boolean(opts?.sourceContext?.trim()),
+						}),
 						criteria: ["Safe", "Needs human", "Unsafe"],
 					},
 				},

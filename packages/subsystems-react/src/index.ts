@@ -173,6 +173,8 @@ export type {
   SubsystemEdgeView,
   SubsystemConstructDeclaration,
   SubsystemDeclarationProvenance,
+  SubsystemSignatureClaim,
+  SubsystemSignatureParameter,
 } from './subsystem/model';
 export {
   constructBadgeLabel,

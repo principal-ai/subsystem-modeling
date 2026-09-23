@@ -30,7 +30,15 @@ import {
 	resolveRepoRootForComponent,
 	type StoredSubsystemModel,
 } from "./subsystem-model-store";
-import { pendingProposalCount } from "./proposal-store";
+import {
+	pendingProposalCount,
+	pendingProposalCountForRun,
+} from "./proposal-store";
+import {
+	runMaintainSequence,
+	type MaintainSequenceOutcome,
+	type MaintainStageOutcome,
+} from "./maintain-sequence";
 import { resolveSubsystemMaintainerModel, modelProviderOf, FALLBACK_MAINTAINER_MODEL } from "./opencode-models";
 import {
 	firstActivityTimeoutMsFor,
@@ -796,16 +804,24 @@ export async function runClaimAdjudicator(opts: {
 	};
 }
 
+interface MaintainRunContext {
+	graph: StoredSubsystemModel;
+	/** Model resolved for this run (before any per-run fallback). */
+	model: string;
+	credentialed: string[] | null;
+	root?: string;
+}
+
 /**
- * Full host path: install agents → audit → route by verdict → brief → opencode.
+ * Install agents, load the model, and resolve the maintainer model — the
+ * shared preamble for a single-stage run and a full sequence.
  */
-export async function maintainSubsystemModel(
+async function resolveMaintainRunContext(
 	graphId: string,
-	opts?: {
-		model?: string;
-		onSession?: (sessionId: string) => void;
-	},
-): Promise<MaintainModelResult> {
+	opts?: { model?: string },
+): Promise<
+	{ ok: true; ctx: MaintainRunContext } | { ok: false; error: string }
+> {
 	const installed = ensureMaintainAgentsInstalled();
 	if (!installed.ok) {
 		return { ok: false, error: installed.error ?? "failed to install agents" };
@@ -832,45 +848,10 @@ export async function maintainSubsystemModel(
 		patchViewerSettings(settings, { subsystemMaintainerModel: null });
 	}
 
-	const audit = await auditSubsystemModel(graphId);
-	if (!audit.ok) return { ok: false, error: audit.error };
-
-	const verdict = classifyAuditReport(audit.report);
-	const route = selectMaintainRoute(audit.report);
-	const pendingCount = await pendingProposalCount(graphId);
-	const root = primaryRepoRoot(graph);
-
-	if (!route) {
-		const summary = "Fully verified — nothing for Maintain to propose";
-		try {
-			await noteSubsystemModelRunFinish({
-				graphId,
-				graphTitle: graph.title,
-				status: "skipped",
-				model: resolved.model,
-				verdict,
-				pendingCount,
-				summary,
-			});
-		} catch {
-			// Best-effort log — skip reporting still succeeds without it.
-		}
-		return {
-			ok: true,
-			skipped: true,
-			verdict,
-			model: resolved.model,
-			pendingCount,
-			summary,
-		};
-	}
-
-	const { agent, mode, layer } = route;
 	const credentialed = resolved.credentialedProviders ?? null;
-
+	let model = resolved.model;
 	// Degraded-memory fast path: the free tier just proved unusable, so don't
 	// re-burn the 30s liveness timeout — go straight to the credentialed fallback.
-	let model = resolved.model;
 	if (
 		isModelUnusable(model) &&
 		modelProviderOf(model) === "opencode" &&
@@ -879,16 +860,50 @@ export async function maintainSubsystemModel(
 		model = FALLBACK_MAINTAINER_MODEL;
 	}
 
+	return {
+		ok: true,
+		ctx: { graph, model, credentialed, root: primaryRepoRoot(graph) },
+	};
+}
+
+interface MaintainStageRunResult {
+	ok: boolean;
+	/** Durable run id for this stage — the join key for its proposals. */
+	runId: string;
+	model: string;
+	error?: string;
+	summary?: string;
+	sessionId?: string;
+	unusable?: boolean;
+}
+
+/**
+ * Run exactly one stage's agent against a supplied audit report, log the run,
+ * and retry once on the credentialed fallback when the free tier proves
+ * unusable headless.
+ */
+async function runMaintainStage(opts: {
+	ctx: MaintainRunContext;
+	graphId: string;
+	report: SubsystemModelAuditReport;
+	route: MaintainRoute;
+	verdict?: SubsystemModelAuditVerdict;
+	onSession?: (sessionId: string) => void;
+}): Promise<MaintainStageRunResult> {
+	const { ctx, graphId, report, route, verdict } = opts;
+	const { agent, mode, layer } = route;
+	const graph = ctx.graph;
+
 	const runOnce = async (runModel: string, probeRunId: string) => {
 		const runId = randomUUID();
 		const startedAt = new Date().toISOString();
 		let sessionId: string | undefined;
 		const run = await runMaintainAgent({
 			agent,
-			primaryRepoRoot: root,
+			primaryRepoRoot: ctx.root,
 			task: buildMaintainBrief({
 				graph,
-				report: audit.report,
+				report,
 				route,
 				probeRunId,
 				runId,
@@ -911,7 +926,7 @@ export async function maintainSubsystemModel(
 					model: runModel,
 					startedAt,
 				}).catch(() => {});
-				opts?.onSession?.(sid);
+				opts.onSession?.(sid);
 			},
 			probeRunId,
 			firstActivityTimeoutMs: firstActivityTimeoutMsFor(runModel),
@@ -936,10 +951,10 @@ export async function maintainSubsystemModel(
 		} catch {
 			// Best-effort log — never fail the run over it.
 		}
-		return run;
+		return { run, runId };
 	};
 
-	let run = await runOnce(model, randomUUID());
+	let { run, runId } = await runOnce(ctx.model, randomUUID());
 
 	// The model could not make its first tool call — it's unusable headless.
 	// Remember that, then retry once on the credentialed fallback if we have one.
@@ -947,37 +962,179 @@ export async function maintainSubsystemModel(
 		rememberModelUnusable(run.model);
 		if (
 			modelProviderOf(run.model) === "opencode" &&
-			credentialed?.includes("opencode-go")
+			ctx.credentialed?.includes("opencode-go")
 		) {
-			run = await runOnce(FALLBACK_MAINTAINER_MODEL, randomUUID());
+			({ run, runId } = await runOnce(FALLBACK_MAINTAINER_MODEL, randomUUID()));
 		}
 	}
 
+	return {
+		ok: run.ok,
+		runId,
+		model: run.model || ctx.model,
+		error: run.error,
+		summary: run.summary,
+		sessionId: run.sessionId,
+		unusable: run.unusable,
+	};
+}
+
+/**
+ * Full host path: install agents → audit → route by verdict → brief → opencode.
+ */
+export async function maintainSubsystemModel(
+	graphId: string,
+	opts?: {
+		model?: string;
+		onSession?: (sessionId: string) => void;
+	},
+): Promise<MaintainModelResult> {
+	const resolved = await resolveMaintainRunContext(graphId, opts);
+	if (!resolved.ok) return { ok: false, error: resolved.error };
+	const { ctx } = resolved;
+
+	const audit = await auditSubsystemModel(graphId);
+	if (!audit.ok) return { ok: false, error: audit.error };
+
+	const verdict = classifyAuditReport(audit.report);
+	const route = selectMaintainRoute(audit.report);
+	const pendingCount = await pendingProposalCount(graphId);
+
+	if (!route) {
+		const summary = "Fully verified — nothing for Maintain to propose";
+		try {
+			await noteSubsystemModelRunFinish({
+				graphId,
+				graphTitle: ctx.graph.title,
+				status: "skipped",
+				model: ctx.model,
+				verdict,
+				pendingCount,
+				summary,
+			});
+		} catch {
+			// Best-effort log — skip reporting still succeeds without it.
+		}
+		return {
+			ok: true,
+			skipped: true,
+			verdict,
+			model: ctx.model,
+			pendingCount,
+			summary,
+		};
+	}
+
+	const stage = await runMaintainStage({
+		ctx,
+		graphId,
+		report: audit.report,
+		route,
+		verdict,
+		onSession: opts?.onSession,
+	});
+
 	const pendingAfter = await pendingProposalCount(graphId);
-	if (!run.ok) {
+	if (!stage.ok) {
 		return {
 			ok: false,
-			error: run.error,
-			model: run.model,
-			agent,
-			layer,
-			mode,
+			error: stage.error,
+			model: stage.model,
+			agent: route.agent,
+			layer: route.layer,
+			mode: route.mode,
 			verdict,
 			pendingCount: pendingAfter,
-			summary: run.summary,
-			sessionId: run.sessionId,
+			summary: stage.summary,
+			sessionId: stage.sessionId,
 		};
 	}
 	return {
 		ok: true,
-		model: run.model,
-		agent,
-		layer,
-		mode,
+		model: stage.model,
+		agent: route.agent,
+		layer: route.layer,
+		mode: route.mode,
 		verdict,
 		pendingCount: pendingAfter,
-		summary: run.summary,
-		sessionId: run.sessionId,
+		summary: stage.summary,
+		sessionId: stage.sessionId,
+	};
+}
+
+export interface MaintainSequenceHostResult {
+	ok: boolean;
+	outcome: MaintainSequenceOutcome;
+	stages: MaintainStageOutcome[];
+	blockedAt?: MaintainRoute;
+	error?: string;
+	model?: string;
+	pendingCount: number;
+}
+
+/**
+ * Full sequenced path: audit → run each routed stage in priority order,
+ * advancing only when a stage leaves no pending proposals. Stops and surfaces
+ * (`needs_unblock`) the moment a stage does not clear — see runMaintainSequence.
+ */
+export async function maintainSubsystemModelSequence(
+	graphId: string,
+	opts?: {
+		model?: string;
+		onSession?: (sessionId: string) => void;
+		maxStages?: number;
+	},
+): Promise<MaintainSequenceHostResult> {
+	const resolved = await resolveMaintainRunContext(graphId, opts);
+	if (!resolved.ok) {
+		return {
+			ok: false,
+			outcome: "error",
+			stages: [],
+			error: resolved.error,
+			pendingCount: 0,
+		};
+	}
+	const { ctx } = resolved;
+	let lastModel = ctx.model;
+
+	const result = await runMaintainSequence({
+		audit: async () => {
+			const audited = await auditSubsystemModel(graphId);
+			if (!audited.ok) throw new Error(audited.error);
+			return audited.report;
+		},
+		runStage: async (route, report) => {
+			const stage = await runMaintainStage({
+				ctx,
+				graphId,
+				report,
+				route,
+				verdict: classifyAuditReport(report),
+				onSession: opts?.onSession,
+			});
+			lastModel = stage.model;
+			return {
+				ok: stage.ok,
+				runId: stage.runId,
+				error: stage.error,
+				sessionId: stage.sessionId,
+				summary: stage.summary,
+			};
+		},
+		pendingForRun: (runId) => pendingProposalCountForRun(graphId, runId),
+		maxStages: opts?.maxStages,
+	});
+
+	const pendingCount = await pendingProposalCount(graphId);
+	return {
+		ok: result.ok,
+		outcome: result.outcome,
+		stages: result.stages,
+		blockedAt: result.blockedAt,
+		error: result.error,
+		model: lastModel,
+		pendingCount,
 	};
 }
 

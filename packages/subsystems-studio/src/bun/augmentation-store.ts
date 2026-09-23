@@ -136,6 +136,56 @@ export async function listGraphifyAugmentations(
 	return doc.augmentations.filter((a) => a.status === opts.status);
 }
 
+/** A component carrying a display-only accepted signature augmentation. */
+export type SignatureAugmented<T> = T & {
+	signatureAugmentation?: SignatureAugmentationClaim;
+};
+
+/**
+ * Overlay accepted signature augmentations onto components for display.
+ *
+ * Matches by purl repo key + `file#symbol`; components without a matching
+ * accepted signature augmentation pass through unchanged. Returns new objects
+ * — the caller's model document (and the JSON on disk) is never mutated. This
+ * is how the renderer's `ComponentDeclaration` learns a signature is
+ * augmentation-backed.
+ */
+export async function attachSignatureAugmentations<
+	T extends { purl?: string; file?: string; symbol?: string },
+>(
+	components: T[],
+	opts?: { storeRoot?: string },
+): Promise<Array<SignatureAugmented<T>>> {
+	const perPurl = new Map<string, Map<string, SignatureAugmentationClaim>>();
+	const loadPurl = async (
+		key: string,
+	): Promise<Map<string, SignatureAugmentationClaim>> => {
+		const cached = perPurl.get(key);
+		if (cached) return cached;
+		const map = new Map<string, SignatureAugmentationClaim>();
+		const augs = await listGraphifyAugmentations(key, {
+			status: "accepted",
+			storeRoot: opts?.storeRoot,
+		});
+		for (const a of augs) {
+			const sig = normalizeSignatureClaim(a.claims.signature);
+			if (sig) map.set(augmentationKey(a.file, a.symbol), sig);
+		}
+		perPurl.set(key, map);
+		return map;
+	};
+
+	return Promise.all(
+		components.map(async (c) => {
+			const key = c.purl ? (purlRepoKey(c.purl) ?? c.purl.trim()) : "";
+			if (!key || !c.file?.trim() || !c.symbol?.trim()) return c;
+			const map = await loadPurl(key);
+			const sig = map.get(augmentationKey(c.file, c.symbol));
+			return sig ? { ...c, signatureAugmentation: sig } : c;
+		}),
+	);
+}
+
 /**
  * Latest accepted construct claim for this file+symbol, if any.
  */

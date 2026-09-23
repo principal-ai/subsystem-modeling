@@ -565,6 +565,16 @@ export async function pendingProposalCount(graphId: string): Promise<number> {
 	return pending.length;
 }
 
+/** Pending proposals attributable to one Maintain run (by `runId`). Used by the
+ *  maintain sequence to tell whether a stage cleared. */
+export async function pendingProposalCountForRun(
+	graphId: string,
+	runId: string,
+): Promise<number> {
+	const pending = await listSubsystemModelProposals(graphId);
+	return pending.filter((p) => p.runId === runId).length;
+}
+
 export async function getSubsystemModelProposal(
 	graphId: string,
 	proposalId: string,

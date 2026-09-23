@@ -2230,6 +2230,21 @@ export type StudioMessages = {
 			| "boundary-gap-filler";
 		/** True when audit was fully verified and no agent ran. */
 		skipped?: boolean;
+		/** Sequenced-run outcome (multi-stage Maintain). */
+		outcome?: "converged" | "needs_unblock" | "cap" | "error";
+		/** Stages run in this sequence. */
+		stages?: number;
+		/** Stage that left pending proposals when `outcome === "needs_unblock"`. */
+		blockedAt?: {
+			agent?:
+				| "issue-fixer"
+				| "gap-filler"
+				| "topology-fixer"
+				| "topology-gap-filler"
+				| "boundary-gap-filler";
+			layer: "construct" | "topology" | "boundary";
+			mode: "issues" | "gaps";
+		};
 	};
 	/** Host regular-audit scheduler status changed (enable/interval/tick/running). */
 	regularAuditChanged: RegularAuditStatus;

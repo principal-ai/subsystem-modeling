@@ -43,6 +43,7 @@ import { startHttpServer } from "./http-server";
 import { resolveSandboxed } from "./sandboxed-path";
 import { deleteSubsystemModel, getSubsystemModel, listSubsystemModels, purlRepoKey, resolveRepoRootForComponent, setSubsystemModelChangeListener, startSubsystemModelDirWatcher, subsystemModelFilePath, touchSubsystemModelOpened, updateSubsystemModel } from "./subsystem-model-store";
 import { mergeSubsystemModels, type MergeInputModel } from "./merge-submodel-models";
+import { attachSignatureAugmentations } from "./augmentation-store";
 import { publishSubsystemModelGist } from "./gist-publish";
 import {
 	buildAuditFingerprint,
@@ -61,7 +62,7 @@ import {
 	rejectSubsystemModelProposal as rejectProposalInStore,
 	setProposalSecondOpinion,
 } from "./proposal-store";
-import { maintainSubsystemModel as runMaintainSubsystemModel } from "./maintain-model";
+import { maintainSubsystemModelSequence } from "./maintain-model";
 import {
 	autoAcceptProposalIfConfident,
 	evaluateProposalSecondOpinion,
@@ -2241,7 +2242,10 @@ const requests: RequestHandlers = {
 			getSubsystemModel: async ({ graphId }) => {
 				const graph = await getSubsystemModel(graphId);
 				if (!graph) return { ok: false, error: `unknown graph: ${graphId}` };
-				return { ok: true, graph };
+				// Overlay accepted signature augmentations for display only —
+				// never written back to the stored model.
+				const components = await attachSignatureAugmentations(graph.components);
+				return { ok: true, graph: { ...graph, components } };
 			},
 			updateSubsystemModel: async ({ graphId, patch }) => {
 				const updated = await updateSubsystemModel(graphId, patch);
@@ -2264,9 +2268,13 @@ const requests: RequestHandlers = {
 					if (touches) models.push({ id: e.id, document: full });
 				}
 				const merged = mergeSubsystemModels(models);
+				// Overlay accepted signature augmentations for display only.
+				const components = await attachSignatureAugmentations(
+					merged.document.components,
+				);
 				return {
 					ok: true as const,
-					document: merged.document,
+					document: { ...merged.document, components },
 					sidecar: merged.sidecar,
 					modelIds: models.map((m) => m.id),
 				};
@@ -3260,7 +3268,7 @@ function maintainSubsystemModelInBackground(
 	broadcastSubsystemModelMaintainChanged({ graphId, status: "running" });
 	void (async () => {
 		try {
-			const result = await runMaintainSubsystemModel(graphId, {
+			const result = await maintainSubsystemModelSequence(graphId, {
 				model: opts?.model,
 				onSession: (sessionId) => {
 					const feed = getOpencodeLiveFeed(sessionId);
@@ -3274,8 +3282,7 @@ function maintainSubsystemModelInBackground(
 					broadcastSubsystemModelRunsChanged({ graphId });
 				},
 			});
-			const pendingCount =
-				result.pendingCount ?? (await pendingProposalCount(graphId));
+			const pendingCount = result.pendingCount;
 			broadcastSubsystemModelProposalsChanged({ graphId, pendingCount });
 			if (!result.ok) {
 				broadcastSubsystemModelMaintainChanged({
@@ -3283,20 +3290,24 @@ function maintainSubsystemModelInBackground(
 					status: "error",
 					error: result.error ?? "maintain failed",
 					pendingCount,
-					summary: result.summary,
 					model: result.model,
-					agent: result.agent,
+					outcome: result.outcome,
+					stages: result.stages.length,
+					blockedAt: result.blockedAt,
 				});
 				return;
 			}
+			const lastStage = result.stages[result.stages.length - 1];
 			broadcastSubsystemModelMaintainChanged({
 				graphId,
 				status: "done",
 				pendingCount,
-				summary: result.summary,
+				summary: lastStage?.summary,
 				model: result.model,
-				agent: result.agent,
-				skipped: result.skipped,
+				outcome: result.outcome,
+				stages: result.stages.length,
+				blockedAt: result.blockedAt,
+				skipped: result.outcome === "converged" && result.stages.length === 0,
 			});
 		} catch (err) {
 			broadcastSubsystemModelMaintainChanged({

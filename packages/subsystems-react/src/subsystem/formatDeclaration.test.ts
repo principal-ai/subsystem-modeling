@@ -113,3 +113,85 @@ describe('generateDeclarationString — type family', () => {
     ).toBe("enum StudioMessageSubscriber { Running = 'running' }");
   });
 });
+
+describe('generateDeclarationString — signature augmentation', () => {
+  const base = (component: Partial<SubsystemComponent>): SubsystemComponent => ({
+    alias: 'aug',
+    name: 'fn',
+    construct: 'function',
+    file: 'src/fn.ts',
+    purl: 'pkg:github/acme/widget',
+    ...component,
+  });
+
+  test('function: renders params + return from the augmentation when no declaration', () => {
+    expect(
+      generateDeclarationString(
+        base({
+          name: 'WalkthroughsPanel',
+          symbol: 'WalkthroughsPanel',
+          signatureAugmentation: {
+            parameters: [{ type: 'WalkthroughsPanelProps' }],
+            returnType: 'JSX.Element',
+          },
+        }),
+      ),
+    ).toBe('function WalkthroughsPanel(arg0: WalkthroughsPanelProps): JSX.Element;');
+  });
+
+  test('method: hostClass comes from the dotted symbol', () => {
+    expect(
+      generateDeclarationString(
+        base({
+          name: 'normalize',
+          symbol: 'SessionReader.normalize',
+          construct: 'method',
+          signatureAugmentation: {
+            parameters: [{ name: 'session', type: 'SessionRecord' }],
+            returnType: 'SessionEvent[]',
+          },
+        }),
+      ),
+    ).toBe(
+      'class SessionReader {\n  normalize(session: SessionRecord): SessionEvent[];\n}',
+    );
+  });
+
+  test('own declaration wins over the augmentation', () => {
+    expect(
+      generateDeclarationString(
+        base({
+          name: 'foo',
+          symbol: 'foo',
+          declaration: {
+            kind: 'function',
+            parameters: [{ name: 'x', type: 'number' }],
+            returnType: 'void',
+            callers: [],
+            callees: [],
+          },
+          signatureAugmentation: {
+            parameters: [{ name: 'ignored', type: 'string' }],
+            returnType: 'string',
+          },
+        }),
+      ),
+    ).toBe('function foo(x: number): void;');
+  });
+
+  test('non-callable construct ignores the augmentation', () => {
+    expect(
+      generateDeclarationString(
+        base({
+          name: 'Foo',
+          symbol: 'Foo',
+          construct: 'interface',
+          signatureAugmentation: {
+            parameters: [{ type: 'Bar' }],
+            returnType: 'void',
+          },
+        }),
+      ),
+    ).toBe('interface Foo {}');
+  });
+});
