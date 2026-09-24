@@ -51,12 +51,23 @@ export function AgentLogo({ agent, size = 14 }: { agent: string; size?: number }
 	const { theme } = useTheme();
 	const key = agent.toLowerCase();
 	// Maintain OpenCode sub-agents / V2 pipeline tag share the opencode mark.
+	const maintainAgents = [
+		"construct-verifier",
+		"static-topology-verifier",
+		"package-module-verifier",
+		"runtime-topology-verifier",
+		"construct-fixer",
+		"static-topology-fixer",
+		"package-module-fixer",
+		// Legacy (pre-rename).
+		"issue-fixer",
+		"gap-filler",
+		"topology-fixer",
+		"topology-gap-filler",
+		"boundary-gap-filler",
+	];
 	const logoKey =
-		key === "issue-fixer" ||
-		key === "gap-filler" ||
-		key === "topology-fixer" ||
-		key === "topology-gap-filler" ||
-		key === "boundary-gap-filler" ||
+		maintainAgents.includes(key) ||
 		key === "maintain" ||
 		key === "opencode-v2" ||
 		key === "opencode2"

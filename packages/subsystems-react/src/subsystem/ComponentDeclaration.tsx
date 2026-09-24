@@ -6,7 +6,7 @@
  * comments. File content lives in the bottom FileDrawer, not here.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AlignLeft, FileText } from 'lucide-react';
 import { useTheme } from '@principal-ade/industry-theme';
 import { resolvePierreSyntaxThemeName } from '../pierre/pierreSyntaxTheme';
@@ -19,6 +19,38 @@ import type { SubsystemOpenFileOptions } from './declarationRef';
 import { parseSourceLocation } from './declarationRef';
 import { tokenizeComponent } from './tokenizeComponent';
 import { componentColor } from '../pierre/constructColors';
+import type { DeclarationSymbolRef, SymbolInspection } from './symbolRefs';
+import { extractDeclarationSymbolRefs } from './symbolRefs';
+import { SymbolInspectionCard } from './SymbolInspectionCard';
+
+/** One clickable span in the token stream, mapped to a referenced symbol. */
+interface SymbolClickRange {
+  start: number;
+  end: number;
+  ref: DeclarationSymbolRef;
+}
+
+/** Whole-word occurrences of `name` in `text` (identifier boundaries only). */
+function findSymbolOccurrences(
+  text: string,
+  name: string,
+): { start: number; end: number }[] {
+  const out: { start: number; end: number }[] = [];
+  if (!name) return out;
+  const isWordChar = (ch: string) => /[\w$]/.test(ch);
+  let from = 0;
+  for (;;) {
+    const idx = text.indexOf(name, from);
+    if (idx < 0) break;
+    const before = idx > 0 ? text[idx - 1]! : '';
+    const after = text[idx + name.length] ?? '';
+    if ((!before || !isWordChar(before)) && (!after || !isWordChar(after))) {
+      out.push({ start: idx, end: idx + name.length });
+    }
+    from = idx + name.length;
+  }
+  return out;
+}
 
 /** Live / result state for the declaration-panel Verify control. */
 export type ComponentVerificationPhase =
@@ -113,6 +145,14 @@ export interface ComponentDeclarationProps {
   /** Related-name click (types, callers/callees, implementors, …) → select
    *  that component if one matches; unmatched refs no-op. */
   onRelatedSelect?: (ref: string) => void;
+  /** Referenced-symbol click → resolve it against graphify. When absent,
+   *  symbols are not clickable. Host-injected; stories pass a fixture. */
+  onInspectSymbol?: (
+    symbol: string,
+    ref: DeclarationSymbolRef,
+  ) => Promise<SymbolInspection | null> | SymbolInspection | null;
+  /** "Add to references" from the inspection card. */
+  onAddToModel?: (ref: DeclarationSymbolRef, info?: SymbolInspection) => void;
   /** Max width of the declaration panel (CSS value). Defaults to none. */
   maxWidth?: string | number;
   /** Live verification status for the selected component. */
@@ -267,6 +307,8 @@ export function ComponentDeclaration({
   component,
   onOpenFile,
   onRelatedSelect: _onRelatedSelect,
+  onInspectSymbol,
+  onAddToModel,
   maxWidth,
   verification,
   defaultShowFile = false,
@@ -299,6 +341,53 @@ export function ComponentDeclaration({
   };
   /** Fallback when wire tokens omit Shiki colors. */
   const declarationTextColor = muted;
+
+  // Symbols the declaration references — made clickable for a graphify lookup.
+  const symbolRefs = useMemo(
+    () => extractDeclarationSymbolRefs(component.declaration),
+    [component.declaration],
+  );
+  const [inspection, setInspection] = useState<
+    | {
+        ref: DeclarationSymbolRef;
+        loading: boolean;
+        info?: SymbolInspection;
+        error?: string;
+        x: number;
+        y: number;
+      }
+    | null
+  >(null);
+  // Symbol name currently hovered, so every occurrence of the same symbol can
+  // highlight together (and stay lit while its popover is open).
+  const [hoveredSymbol, setHoveredSymbol] = useState<string | null>(null);
+  const activeSymbol = inspection?.ref.name ?? null;
+
+  // Dismiss the inspection card on outside click / Escape.
+  useEffect(() => {
+    if (!inspection) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      // The popover, and the symbol spans themselves (they toggle on click),
+      // must not be treated as outside.
+      if (t?.closest('[data-symbol-inspection]')) return;
+      if (t?.closest('[data-symbol-ref]')) return;
+      setInspection(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        // Drop focus from the symbol span so no focus ring lingers after close.
+        (document.activeElement as HTMLElement | null)?.blur?.();
+        setInspection(null);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [inspection]);
 
   const declarationStartLine =
     component.declarationRef?.startLine ??
@@ -729,22 +818,140 @@ export function ComponentDeclaration({
       cancelled = true;
     };
   }, [component, printWidth, pierreSyntaxTheme]);
+
+  // Map character offsets in the concatenated token text to referenced symbols,
+  // so inline occurrences render as clickable spans. `-1` = not a symbol.
+  const clickIndex = useMemo(() => {
+    const full = tokens.map((t) => t.text).join('');
+    const rangeAt = new Int32Array(full.length).fill(-1);
+    if (!onInspectSymbol || symbolRefs.length === 0) {
+      return { ranges: [] as SymbolClickRange[], rangeAt };
+    }
+    const ranges: SymbolClickRange[] = [];
+    for (const ref of symbolRefs) {
+      for (const occ of findSymbolOccurrences(full, ref.name)) {
+        ranges.push({ start: occ.start, end: occ.end, ref });
+      }
+    }
+    ranges.sort((a, b) => a.start - b.start);
+    ranges.forEach((r, i) => {
+      for (let k = r.start; k < r.end && k < rangeAt.length; k++) {
+        if (rangeAt[k] === -1) rangeAt[k] = i;
+      }
+    });
+    return { ranges, rangeAt };
+  }, [onInspectSymbol, symbolRefs, tokens]);
+
+  const handleInspect = useCallback(
+    async (ref: DeclarationSymbolRef, el: HTMLElement) => {
+      if (!onInspectSymbol) return;
+      // Toggle: clicking the symbol whose popover is already open closes it.
+      if (inspection?.ref.name === ref.name) {
+        setInspection(null);
+        return;
+      }
+      let x = 0;
+      let y = 0;
+      const cont = containerRef.current;
+      if (cont) {
+        const crect = cont.getBoundingClientRect();
+        const r = el.getBoundingClientRect();
+        x = r.left - crect.left;
+        y = r.bottom - crect.top + 4;
+      }
+      setInspection({ ref, loading: true, x, y });
+      try {
+        const info = await onInspectSymbol(ref.name, ref);
+        setInspection((cur) =>
+          cur?.ref.name === ref.name
+            ? { ref, loading: false, info: info ?? undefined, x, y }
+            : cur,
+        );
+      } catch (err) {
+        setInspection((cur) =>
+          cur?.ref.name === ref.name
+            ? {
+                ref,
+                loading: false,
+                error: err instanceof Error ? err.message : String(err),
+                x,
+                y,
+              }
+            : cur,
+        );
+      }
+    },
+    [onInspectSymbol, inspection],
+  );
+
   const declLines: ReactNode[][] = [[]];
   let di = 0;
+  let offset = 0;
   for (const tok of tokens) {
     if (tok.kind === 'newline') {
       declLines.push([]);
       di++;
       continue;
     }
-    declLines[di].push(
-      <span
-        key={`${di}-${declLines[di].length}`}
-        style={{ color: tok.color ?? tokenColor[tok.kind] ?? declarationTextColor }}
-      >
-        {tok.text}
-      </span>,
-    );
+    const color = tok.color ?? tokenColor[tok.kind] ?? declarationTextColor;
+    let i = 0;
+    while (i < tok.text.length) {
+      const rIdx = clickIndex.rangeAt[offset + i] ?? -1;
+      let j = i + 1;
+      while (j < tok.text.length && (clickIndex.rangeAt[offset + j] ?? -1) === rIdx) {
+        j++;
+      }
+      const piece = tok.text.slice(i, j);
+      const key = `${di}-${declLines[di].length}`;
+      const range = rIdx >= 0 ? clickIndex.ranges[rIdx] : undefined;
+      if (range) {
+        const ref = range.ref;
+        const hovered = hoveredSymbol === ref.name;
+        // Active (popover open for this symbol) is the only state that gets a
+        // solid underline; hover just shifts the color.
+        const active = activeSymbol === ref.name;
+        const lit = hovered || active;
+        declLines[di].push(
+          <span
+            key={key}
+            role="button"
+            tabIndex={0}
+            data-symbol-ref={ref.name}
+            // Don't take focus on mouse click — otherwise closing the popover
+            // (Escape) leaves a focus ring around the clicked symbol.
+            onMouseDown={(e) => e.preventDefault()}
+            onMouseEnter={() => setHoveredSymbol(ref.name)}
+            onMouseLeave={(e) => {
+              // Keep it lit when moving straight to another occurrence of the
+              // same symbol; otherwise clear on unhover.
+              const to = e.relatedTarget as HTMLElement | null;
+              const next = to?.closest('[data-symbol-ref]')?.getAttribute('data-symbol-ref');
+              if (next === ref.name) return;
+              setHoveredSymbol((s) => (s === ref.name ? null : s));
+            }}
+            onClick={(e) => handleInspect(ref, e.currentTarget)}
+            style={{
+              // Lit occurrences shift to the accent color (no background fill).
+              color: lit ? theme.colors.accent ?? theme.colors.secondary : color,
+              cursor: 'pointer',
+              textDecorationLine: 'underline',
+              textDecorationStyle: active ? 'solid' : 'dotted',
+              textUnderlineOffset: 2,
+            }}
+          >
+            {piece}
+          </span>,
+        );
+      } else {
+        declLines[di].push(
+          <span key={key} style={{ color }}>
+            {piece}
+          </span>,
+        );
+      }
+      i = j;
+    }
+    offset += tok.text.length;
   }
   for (let li = 0; li < declLines.length; li++) {
     if (declLines[li].length === 0) continue;
@@ -783,10 +990,22 @@ export function ComponentDeclaration({
     );
   }
 
+  const inspectionLeft = inspection
+    ? Math.max(
+        0,
+        Math.min(
+          inspection.x,
+          Math.max(0, (containerRef.current?.clientWidth ?? 320) - 320),
+        ),
+      )
+    : 0;
+
   return (
     <div
       ref={containerRef}
+      onMouseLeave={() => setHoveredSymbol(null)}
       style={{
+        position: 'relative',
         width: '100%',
         minWidth: 0,
         boxSizing: 'border-box',
@@ -800,6 +1019,17 @@ export function ComponentDeclaration({
       }}
     >
       {lines}
+      {inspection && !inspection.loading && (
+        <SymbolInspectionCard
+          symbolRef={inspection.ref}
+          inspection={inspection.info}
+          error={inspection.error}
+          onClose={() => setInspection(null)}
+          onAddToModel={onAddToModel}
+          onOpenFile={onOpenFile}
+          style={{ left: inspectionLeft, top: inspection.y }}
+        />
+      )}
     </div>
   );
 }

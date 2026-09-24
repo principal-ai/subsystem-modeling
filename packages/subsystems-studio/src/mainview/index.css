@@ -72,6 +72,52 @@ body {
 	z-index: 1;
 }
 
+/* Animatable angle for the running-border comet (Houdini @property). */
+@property --principal-running-angle {
+	syntax: "<angle>";
+	initial-value: 0deg;
+	inherits: false;
+}
+
+@keyframes principal-studio-running-spin {
+	to {
+		--principal-running-angle: 360deg;
+	}
+}
+
+/* A single-color comet that travels all the way around the border. */
+.principal-studio-running-border {
+	position: relative;
+	border-color: transparent !important;
+}
+
+.principal-studio-running-border::before {
+	content: "";
+	position: absolute;
+	inset: -1px;
+	border-radius: 7px;
+	padding: 1px;
+	background: conic-gradient(
+		from var(--principal-running-angle, 0deg),
+		transparent 0deg,
+		#f36f41 45deg,
+		transparent 90deg
+	);
+	animation: principal-studio-running-spin 1.4s linear infinite;
+	pointer-events: none;
+	z-index: 0;
+	-webkit-mask:
+		linear-gradient(#fff 0 0) content-box,
+		linear-gradient(#fff 0 0);
+	-webkit-mask-composite: xor;
+	mask-composite: exclude;
+}
+
+.principal-studio-running-border > * {
+	position: relative;
+	z-index: 1;
+}
+
 @keyframes trail-blip {
 	50% { opacity: 0.2; }
 }

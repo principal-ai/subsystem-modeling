@@ -38,7 +38,7 @@ export function openCodeStateDir(): string {
 }
 
 /** Resolve the running opencode v2 server. Two on-disk layouts exist:
- *   - the installed CLI (`opencode2` / `@opencode-ai/cli`) writes `service.json`
+ *   - the installed CLI (`opencode2` / `@opencode/cli`) writes `service.json`
  *     carrying `url`, `version`, `pid`, and the `password` inline;
  *   - the source-repo daemon (`cli/src/services/daemon.ts`) writes `server.json`
  *     plus a separate `password` file.

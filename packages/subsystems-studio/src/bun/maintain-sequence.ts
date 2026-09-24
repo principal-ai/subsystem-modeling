@@ -23,6 +23,11 @@ export type MaintainSequenceOutcome =
 	| "converged"
 	/** A stage left pending proposals; stopped for the user to unblock. */
 	| "needs_unblock"
+	/**
+	 * A stage cleared without advancing the route — its agent declined to
+	 * propose, so the same work is still selected. Re-running would spin.
+	 */
+	| "stalled"
 	/** Hit the stage cap without converging (e.g. a stage that never advances). */
 	| "cap"
 	/** A stage's agent run failed (or a dependency threw). */
@@ -81,6 +86,11 @@ export async function runMaintainSequence(deps: {
 		for (;;) {
 			const route = selectMaintainRoute(report);
 			if (!route) return { ok: true, outcome: "converged", stages };
+			// This stage already ran and the same work is still selected: its
+			// agent declined to propose, so re-running it would just spin.
+			if (stages.some((s) => s.route.agent === route.agent)) {
+				return { ok: true, outcome: "stalled", stages, blockedAt: route };
+			}
 			if (stages.length >= maxStages) {
 				return { ok: true, outcome: "cap", stages };
 			}

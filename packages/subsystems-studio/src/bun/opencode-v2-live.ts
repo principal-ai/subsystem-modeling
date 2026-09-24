@@ -225,16 +225,24 @@ function isTerminalEvent(type: string, data: Record<string, unknown> | undefined
  * across an `/api/event` gap: SSE has no replay, so the terminal event is lost
  * forever if the stream drops the moment it is emitted.
  */
-async function fetchSessionFinished(
+export type SessionProbe = "finished" | "running" | "missing" | "unknown";
+
+/**
+ * Probe an OpenCode session's state without attaching to its live feed:
+ * `finished` when it has a terminal outcome/idle, `running` while active,
+ * `missing` when the server no longer knows the id (404), `unknown` on a
+ * transport failure. Used to reconcile orphaned runs after a host restart.
+ */
+export async function probeSessionFinished(
 	connection: OpencodeConnection,
 	sessionId: string,
-): Promise<boolean> {
+): Promise<SessionProbe> {
 	try {
 		const res = await fetch(`${connection.url}/api/session/${sessionId}`, {
 			headers: serverAuthHeaders(connection.password),
 			signal: AbortSignal.timeout(5_000),
 		});
-		if (!res.ok) return false;
+		if (!res.ok) return res.status === 404 ? "missing" : "unknown";
 		const body = (await res.json().catch(() => null)) as {
 			data?: {
 				status?: unknown;
@@ -243,17 +251,26 @@ async function fetchSessionFinished(
 			};
 		} | null;
 		const d = body?.data;
-		if (!d) return false;
-		if (d.outcome != null) return true;
-		if (typeof d.time?.idle === "number") return true;
+		if (!d) return "missing";
+		if (d.outcome != null) return "finished";
+		if (typeof d.time?.idle === "number") return "finished";
 		if (d.status && typeof d.status === "object") {
 			const t = (d.status as { type?: string }).type;
-			if (typeof t === "string" && t !== "running" && t !== "queued") return true;
+			if (typeof t === "string" && t !== "running" && t !== "queued") {
+				return "finished";
+			}
 		}
-		return false;
+		return "running";
 	} catch {
-		return false;
+		return "unknown";
 	}
+}
+
+async function fetchSessionFinished(
+	connection: OpencodeConnection,
+	sessionId: string,
+): Promise<boolean> {
+	return (await probeSessionFinished(connection, sessionId)) === "finished";
 }
 
 /**
@@ -402,8 +419,17 @@ export interface RunOpencodeV2AgentSessionOpts {
 	 */
 	probeRunId?: string;
 	firstActivityTimeoutMs?: number;
+	/**
+	 * Stall watchdog: once activity has started, abort the run when no session
+	 * event arrives for this long. Guards against a mid-run hang (model or
+	 * server stalls) that would otherwise sit out the 15-minute deadline.
+	 */
+	idleTimeoutMs?: number;
 	probeRegistry?: import("./maintainer-probe").MaintainerProbeRegistry;
 }
+
+/** Default stall-watchdog window once a run has produced activity. */
+export const DEFAULT_IDLE_TIMEOUT_MS = 180_000;
 
 export async function runOpencodeV2AgentSession(
 	opts: RunOpencodeV2AgentSessionOpts,
@@ -443,6 +469,8 @@ export async function runOpencodeV2AgentSession(
 	// Any session activity after creation means the model is alive and streaming
 	// — that satisfies the liveness gate even if the Step-0 probe call never lands.
 	let sawActivity = false;
+	// Wall-clock of the most recent session event; drives the stall watchdog.
+	let lastActivityAt = Date.now();
 	const placeholderId = `pending-${Date.now()}`;
 
 	upsertFeed(
@@ -472,7 +500,10 @@ export async function runOpencodeV2AgentSession(
 				sessionId: sid,
 				summary: summarizeEvent(raw.type, raw.data),
 			});
-			if (raw.type !== "server.connected") sawActivity = true;
+			if (raw.type !== "server.connected") {
+				sawActivity = true;
+				lastActivityAt = Date.now();
+			}
 			if (isTerminalEvent(raw.type, raw.data)) sawTerminal = true;
 		},
 		() => {
@@ -590,6 +621,7 @@ export async function runOpencodeV2AgentSession(
 		}
 
 		const deadline = Date.now() + 15 * 60_000;
+		const idleTimeoutMs = opts.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
 		const probe = opts.probeRunId
 			? {
 					token: opts.probeRunId,
@@ -652,10 +684,58 @@ export async function runOpencodeV2AgentSession(
 					};
 				}
 			}
+			// Stall watchdog: activity started, then the session went quiet. Abort
+			// instead of sitting out the remaining deadline.
+			if (sawActivity && Date.now() - lastActivityAt > idleTimeoutMs) {
+				const idleMs = Date.now() - lastActivityAt;
+				controller.abort();
+				await feedTask.catch(() => undefined);
+				const stalledFeed = feeds.get(sessionId);
+				if (stalledFeed) {
+					upsertFeed(
+						{
+							...stalledFeed,
+							status: "error",
+							error: `no session activity for ${Math.round(idleMs / 1000)}s — run stalled`,
+						},
+						true,
+					);
+				}
+				return {
+					ok: false,
+					error: `session stalled — no activity for ${Math.round(idleMs / 1000)}s`,
+					sessionId,
+					model: opts.model,
+					agent: opts.agent,
+				};
+			}
 		}
 
 		controller.abort();
 		await feedTask.catch(() => undefined);
+
+		// The loop only exits early on a terminal event; reaching here without one
+		// means the 15-minute deadline was hit — a timeout, not a success.
+		if (!sawTerminal) {
+			const timeoutFeed = feeds.get(sessionId);
+			if (timeoutFeed) {
+				upsertFeed(
+					{
+						...timeoutFeed,
+						status: "error",
+						error: "session timed out after 15m without finishing",
+					},
+					true,
+				);
+			}
+			return {
+				ok: false,
+				error: "session timed out after 15m without finishing",
+				sessionId,
+				model: opts.model,
+				agent: opts.agent,
+			};
+		}
 
 		const feed = feeds.get(sessionId);
 		const events = feed?.events ?? [];

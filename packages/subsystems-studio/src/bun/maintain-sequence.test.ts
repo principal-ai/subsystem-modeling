@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { SubsystemModelAuditReport } from "../shared/contract";
 import {
-	BOUNDARY_GAP_FILLER_AGENT,
-	GAP_FILLER_AGENT,
-	ISSUE_FIXER_AGENT,
+	CONSTRUCT_FIXER_AGENT,
+	CONSTRUCT_VERIFIER_AGENT,
+	PACKAGE_MODULE_VERIFIER_AGENT,
 } from "./maintain-model";
 import { runMaintainSequence, type MaintainStageRun } from "./maintain-sequence";
 
@@ -110,7 +110,7 @@ describe("runMaintainSequence", () => {
 		});
 		expect(result.outcome).toBe("converged");
 		expect(result.stages).toHaveLength(1);
-		expect(result.stages[0]?.route.agent).toBe(ISSUE_FIXER_AGENT);
+		expect(result.stages[0]?.route.agent).toBe(CONSTRUCT_FIXER_AGENT);
 		expect(result.stages[0]?.cleared).toBe(true);
 	});
 
@@ -123,7 +123,7 @@ describe("runMaintainSequence", () => {
 		});
 		expect(result.outcome).toBe("needs_unblock");
 		expect(result.ok).toBe(true);
-		expect(result.blockedAt?.agent).toBe(ISSUE_FIXER_AGENT);
+		expect(result.blockedAt?.agent).toBe(CONSTRUCT_FIXER_AGENT);
 		expect(result.stages).toHaveLength(1);
 		expect(result.stages[0]?.pending).toBe(2);
 		expect(result.stages[0]?.cleared).toBe(false);
@@ -143,9 +143,9 @@ describe("runMaintainSequence", () => {
 		});
 		expect(result.outcome).toBe("converged");
 		expect(result.stages.map((s) => s.route.agent)).toEqual([
-			ISSUE_FIXER_AGENT,
-			GAP_FILLER_AGENT,
-			BOUNDARY_GAP_FILLER_AGENT,
+			CONSTRUCT_FIXER_AGENT,
+			CONSTRUCT_VERIFIER_AGENT,
+			PACKAGE_MODULE_VERIFIER_AGENT,
 		]);
 		// One audit before the first stage + one after each of the 3 cleared stages.
 		expect(calls.n).toBe(4);
@@ -164,17 +164,18 @@ describe("runMaintainSequence", () => {
 		expect(result.stages[0]?.ok).toBe(false);
 	});
 
-	test("caps a stage that never advances", async () => {
-		// Same work every audit, and each stage clears with zero pending — the
-		// sequence would loop forever without the cap.
+	test("stalls when a cleared stage does not advance the route", async () => {
+		// Same work every audit, and the stage clears with zero pending (the
+		// agent declined to propose) — the sequence must not re-run it.
 		const { audit } = scriptedAudit([constructIssue()]);
 		const result = await runMaintainSequence({
 			audit,
 			runStage: async () => okRun("r1"),
 			pendingForRun: async () => 0,
-			maxStages: 2,
+			maxStages: 8,
 		});
-		expect(result.outcome).toBe("cap");
-		expect(result.stages).toHaveLength(2);
+		expect(result.outcome).toBe("stalled");
+		expect(result.stages).toHaveLength(1);
+		expect(result.blockedAt?.agent).toBe(CONSTRUCT_FIXER_AGENT);
 	});
 });

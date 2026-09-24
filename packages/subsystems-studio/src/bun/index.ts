@@ -62,7 +62,10 @@ import {
 	rejectSubsystemModelProposal as rejectProposalInStore,
 	setProposalSecondOpinion,
 } from "./proposal-store";
-import { maintainSubsystemModelSequence } from "./maintain-model";
+import {
+	maintainSubsystemModelSequence,
+	nextMaintainRouteForModel,
+} from "./maintain-model";
 import {
 	autoAcceptProposalIfConfident,
 	evaluateProposalSecondOpinion,
@@ -160,6 +163,7 @@ import {
 	patchViewerSettings,
 } from "./viewer-settings";
 import { createRegularAuditScheduler } from "./regular-audit";
+import { reconcileOrphanedRuns } from "./subsystem-model-run-reconcile";
 
 /**
  * Resident store — the in-memory home for the recent window's processed
@@ -675,6 +679,7 @@ function ensurePermanentTab(id: string): void {
 		regularAuditEnabled: viewerSettings.regularAuditEnabled,
 		regularAuditIntervalMinutes: viewerSettings.regularAuditIntervalMinutes,
 		typesafeApiKey: viewerSettings.typesafeApiKey,
+		maintenanceRepoKey: viewerSettings.maintenanceRepoKey,
 	};
 	syncPermanentTabs(forced);
 }
@@ -2363,7 +2368,7 @@ const requests: RequestHandlers = {
 						let lanes: MaintenanceOverviewModel["lanes"] = {
 							construct: "none",
 							"static-topology": "none",
-							"runtime-topology": "none",
+							"dynamic-topology": "none",
 							walkthrough: "none",
 						};
 						let stale = false;
@@ -2411,6 +2416,7 @@ const requests: RequestHandlers = {
 							checkedAt,
 							lanes,
 							repos: githubReposFromComponents(full?.components ?? []),
+							nextRoute: await nextMaintainRouteForModel(e.id),
 						};
 						return [
 							model,
@@ -2619,6 +2625,16 @@ const requests: RequestHandlers = {
 					model: typeof model === "string" && model.trim() ? model.trim() : undefined,
 				});
 				return { ok: true, started: true };
+			},
+			openMaintainEvents: async ({ sessionId, graphId, title, agent }) => {
+				if (!sessionId) return { ok: false, error: "sessionId is required" };
+				const tabId = openMaintainEventsTab({
+					sessionId,
+					graphId,
+					title,
+					agent,
+				});
+				return { ok: true, tabId };
 			},
 			getSubsystemMaintainerModels: async ({ refresh }) => {
 				try {
@@ -3258,6 +3274,30 @@ const regularAuditScheduler = createRegularAuditScheduler({
 });
 regularAuditScheduler.sync(viewerSettings);
 
+/**
+ * Close out run-log entries orphaned by a previous Studio restart. The OpenCode
+ * sessions outlive this host process, so a run left `running` in the log is
+ * reconciled against the server (finished → done, missing → error). Runs the
+ * host is tracking are skipped. Swept once on boot and then periodically.
+ */
+async function reconcileRunsNow(): Promise<void> {
+	try {
+		const { closedGraphIds } = await reconcileOrphanedRuns({
+			trackedGraphIds: maintainingGraphIds,
+		});
+		for (const graphId of closedGraphIds) {
+			broadcastSubsystemModelRunsChanged({ graphId });
+			broadcastSubsystemModelChanged({ graphId, reason: "updated" });
+		}
+	} catch (err) {
+		console.warn(
+			`[principal-studio] run reconcile failed: ${(err as Error).message}`,
+		);
+	}
+}
+setTimeout(() => void reconcileRunsNow(), 8_000);
+setInterval(() => void reconcileRunsNow(), 5 * 60_000);
+
 function maintainSubsystemModelInBackground(
 	graphId: string,
 	opts?: { model?: string },
@@ -3270,15 +3310,10 @@ function maintainSubsystemModelInBackground(
 		try {
 			const result = await maintainSubsystemModelSequence(graphId, {
 				model: opts?.model,
-				onSession: (sessionId) => {
-					const feed = getOpencodeLiveFeed(sessionId);
-					openMaintainEventsTab({
-						sessionId,
-						graphId,
-						title: feed?.title,
-						agent: feed?.agent,
-					});
-					// The run log now has the sessionId -> graphId pair.
+				onSession: () => {
+					// Do not auto-open the events tab — the run log now has the
+					// sessionId -> graphId pair; the Maintain surface opens the tab
+					// on demand (click a run row / the progress card).
 					broadcastSubsystemModelRunsChanged({ graphId });
 				},
 			});

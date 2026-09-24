@@ -48,6 +48,7 @@ export function defaultViewerSettings(): ViewerSettings {
 		regularAuditEnabled: true,
 		regularAuditIntervalMinutes: REGULAR_AUDIT_INTERVAL_DEFAULT_MINUTES,
 		typesafeApiKey: null,
+		maintenanceRepoKey: null,
 	};
 }
 
@@ -134,6 +135,10 @@ function normalize(raw: unknown): ViewerSettings {
 			"typesafeApiKey" in obj
 				? coerceModelRef(obj["typesafeApiKey"])
 				: defaults.typesafeApiKey,
+		maintenanceRepoKey:
+			"maintenanceRepoKey" in obj
+				? coerceModelRef(obj["maintenanceRepoKey"])
+				: defaults.maintenanceRepoKey,
 	};
 }
 
@@ -196,6 +201,10 @@ export function patchViewerSettings(
 			patch.typesafeApiKey !== undefined
 				? coerceModelRef(patch.typesafeApiKey)
 				: current.typesafeApiKey,
+		maintenanceRepoKey:
+			patch.maintenanceRepoKey !== undefined
+				? coerceModelRef(patch.maintenanceRepoKey)
+				: current.maintenanceRepoKey,
 	};
 	return saveViewerSettings(next);
 }

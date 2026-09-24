@@ -101,6 +101,20 @@ export type {
   ComponentDeclarationProps,
 } from './subsystem/ComponentDeclaration';
 export { ComponentDeclaration } from './subsystem/ComponentDeclaration';
+export { SymbolInspectionCard } from './subsystem/SymbolInspectionCard';
+export type { SymbolInspectionCardProps } from './subsystem/SymbolInspectionCard';
+export {
+  extractDeclarationSymbolRefs,
+  isLimitedInspection,
+} from './subsystem/symbolRefs';
+export type {
+  DeclarationSymbolRef,
+  SymbolInspection,
+  SymbolInspectionResolution,
+  SymbolInspectionNode,
+  SymbolInspectionSource,
+  SymbolInspectionCandidate,
+} from './subsystem/symbolRefs';
 export {
   SubsystemDiagnosticToggle,
   diagnosticStatusColor,

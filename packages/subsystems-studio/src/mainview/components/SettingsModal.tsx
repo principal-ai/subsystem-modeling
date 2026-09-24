@@ -84,6 +84,7 @@ const FALLBACK_SETTINGS: ViewerSettings = {
 	regularAuditEnabled: true,
 	regularAuditIntervalMinutes: 5,
 	typesafeApiKey: null,
+	maintenanceRepoKey: null,
 };
 
 type SavingKey =

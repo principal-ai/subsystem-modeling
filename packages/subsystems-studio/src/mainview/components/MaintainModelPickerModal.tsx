@@ -27,7 +27,7 @@ export function MaintainModelPickerModal({
 }: {
 	graphId: string;
 	title: string;
-	mode: "issues" | "gaps";
+	mode: "issues" | "verify";
 	onClose: () => void;
 	onStarted: (info: { model: string; alreadyRunning?: boolean }) => void;
 }) {
@@ -54,8 +54,8 @@ export function MaintainModelPickerModal({
 
 	const agentLabel =
 		mode === "issues"
-			? "issue-fixer / topology-fixer"
-			: "gap-filler / boundary-gap-filler / topology-gap-filler";
+			? "construct-fixer / static-topology-fixer / package-module-fixer"
+			: "construct-verifier / static-topology-verifier / package-module-verifier / runtime-topology-verifier";
 	const actionLabel = "Run maintenance";
 
 	const load = useCallback(async (refresh?: boolean) => {

@@ -26,7 +26,7 @@ describe("subsystem-model-runs", () => {
 			graphId: "sg-1",
 			graphTitle: "Auth flow",
 			sessionId: "ses_abc",
-			agent: "gap-filler",
+			agent: "construct-verifier",
 			model: "opencode-go/x",
 		});
 		expect(run.status).toBe("running");

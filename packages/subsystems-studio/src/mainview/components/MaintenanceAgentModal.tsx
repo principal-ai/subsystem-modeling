@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { BadgeCheck, Bot, Check, Component, Copy, History, ListChecks, Loader2, Network, Play, Puzzle, Route, ScanSearch, Server, Trash2, Waypoints, Wrench, type LucideIcon } from "lucide-react";
+import { BadgeCheck, Bot, Check, Component, Copy, History, ListChecks, Loader2, Network, Play, Route, ScanSearch, Server, Square, Trash2, type LucideIcon } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import { repoAvatarUrl } from "@principal-ai/subsystems-react";
 import type {
@@ -18,6 +18,7 @@ import type {
 	MaintenanceOverviewModel,
 	MaintenanceOverviewProposal,
 	StudioMessages,
+	SubsystemModelProposal,
 	SubsystemModelRun,
 	SubsystemVerificationLane,
 	VerificationLaneStatus,
@@ -39,17 +40,121 @@ import { RepoRow } from "./RepoRow";
 const RUN_COPY_FEEDBACK_MS = 1500;
 
 /**
- * The Maintain agents, in routing priority order (construct → topology →
- * boundary), each with a badge icon. Mirrors the host's `MaintainAgentId` set;
- * drives the per-row "which agent is running" badge strip.
+ * The Maintain agents, in routing priority order (construct → static topology →
+ * package/module → runtime topology), each with a badge icon. Mirrors the
+ * host's `MaintainAgentId` set; drives the per-row "which agent is running"
+ * badge strip.
  */
 const AGENT_META: Array<{ agent: string; label: string; Icon: LucideIcon }> = [
-	{ agent: "issue-fixer", label: "Issue Fixer", Icon: Wrench },
-	{ agent: "gap-filler", label: "Gap Filler", Icon: Puzzle },
-	{ agent: "topology-fixer", label: "Topology Fixer", Icon: Network },
-	{ agent: "topology-gap-filler", label: "Topology Gaps", Icon: Waypoints },
-	{ agent: "boundary-gap-filler", label: "Boundary Gaps", Icon: Server },
+	// Icon = the agent's lane (construct / static-topology / dynamic-topology),
+	// so the badge reads as "which lane"; the name distinguishes the workers
+	// within a lane. Mirrors the lane icons: construct→Component,
+	// static-topology→Network, dynamic-topology→Server.
+	{ agent: "construct-fixer", label: "Construct Fixer", Icon: Component },
+	{
+		agent: "static-topology-fixer",
+		label: "Static Topology Fixer",
+		Icon: Network,
+	},
+	{ agent: "package-module-fixer", label: "Package/Module Fixer", Icon: Server },
+	{ agent: "construct-verifier", label: "Construct Verifier", Icon: Component },
+	{
+		agent: "static-topology-verifier",
+		label: "Static Topology Verifier",
+		Icon: Network,
+	},
+	{
+		agent: "package-module-verifier",
+		label: "Package/Module Verifier",
+		Icon: Server,
+	},
+	{
+		agent: "runtime-topology-verifier",
+		label: "Runtime Topology Verifier",
+		Icon: Server,
+	},
 ];
+
+/**
+ * The fix-cycle position for a model: the routing-ordered stages with the ones
+ * already cleared marked done, the next one highlighted, and the rest queued.
+ * `nextRoute === null` means nothing is queued (fully verified).
+ */
+function FixCycleStrip({
+	nextRoute,
+}: {
+	nextRoute: MaintenanceOverviewModel["nextRoute"];
+}) {
+	const { theme } = useTheme();
+	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
+	const success = theme.colors.success ?? "#2da44e";
+	const nextIdx = nextRoute
+		? AGENT_META.findIndex((a) => a.agent === nextRoute.agent)
+		: -1;
+	const nextLabel = nextIdx >= 0 ? AGENT_META[nextIdx]?.label : null;
+	return (
+		<>
+			<div
+				style={{
+					display: "flex",
+					alignItems: "center",
+					gap: 5,
+					flexWrap: "wrap",
+				}}
+			>
+				<span style={{ fontSize: theme.fontSizes[1], color: muted }}>
+					Fix cycle
+				</span>
+				{AGENT_META.map(({ agent, label, Icon }, idx) => {
+					const state =
+						nextIdx < 0
+							? "cleared"
+							: idx < nextIdx
+								? "cleared"
+								: idx === nextIdx
+									? "next"
+									: "pending";
+					return (
+						<span
+							key={agent}
+							style={{
+								display: "inline-flex",
+								alignItems: "center",
+								gap: 4,
+								padding: "1px 7px",
+								borderRadius: 6,
+								fontSize: theme.fontSizes[1],
+								fontFamily: theme.fonts.body,
+								border: `1px solid ${
+									state === "next"
+										? theme.colors.primary
+										: (theme.colors.border ?? "#333")
+								}`,
+								background:
+									state === "next" ? theme.colors.primary : "transparent",
+								color:
+									state === "next"
+										? theme.colors.background
+										: state === "cleared"
+											? success
+											: muted,
+								opacity: state === "pending" ? 0.5 : 1,
+							}}
+						>
+							<Icon size={11} />
+							{label}
+						</span>
+					);
+				})}
+			</div>
+			<span style={{ fontSize: theme.fontSizes[1], color: muted }}>
+				{nextLabel
+					? `Next: ${nextLabel}`
+					: "Nothing queued — fully verified"}
+			</span>
+		</>
+	);
+}
 
 /** Compact copyable context for one run — mirrors the agent-sessions row copy. */
 function formatRunContext(run: SubsystemModelRun, graphTitle: string): string {
@@ -75,13 +180,44 @@ function formatRunContext(run: SubsystemModelRun, graphTitle: string): string {
 	return lines.join("\n");
 }
 
+/**
+ * Attribute proposals to a run: by `runId` when it matches (new runs), else by
+ * the run's agent within its start/end window — older runs predate
+ * `runId === log id`, so their proposals carry a runId that no log entry has.
+ */
+function proposalsForRun(
+	all: SubsystemModelProposal[] | undefined,
+	run: SubsystemModelRun,
+): SubsystemModelProposal[] | undefined {
+	if (!all) return undefined;
+	const byRunId = all.filter((p) => p.runId === run.id);
+	if (byRunId.length > 0) return byRunId;
+	// Half-open [startedAt, endedAt) so adjacent runs don't both claim a
+	// proposal posted on the boundary; a still-running run owns everything after.
+	const start = Date.parse(run.startedAt);
+	const end = run.endedAt
+		? Date.parse(run.endedAt)
+		: Number.POSITIVE_INFINITY;
+	return all.filter((p) => {
+		if (p.author !== run.agent) return false;
+		const t = Date.parse(p.createdAt);
+		return Number.isFinite(t) && t >= start && t < end;
+	});
+}
+
 /** One persisted Maintain run: status · agent/layer/model · started · copy. */
 function RunRow({
 	run,
 	graphTitle,
+	proposals,
+	onOpen,
 }: {
 	run: SubsystemModelRun;
 	graphTitle: string;
+	/** Every proposal this run produced (any status), when loaded. */
+	proposals?: SubsystemModelProposal[];
+	/** Click the row to open the run's live events tab. */
+	onOpen?: () => void;
 }) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -111,66 +247,86 @@ function RunRow({
 				? theme.colors.primary
 				: muted;
 	const label = run.status === "running" ? "Running…" : run.status;
-	const meta = [
-		run.agent,
-		run.layer && run.mode ? `${run.layer}/${run.mode}` : null,
-		run.model,
-	]
-		.filter(Boolean)
-		.join(" · ");
+	const agentMeta = AGENT_META.find((a) => a.agent === run.agent);
+	// The agent chip already implies the layer/mode, so only the model is left.
+	const meta = run.model ?? "";
+	const acceptedProposals = (proposals ?? []).filter(
+		(p) => p.status === "accepted",
+	);
+	const pendingProposalTotal = (proposals ?? []).filter(
+		(p) => p.status === "pending",
+	).length;
+	const rejectedProposals = (proposals ?? []).filter(
+		(p) => p.status === "rejected",
+	).length;
 	return (
+		<div
+			onClick={onOpen}
+			style={{
+				display: "flex",
+				flexDirection: "column",
+				gap: 1,
+				minWidth: 0,
+				cursor: onOpen ? "pointer" : "default",
+			}}
+		>
 		<div
 			style={{
 				display: "flex",
 				alignItems: "center",
 				gap: 8,
-				padding: "3px 4px",
-				fontSize: theme.fontSizes[1],
+				padding: "3px 0",
+				fontSize: theme.fontSizes[2],
 				minWidth: 0,
 			}}
 		>
 			<span
-				aria-hidden="true"
-				style={{
-					flexShrink: 0,
-					width: 6,
-					height: 6,
-					borderRadius: 999,
-					background: statusColor,
-				}}
-			/>
-			<span
-				style={{
-					flexShrink: 0,
-					color: statusColor,
-					textTransform: "uppercase",
-					fontSize: theme.fontSizes[0],
-					letterSpacing: 0.3,
-					fontWeight: 600,
-				}}
-			>
-				{label}
-			</span>
-			<span
-				title={meta}
 				style={{
 					flex: 1,
 					minWidth: 0,
-					overflow: "hidden",
-					textOverflow: "ellipsis",
-					whiteSpace: "nowrap",
-					color: muted,
-					fontFamily: theme.fonts.monospace ?? "ui-monospace, monospace",
+					display: "inline-flex",
+					alignItems: "center",
+					gap: 6,
 				}}
 			>
-				{meta || "—"}
+				{agentMeta && (
+					<span
+						style={{
+							display: "inline-flex",
+							alignItems: "center",
+							gap: 4,
+							flexShrink: 0,
+							padding: "1px 7px",
+							borderRadius: 6,
+							fontSize: theme.fontSizes[1],
+							fontFamily: theme.fonts.body,
+							border: `1px solid ${theme.colors.border ?? "#333"}`,
+							color: muted,
+						}}
+					>
+						<agentMeta.Icon size={11} />
+						{agentMeta.label}
+					</span>
+				)}
+				<span
+					style={{
+						minWidth: 0,
+						overflow: "hidden",
+						textOverflow: "ellipsis",
+						whiteSpace: "nowrap",
+						color: muted,
+						fontFamily: theme.fonts.monospace ?? "ui-monospace, monospace",
+					}}
+				>
+					{meta || "—"}
+				</span>
 			</span>
 			<span
 				style={{
 					flexShrink: 0,
 					color: muted,
 					fontVariantNumeric: "tabular-nums",
-					fontSize: theme.fontSizes[0],
+					fontSize: theme.fontSizes[1],
 				}}
 			>
 				{new Date(run.startedAt).toLocaleString()}
@@ -193,12 +349,49 @@ function RunRow({
 					background: copied ? theme.colors.primary : "transparent",
 					color: copied ? theme.colors.background : muted,
 					cursor: "pointer",
-					fontSize: theme.fontSizes[0],
+					fontSize: theme.fontSizes[1],
 					fontFamily: theme.fonts.body,
 				}}
 			>
 				{copied ? <Check size={12} /> : <Copy size={12} />}
 			</button>
+		</div>
+		<div
+			style={{
+				display: "flex",
+				alignItems: "center",
+				gap: 8,
+				fontSize: theme.fontSizes[1],
+				color: muted,
+			}}
+		>
+			<span
+				style={{
+					flexShrink: 0,
+					color: statusColor,
+					textTransform: "uppercase",
+					fontSize: theme.fontSizes[1],
+					letterSpacing: 0.3,
+					fontWeight: 600,
+				}}
+			>
+				{label}
+			</span>
+			{proposals &&
+				(proposals.length === 0 ? (
+					<span>No proposals</span>
+				) : (
+					<span>
+						{acceptedProposals.length} accepted
+						{pendingProposalTotal > 0
+							? ` · ${pendingProposalTotal} pending`
+							: ""}
+						{rejectedProposals > 0
+							? ` · ${rejectedProposals} rejected`
+							: ""}
+					</span>
+				))}
+		</div>
 		</div>
 	);
 }
@@ -211,7 +404,7 @@ const LANE_META: Array<{
 }> = [
 	{ lane: "construct", label: "Construct", Icon: Component },
 	{ lane: "static-topology", label: "Static topology", Icon: Network },
-	{ lane: "runtime-topology", label: "Runtime topology", Icon: Server },
+	{ lane: "dynamic-topology", label: "Dynamic topology", Icon: Server },
 	{ lane: "walkthrough", label: "Walkthrough", Icon: Route },
 ];
 
@@ -333,12 +526,12 @@ const LANE_HELP: Record<SubsystemVerificationLane, { name: string; blurb: string
 		"static-topology": {
 			name: "Static topology",
 			blurb:
-				"Layer 2 — how constructs are arranged in source: typed relations[] (extends, implements, …) and containment (package / module).",
+				"Layer 2 — typed relations[] between constructs (extends, implements, …).",
 		},
-		"runtime-topology": {
-			name: "Runtime topology",
+		"dynamic-topology": {
+			name: "Dynamic topology",
 			blurb:
-				"Layer 3 — deployment-unit membership via process: which unit each construct runs in.",
+				"Layer 3 — how constructs are arranged at runtime: deployment-unit membership via process, and containment via package / module.",
 		},
 		walkthrough: {
 			name: "Walkthrough verification",
@@ -478,7 +671,7 @@ function MaintenanceRepoList({
 		>
 			<span
 				style={{
-					fontSize: theme.fontSizes[0],
+					fontSize: theme.fontSizes[1],
 					color: muted,
 					textTransform: "uppercase",
 					letterSpacing: 0.3,
@@ -556,6 +749,8 @@ export function MaintenancePanel({
 		last?: string;
 		lastAt?: number;
 		error?: string | null;
+		/** OpenCode session id — used to open the events tab on click. */
+		sessionId?: string;
 	};
 	// Live OpenCode feed per graphId, so "Run maintenance" shows what the
 	// agent is actually doing instead of a silent spinner.
@@ -567,6 +762,40 @@ export function MaintenancePanel({
 	// Model rows whose "Runs" section is expanded.
 	const [expandedRunsIds, setExpandedRunsIds] = useState<ReadonlySet<string>>(
 		() => new Set(),
+	);
+	// Every proposal (any status) per model, loaded lazily when a model's Runs
+	// section is expanded — so each run can show what it accomplished.
+	const [proposalsByGraph, setProposalsByGraph] = useState<
+		ReadonlyMap<string, SubsystemModelProposal[]>
+	>(() => new Map());
+
+	const loadProposalsFor = useCallback(async (graphId: string) => {
+		try {
+			const res = await electrobun.rpc!.request.listSubsystemModelProposals({
+				graphId,
+				includeResolved: true,
+			});
+			if (!res.ok) return;
+			const proposals = res.proposals ?? [];
+			setProposalsByGraph((prev) => {
+				const next = new Map(prev);
+				next.set(graphId, proposals);
+				return next;
+			});
+		} catch {
+			// best-effort — the Runs section just won't show outcomes
+		}
+	}, []);
+
+	/** Open the live events tab for a run's session (no auto-open on start). */
+	const openRunEvents = useCallback(
+		(sessionId: string | undefined, graphId: string, title?: string, agent?: string) => {
+			if (!sessionId) return;
+			void electrobun.rpc!.request
+				.openMaintainEvents({ sessionId, graphId, title, agent })
+				.catch(() => {});
+		},
+		[],
 	);
 	// Repo filter (owner/name, lowercased) narrowing the model + proposal lists,
 	// mirroring the Subsystems tab's repo drilldown.
@@ -624,7 +853,8 @@ export function MaintenancePanel({
 	}, [load]);
 
 	// Mirror the Jev confidence threshold so the "Accept confident" button
-	// agrees with the host's auto-accept gate.
+	// agrees with the host's auto-accept gate, and restore the last repo the
+	// user picked in the filter (unless they already picked one this session).
 	useEffect(() => {
 		let cancelled = false;
 		(async () => {
@@ -634,14 +864,29 @@ export function MaintenancePanel({
 					setConfidenceThreshold(
 						res.autoAcceptSubsystemModelConfidenceThreshold,
 					);
+					setRepoKey((current) => current ?? res.maintenanceRepoKey ?? null);
 				}
 			} catch {
-				// keep the default threshold
+				// keep the default threshold / first repo
 			}
 		})();
 		return () => {
 			cancelled = true;
 		};
+	}, []);
+
+	// Persist the repo pick so the Maintainer tab reopens on it next time.
+	const onSelectRepo = useCallback((key: string) => {
+		setRepoKey(key);
+		void (async () => {
+			try {
+				await electrobun.rpc!.request.setSettings({
+					settings: { maintenanceRepoKey: key },
+				});
+			} catch {
+				// best-effort — the pick still applies for this session
+			}
+		})();
 	}, []);
 
 	// Re-paint when a background re-audit finishes (or a run/proposal changes).
@@ -675,6 +920,7 @@ export function MaintenancePanel({
 					last: last?.summary ?? prev[gid]?.last,
 					lastAt: last?.at ?? prev[gid]?.lastAt,
 					error: payload.error ?? prev[gid]?.error,
+					sessionId: payload.sessionId ?? prev[gid]?.sessionId,
 				},
 			}));
 		};
@@ -796,51 +1042,51 @@ export function MaintenancePanel({
 	}, [overview]);
 	const repoBreaks = useMemo(() => repoBreakdown(overview), [overview]);
 	// There is no "all repos" view — always keep one repo selected, defaulting
-	// to the first (and re-selecting if the current one disappears).
-	useEffect(() => {
-		if (repoBreaks.length === 0) return;
-		setRepoKey((current) => {
-			const exists =
-				current != null &&
-				repoBreaks.some(
-					(r) => `${r.owner}/${r.name}`.toLowerCase() === current,
-				);
-			if (exists) return current;
-			return `${repoBreaks[0].owner}/${repoBreaks[0].name}`.toLowerCase();
-		});
-	}, [repoBreaks]);
+	// to the first (and re-selecting if the current one disappears). Resolve it
+	// during render rather than in an effect: an effect would paint every model
+	// for one frame after the overview loads before narrowing to a repo, which
+	// reads as a flash.
+	const activeRepoKey = useMemo(() => {
+		if (repoBreaks.length === 0) return null;
+		const exists =
+			repoKey != null &&
+			repoBreaks.some((r) => `${r.owner}/${r.name}`.toLowerCase() === repoKey);
+		return exists
+			? repoKey
+			: `${repoBreaks[0].owner}/${repoBreaks[0].name}`.toLowerCase();
+	}, [repoBreaks, repoKey]);
 	const matchesRepo = (m: MaintenanceOverviewModel) =>
-		repoKey == null ||
+		activeRepoKey == null ||
 		(m.repos ?? []).some(
-			(r) => `${r.owner}/${r.name}`.toLowerCase() === repoKey,
+			(r) => `${r.owner}/${r.name}`.toLowerCase() === activeRepoKey,
 		);
 	const visibleModels = useMemo(
 		() => (overview?.models ?? []).filter(matchesRepo),
-		[overview, repoKey],
+		[overview, activeRepoKey],
 	);
 	const visiblePending = useMemo(
 		() =>
-			repoKey == null
+			activeRepoKey == null
 				? pending
 				: pending.filter((e) =>
 						(reposByGraph.get(e.graphId) ?? []).some(
-							(r) => `${r.owner}/${r.name}`.toLowerCase() === repoKey,
+							(r) => `${r.owner}/${r.name}`.toLowerCase() === activeRepoKey,
 						),
 					),
-		[repoKey, pending, reposByGraph],
+		[activeRepoKey, pending, reposByGraph],
 	);
 	const inRepo = (gid: string) =>
-		repoKey == null ||
+		activeRepoKey == null ||
 		(reposByGraph.get(gid) ?? []).some(
-			(r) => `${r.owner}/${r.name}`.toLowerCase() === repoKey,
+			(r) => `${r.owner}/${r.name}`.toLowerCase() === activeRepoKey,
 		);
 	const visibleRunning = useMemo(
 		() => (overview?.running ?? []).filter(inRepo),
-		[overview, repoKey, reposByGraph],
+		[overview, activeRepoKey, reposByGraph],
 	);
 	const visibleAuditing = useMemo(
 		() => (overview?.auditing ?? []).filter(inRepo),
-		[overview, repoKey, reposByGraph],
+		[overview, activeRepoKey, reposByGraph],
 	);
 
 	// Visible pending proposals whose Jev second opinion already cleared the
@@ -867,6 +1113,137 @@ export function MaintenancePanel({
 			...activeFeeds.map(([gid]) => gid),
 		]),
 	);
+
+	// Batch "Run maintenance on all" over the repo-filtered visible models.
+	const [repoBatch, setRepoBatch] = useState<
+		Record<
+			string,
+			{
+				status: "pending" | "running" | "done" | "skipped" | "stopped" | "error";
+				error?: string;
+			}
+		>
+	>({});
+	const [repoBatchActive, setRepoBatchActive] = useState(false);
+	const [repoBatchStopping, setRepoBatchStopping] = useState(false);
+	/** Set to stop the batch after the in-flight model finishes. */
+	const repoBatchCancel = useRef(false);
+
+	/** Resolve when a model's background Maintain run finishes (done/error). */
+	const waitForMaintainDone = useCallback(
+		(graphId: string): { promise: Promise<void>; cancel: () => void } => {
+			let resolve!: () => void;
+			const promise = new Promise<void>((r) => {
+				resolve = r;
+			});
+			const handler = (
+				payload: StudioMessages["subsystemModelMaintainChanged"],
+			) => {
+				if (payload.graphId !== graphId) return;
+				if (payload.status === "done" || payload.status === "error") {
+					subsystemModelMaintainChangeSubscribers.delete(handler);
+					resolve();
+				}
+			};
+			subsystemModelMaintainChangeSubscribers.add(handler);
+			return {
+				promise,
+				cancel: () => subsystemModelMaintainChangeSubscribers.delete(handler),
+			};
+		},
+		[],
+	);
+
+	// Run maintenance across the visible (repo-filtered) models, one at a time.
+	// Models with pending proposals are skipped so a human can review them first.
+	const runRepoMaintenance = useCallback(async () => {
+		if (repoBatchActive) return;
+		const targets = visibleModels;
+		repoBatchCancel.current = false;
+		setRepoBatchStopping(false);
+		setRepoBatchActive(true);
+		setRepoBatch(
+			Object.fromEntries(
+				targets.map((m) => [m.graphId, { status: "pending" as const }]),
+			),
+		);
+		try {
+			for (const m of targets) {
+				// Stop requested: halt after the model already in flight.
+				if (repoBatchCancel.current) break;
+				if (m.pendingProposalCount > 0) {
+					setRepoBatch((prev) => ({
+						...prev,
+						[m.graphId]: { status: "skipped" },
+					}));
+					continue;
+				}
+				setRepoBatch((prev) => ({
+					...prev,
+					[m.graphId]: { status: "running" },
+				}));
+				const waiter = waitForMaintainDone(m.graphId);
+				try {
+					const res =
+						await electrobun.rpc!.request.maintainSubsystemModel({
+							graphId: m.graphId,
+						});
+					if (!res.ok) {
+						waiter.cancel();
+						setRepoBatch((prev) => ({
+							...prev,
+							[m.graphId]: { status: "error", error: res.error },
+						}));
+						continue;
+					}
+					if (res.alreadyRunning || res.started === false) {
+						waiter.cancel();
+						setRepoBatch((prev) => ({
+							...prev,
+							[m.graphId]: { status: "skipped" },
+						}));
+						continue;
+					}
+					await waiter.promise;
+					setRepoBatch((prev) => ({
+						...prev,
+						[m.graphId]: { status: "done" },
+					}));
+				} catch (err) {
+					waiter.cancel();
+					setRepoBatch((prev) => ({
+						...prev,
+						[m.graphId]: {
+							status: "error",
+							error: err instanceof Error ? err.message : String(err),
+						},
+					}));
+				}
+			}
+			if (repoBatchCancel.current) {
+				setRepoBatch((prev) => {
+					const next = { ...prev };
+					for (const [gid, entry] of Object.entries(next)) {
+						if (entry.status === "pending") next[gid] = { status: "stopped" };
+					}
+					return next;
+				});
+			}
+		} finally {
+			setRepoBatchStopping(false);
+			setRepoBatchActive(false);
+		}
+	}, [repoBatchActive, visibleModels, waitForMaintainDone]);
+
+	const repoBatchDone = Object.values(repoBatch).filter(
+		(e) => e.status === "done",
+	).length;
+	const repoBatchSkipped = Object.values(repoBatch).filter(
+		(e) => e.status === "skipped",
+	).length;
+	const repoBatchStopped = Object.values(repoBatch).filter(
+		(e) => e.status === "stopped",
+	).length;
 
 	return (
 		<div
@@ -966,7 +1343,7 @@ export function MaintenancePanel({
 										theme.colors.border
 									}
 									borderColor={theme.colors.border ?? "#333"}
-									fontSize={theme.fontSizes[0]}
+									fontSize={theme.fontSizes[1]}
 									fontFamily={theme.fonts.body}
 									onOpen={setLaneHelp}
 								/>
@@ -989,7 +1366,7 @@ export function MaintenancePanel({
 								border: `1px solid ${theme.colors.border ?? "#333"}`,
 								color: theme.colors.text,
 								cursor: "pointer",
-								fontSize: theme.fontSizes[1],
+								fontSize: theme.fontSizes[2],
 								fontFamily: theme.fonts.body,
 								display: "inline-flex",
 								alignItems: "center",
@@ -1001,6 +1378,73 @@ export function MaintenancePanel({
 							<ScanSearch size={13} />
 							Audit all
 						</button>
+						<button
+							type="button"
+							disabled={repoBatchActive || visibleModels.length === 0}
+							onClick={() => void runRepoMaintenance()}
+							title="Run maintenance on every visible model in this repo, one at a time. Models with pending proposals are skipped."
+							style={{
+								background: "transparent",
+								border: `1px solid ${theme.colors.primary}`,
+								color: theme.colors.primary,
+								cursor: repoBatchActive ? "default" : "pointer",
+								opacity: repoBatchActive ? 0.6 : 1,
+								fontSize: theme.fontSizes[2],
+								fontFamily: theme.fonts.body,
+								display: "inline-flex",
+								alignItems: "center",
+								gap: 6,
+								padding: "4px 10px",
+								borderRadius: 6,
+							}}
+						>
+							{repoBatchActive ? (
+								<Loader2 size={13} className="principal-studio-spin" />
+							) : (
+								<Play size={13} />
+							)}
+							{repoBatchActive
+								? `Running… ${repoBatchDone}/${visibleModels.length}`
+								: "Run maintenance on all"}
+						</button>
+						{repoBatchActive && (
+							<button
+								type="button"
+								disabled={repoBatchStopping}
+								onClick={() => {
+									repoBatchCancel.current = true;
+									setRepoBatchStopping(true);
+								}}
+								title="Stop after the model currently running finishes."
+								style={{
+									background: "transparent",
+									border: `1px solid ${theme.colors.error ?? "#e5534b"}`,
+									color: theme.colors.error ?? "#e5534b",
+									cursor: repoBatchStopping ? "default" : "pointer",
+									opacity: repoBatchStopping ? 0.6 : 1,
+									fontSize: theme.fontSizes[2],
+									fontFamily: theme.fonts.body,
+									display: "inline-flex",
+									alignItems: "center",
+									gap: 6,
+									padding: "4px 10px",
+									borderRadius: 6,
+								}}
+							>
+								<Square size={13} />
+								{repoBatchStopping ? "Stopping…" : "Stop"}
+							</button>
+						)}
+						{!repoBatchActive && repoBatchSkipped > 0 && (
+							<span style={{ fontSize: theme.fontSizes[1], color: muted }}>
+								{repoBatchSkipped} skipped (pending proposals)
+							</span>
+						)}
+						{!repoBatchActive && repoBatchStopped > 0 && (
+							<span style={{ fontSize: theme.fontSizes[1], color: muted }}>
+								{repoBatchStopped} stopped
+							</span>
+						)}
 						{pending.length > 0 && (
 							<button
 								type="button"
@@ -1014,7 +1458,7 @@ export function MaintenancePanel({
 									border: `1px solid ${theme.colors.error ?? "#e5534b"}`,
 									color: theme.colors.error ?? "#e5534b",
 									cursor: "pointer",
-									fontSize: theme.fontSizes[1],
+									fontSize: theme.fontSizes[2],
 									fontFamily: theme.fonts.body,
 									display: "inline-flex",
 									alignItems: "center",
@@ -1040,7 +1484,7 @@ export function MaintenancePanel({
 									border: `1px solid ${theme.colors.success ?? "#2da44e"}`,
 									color: theme.colors.success ?? "#2da44e",
 									cursor: "pointer",
-									fontSize: theme.fontSizes[1],
+									fontSize: theme.fontSizes[2],
 									fontFamily: theme.fonts.body,
 									display: "inline-flex",
 									alignItems: "center",
@@ -1062,7 +1506,7 @@ export function MaintenancePanel({
 									border: "none",
 									color: muted,
 									cursor: "pointer",
-									fontSize: theme.fontSizes[1],
+									fontSize: theme.fontSizes[2],
 								}}
 							>
 								Close
@@ -1076,7 +1520,7 @@ export function MaintenancePanel({
 							margin: "0 0 12px",
 							padding: `0 ${scalePad}px`,
 							color: theme.colors.error ?? "#e5534b",
-							fontSize: theme.fontSizes[0],
+							fontSize: theme.fontSizes[1],
 						}}
 					>
 						{error}
@@ -1088,7 +1532,7 @@ export function MaintenancePanel({
 						style={{
 							padding: `0 ${scalePad}px`,
 							color: muted,
-							fontSize: theme.fontSizes[1],
+							fontSize: theme.fontSizes[2],
 						}}
 					>
 						Loading…
@@ -1107,8 +1551,8 @@ export function MaintenancePanel({
 					>
 						<MaintenanceRepoList
 							repoBreaks={repoBreaks}
-							selectedKey={repoKey}
-							onSelect={setRepoKey}
+							selectedKey={activeRepoKey}
+							onSelect={onSelectRepo}
 							scalePad={scalePad}
 						/>
 						<div
@@ -1127,7 +1571,7 @@ export function MaintenancePanel({
 					<div style={{ marginBottom: 16 }}>
 						<div
 							style={{
-								fontSize: theme.fontSizes[0],
+								fontSize: theme.fontSizes[1],
 								textTransform: "uppercase",
 								letterSpacing: 0.3,
 								color: muted,
@@ -1140,15 +1584,27 @@ export function MaintenancePanel({
 							const m = overview?.models.find((x) => x.graphId === gid);
 							const f = feeds[gid];
 							const title = m?.title || f?.title || gid;
+							const progressMeta = AGENT_META.find(
+								(a) => a.agent === f?.agent,
+							);
 							return (
 								<div
 									key={gid}
+									onClick={() =>
+										openRunEvents(
+											feeds[gid]?.sessionId,
+											gid,
+											title,
+											feeds[gid]?.agent,
+										)
+									}
 									style={{
 										padding: "10px 12px",
 										borderRadius: 8,
 										border: `1px solid ${theme.colors.border}`,
 										background: theme.colors.background,
 										marginBottom: 8,
+										cursor: feeds[gid]?.sessionId ? "pointer" : "default",
 									}}
 								>
 									<div
@@ -1159,11 +1615,26 @@ export function MaintenancePanel({
 											marginBottom: 4,
 										}}
 									>
-										<Loader2
-											size={12}
-											className="principal-studio-spin"
-											style={{ flexShrink: 0, color: theme.colors.primary }}
-										/>
+										<span
+											className="principal-studio-running-border"
+											style={{
+												display: "inline-flex",
+												alignItems: "center",
+												gap: 5,
+												flexShrink: 0,
+												height: 26,
+												padding: "0 8px",
+												borderRadius: 6,
+												fontSize: theme.fontSizes[1],
+												fontFamily: theme.fonts.body,
+												border: `1px solid ${theme.colors.primary}`,
+												color: theme.colors.primary,
+												whiteSpace: "nowrap",
+											}}
+										>
+											{progressMeta && <progressMeta.Icon size={12} />}
+											{progressMeta?.label ?? f?.agent ?? "maintain"}
+										</span>
 										<span
 											style={{
 												flex: 1,
@@ -1177,14 +1648,14 @@ export function MaintenancePanel({
 											{title}
 										</span>
 										{f?.agent && (
-											<code style={{ fontSize: theme.fontSizes[0], color: muted }}>
+											<code style={{ fontSize: theme.fontSizes[1], color: muted }}>
 												{f.agent}
 											</code>
 										)}
 										{f != null && (
 											<span
 												style={{
-													fontSize: theme.fontSizes[0],
+													fontSize: theme.fontSizes[1],
 													color: muted,
 													fontVariantNumeric: "tabular-nums",
 												}}
@@ -1195,17 +1666,19 @@ export function MaintenancePanel({
 									</div>
 									<div
 										style={{
-											fontSize: theme.fontSizes[0],
+											fontSize: theme.fontSizes[1],
 											color: muted,
 											fontFamily:
 												theme.fonts.monospace ?? "ui-monospace, monospace",
 											lineHeight: 1.45,
-											wordBreak: "break-word",
+											overflow: "hidden",
+											textOverflow: "ellipsis",
+											whiteSpace: "nowrap",
 										}}
 									>
 										{f
 											? f.last
-												? `${f.title ? `${f.title} — ` : ""}${f.last}`
+												? f.last
 												: f.status === "starting"
 													? "Starting OpenCode session…"
 													: `${f.status}…`
@@ -1216,7 +1689,7 @@ export function MaintenancePanel({
 											style={{
 												marginTop: 4,
 												color: theme.colors.error ?? "#e5534b",
-												fontSize: theme.fontSizes[0],
+												fontSize: theme.fontSizes[1],
 											}}
 										>
 											{f.error}
@@ -1232,7 +1705,7 @@ export function MaintenancePanel({
 					<>
 						<div
 							style={{
-								fontSize: theme.fontSizes[0],
+								fontSize: theme.fontSizes[1],
 								textTransform: "uppercase",
 								letterSpacing: 0.3,
 								color: muted,
@@ -1243,7 +1716,7 @@ export function MaintenancePanel({
 						</div>
 						<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
 							{visibleModels.length === 0 && (
-								<p style={{ color: muted, fontSize: theme.fontSizes[1] }}>
+								<p style={{ color: muted, fontSize: theme.fontSizes[2] }}>
 									{overview.models.length === 0
 										? "No subsystem models."
 										: "No models reference this repo."}
@@ -1273,13 +1746,23 @@ const rowBusy =
 								return (
 									<div
 										key={m.graphId}
+										onClick={() => {
+											const expanding = !expandedRunsIds.has(m.graphId);
+											setExpandedRunsIds((prev) => {
+												const next = new Set(prev);
+												if (next.has(m.graphId)) next.delete(m.graphId);
+												else next.add(m.graphId);
+												return next;
+											});
+											if (expanding) void loadProposalsFor(m.graphId);
+										}}
 										onDoubleClick={(e) => onRowDoubleClick(e, m)}
-										title="Double-click to open this model"
 										style={{
 											borderRadius: 6,
 											border: `1px solid ${theme.colors.border}`,
 											background: theme.colors.background,
-											fontSize: theme.fontSizes[1],
+											fontSize: theme.fontSizes[2],
+											cursor: "pointer",
 										}}
 									>
 										<div
@@ -1290,19 +1773,12 @@ const rowBusy =
 												padding: "8px 10px",
 											}}
 										>
-										{rowBusy && (
-											<Loader2
-												size={12}
-												className="principal-studio-spin"
-												style={{ flexShrink: 0, color: theme.colors.primary }}
-											/>
-										)}
 										<span style={{ flex: 1, minWidth: 0 }}>{m.title}</span>
 										{m.blocked > 0 && (
 											<span
 												title="Claims blocked on an unavailable repo or graphify cache. Run maintenance to rebuild caches; cloned repos still need the repo available locally."
 												style={{
-													fontSize: theme.fontSizes[0],
+													fontSize: theme.fontSizes[1],
 													color: muted,
 												}}
 											>
@@ -1313,15 +1789,18 @@ const rowBusy =
 											<button
 												type="button"
 												aria-expanded={runsOpen}
-												onClick={() =>
+												onClick={(e) => {
+													e.stopPropagation();
+													const expanding = !expandedRunsIds.has(m.graphId);
 													setExpandedRunsIds((prev) => {
 														const next = new Set(prev);
 														if (next.has(m.graphId))
 															next.delete(m.graphId);
 														else next.add(m.graphId);
 														return next;
-													})
-												}
+													});
+													if (expanding) void loadProposalsFor(m.graphId);
+												}}
 												title={
 													runsOpen
 														? "Hide recent runs"
@@ -1331,7 +1810,7 @@ const rowBusy =
 													padding: "0 10px",
 													height: 26,
 													borderRadius: 6,
-													fontSize: theme.fontSizes[0],
+													fontSize: theme.fontSizes[1],
 													fontFamily: theme.fonts.body,
 													background: runsOpen
 														? (theme.colors.primary ?? "#2da44e")
@@ -1373,7 +1852,7 @@ const rowBusy =
 													padding: "0 10px",
 													height: 26,
 													borderRadius: 6,
-													fontSize: theme.fontSizes[0],
+													fontSize: theme.fontSizes[1],
 													fontFamily: theme.fonts.body,
 													background: "transparent",
 													color: theme.colors.primary,
@@ -1394,13 +1873,16 @@ const rowBusy =
 											<button
 												type="button"
 												disabled={rowBusy}
-												onClick={() => setPickTarget(m)}
+												onClick={(e) => {
+													e.stopPropagation();
+													setPickTarget(m);
+												}}
 												title="Run a background maintenance pass: audits this model and drafts a proposal for the first fixable finding (does not auto-accept)."
 												style={{
 													padding: "0 10px",
 													height: 26,
 													borderRadius: 6,
-													fontSize: theme.fontSizes[0],
+													fontSize: theme.fontSizes[1],
 													fontFamily: theme.fonts.body,
 													background: "transparent",
 													color: theme.colors.primary,
@@ -1442,12 +1924,10 @@ const rowBusy =
 													return (
 														<span
 															key={agent}
-															title={
+															className={
 																active
-																	? `Running: ${agent}`
-																	: activeAgent
-																		? `${agent} — not running (current: ${activeAgent})`
-																		: `${agent} — waiting for the current stage`
+																	? "principal-studio-running-border"
+																	: undefined
 															}
 															style={{
 																display: "inline-flex",
@@ -1458,7 +1938,7 @@ const rowBusy =
 																height: 26,
 																padding: "0 8px",
 																borderRadius: 6,
-																fontSize: theme.fontSizes[0],
+																fontSize: theme.fontSizes[1],
 																fontFamily: theme.fonts.body,
 																whiteSpace: "nowrap",
 																border: `1px solid ${
@@ -1466,11 +1946,9 @@ const rowBusy =
 																		? theme.colors.primary
 																		: (theme.colors.border ?? "#333")
 																}`,
-																background: active
-																	? theme.colors.primary
-																	: "transparent",
+																background: "transparent",
 																color: active
-																	? theme.colors.background
+																	? theme.colors.primary
 																	: muted,
 																opacity: active ? 1 : 0.5,
 																flexShrink: 0,
@@ -1485,32 +1963,57 @@ const rowBusy =
 										)}
 										{runsOpen && (
 											<div
+												onClick={(e) => e.stopPropagation()}
 												style={{
 													borderTop: `1px solid ${theme.colors.border}`,
 													padding: "6px 10px 8px",
 													display: "flex",
 													flexDirection: "column",
-													gap: 2,
+													gap: 6,
 												}}
 											>
-												{modelRuns.length === 0 ? (
-													<div
-														style={{
-															fontSize: theme.fontSizes[0],
-															color: muted,
-														}}
-													>
-														No runs recorded yet.
-													</div>
-												) : (
-													modelRuns.map((run) => (
+												<FixCycleStrip nextRoute={m.nextRoute} />
+												<div
+													style={{
+														display: "flex",
+														flexDirection: "column",
+														gap: 2,
+													}}
+												>
+													{modelRuns.length === 0 ? (
+														<div
+															style={{
+																fontSize: theme.fontSizes[1],
+																color: muted,
+															}}
+														>
+															No runs yet.
+														</div>
+													) : (
+														modelRuns.map((run) => (
 														<RunRow
 															key={run.id}
 															run={run}
 															graphTitle={m.title}
+															proposals={proposalsForRun(
+																proposalsByGraph.get(m.graphId),
+																run,
+															)}
+															onOpen={
+																run.sessionId
+																	? () =>
+																			openRunEvents(
+																				run.sessionId,
+																				run.graphId,
+																				m.title,
+																				run.agent,
+																			)
+																	: undefined
+															}
 														/>
-													))
-												)}
+														))
+													)}
+												</div>
 											</div>
 										)}
 									</div>
@@ -1528,8 +2031,8 @@ const rowBusy =
 								overview.needsWork === 0 &&
 								overview.running.length === 0 &&
 								overview.auditing.length === 0
-									? theme.fontSizes[1]
-									: theme.fontSizes[0],
+									? theme.fontSizes[2]
+									: theme.fontSizes[1],
 							color:
 								overview.needsWork === 0 &&
 								overview.running.length === 0 &&
@@ -1555,7 +2058,7 @@ const rowBusy =
 				<MaintainModelPickerModal
 					graphId={pickTarget.graphId}
 					title={pickTarget.title}
-					mode={pickTarget.verdict === "issues" ? "issues" : "gaps"}
+					mode={pickTarget.verdict === "issues" ? "issues" : "verify"}
 					onClose={() => setPickTarget(null)}
 					onStarted={onMaintainStarted}
 				/>
@@ -1635,7 +2138,7 @@ const rowBusy =
 									</div>
 									<div
 										style={{
-											fontSize: theme.fontSizes[0],
+											fontSize: theme.fontSizes[1],
 											color: muted,
 											lineHeight: 1.4,
 										}}
@@ -1674,7 +2177,7 @@ const rowBusy =
 												borderRadius: 6,
 												border: `1px solid ${theme.colors.border}`,
 												background: theme.colors.background,
-												fontSize: theme.fontSizes[1],
+												fontSize: theme.fontSizes[2],
 											}}
 										>
 											{state?.status === "running" ? (
@@ -1715,7 +2218,7 @@ const rowBusy =
 											</span>
 											<span
 												style={{
-													fontSize: theme.fontSizes[0],
+													fontSize: theme.fontSizes[1],
 													color: state?.status === "error"
 														? (theme.colors.error ?? "#e5534b")
 														: muted,
@@ -1755,7 +2258,7 @@ const rowBusy =
 										padding: "0 12px",
 										height: 32,
 										borderRadius: 6,
-										fontSize: theme.fontSizes[1],
+										fontSize: theme.fontSizes[2],
 										fontFamily: theme.fonts.body,
 										background: "transparent",
 										color: theme.colors.text,
@@ -1775,7 +2278,7 @@ const rowBusy =
 												padding: "0 14px",
 												height: 32,
 												borderRadius: 6,
-												fontSize: theme.fontSizes[1],
+												fontSize: theme.fontSizes[2],
 												fontWeight: 500,
 												fontFamily: theme.fonts.body,
 												background: theme.colors.primary,
@@ -1803,7 +2306,7 @@ const rowBusy =
 												padding: "0 14px",
 												height: 32,
 												borderRadius: 6,
-												fontSize: theme.fontSizes[1],
+												fontSize: theme.fontSizes[2],
 												fontWeight: 500,
 												fontFamily: theme.fonts.body,
 												background: theme.colors.primary,
@@ -1888,7 +2391,7 @@ const rowBusy =
 									</div>
 									<div
 										style={{
-											fontSize: theme.fontSizes[0],
+											fontSize: theme.fontSizes[1],
 											color: muted,
 											lineHeight: 1.4,
 										}}
@@ -1904,7 +2407,7 @@ const rowBusy =
 								<div
 									style={{
 										padding: "10px 20px 0",
-										fontSize: theme.fontSizes[0],
+										fontSize: theme.fontSizes[1],
 										color: theme.colors.error ?? "#e5534b",
 									}}
 								>
@@ -1930,7 +2433,7 @@ const rowBusy =
 										padding: "0 12px",
 										height: 32,
 										borderRadius: 6,
-										fontSize: theme.fontSizes[1],
+										fontSize: theme.fontSizes[2],
 										fontFamily: theme.fonts.body,
 										background: "transparent",
 										color: theme.colors.text,
@@ -1949,7 +2452,7 @@ const rowBusy =
 										padding: "0 14px",
 										height: 32,
 										borderRadius: 6,
-										fontSize: theme.fontSizes[1],
+										fontSize: theme.fontSizes[2],
 										fontWeight: 500,
 										fontFamily: theme.fonts.body,
 										background: theme.colors.error ?? "#e5534b",
@@ -2038,7 +2541,7 @@ const rowBusy =
 								<p
 									style={{
 										margin: "0 0 14px",
-										fontSize: theme.fontSizes[1],
+										fontSize: theme.fontSizes[2],
 										lineHeight: 1.5,
 										color: muted,
 									}}
@@ -2047,7 +2550,7 @@ const rowBusy =
 								</p>
 								<div
 									style={{
-										fontSize: theme.fontSizes[0],
+										fontSize: theme.fontSizes[1],
 										textTransform: "uppercase",
 										letterSpacing: 0.3,
 										color: muted,
@@ -2070,7 +2573,7 @@ const rowBusy =
 												display: "flex",
 												alignItems: "baseline",
 												gap: 8,
-												fontSize: theme.fontSizes[0],
+												fontSize: theme.fontSizes[1],
 											}}
 										>
 											<span
@@ -2101,7 +2604,7 @@ const rowBusy =
 											padding: "0 14px",
 											height: 34,
 											borderRadius: 6,
-											fontSize: theme.fontSizes[1],
+											fontSize: theme.fontSizes[2],
 											fontWeight: 500,
 											fontFamily: theme.fonts.body,
 											background: theme.colors.primary,

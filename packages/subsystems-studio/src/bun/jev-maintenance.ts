@@ -86,9 +86,9 @@ const LANE_SUBJECT: Record<SubsystemVerificationLane, string> = {
 	construct:
 		"The proposed construct correction is an accurate extraction of the declaration in the source under review.",
 	"static-topology":
-		"The proposed relation or containment (module) claim is accurate given the source under review.",
-	"runtime-topology":
-		"The proposed process (deployment-unit) membership is accurate given the source under review.",
+		"The proposed relation claim is accurate given the source under review.",
+	"dynamic-topology":
+		"The proposed process (runtime deployment-unit) or package/module (containment) membership is accurate given the source under review.",
 	walkthrough:
 		"The proposed walkthrough step is accurate given the source under review.",
 };
@@ -166,14 +166,14 @@ export function changeKindQuestion(proposal: SubsystemModelProposal): {
 				criteria: {
 					relation_augment: "Confirming a topology relation claim",
 					relation_fix: "Retargeting, retyping, or deleting a relation",
-					module_augment: "Confirming an intentional module grouping",
-					module_fix: "Correcting a component's module",
 				},
 			};
-		case "runtime-topology":
+		case "dynamic-topology":
 			return {
-				instructions: "What kind of runtime-topology correction is this?",
+				instructions: "What kind of dynamic-topology correction is this?",
 				criteria: {
+					module_augment: "Confirming an intentional module grouping",
+					module_fix: "Correcting a component's module",
 					process_fix: "Correcting a component's process (deployment unit)",
 				},
 			};

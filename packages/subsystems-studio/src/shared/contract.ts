@@ -105,6 +105,11 @@ export interface ViewerSettings {
 	 * second opinions. `null` = fall back to the `TYPESAFE_API_KEY` env var.
 	 */
 	typesafeApiKey: string | null;
+	/**
+	 * Last repo (owner/name, lowercased) selected in the Maintainer tab's repo
+	 * filter, restored on the next mount. `null` = fall back to the first repo.
+	 */
+	maintenanceRepoKey: string | null;
 }
 
 /** Live status of the host regular-audit scheduler (for countdown UI). */
@@ -132,6 +137,8 @@ export interface PartialViewerSettings {
 	regularAuditIntervalMinutes?: number;
 	/** Pass `null` to clear the stored Jev API key. */
 	typesafeApiKey?: string | null;
+	/** Pass `null` to fall back to the first repo on the next mount. */
+	maintenanceRepoKey?: string | null;
 }
 
 export interface RepoInfo {
@@ -778,6 +785,22 @@ export interface MaintenanceOverviewModel {
 	 * component purls. Drives the Maintain tab's repo filter.
 	 */
 	repos?: Array<{ owner: string; name: string }>;
+	/**
+	 * The next stage a Maintain run would execute, in routing order — or `null`
+	 * when nothing is queued (fully verified). Drives the fix-cycle position.
+	 */
+	nextRoute?: {
+		agent:
+			| "construct-verifier"
+			| "static-topology-verifier"
+			| "package-module-verifier"
+			| "runtime-topology-verifier"
+			| "construct-fixer"
+			| "static-topology-fixer"
+			| "package-module-fixer";
+		layer: "construct" | "static-topology" | "dynamic-topology";
+		mode: "issues" | "verify";
+	} | null;
 }
 
 /**
@@ -798,8 +821,8 @@ export interface SubsystemModelRun {
 	sessionId?: string;
 	/** Maintain agent that ran (or was selected). */
 	agent?: string;
-	layer?: "construct" | "topology" | "boundary";
-	mode?: "issues" | "gaps";
+	layer?: "construct" | "static-topology" | "dynamic-topology";
+	mode?: "issues" | "verify";
 	/** OpenCode model ref used for the run. */
 	model?: string;
 	status: "running" | "done" | "error" | "skipped";
@@ -1012,13 +1035,15 @@ export interface SubsystemModelSecondOpinion {
  */
 /**
  * Verification lane a proposal belongs to — the four layers of the model:
- * construct (L1), static topology (L2), runtime topology (L3), walkthrough (L4).
- * Derived from the proposal's changes (+ finding kind) at creation.
+ * construct (L1), static topology (L2), dynamic topology (L3), walkthrough (L4).
+ * Static topology = relations[]; dynamic topology = process (runtime) +
+ * package/module (containment). Derived from the proposal's changes
+ * (+ finding kind) at creation.
  */
 export type SubsystemVerificationLane =
 	| "construct"
 	| "static-topology"
-	| "runtime-topology"
+	| "dynamic-topology"
 	| "walkthrough";
 
 export interface SubsystemModelProposal {
@@ -1773,9 +1798,11 @@ export type StudioRequests = {
 	};
 	/**
 	 * Start a background Maintain OpenCode run for this model.
-	 * Host re-audits and routes: construct issues → issue-fixer, topology
-	 * broken endpoints → topology-fixer, construct gaps → gap-filler,
-	 * topology soft gaps → topology-gap-filler, fully_verified → no-op.
+	 * Host re-audits and routes: construct issues → construct-fixer, broken
+	 * relation endpoints → static-topology-fixer, package/module issues →
+	 * package-module-fixer; unconfirmed claims → construct-verifier,
+	 * static-topology-verifier, package-module-verifier, or
+	 * runtime-topology-verifier; fully_verified → no-op.
 	 * Progress via `subsystemModelMaintainChanged`. Does not auto-accept
 	 * proposals.
 	 */
@@ -1794,6 +1821,19 @@ export type StudioRequests = {
 			/** True when a run is already in flight for this graph. */
 			alreadyRunning?: boolean;
 		};
+	};
+	/**
+	 * Open (or focus) the live Maintain-events tab for a run's OpenCode session.
+	 * Used to open the tab on demand instead of when a run starts.
+	 */
+	openMaintainEvents: {
+		params: {
+			sessionId: string;
+			graphId: string;
+			title?: string;
+			agent?: string;
+		};
+		response: { ok: boolean; tabId?: string; error?: string };
 	};
 	/**
 	 * Free / configured OpenCode models for the subsystem maintainer.
@@ -1846,9 +1886,9 @@ export type StudioRequests = {
 		response: OpencodeV2Status;
 	};
 	/**
-	 * Install `@opencode-ai/cli@beta` globally when `opencode2` is missing.
-	 * Returns immediately with `started` while work continues; listen for
-	 * `opencodeV2Changed`.
+	 * Download the latest OpenCode V2 binary to `~/.opencode/bin/opencode2`
+	 * when `opencode2` is missing. Returns immediately with `started` while
+	 * work continues; listen for `opencodeV2Changed`.
 	 */
 	installOpencodeV2: {
 		params: Record<string, never>;
@@ -1859,7 +1899,7 @@ export type StudioRequests = {
 			status?: OpencodeV2Status;
 		};
 	};
-	/** Re-run npm install -g @opencode-ai/cli@beta when already installed. */
+	/** Re-download the latest OpenCode V2 binary over an existing `opencode2`. */
 	updateOpencodeV2: {
 		params: Record<string, never>;
 		response: {
@@ -2212,7 +2252,7 @@ export type StudioMessages = {
 	subsystemModelRunsChanged: {
 		graphId: string;
 	};
-	/** Maintain agent run started / finished (issue-fixer or gap-filler). */
+	/** Maintain agent run started / finished (a fixer or verifier agent). */
 	subsystemModelMaintainChanged: {
 		graphId: string;
 		status: "running" | "done" | "error";
@@ -2223,27 +2263,31 @@ export type StudioMessages = {
 		model?: string;
 		/** Which Maintain agent ran (or was selected). */
 		agent?:
-			| "issue-fixer"
-			| "gap-filler"
-			| "topology-fixer"
-			| "topology-gap-filler"
-			| "boundary-gap-filler";
+			| "construct-verifier"
+			| "static-topology-verifier"
+			| "package-module-verifier"
+			| "runtime-topology-verifier"
+			| "construct-fixer"
+			| "static-topology-fixer"
+			| "package-module-fixer";
 		/** True when audit was fully verified and no agent ran. */
 		skipped?: boolean;
 		/** Sequenced-run outcome (multi-stage Maintain). */
-		outcome?: "converged" | "needs_unblock" | "cap" | "error";
+		outcome?: "converged" | "needs_unblock" | "stalled" | "cap" | "error";
 		/** Stages run in this sequence. */
 		stages?: number;
 		/** Stage that left pending proposals when `outcome === "needs_unblock"`. */
 		blockedAt?: {
 			agent?:
-				| "issue-fixer"
-				| "gap-filler"
-				| "topology-fixer"
-				| "topology-gap-filler"
-				| "boundary-gap-filler";
-			layer: "construct" | "topology" | "boundary";
-			mode: "issues" | "gaps";
+				| "construct-verifier"
+				| "static-topology-verifier"
+				| "package-module-verifier"
+				| "runtime-topology-verifier"
+				| "construct-fixer"
+				| "static-topology-fixer"
+				| "package-module-fixer";
+			layer: "construct" | "static-topology" | "dynamic-topology";
+			mode: "issues" | "verify";
 		};
 	};
 	/** Host regular-audit scheduler status changed (enable/interval/tick/running). */

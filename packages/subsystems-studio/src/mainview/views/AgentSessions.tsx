@@ -211,7 +211,7 @@ function resolveAgentLogoFields(raw: string): {
 	displayAgent: string;
 } {
 	const key = raw.trim().toLowerCase();
-	if (key === "issue-fixer" || key === "gap-filler" || key === "topology-fixer" || key === "topology-gap-filler" || key === "boundary-gap-filler" || key === "maintain") {
+	if (MAINTAIN_LOADER_AGENTS.includes(key) || key === "maintain") {
 		return { logoAgent: "opencode", displayAgent: key };
 	}
 	if (key === "opencode-v2" || key === "opencode2") {
@@ -281,7 +281,21 @@ const LOAD_MORE_STEP = 7;
 
 export type AgentSessionsScope = "agents" | "maintain";
 
-const MAINTAIN_LOADER_AGENTS = ["issue-fixer", "gap-filler", "topology-fixer", "topology-gap-filler", "boundary-gap-filler"];
+const MAINTAIN_LOADER_AGENTS = [
+	"construct-verifier",
+	"static-topology-verifier",
+	"package-module-verifier",
+	"runtime-topology-verifier",
+	"construct-fixer",
+	"static-topology-fixer",
+	"package-module-fixer",
+	// Legacy (pre-rename).
+	"issue-fixer",
+	"gap-filler",
+	"topology-fixer",
+	"topology-gap-filler",
+	"boundary-gap-filler",
+];
 
 export function AgentSessionsOverviewView({
 	active = true,

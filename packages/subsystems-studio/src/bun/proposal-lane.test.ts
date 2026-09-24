@@ -32,16 +32,16 @@ describe("laneForChange", () => {
 		expect(laneForChange(augmentation("construct"))).toBe("construct");
 		expect(laneForChange(augmentation("signature"))).toBe("construct");
 	});
-	test("module is static topology", () => {
-		expect(laneForChange(component("module"))).toBe("static-topology");
-		expect(laneForChange(augmentation("module"))).toBe("static-topology");
+	test("module is dynamic topology", () => {
+		expect(laneForChange(component("module"))).toBe("dynamic-topology");
+		expect(laneForChange(augmentation("module"))).toBe("dynamic-topology");
 	});
 	test("relations are static topology", () => {
 		expect(laneForChange(augmentation("relation"))).toBe("static-topology");
 		expect(laneForChange(relation())).toBe("static-topology");
 	});
 	test("process is runtime topology", () => {
-		expect(laneForChange(component("process"))).toBe("runtime-topology");
+		expect(laneForChange(component("process"))).toBe("dynamic-topology");
 	});
 	test("walkthrough step", () => {
 		expect(laneForChange(step())).toBe("walkthrough");
@@ -58,11 +58,14 @@ describe("laneForFindingKind", () => {
 		expect(laneForFindingKind("topology_broken_endpoint")).toBe(
 			"static-topology",
 		);
-		expect(laneForFindingKind("boundary_module_file_mismatch")).toBe(
+		expect(laneForFindingKind("topology_relation_unconfirmed")).toBe(
 			"static-topology",
 		);
+		expect(laneForFindingKind("boundary_module_file_mismatch")).toBe(
+			"dynamic-topology",
+		);
 		expect(laneForFindingKind("boundary_process_nest_disagree")).toBe(
-			"runtime-topology",
+			"dynamic-topology",
 		);
 		expect(laneForFindingKind("walkthrough")).toBe("walkthrough");
 	});

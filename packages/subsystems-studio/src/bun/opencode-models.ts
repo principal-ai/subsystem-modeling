@@ -1,6 +1,6 @@
 /**
  * Discover OpenCode models and pick a free-tier default for Studio agents
- * (issue-fixer / gap-filler, later extractors). Uses `opencode models --verbose`.
+ * (the maintain verifier/fixer agents, later extractors). Uses `opencode models --verbose`.
  */
 
 import { readFileSync } from "node:fs";

@@ -442,7 +442,7 @@ describe("summarizeLanes", () => {
 		expect(lanes).toEqual({
 			construct: "verified",
 			"static-topology": "verified",
-			"runtime-topology": "verified",
+			"dynamic-topology": "verified",
 			walkthrough: "verified",
 		});
 	});
@@ -459,7 +459,7 @@ describe("summarizeLanes", () => {
 		);
 		expect(lanes.construct).toBe("partial");
 		expect(lanes["static-topology"]).toBe("issues");
-		expect(lanes["runtime-topology"]).toBe("none");
+		expect(lanes["dynamic-topology"]).toBe("none");
 		expect(lanes.walkthrough).toBe("none");
 	});
 

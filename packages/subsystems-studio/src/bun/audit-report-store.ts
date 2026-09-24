@@ -281,8 +281,8 @@ function laneStatus(t: VerificationTally): VerificationLaneStatus {
 
 /**
  * Coarse per-lane status mapped onto the four model layers: construct (L1),
- * static topology (L2 = relations + module containment), runtime topology
- * (L3 = process), walkthrough (L4).
+ * static topology (L2 = relations), dynamic topology (L3 = process runtime +
+ * package/module containment), walkthrough (L4).
  */
 export function summarizeLanes(
 	report: SubsystemModelAuditReport,
@@ -294,13 +294,11 @@ export function summarizeLanes(
 	const staticTopology = emptyTally();
 	for (const c of report.topologyChecks ?? [])
 		classifyTopologyCheck(c, staticTopology);
-	for (const c of report.boundaryChecks ?? []) {
-		if (c.kind === "module_file") classifyBoundaryCheck(c, staticTopology);
-	}
 
-	const runtimeTopology = emptyTally();
+	const dynamicTopology = emptyTally();
 	for (const c of report.boundaryChecks ?? []) {
-		if (c.kind === "process_nest") classifyBoundaryCheck(c, runtimeTopology);
+		if (c.kind === "module_file") classifyBoundaryCheck(c, dynamicTopology);
+		if (c.kind === "process_nest") classifyBoundaryCheck(c, dynamicTopology);
 	}
 
 	const walkthrough: VerificationLaneStatus = !opts.hasWalkthroughs
@@ -319,7 +317,7 @@ export function summarizeLanes(
 	return {
 		construct: constructStatus,
 		"static-topology": laneStatus(staticTopology),
-		"runtime-topology": laneStatus(runtimeTopology),
+		"dynamic-topology": laneStatus(dynamicTopology),
 		walkthrough,
 	};
 }

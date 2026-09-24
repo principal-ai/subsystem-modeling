@@ -38,13 +38,15 @@ export type SubsystemIssueTargetKind =
 
 /**
  * The four verification layers, in order. Mirrors the docs' progression:
- * constructs → static topology → runtime topology → walkthrough.
+ * constructs → static topology → dynamic topology → walkthrough.
+ * Static topology = relations; dynamic topology = process (runtime) +
+ * package/module (containment).
  */
 export type SubsystemIssueCategory =
   | 'repo'
   | 'construct'
   | 'static-topology'
-  | 'runtime-topology'
+  | 'dynamic-topology'
   | 'walkthrough';
 
 /** Layer order + display names, shared by the list and its headers. */
@@ -52,7 +54,7 @@ export const SUBSYSTEM_ISSUE_CATEGORIES: SubsystemIssueCategory[] = [
   'repo',
   'construct',
   'static-topology',
-  'runtime-topology',
+  'dynamic-topology',
   'walkthrough',
 ];
 
@@ -64,7 +66,7 @@ export const SUBSYSTEM_ISSUE_CATEGORY_ICON: Record<
   repo: FolderGit2,
   construct: Component,
   'static-topology': Network,
-  'runtime-topology': Server,
+  'dynamic-topology': Server,
   walkthrough: Route,
 };
 
@@ -75,11 +77,11 @@ export const SUBSYSTEM_ISSUE_CATEGORY_LABEL: Record<
   repo: 'Repositories',
   construct: 'Constructs',
   'static-topology': 'Static topology',
-  'runtime-topology': 'Runtime topology',
+  'dynamic-topology': 'Dynamic topology',
   walkthrough: 'Walkthrough',
 };
 
-/** Default `kind` → layer. `boundary_*` splits by module (static) vs process (runtime). */
+/** Default `kind` → layer. `boundary_*` (module containment + process) is dynamic. */
 const KIND_CATEGORY: Record<string, SubsystemIssueCategory> = {
   missing_file: 'construct',
   symbol_ambiguous: 'construct',
@@ -94,8 +96,8 @@ const KIND_CATEGORY: Record<string, SubsystemIssueCategory> = {
   topology_broken_endpoint: 'static-topology',
   topology_import_unconfirmed: 'static-topology',
   topology_relation_unconfirmed: 'static-topology',
-  boundary_module_file_mismatch: 'static-topology',
-  boundary_process_nest_disagree: 'runtime-topology',
+  boundary_module_file_mismatch: 'dynamic-topology',
+  boundary_process_nest_disagree: 'dynamic-topology',
   walkthrough: 'walkthrough',
 };
 

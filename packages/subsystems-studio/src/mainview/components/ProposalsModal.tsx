@@ -4,8 +4,18 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Copy, Loader2 } from "lucide-react";
+import {
+	Check,
+	Component,
+	Copy,
+	Loader2,
+	Network,
+	Route,
+	Server,
+	type LucideIcon,
+} from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
+import { DocumentView } from "themed-markdown";
 import type {
 	SubsystemModelProposal,
 	SubsystemVerificationLane,
@@ -15,9 +25,40 @@ import { electrobun } from "../rpc";
 const LANE_LABEL: Record<SubsystemVerificationLane, string> = {
 	construct: "Construct",
 	"static-topology": "Static topology",
-	"runtime-topology": "Runtime topology",
+	"dynamic-topology": "Dynamic topology",
 	walkthrough: "Walkthrough",
 };
+
+/** Lane icons — mirrors MaintenanceAgentModal's LANE_META (layer → mark). */
+const LANE_ICON: Record<SubsystemVerificationLane, LucideIcon> = {
+	construct: Component,
+	"static-topology": Network,
+	"dynamic-topology": Server,
+	walkthrough: Route,
+};
+
+/** Display label for the agent that produced a proposal (its `author` tag).
+ *  Legacy ids (pre-rename) are aliased so persisted proposals still read. */
+const AGENT_LABEL: Record<string, string> = {
+	"construct-verifier": "Construct Verifier",
+	"static-topology-verifier": "Static Topology Verifier",
+	"package-module-verifier": "Package/Module Verifier",
+	"runtime-topology-verifier": "Runtime Topology Verifier",
+	"construct-fixer": "Construct Fixer",
+	"static-topology-fixer": "Static Topology Fixer",
+	"package-module-fixer": "Package/Module Fixer",
+	// Legacy (pre-rename) ids.
+	"gap-filler": "Construct Verifier",
+	"topology-gap-filler": "Static Topology Verifier",
+	"boundary-gap-filler": "Dynamic Topology Verifier",
+	"issue-fixer": "Construct Fixer",
+	"topology-fixer": "Static Topology Fixer",
+};
+
+function agentLabel(author?: string): string | null {
+	if (!author) return null;
+	return AGENT_LABEL[author] ?? author;
+}
 
 function formatValue(v: unknown): string {
 	if (v === undefined) return "—";
@@ -29,6 +70,77 @@ function formatValue(v: unknown): string {
 	} catch {
 		return String(v);
 	}
+}
+
+/** True when at least one change rewrites the model (vs only recording a confirmation). */
+function updatesModel(p: SubsystemModelProposal): boolean {
+	return p.changes.some((c) => c.target !== "augmentation");
+}
+
+/** Whether the change at `index` records a confirmation rather than editing the model. */
+function isConfirmation(p: SubsystemModelProposal, index: number): boolean {
+	return p.changes[index]?.target === "augmentation";
+}
+
+/** Human heading for the change — `<symbol>.<field>` for the common cases. */
+function changeHeading(p: SubsystemModelProposal): string {
+	const ch = p.changes[0];
+	if (!ch) return "Change";
+	if (ch.target === "augmentation") {
+		if (ch.field === "relation") return `relation ${ch.relationId}`;
+		const name = p.finding?.componentName ?? ch.componentAlias;
+		return `${name}.${ch.field}`;
+	}
+	if (ch.target === "walkthrough-step") {
+		return `walkthrough ${ch.walkthroughId} step ${ch.stepIndex}.${ch.field}`;
+	}
+	if (ch.target === "relation") return `relation ${ch.relationId}.${ch.field}`;
+	const name = p.finding?.componentName ?? ch.componentAlias;
+	return `${name}.${ch.field}`;
+}
+
+/** Audit gap kinds an augmentation can close → the "now" state label. */
+const UNCONFIRMED_LABEL: Record<string, string> = {
+	construct_unconfirmed: "Construct unconfirmed",
+	signature_unconfirmed: "Signature unconfirmed",
+	topology_relation_unconfirmed: "Relation unconfirmed",
+	topology_import_unconfirmed: "Import unconfirmed",
+	boundary_module_file_mismatch: "Module unconfirmed",
+};
+
+/** Fallback label from the augmentation's field when no finding kind is linked. */
+function unconfirmedLabel(field: string): string {
+	switch (field) {
+		case "construct":
+			return "Construct unconfirmed";
+		case "signature":
+			return "Signature unconfirmed";
+		case "module":
+			return "Module unconfirmed";
+		case "relation":
+			return "Relation unconfirmed";
+		default:
+			return "Unconfirmed";
+	}
+}
+
+/** The state a change moves from. */
+function nowState(p: SubsystemModelProposal, index: number): string {
+	const ch = p.changes[index];
+	if (ch?.target === "augmentation") {
+		const kind = p.finding?.kind;
+		return (kind && UNCONFIRMED_LABEL[kind]) || unconfirmedLabel(ch.field);
+	}
+	return formatValue(p.preview[index]?.before);
+}
+
+/** The state a change moves to. */
+function afterState(p: SubsystemModelProposal, index: number): string {
+	const row = p.preview[index];
+	if (p.changes[index]?.target === "augmentation") {
+		return `Verified${row?.after ? ` as ${formatValue(row.after)}` : ""}`;
+	}
+	return formatValue(row?.after);
 }
 
 const COPY_FEEDBACK_MS = 1500;
@@ -391,17 +503,6 @@ setBusy((prev) => ({ ...prev, [proposalId]: "accept" }));
 						Close
 					</button>
 				</div>
-				<p
-					style={{
-						margin: "0 0 16px",
-						fontSize: theme.fontSizes[0],
-						color: muted,
-						lineHeight: 1.5,
-					}}
-				>
-					{title ? `${title} — ` : ""}
-					Review what the agent wants to change and why before applying.
-				</p>
 
 				{error && (
 					<p
@@ -461,6 +562,7 @@ setBusy((prev) => ({ ...prev, [proposalId]: "accept" }));
 						const cardBusy = cardAction != null;
 						const accepting = cardAction === "accept";
 						const rejecting = cardAction === "reject";
+						const LaneIcon = p.lane ? LANE_ICON[p.lane] : null;
 						return (
 							<article
 								key={p.id}
@@ -471,61 +573,127 @@ setBusy((prev) => ({ ...prev, [proposalId]: "accept" }));
 									background: theme.colors.background,
 								}}
 							>
-								<div
-									style={{
-										display: "flex",
-										justifyContent: "space-between",
-										gap: 8,
-										marginBottom: 8,
-									}}
-								>
+								<div style={{ marginBottom: 10 }}>
 									<div
 										style={{
 											display: "flex",
 											alignItems: "center",
-											gap: 8,
-											minWidth: 0,
+											gap: 6,
+											marginBottom: 3,
+											fontSize: theme.fontSizes[0],
+											color: muted,
 										}}
 									>
-										<code
+										{LaneIcon && (
+											<LaneIcon size={12} style={{ flexShrink: 0 }} />
+										)}
+										<span style={{ whiteSpace: "nowrap" }}>
+											{[
+												p.lane ? LANE_LABEL[p.lane] : null,
+												agentLabel(p.author),
+											]
+												.filter(Boolean)
+												.join(" · ")}
+										</span>
+										<span
+											title={
+												updatesModel(p)
+													? "Accepting rewrites this model's JSON."
+													: "Accepting writes a verification record to the augmentation store. The model JSON is not changed."
+											}
 											style={{
+												flexShrink: 0,
+												padding: "1px 6px",
+												borderRadius: 4,
+												border: `1px solid ${
+													updatesModel(p)
+														? theme.colors.primary
+														: theme.colors.border
+												}`,
+												color: updatesModel(p)
+													? theme.colors.primary
+													: muted,
 												fontSize: theme.fontSizes[0],
-												color: muted,
+												whiteSpace: "nowrap",
 											}}
 										>
-											{p.id}
-											{p.author ? ` · ${p.author}` : ""}
-										</code>
-										{p.lane && (
-											<span
-												style={{
-													padding: "1px 6px",
-													borderRadius: 4,
-													border: `1px solid ${theme.colors.border}`,
-													fontSize: theme.fontSizes[0],
-													color: muted,
-													whiteSpace: "nowrap",
-												}}
-											>
-												{LANE_LABEL[p.lane]}
-											</span>
-										)}
+											{updatesModel(p) ? "Model Change" : "Augmentation"}
+										</span>
 									</div>
-									<span style={{ fontSize: theme.fontSizes[0], color: muted }}>
-										{new Date(p.createdAt).toLocaleString()}
-									</span>
+									<div style={{ display: "flex", minWidth: 0 }}>
+										<span
+											title={p.id}
+											style={{
+												fontSize: theme.fontSizes[2],
+												fontWeight: 600,
+												minWidth: 0,
+												overflow: "hidden",
+												textOverflow: "ellipsis",
+												whiteSpace: "nowrap",
+											}}
+										>
+											{changeHeading(p)}
+										</span>
+									</div>
 								</div>
 
-								<p
+								<div
 									style={{
-										margin: "0 0 10px",
-										fontSize: theme.fontSizes[1],
-										lineHeight: 1.5,
+										display: "flex",
+										flexDirection: "column",
+										gap: 8,
+										marginBottom: 12,
 									}}
 								>
-									<strong>Why: </strong>
-									{p.rationale}
-								</p>
+									{p.preview.map((row, i) => (
+										<div
+											key={`${row.label}-${i}`}
+											style={{
+												display: "grid",
+												gridTemplateColumns: "auto 1fr",
+												alignItems: "baseline",
+												gap: "4px 10px",
+												fontSize: theme.fontSizes[1],
+												lineHeight: 1.4,
+											}}
+										>
+											{p.preview.length > 1 && (
+												<span
+													style={{
+														gridColumn: "1 / -1",
+														color: muted,
+														fontSize: theme.fontSizes[0],
+														fontFamily:
+															theme.fonts.monospace ?? "ui-monospace, monospace",
+													}}
+												>
+													{row.label}
+												</span>
+											)}
+											<span style={{ color: muted }}>Now</span>
+											<span
+												style={{
+													fontFamily:
+														theme.fonts.monospace ?? "ui-monospace, monospace",
+												}}
+											>
+												{nowState(p, i)}
+											</span>
+											<span style={{ color: muted }}>After</span>
+											<span
+												style={{
+													fontFamily:
+														theme.fonts.monospace ?? "ui-monospace, monospace",
+													color: isConfirmation(p, i)
+														? theme.colors.text
+														: (theme.colors.success ?? "#2da44e"),
+												}}
+											>
+												{afterState(p, i)}
+											</span>
+										</div>
+									))}
+								</div>
 
 								{p.finding?.message && (
 									<p
@@ -536,47 +704,28 @@ setBusy((prev) => ({ ...prev, [proposalId]: "accept" }));
 											lineHeight: 1.45,
 										}}
 									>
-										Finding
-										{p.finding.kind ? ` (${p.finding.kind})` : ""}:{" "}
-										{p.finding.message}
+										Audit · {p.finding.message}
 									</p>
 								)}
 
-								<div
-									style={{
-										display: "flex",
-										flexDirection: "column",
-										gap: 6,
-										marginBottom: 12,
-									}}
-								>
-									{p.preview.map((row, i) => (
-										<div
-											key={`${row.label}-${i}`}
-											style={{
-												fontSize: theme.fontSizes[0],
-												fontFamily: theme.fonts.monospace ?? "ui-monospace, monospace",
-												lineHeight: 1.4,
-												padding: "6px 8px",
-												borderRadius: 6,
-												background: theme.colors.surface,
-												border: `1px solid ${theme.colors.border}`,
-											}}
-										>
-											<div style={{ color: muted, marginBottom: 2 }}>
-												{row.label}
-											</div>
-											<div>
-												<span style={{ color: theme.colors.error ?? "#e5534b" }}>
-													{formatValue(row.before)}
-												</span>
-												{" → "}
-												<span style={{ color: theme.colors.success ?? "#2da44e" }}>
-													{formatValue(row.after)}
-												</span>
-											</div>
-										</div>
-									))}
+								<div style={{ margin: "0 0 10px" }}>
+									<div
+										style={{
+											fontSize: theme.fontSizes[1],
+											fontWeight: 600,
+											marginBottom: 4,
+										}}
+									>
+										Why
+									</div>
+									<DocumentView
+										content={p.rationale || "_(none)_"}
+										theme={theme}
+										transparentBackground
+										maxWidth="100%"
+										enableKeyboardScrolling={false}
+										autoFocusOnVisible={false}
+									/>
 								</div>
 
 								{p.secondOpinion ? (

@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { SubsystemModelAuditReport } from "../shared/contract";
 import {
-	BOUNDARY_GAP_FILLER_AGENT,
-	GAP_FILLER_AGENT,
-	ISSUE_FIXER_AGENT,
+	CONSTRUCT_FIXER_AGENT,
+	CONSTRUCT_VERIFIER_AGENT,
+	PACKAGE_MODULE_FIXER_AGENT,
+	PACKAGE_MODULE_VERIFIER_AGENT,
+	RUNTIME_TOPOLOGY_VERIFIER_AGENT,
 	selectMaintainRoute,
-	TOPOLOGY_FIXER_AGENT,
-	TOPOLOGY_GAP_FILLER_AGENT,
+	STATIC_TOPOLOGY_FIXER_AGENT,
+	STATIC_TOPOLOGY_VERIFIER_AGENT,
 } from "./maintain-model";
 
 function emptyReport(
@@ -76,10 +78,10 @@ describe("selectMaintainRoute", () => {
 				},
 			],
 		});
-		expect(selectMaintainRoute(report)?.agent).toBe(ISSUE_FIXER_AGENT);
+		expect(selectMaintainRoute(report)?.agent).toBe(CONSTRUCT_FIXER_AGENT);
 	});
 
-	test("routes topology broken endpoints to topology-fixer", () => {
+	test("routes topology broken endpoints to static-topology-fixer", () => {
 		const report = emptyReport({
 			needsUpdate: true,
 			findings: [
@@ -92,8 +94,8 @@ describe("selectMaintainRoute", () => {
 			],
 		});
 		expect(selectMaintainRoute(report)).toEqual({
-			agent: TOPOLOGY_FIXER_AGENT,
-			layer: "topology",
+			agent: STATIC_TOPOLOGY_FIXER_AGENT,
+			layer: "static-topology",
 			mode: "issues",
 		});
 	});
@@ -115,10 +117,10 @@ describe("selectMaintainRoute", () => {
 				},
 			],
 		});
-		expect(selectMaintainRoute(report)?.agent).toBe(GAP_FILLER_AGENT);
+		expect(selectMaintainRoute(report)?.agent).toBe(CONSTRUCT_VERIFIER_AGENT);
 	});
 
-	test("prefers boundary gaps over topology soft gaps", () => {
+	test("prefers package/module unconfirmed over relation unconfirmed", () => {
 		const report = emptyReport({
 			findings: [
 				{
@@ -135,10 +137,12 @@ describe("selectMaintainRoute", () => {
 				},
 			],
 		});
-		expect(selectMaintainRoute(report)?.agent).toBe(BOUNDARY_GAP_FILLER_AGENT);
+		expect(selectMaintainRoute(report)?.agent).toBe(
+			PACKAGE_MODULE_VERIFIER_AGENT,
+		);
 	});
 
-	test("routes topology soft gaps to topology-gap-filler", () => {
+	test("routes relation unconfirmed to static-topology-verifier", () => {
 		const report = emptyReport({
 			findings: [
 				{
@@ -160,13 +164,13 @@ describe("selectMaintainRoute", () => {
 			],
 		});
 		expect(selectMaintainRoute(report)).toEqual({
-			agent: TOPOLOGY_GAP_FILLER_AGENT,
-			layer: "topology",
-			mode: "gaps",
+			agent: STATIC_TOPOLOGY_VERIFIER_AGENT,
+			layer: "static-topology",
+			mode: "verify",
 		});
 	});
 
-	test("routes boundary soft gaps to boundary-gap-filler", () => {
+	test("routes process unconfirmed to runtime-topology-verifier", () => {
 		const report = emptyReport({
 			findings: [
 				{
@@ -178,9 +182,28 @@ describe("selectMaintainRoute", () => {
 			],
 		});
 		expect(selectMaintainRoute(report)).toEqual({
-			agent: BOUNDARY_GAP_FILLER_AGENT,
-			layer: "boundary",
-			mode: "gaps",
+			agent: RUNTIME_TOPOLOGY_VERIFIER_AGENT,
+			layer: "dynamic-topology",
+			mode: "verify",
+		});
+	});
+
+	test("routes package/module hard failures to package-module-fixer", () => {
+		const report = emptyReport({
+			needsUpdate: true,
+			findings: [
+				{
+					kind: "boundary_module_file_mismatch",
+					severity: "error",
+					componentAlias: "a",
+					message: "no anchor",
+				},
+			],
+		});
+		expect(selectMaintainRoute(report)).toEqual({
+			agent: PACKAGE_MODULE_FIXER_AGENT,
+			layer: "dynamic-topology",
+			mode: "issues",
 		});
 	});
 

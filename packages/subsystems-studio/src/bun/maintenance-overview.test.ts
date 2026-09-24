@@ -22,7 +22,7 @@ function model(
 		lanes: {
 			construct: "none",
 			"static-topology": "none",
-			"runtime-topology": "none",
+			"dynamic-topology": "none",
 			walkthrough: "none",
 		},
 		...over,

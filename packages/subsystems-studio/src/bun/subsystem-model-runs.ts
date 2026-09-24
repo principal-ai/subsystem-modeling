@@ -73,6 +73,12 @@ export async function noteSubsystemModelRunStart(opts: {
 	graphTitle?: string;
 	/** OpenCode session id from the create response. */
 	sessionId: string;
+	/**
+	 * The run's durable id (stamped into the agent brief and onto every
+	 * proposal it posts). Use it as the log entry id so proposals join back to
+	 * the run; falls back to a fresh uuid when absent.
+	 */
+	runId?: string;
 	agent?: string;
 	layer?: SubsystemModelRun["layer"];
 	mode?: SubsystemModelRun["mode"];
@@ -82,7 +88,7 @@ export async function noteSubsystemModelRunStart(opts: {
 }): Promise<SubsystemModelRun> {
 	const root = opts.root ?? ROOT;
 	const run: SubsystemModelRun = {
-		id: randomUUID(),
+		id: opts.runId ?? randomUUID(),
 		graphId: opts.graphId,
 		graphTitle: opts.graphTitle ?? opts.graphId,
 		sessionId: opts.sessionId,

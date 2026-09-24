@@ -22,8 +22,25 @@ export function isMaintainSessionTitle(title: string): boolean {
 	return /^Maintain\s*[—–-]/.test(title.trim());
 }
 
+/** Maintain agents (new ids) plus legacy pre-rename ids, so stored sessions read. */
+const MAINTAIN_AGENT_NAMES = new Set([
+	"construct-verifier",
+	"static-topology-verifier",
+	"package-module-verifier",
+	"runtime-topology-verifier",
+	"construct-fixer",
+	"static-topology-fixer",
+	"package-module-fixer",
+	// Legacy (pre-rename).
+	"issue-fixer",
+	"gap-filler",
+	"topology-fixer",
+	"topology-gap-filler",
+	"boundary-gap-filler",
+]);
+
 export function isMaintainAgentName(agent: string | undefined | null): boolean {
-	return agent === "issue-fixer" || agent === "gap-filler";
+	return !!agent && MAINTAIN_AGENT_NAMES.has(agent);
 }
 
 export function isMaintainSession(opts: {
@@ -158,8 +175,11 @@ export async function listMaintainSessions(opts?: {
 			}
 		};
 
+		const maintainAgentSql = [...MAINTAIN_AGENT_NAMES]
+			.map((a) => `'${a}'`)
+			.join(", ");
 		const maintainWhere = `(
-			agent IN ('issue-fixer', 'gap-filler')
+			agent IN (${maintainAgentSql})
 			OR title LIKE 'Maintain%'
 		)`;
 
