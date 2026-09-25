@@ -32,6 +32,7 @@ import {
 	type SubsystemGraphNodeData,
 } from "@principal-ai/subsystems-react";
 import { electrobun } from "../rpc";
+import { Modal, ModalBody, ModalHeader } from "./Modal";
 
 const LANE_LABEL: Record<SubsystemVerificationLane, string> = {
 	construct: "Construct",
@@ -528,63 +529,13 @@ setBusy((prev) => ({ ...prev, [proposalId]: "accept" }));
 	const shown = (proposals ?? []).filter((p) => !lane || p.lane === lane);
 
 	return (
-		<div
-			role="dialog"
-			aria-modal
-			aria-label="Correction proposals"
-			onClick={onClose}
-			style={{
-				position: "fixed",
-				inset: 0,
-				zIndex: 2147483000,
-				display: "flex",
-				alignItems: "center",
-				justifyContent: "center",
-				background: "rgba(0,0,0,0.55)",
-				fontFamily: theme.fonts.body,
-			}}
+		<Modal
+			ariaLabel="Correction proposals"
+			width={640}
+			onClose={onClose}
 		>
-			<div
-				onClick={(e) => e.stopPropagation()}
-				style={{
-					width: "min(640px, calc(100vw - 48px))",
-					maxHeight: "min(80vh, 720px)",
-					overflow: "auto",
-					background: theme.colors.surface,
-					border: `1px solid ${theme.colors.border}`,
-					borderRadius: 12,
-					padding: 24,
-					boxShadow: "0 12px 48px rgba(0,0,0,0.4)",
-					color: theme.colors.text,
-				}}
-			>
-				<div
-					style={{
-						display: "flex",
-						alignItems: "baseline",
-						justifyContent: "space-between",
-						gap: 12,
-						marginBottom: 4,
-					}}
-				>
-					<span style={{ fontSize: theme.fontSizes[3], fontWeight: 600 }}>
-						Proposed corrections
-					</span>
-					<button
-						type="button"
-						onClick={onClose}
-						style={{
-							background: "transparent",
-							border: "none",
-							color: muted,
-							cursor: "pointer",
-							fontSize: theme.fontSizes[1],
-						}}
-					>
-						Close
-					</button>
-				</div>
-
+			<ModalHeader title="Proposed corrections" onClose={onClose} />
+			<ModalBody>
 				{error && (
 					<p
 						style={{
@@ -955,7 +906,7 @@ setBusy((prev) => ({ ...prev, [proposalId]: "accept" }));
 						);
 					})}
 				</div>
-			</div>
-		</div>
+			</ModalBody>
+		</Modal>
 	);
 }

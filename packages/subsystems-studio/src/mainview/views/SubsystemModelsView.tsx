@@ -406,22 +406,22 @@ function SubsystemsTabHeader({
 			style={{
 				flexShrink: 0,
 				display: "flex",
-				alignItems: "baseline",
+				alignItems: "stretch",
 				justifyContent: "space-between",
-				gap: 12,
-				padding: "10px 24px",
+				padding: 0,
+				minHeight: 34,
 				borderBottom: `1px solid ${theme.colors.border ?? "#333"}`,
 				background: theme.colors.backgroundSecondary ?? theme.colors.background,
 			}}
 		>
-			<div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+			<div style={{ display: "flex", alignItems: "stretch", minWidth: 0 }}>
 				{onEditedWindowChange && (
 					<div
 						role="group"
 						aria-label="Edited"
-						style={{ display: "flex", alignItems: "center", gap: 4 }}
+						style={{ display: "flex", alignItems: "stretch" }}
 					>
-							{EDITED_WINDOWS.map((w) => {
+							{EDITED_WINDOWS.map((w, i) => {
 								const active = (editedWindow ?? "today") === w.key;
 								return (
 									<button
@@ -431,17 +431,18 @@ function SubsystemsTabHeader({
 										aria-pressed={active}
 										onClick={() => onEditedWindowChange(w.key)}
 										style={{
+											display: "inline-flex",
+											alignItems: "center",
 											fontSize: theme.fontSizes[0],
 											fontWeight: active ? 600 : 400,
 											letterSpacing: 0.3,
 											textTransform: "uppercase",
-											padding: "1px 7px",
-											borderRadius: 4,
-											border: `1px solid ${
-												active
-													? theme.colors.primary
-													: (theme.colors.border ?? "#333")
-											}`,
+											padding: "0 14px",
+											border: "none",
+											borderRight:
+												i < EDITED_WINDOWS.length - 1
+													? `1px solid ${theme.colors.border ?? "#333"}`
+													: "none",
 											background: active
 												? `${theme.colors.primary}22`
 												: "transparent",
@@ -457,19 +458,19 @@ function SubsystemsTabHeader({
 					</div>
 				)}
 			</div>
-			<div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+			<div style={{ display: "flex", alignItems: "stretch", flexShrink: 0 }}>
 				{onViewModeChange && (
 					<div
 						role="group"
 						aria-label="Subsystems view"
-						style={{ display: "flex", alignItems: "center", gap: 4 }}
+						style={{ display: "flex", alignItems: "stretch" }}
 					>
 						{(
 							[
 								["list", "List"],
 								["map", "Map"],
 							] as const
-						).map(([key, label]) => {
+						).map(([key, label], i) => {
 							const active = (viewMode ?? "list") === key;
 							return (
 								<button
@@ -486,13 +487,12 @@ function SubsystemsTabHeader({
 										fontWeight: active ? 600 : 400,
 										letterSpacing: 0.3,
 										textTransform: "uppercase",
-										padding: "1px 7px",
-										borderRadius: 4,
-										border: `1px solid ${
-											active
-												? theme.colors.primary
-												: theme.colors.border ?? "#333"
-										}`,
+										padding: "0 14px",
+										border: "none",
+										borderLeft:
+											i > 0
+												? `1px solid ${theme.colors.border ?? "#333"}`
+												: "none",
 										background: active
 											? `${theme.colors.primary}22`
 											: "transparent",

@@ -17,7 +17,6 @@ const preview: Preview = {
         <div
           style={{
             minHeight: "100vh",
-            padding: 24,
             background: slateNeonTheme.colors.background,
             color: slateNeonTheme.colors.text,
             fontFamily: slateNeonTheme.fonts.body,
