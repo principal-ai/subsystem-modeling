@@ -82,6 +82,7 @@ import {
 	type OpenCodeModelInfo,
 } from "./opencode-models";
 import { auditSubsystemModel, applySubsystemModelAuditFix, verifySubsystemComponent } from "./verify-subsystem-component";
+import { inspectSubsystemSymbol } from "./inspect-symbol";
 import {
 	getGraphifyStatus,
 	getGraphifyStatusDetailed,
@@ -122,10 +123,6 @@ import {
 	resolveLocalRepoIdentity,
 	resolveUserIdentity,
 } from "./library";
-import { analyses, newAnalysisId } from "./analyses";
-import { savedConcepts } from "./saved";
-import { runOpenCodeExtraction, writeBrief, buildBrief, getExtractionPromptInfo } from "./extraction";
-import { analyzeBeats } from "./beat-analysis";
 import type {
 	DefaultTabFlags,
 	GraphifyCliStatus,
@@ -508,13 +505,6 @@ interface OpencodeV2TabState {
 	title: "OpenCode V2";
 }
 
-interface AnalysisTabState {
-	id: string;
-	kind: "analysis";
-	title: string;
-	analysisId: string;
-}
-
 interface SessionEventsTabState {
 	id: string;
 	kind: "session-events";
@@ -530,12 +520,6 @@ interface MaintainEventsTabState {
 	sessionId: string;
 	graphId: string;
 	agent?: string;
-}
-
-interface PromptTabState {
-	id: string;
-	kind: "prompt";
-	title: string;
 }
 
 interface SubsystemModelTabState {
@@ -572,10 +556,8 @@ type TabState =
 	| GraphifyTabState
 	| PackageLayersTabState
 	| OpencodeV2TabState
-	| AnalysisTabState
 	| SessionEventsTabState
 	| MaintainEventsTabState
-	| PromptTabState
 	| SubsystemModelTabState
 	| SubsystemShowcaseTabState
 	| TrailTabState;
@@ -625,7 +607,7 @@ function permanentTabState(
 
 /**
  * Rebuild the permanent-tab prefix of `tabs` from settings. Transient tabs
- * (trails, analyses, …) are preserved after the permanent ones so strip order
+ * (trails, models, …) are preserved after the permanent ones so strip order
  * stays stable when flags flip.
  */
 function syncPermanentTabs(settings: ViewerSettings): void {
@@ -951,9 +933,9 @@ function addTabFromMessage(msg: LoadTrailMessage): string {
 
 /**
  * Focus or create the tab that renders a session's raw → normalized →
- * accumulated event feed. Dedupes by sessionId the way analysis tabs dedupe by
- * analysisId. Only opencode sessions are supported for now — callers check the
- * agent before invoking (the renderer disables the button for unsupported agents).
+ * accumulated event feed. Dedupes by sessionId. Only opencode and cursor
+ * sessions are supported — callers check the agent before invoking (the
+ * renderer disables the button for unsupported agents).
  */
 function openSessionEventsTab(
 	sessionId: string,
@@ -1015,54 +997,6 @@ function openMaintainEventsTab(opts: {
 	console.log(
 		`[principal-studio] maintain-events tab ${id} added: ${opts.sessionId}`,
 	);
-	broadcastTabsChanged(id);
-	return id;
-}
-
-/**
- * Focus or create the prompt tab — the surface that shows what the extractor
- * agent is asked (system prompt + task template). Deduped like analysis tabs.
- */
-function openPromptTab(): string {
-	for (const existing of tabs.values()) {
-		if (existing.kind === "prompt") {
-			suggestedTabId = existing.id;
-			console.log(`[principal-studio] prompt tab ${existing.id} focused (already open)`);
-			broadcastTabsChanged(existing.id);
-			return existing.id;
-		}
-	}
-	const id = String(nextTabId++);
-	tabs.set(id, { id, kind: "prompt", title: "Extractor prompt" });
-	suggestedTabId = id;
-	console.log(`[principal-studio] prompt tab ${id} added`);
-	broadcastTabsChanged(id);
-	return id;
-}
-
-/**
- * Focus or create the tab that renders a session's concept analysis (the custom
- * `AnalysisView`, with concept cards + subsystem snapshots). Dedupes by
- * analysisId. This is how an analysis surfaces in our view rather than only
- * expanding inline in the guide panel.
- */
-function openAnalysisTab(analysisId: string): string {
-	for (const existing of tabs.values()) {
-		if (existing.kind === "analysis" && existing.analysisId === analysisId) {
-			suggestedTabId = existing.id;
-			console.log(`[principal-studio] analysis tab ${existing.id} focused (already open): ${analysisId}`);
-			broadcastTabsChanged(existing.id);
-			return existing.id;
-		}
-	}
-	const analysis = analyses.get(analysisId);
-	const title = analysis?.sessionTitle
-		? `Analysis — ${analysis.sessionTitle}`
-		: `Analysis — ${analysisId.slice(0, 12)}`;
-	const id = String(nextTabId++);
-	tabs.set(id, { id, kind: "analysis", title, analysisId });
-	suggestedTabId = id;
-	console.log(`[principal-studio] analysis tab ${id} added: ${analysisId}`);
 	broadcastTabsChanged(id);
 	return id;
 }
@@ -1545,17 +1479,11 @@ function isTrailTab(tab: TabState): tab is TrailTabState {
 }
 
 function summarize(tab: TabState): TabSummary {
-	if (tab.kind === "analysis") {
-		return { id: tab.id, kind: "analysis", title: tab.title };
-	}
 	if (tab.kind === "session-events") {
 		return { id: tab.id, kind: "session-events", title: tab.title };
 	}
 	if (tab.kind === "maintain-events") {
 		return { id: tab.id, kind: "maintain-events", title: tab.title };
-	}
-	if (tab.kind === "prompt") {
-		return { id: tab.id, kind: "prompt", title: tab.title };
 	}
 	if (tab.kind === "subsystem-model") {
 		return {
@@ -1581,16 +1509,6 @@ function summarize(tab: TabState): TabSummary {
 }
 
 function fullState(tab: TabState): TabFullState {
-	if (tab.kind === "analysis") {
-		return {
-			ok: true,
-			id: tab.id,
-			kind: "analysis",
-			title: tab.title,
-			analysisId: tab.analysisId,
-			payload: analyses.get(tab.analysisId) ?? null,
-		};
-	}
 	if (tab.kind === "session-events") {
 		return {
 			ok: true,
@@ -1609,15 +1527,6 @@ function fullState(tab: TabState): TabFullState {
 			sessionId: tab.sessionId,
 			graphId: tab.graphId,
 			agent: tab.agent,
-		};
-	}
-	if (tab.kind === "prompt") {
-		return {
-			ok: true,
-			id: tab.id,
-			kind: "prompt",
-			title: tab.title,
-			payload: getExtractionPromptInfo(),
 		};
 	}
 	if (tab.kind === "subsystem-model") {
@@ -1805,6 +1714,17 @@ const requests: RequestHandlers = {
 						: { files: await walkFiles(tab.repoRoot) };
 				}
 				return { files: await walkFiles(walkPath) };
+			},
+			getRepoFileTree: async ({ purl }) => {
+				const root = resolveRepoRootForComponent(purl);
+				if (!root) {
+					return { files: [], error: "no local checkout for this repo" };
+				}
+				try {
+					return { files: await walkFiles(root), repoRoot: root };
+				} catch (err) {
+					return { files: [], error: (err as Error).message };
+				}
 			},
 			listTrails: async () => {
 				// Merge cached trails and tours into one mtime-sorted list; each row
@@ -2188,62 +2108,6 @@ const requests: RequestHandlers = {
 				}
 			},
 
-			listAnalyses: async () => {
-				return { analyses: analyses.summaries() };
-			},
-			listAnalysesFull: async () => {
-				return { analyses: analyses.list() };
-			},
-			listSavedConcepts: async () => {
-				return { concepts: savedConcepts.list() };
-			},
-			saveConcept: async ({ analysisId, conceptId }) => {
-				const analysis = analyses.get(analysisId);
-				if (!analysis) {
-					return { ok: false, error: `unknown analysis: ${analysisId}` };
-				}
-				const concept = analysis.concepts.find((c) => c.id === conceptId);
-				if (!concept) {
-					return {
-						ok: false,
-						error: `concept ${conceptId} not found in analysis ${analysisId}`,
-					};
-				}
-				const savedConceptId = `saved-${analysisId}-${conceptId}`;
-				const existing = savedConcepts.get(savedConceptId);
-				if (existing) return { ok: true, savedConcept: existing };
-				const saved = savedConcepts.save({
-					...concept,
-					savedConceptId,
-					source: "analysis",
-					sourceAnalysisId: analysis.id,
-					sourceSessionId: analysis.sessionId,
-					savedAt: new Date().toISOString(),
-				});
-				broadcastTabsChanged();
-				return { ok: true, savedConcept: saved };
-			},
-			unsaveConcept: async ({ savedConceptId }) => {
-				savedConcepts.remove(savedConceptId);
-				broadcastTabsChanged();
-				return { ok: true };
-			},
-			deleteAnalysis: async ({ analysisId }) => {
-				// Close any analysis tab still wired to the record, then drop the
-				// record itself. Saved concepts copied out of it are unaffected.
-				for (const tab of Array.from(tabs.values())) {
-					if (tab.kind === "analysis" && tab.analysisId === analysisId) {
-						tabs.delete(tab.id);
-						if (suggestedTabId === tab.id) {
-							const remaining = Array.from(tabs.keys());
-							suggestedTabId = remaining[remaining.length - 1] ?? LIBRARY_TAB_ID;
-						}
-					}
-				}
-				const removed = analyses.remove(analysisId);
-				broadcastTabsChanged();
-				return { ok: removed, error: removed ? undefined : `unknown analysis: ${analysisId}` };
-			},
 			getSubsystemModel: async ({ graphId }) => {
 				const graph = await getSubsystemModel(graphId);
 				if (!graph) return { ok: false, error: `unknown graph: ${graphId}` };
@@ -2488,6 +2352,8 @@ const requests: RequestHandlers = {
 			},
 			verifySubsystemComponent: async ({ graphId, componentAlias }) =>
 				verifySubsystemComponent(graphId, componentAlias),
+			inspectSubsystemSymbol: async ({ purl, file, symbol, nodeId }) =>
+				inspectSubsystemSymbol({ purl, file, symbol, nodeId }),
 			auditSubsystemModel: async ({ graphId }) => auditSubsystemModel(graphId),
 			applySubsystemModelAuditFix: async ({ graphId, fixId, componentAlias }) =>
 				applySubsystemModelAuditFix({ graphId, fixId, componentAlias }),
@@ -2588,6 +2454,12 @@ const requests: RequestHandlers = {
 					broadcastSubsystemModelProposalsChanged({ graphId, pendingCount: 0 });
 				}
 				return { ok: true, deleted: result.deleted };
+			},
+			deleteSubsystemModelProposals: async ({ graphId }) => {
+				await deleteSubsystemModelProposals(graphId);
+				const pendingCount = await pendingProposalCount(graphId);
+				broadcastSubsystemModelProposalsChanged({ graphId, pendingCount });
+				return { ok: true };
 			},
 			scoreSubsystemModelProposal: async ({ graphId, proposalId, force }) => {
 				const existing = await getSubsystemModelProposal(graphId, proposalId);
@@ -3035,61 +2907,11 @@ const requests: RequestHandlers = {
 				const tabId = openSessionEventsTab(sessionId, title, agent);
 				return { ok: true, tabId };
 			},
-			openAnalysisTab: async ({ analysisId }) => {
-				if (!analyses.get(analysisId)) {
-					return { ok: false, error: `unknown analysis: ${analysisId}` };
-				}
-				const tabId = openAnalysisTab(analysisId);
-				return { ok: true, tabId };
-			},
-			openPromptTab: async () => {
-				const tabId = openPromptTab();
-				return { ok: true, tabId };
-			},
-			analyzeSession: async ({ sessionId, title, agent, force }) => {
-				const existing = analyses.findBySession(sessionId);
-				if (existing && force && existing.status !== "pending") {
-					// Redo: reset the record and restart extraction in place,
-					// keeping the same analysis id so any open tabs stay wired
-					// to it. A `pending` record is left alone — extraction is
-					// already running, so force just falls through below.
-					analyses.save({
-						...existing,
-						status: "pending",
-						error: undefined,
-						model: undefined,
-						concepts: [],
-					});
-					analyzeSessionInBackground(existing.id, { sessionId, title, agent });
-					const tabId = openAnalysisTab(existing.id);
-					return { ok: true, analysisId: existing.id, tabId };
-				}
-				if (existing) {
-					// Idempotent: an analysis already exists for this session —
-					// open (or focus) its tab in our custom view.
-					const tabId = openAnalysisTab(existing.id);
-					return { ok: true, analysisId: existing.id, tabId };
-				}
-				const id = newAnalysisId();
-				analyses.save({
-					id,
-					sessionId,
-					sessionTitle: title,
-					agent,
-					createdAt: new Date().toISOString(),
-					status: "pending",
-					concepts: [],
-				});
-				analyzeSessionInBackground(id, { sessionId, title, agent });
-				const tabId = openAnalysisTab(id);
-				return { ok: true, analysisId: id, tabId };
-			},
-			
 		};
 
 /**
  * Graphify work (extract / uv install) outlives the Electrobun RPC window
- * (host maxRequestTime is 5s). Same pattern as analyzeSession: return quickly,
+ * (host maxRequestTime is 5s). Return quickly,
  * finish in the background, push `graphifyChanged`.
  */
 const graphifyBuildingPurls = new Set<string>();
@@ -3640,91 +3462,6 @@ async function startOpencodeV2CliJob(
 	})();
 
 	return { ok: true, started: true, status: busyStatus };
-}
-
-/**
- * Fire-and-forget concept extraction for one analysis. The opencode run
- * outlives the 5s RPC window, so the analysis is saved as `pending`,
- * extraction happens here in the background, and a final tabsChanged refresh
- * surfaces the result. Shared by the initial `analyzeSession` and retries
- * (which reset the record to `pending` before calling back in).
- */
-function analyzeSessionInBackground(
-	id: string,
-	opts: { sessionId: string; title?: string; agent?: string },
-): void {
-	// Surface the pending state to the renderer immediately (the header's
-	// activity chip and the Agent Sessions view both watch listAnalyses); the
-	// finally block below broadcasts again on completion/failure.
-	broadcastTabsChanged();
-	void (async () => {
-		try {
-			const { sessionId, title, agent } = opts;
-			const loaded = await requests.getSessionEvents({ sessionId });
-			if (!loaded.ok || !loaded.events) {
-				throw new Error(loaded.error ?? "Session not found or empty");
-			}
-			const beats = analyzeBeats(sessionId, loaded.events);
-			const sessionTitle =
-				loaded.session?.title ?? title ?? sessionId.slice(0, 12);
-			writeBrief({
-				sessionId,
-				sessionTitle,
-				sessionSlug: loaded.session?.slug,
-				agent: loaded.session?.agent ?? agent,
-				repos: loaded.repos ?? [],
-				beats,
-			});
-			const result = await runOpenCodeExtraction({
-				primaryRepoRoot: loaded.repoRoot,
-				task: buildBrief({
-					sessionId,
-					sessionTitle,
-					sessionSlug: loaded.session?.slug,
-					agent: loaded.session?.agent ?? agent,
-					repos: loaded.repos ?? [],
-					beats,
-				}),
-			});
-			if (!result.ok) throw new Error(result.error ?? "extraction failed");
-			const current = analyses.get(id);
-			if (!current) return;
-			analyses.save({
-				...current,
-				status: "done",
-				model: result.model,
-				concepts: (result.concepts ?? []).map((c) => ({
-					...c,
-					sessionIds: Array.from(
-						new Set([sessionId, ...(c.sessionIds ?? [])]),
-					),
-				})),
-				subsystems: (result.subsystems ?? []).map((s) => ({
-					...s,
-					sessionIds: Array.from(
-						new Set([sessionId, ...(s.sessionIds ?? [])]),
-					),
-				})),
-			});
-			console.log(
-				`[principal-studio] analysis ${id} complete (${(result.concepts ?? []).length} cards, ${(result.subsystems ?? []).length} subsystems)`,
-			);
-		} catch (err) {
-			const current = analyses.get(id);
-			if (current) {
-				analyses.save({
-					...current,
-					status: "error",
-					error: (err as Error).message,
-				});
-			}
-			console.error(
-				`[principal-studio] analysis ${id} failed: ${(err as Error).message}`,
-			);
-		} finally {
-			broadcastTabsChanged();
-		}
-	})();
 }
 
 /** Normalize a purl subpath to a repo-root-relative path, rejecting anything

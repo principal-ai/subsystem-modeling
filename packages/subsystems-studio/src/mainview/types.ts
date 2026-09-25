@@ -20,9 +20,7 @@ export type TabState =
 	| { kind: "package-layers" }
 	| { kind: "opencode-v2" }
 	| { kind: "maintain-events"; id: string; sessionId: string; agent?: string; title?: string }
-	| { kind: "analysis"; id: string; analysisId: string }
 	| { kind: "session-events"; id: string; sessionId: string }
-	| { kind: "prompt"; id: string }
 	| {
 			kind: "subsystem-model";
 			id: string;

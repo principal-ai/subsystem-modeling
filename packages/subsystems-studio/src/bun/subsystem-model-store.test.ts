@@ -184,7 +184,7 @@ describe("fileDeclaresSymbol", () => {
 	});
 
 	test("qualified symbols match on their last segment", () => {
-		expect(fileDeclaresSymbol("function analyzeSessionInBackground() {}", "host.analyzeSessionInBackground")).toBe(true);
+		expect(fileDeclaresSymbol("function openSessionEventsTab() {}", "host.openSessionEventsTab")).toBe(true);
 	});
 
 	test("empty or whitespace-only symbols never verify", () => {

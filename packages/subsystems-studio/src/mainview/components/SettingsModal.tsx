@@ -1,11 +1,11 @@
 /**
- * SettingsModal — viewer flags + utility actions (default tabs, open the
- * concept-extractor prompt). Opened from the header Settings button. Flag
+ * SettingsModal — viewer flags (default tabs, auditing, Jev). Opened from the
+ * header Settings button. Flag
  * changes go host-side via setSettings so they persist and re-sync the strip.
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Gauge, KeyRound, ScrollText, SlidersHorizontal, Wrench } from "lucide-react";
+import { Gauge, KeyRound, SlidersHorizontal } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import type { DefaultTabFlags, ViewerSettings } from "../../shared/contract";
 import { electrobun } from "../rpc";
@@ -127,12 +127,6 @@ const SETTINGS_TABS = [
 		icon: KeyRound,
 		description:
 			"Connect TypeSafe AI's Jev API to score correction proposals with an independent second opinion and gate auto-accept on confidence.",
-	},
-	{
-		id: "tools",
-		label: "Tools",
-		icon: Wrench,
-		description: "Utilities that pair with the audit workflow.",
 	},
 ] as const;
 
@@ -325,11 +319,6 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 		},
 		[settings],
 	);
-
-	const openPrompt = useCallback(() => {
-		void electrobun.rpc!.request.openPromptTab({});
-		onClose();
-	}, [onClose]);
 
 	const saveTypesafeKey = useCallback(async () => {
 		if (!settings) return;
@@ -960,54 +949,6 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 									</span>
 								</div>
 							</>
-						)}
-
-						{activeTab === "tools" && (
-							<button
-								type="button"
-								onClick={openPrompt}
-								style={{
-									display: "flex",
-									alignItems: "center",
-									gap: 12,
-									width: "100%",
-									padding: "10px 12px",
-									borderRadius: 8,
-									background: theme.colors.background,
-									border: `1px solid ${theme.colors.border}`,
-									color: theme.colors.text,
-									fontFamily: theme.fonts.body,
-									textAlign: "left",
-									cursor: "pointer",
-								}}
-							>
-								<span style={{ color: theme.colors.primary, flexShrink: 0 }}>
-									<ScrollText size={18} />
-								</span>
-								<span style={{ minWidth: 0, flex: 1 }}>
-									<span
-										style={{
-											display: "block",
-											fontSize: theme.fontSizes[1],
-											fontWeight: 600,
-											lineHeight: 1.3,
-										}}
-									>
-										Concept-extractor prompt
-									</span>
-									<span
-										style={{
-											display: "block",
-											fontSize: theme.fontSizes[0],
-											color: muted,
-											lineHeight: 1.4,
-											marginTop: 2,
-										}}
-									>
-										Open the prompt used for concept extraction
-									</span>
-								</span>
-							</button>
 						)}
 					</div>
 				</div>

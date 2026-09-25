@@ -13,7 +13,7 @@
  * - relation unconfirmed → static-topology-verifier
  * - fully verified → no-op
  *
- * Same host pattern as concept extraction: RPC returns immediately, the
+ * RPC returns immediately; the
  * OpenCode V2 session continues in the background (live SSE tab), then a push
  * notifies the UI.
  */

@@ -37,9 +37,8 @@ import {
 } from "@industry-theme/file-city-panel";
 import type { CitySource } from "@principal-ai/file-city-react";
 import type { NormalizedPathInfo } from "@principal-ai/agent-monitoring";
-import type { ArcCard } from "@industry-theme/file-city-panel";
-import type { ConceptAnalysis, SessionEventRow, SessionSummary } from "../../shared/contract";
-import { electrobun, reloadSubscribers, sessionRefreshers } from "../rpc";
+import type { SessionEventRow, SessionSummary } from "../../shared/contract";
+import { electrobun, sessionRefreshers } from "../rpc";
 import { CenteredMessage } from "../ui";
 import { AgentSessionLoader, type DiscoveredRepo } from "./AgentSessionLoader";
 
@@ -320,13 +319,6 @@ export function AgentSessionsOverviewView({
 	const [hostHasMore, setHostHasMore] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [loaded, setLoaded] = useState(false);
-	// Session id → its concept analysis (cards = arcs). Drives the panel row's
-	// Analyze button state (accent + "Open concept analysis" vs "Analyze…") and
-	// attaches the extracted arc cards to `AgentSessionView.arcs` so the panel
-	// can expand them inline instead of opening an analysis tab.
-	const [analysesBySession, setAnalysesBySession] = useState<
-		Map<string, ConceptAnalysis>
-	>(new Map());
 	// The 3D panel (WebGL + city build) only mounts once the tab has been shown
 	// at least once — no hidden-GPU cost before the first visit — then stays
 	// mounted so switching away and back preserves camera/selection state.
@@ -336,31 +328,6 @@ export function AgentSessionsOverviewView({
 	useLayoutEffect(() => {
 		if (active) setPanelEngaged(true);
 	}, [active]);
-
-	useEffect(() => {
-		let cancelled = false;
-		const load = async (): Promise<void> => {
-			try {
-				const res = await electrobun.rpc!.request.listAnalysesFull({});
-				if (cancelled) return;
-				setAnalysesBySession(
-					new Map(res.analyses.map((a) => [a.sessionId, a])),
-				);
-			} catch {
-				// Enrichment only — rows still show the analyze affordance.
-			}
-		};
-		void load();
-		// Refresh when the host finishes an extraction (it broadcasts tabsChanged
-		// on analysis completion) so freshly-extracted arcs appear without a tab
-		// switch. The view also registers into reloadSubscribers (App.tsx) which
-		// fires on the same signal.
-		reloadSubscribers.add(load);
-		return () => {
-			cancelled = true;
-			reloadSubscribers.delete(load);
-		};
-	}, []);
 
 	// The day-paging loop reads loaded-session state without re-triggering on
 	// every session commit (which would restart the day mid-way).
@@ -926,17 +893,10 @@ export function AgentSessionsOverviewView({
 	const sessions = useMemo<AgentSessionView[]>(() => {
 		return dayGroups.flatMap((d) =>
 			d.sessions.map((s) => {
-				const session = sessionsById.get(s.id) ?? placeholderAgentSession(s);
-				const analysis = analysesBySession.get(s.id);
-				const arcs = analysis?.concepts?.length
-					? (analysis.concepts as unknown as ArcCard[])
-					: undefined;
-				return analysis
-					? { ...session, hasAnalysis: true, arcs }
-					: session;
+				return sessionsById.get(s.id) ?? placeholderAgentSession(s);
 			}),
 		);
-	}, [dayGroups, sessionsById, analysesBySession]);
+	}, [dayGroups, sessionsById]);
 
 	// Full event timeline across every processed session — the panel filters it
 	// per selected session and drives the multi-agent overlay from it.
@@ -1069,26 +1029,6 @@ export function AgentSessionsOverviewView({
 					events: slice.events ?? [],
 					title: slice.sessions[0]?.task ?? sessionId,
 				};
-			},
-			analyzeSession: async (session) => {
-				// Run (or reopen) the host's concept analysis. The host returns
-				// the analysis id; the panel expands the extracted arcs inline
-				// (via `session.arcs`) rather than opening a new tab. The
-				// `listAnalysesFull` refresh on tabsChanged picks up the cards
-				// once extraction completes.
-				await electrobun.rpc!.request.analyzeSession({
-					sessionId: session.id,
-					title: session.task,
-					agent: session.agent,
-				});
-				try {
-					const res = await electrobun.rpc!.request.listAnalysesFull({});
-					setAnalysesBySession(
-						new Map(res.analyses.map((a) => [a.sessionId, a])),
-					);
-				} catch {
-					// Enrichment only.
-				}
 			},
 			openSessionEvents: async (session) => {
 				await electrobun.rpc!.request.openSessionEventsTab({

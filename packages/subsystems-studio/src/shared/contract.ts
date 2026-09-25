@@ -28,6 +28,7 @@ import type {
 	SubsystemWalkthrough,
 	SubsystemWalkthroughMechanism,
 	SubsystemWalkthroughStep,
+	SymbolInspection,
 } from "@principal-ai/subsystems-react";
 
 /** Canonical subsystem-model types, re-shared with both processes. */
@@ -181,132 +182,6 @@ export interface SessionEventRow {
 	raw: unknown;
 	normalized: Record<string, unknown>;
 	accumulated: AgentSessionEvent | null;
-}
-
-// ---------------------------------------------------------------------------
-// Concept analyses — the shared shape for "a session analyzed into concept
-// cards". The renderer's curated registry (`src/mainview/concepts.ts`) aliases
-// these types so hand-curated cards and agent-extracted cards are the same
-// shape on the wire and on the feed.
-// ---------------------------------------------------------------------------
-
-export type ConceptChangeType =
-	| "execution" // timing: when X happens relative to Y (reveal, defer, refresh)
-	| "derive" // single source of truth / canonical identity
-	| "integration" // how an embedded component integrates with its host
-	| "ui"; // building a UI surface / view
-
-/** One concept card, either hand-curated or extracted by an agent. */
-export interface ConceptCardData {
-	id: string;
-	title: string;
-	changeType: ConceptChangeType;
-	/** Optional phase — lets us sort/filter as the set grows. */
-	status?: "draft" | "refining" | "stable";
-	/** Sessions that surfaced or refined this concept (grouped here). */
-	sessionIds: string[];
-	/** Repositories the concept's sessions worked in (owner/name pairs). */
-	repos: Array<{ owner: string; name: string }>;
-	/** One-to-two sentence description for the card's left pane. */
-	description: string;
-	/** Short bullet points that state the key idea. */
-	points: string[];
-	/** Mermaid source for the right (diagram) side of the card. */
-	mermaid: string;
-	/** Optional rich markdown prose (paragraphs, lists, tables, blockquotes)
-	 *  for slide presentation. When absent, renderers derive a slide from
-	 *  `description` + `points`. */
-	markdown?: string;
-	/** Purl file-refs (`pkg:<type>/<owner>/<name>#<repo-root-relative-path>`)
-	 *  the concept is about — click-to-open sources. Resolved by the host via
-	 *  `openFile`. Optional; extracted cards may carry 1–3 of these. */
-	files?: string[];
-	/** Arc-analysis shape: `arc` = a main thread of the session, `detour` = a
-	 *  self-contained deviation (problem → fix → back). Absent on curated
-	 *  cross-session cards. */
-	arcKind?: "arc" | "detour";
-	/** 1-based beat indices this arc/detour spans (the session's beats, as
-	 *  numbered by the host beat analyzer). Present on arc-extracted cards. */
-	keyBeats?: number[];
-}
-
-/**
- * Subsystem snapshots — the durable, verifiable record of a concept being
- * worked on or analyzed (see the "Subsystem artifact: facets" topic). A session
- * may touch several subsystems, so an analysis can carry multiple snapshots.
- *
- * Facets: entry points (the verifiable currency), integration edges (the
- * composable currency), files (membership), tests (how it's tested, separate
- * from how it exists), and the per-capture sequence + component graphs.
- */
-
-export type SubsystemEntryPointKind =
-	| "class"
-	| "function"
-	| "interface"
-	| "type"
-	| "const"
-	| "method";
-
-/** A verifiable symbol the subsystem exposes. `signature` is the verbatim
- *  source line, captured so a verifier can re-check the artifact against the
- *  codebase without session context. */
-export interface SubsystemEntryPoint {
-	symbol: string;
-	kind: SubsystemEntryPointKind;
-	/** Purl file-ref (`pkg:<type>/<owner>/<name>#<path>`) where it lives. */
-	file: string;
-	line?: number;
-	signature?: string;
-}
-
-export interface SubsystemFileRef {
-	/** Purl file-ref. */
-	purl: string;
-	role: "core" | "supporting";
-	/** One-line purpose so graphs/tables read without knowing every file. */
-	purpose?: string;
-}
-
-export type SubsystemIntegrationMechanism =
-	| "imports"
-	| "calls"
-	| "extends"
-	| "registers-into";
-
-export interface SubsystemIntegration {
-	/** Target component/subsystem/purl the edge points at. */
-	to: string;
-	mechanism: SubsystemIntegrationMechanism;
-	/** Concrete file/symbol refs backing the edge (the seam). */
-	refs: string[];
-}
-
-export interface SubsystemTestSuite {
-	/** Purl of the test file. */
-	file: string;
-	/** Entry-point symbols this suite exercises. */
-	exercises: string[];
-	/** What the suite pins, in words. */
-	verifies?: string;
-}
-
-export interface SubsystemSnapshot {
-	id: string;
-	/** Stable name of the concept being worked on. */
-	name: string;
-	description?: string;
-	repo?: { owner: string; name: string };
-	files: SubsystemFileRef[];
-	entryPoints: SubsystemEntryPoint[];
-	integrations: SubsystemIntegration[];
-	/** Purl file-refs of fixtures the subsystem is built against. */
-	fixtures: string[];
-	testSuites: SubsystemTestSuite[];
-	/** Component graph (kind-tagged components) — the stable substrate. */
-	graphMermaid?: string;
-	/** Sessions that refined this snapshot (appended on recurrence). */
-	sessionIds: string[];
 }
 
 /** On-disk record for a persisted subsystem graph. */
@@ -1200,72 +1075,9 @@ export interface PackageLayerRepoEntry {
 	} | null;
 }
 
-/** A concept card deliberately saved out of an analysis. Carries the full card
- *  (a copy — safe from later re-extraction) plus provenance. What the Concepts
- *  tab renders. */
-export interface SavedConcept extends ConceptCardData {
-	/** Stable store key — `saved-<analysisId>-<cardId>`. */
-	savedConceptId: string;
-	/** Where the card came from. `analysis` today; reserved for future curated
-	 *  imports. */
-	source: "curated" | "analysis";
-	/** The analysis this card was saved out of, when `source === "analysis"`. */
-	sourceAnalysisId?: string;
-	/** The session that analysis covers, when `source === "analysis"`. */
-	sourceSessionId?: string;
-	savedAt: string;
-}
-
-export type AnalysisStatus = "pending" | "done" | "error";
-
-/** The extractor prompt surfaces: what the agent is asked, verbatim. Served as
- *  the payload of a `kind: "prompt"` tab. */
-export interface ExtractionPromptInfo {
-	/** opencode agent name the run invokes. */
-	agent: string;
-	/** Model passed via `-m` on the run. */
-	model: string;
-	/** The agent's system prompt, read from its config file on disk. */
-	systemPrompt: string;
-	/** The task message template — `<session title>` is the interpolation point. */
-	taskTemplate: string;
-	/** Absolute path of the agent file the system prompt was read from. */
-	agentPath: string;
-}
-
-/** Full record for one analyzed session, stored host-side on disk. */
-export interface ConceptAnalysis {
-	id: string;
-	sessionId: string;
-	sessionTitle?: string;
-	sessionSlug?: string;
-	agent?: string;
-	createdAt: string;
-	status: AnalysisStatus;
-	/** Model that produced the extraction (the opencode run's model). */
-	model?: string;
-	/** Present when `status === "error"`. */
-	error?: string;
-	/** Concept cards teased out of the session. Empty until `status === "done"`. */
-	concepts: ConceptCardData[];
-	/** Subsystem snapshots teased out of the session — one per subsystem the
-	 *  session worked on or analyzed. Empty until `status === "done"`. */
-	subsystems?: SubsystemSnapshot[];
-}
-
-/** Row in the analyses index — enough to surface state + count without the cards. */
-export interface AnalysisSummary {
-	id: string;
-	sessionId: string;
-	sessionTitle?: string;
-	status: AnalysisStatus;
-	createdAt: string;
-	conceptCount: number;
-}
-
 export interface TabSummary {
 	id: string;
-	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "analysis" | "session-events" | "prompt" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "maintenance" | "graphify" | "package-layers" | "opencode-v2" | "maintain-events";
+	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "maintenance" | "graphify" | "package-layers" | "opencode-v2" | "maintain-events";
 	title: string;
 	mode?: ViewerMode;
 	payloadKind?: PayloadKind;
@@ -1277,7 +1089,7 @@ export interface TabFullState {
 	ok: boolean;
 	error?: string;
 	id: string;
-	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "analysis" | "session-events" | "prompt" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "maintenance" | "graphify" | "package-layers" | "opencode-v2" | "maintain-events";
+	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "maintenance" | "graphify" | "package-layers" | "opencode-v2" | "maintain-events";
 	title: string;
 	mode?: ViewerMode;
 	payloadKind?: PayloadKind;
@@ -1286,8 +1098,6 @@ export interface TabFullState {
 	sessionId?: string;
 	/** For `session-events` / `maintain-events` — agent label when known. */
 	agent?: string;
-	/** For `analysis` tabs — the analysis id the tab renders. */
-	analysisId?: string;
 	/** For `subsystem-model` tabs — the graph id the tab renders. */
 	graphId?: string;
 	/** For `subsystem-model` tabs opened from a walkthrough row — the
@@ -1427,6 +1237,20 @@ export type StudioRequests = {
 		params: { tabId: string; path?: string };
 		response: { files: Array<{ path: string; size: number }> };
 	};
+	/**
+	 * File tree of a repo resolved from one of its purls (via the Alexandria
+	 * registry). Powers the Subsystems map: each repo in a subsystem model gets
+	 * a full-file city built from its own checkout. Empty `files` + `error`
+	 * when no local checkout is registered for the purl.
+	 */
+	getRepoFileTree: {
+		params: { purl: string };
+		response: {
+			files: Array<{ path: string; size: number }>;
+			repoRoot?: string;
+			error?: string;
+		};
+	};
 	listTrails: {
 		params: Record<string, never>;
 		response: { entries: LibraryEntry[] };
@@ -1529,43 +1353,6 @@ export type StudioRequests = {
 		params: { sessionId: string; title?: string; agent?: string };
 		response: { ok: boolean; error?: string; tabId?: string };
 	};
-	openAnalysisTab: {
-		params: { analysisId: string };
-		response: { ok: boolean; error?: string; tabId?: string };
-	};
-	listAnalyses: {
-		params: Record<string, never>;
-		response: { analyses: AnalysisSummary[] };
-	};
-	/** Full analysis records (concept/arc cards included) — the renderer maps
-	 *  each session's cards onto `AgentSessionView.arcs` so the panel can expand
-	 *  arcs inline instead of only opening an analysis tab. */
-	listAnalysesFull: {
-		params: Record<string, never>;
-		response: { analyses: ConceptAnalysis[] };
-	};
-	listSavedConcepts: {
-		params: Record<string, never>;
-		response: { concepts: SavedConcept[] };
-	};
-	saveConcept: {
-		params: { analysisId: string; conceptId: string };
-		response: {
-			ok: boolean;
-			error?: string;
-			/** The saved record — an existing one when the card was already
-			 *  saved (the action is idempotent). */
-			savedConcept?: SavedConcept;
-		};
-	};
-	unsaveConcept: {
-		params: { savedConceptId: string };
-		response: { ok: boolean; error?: string };
-	};
-	deleteAnalysis: {
-		params: { analysisId: string };
-		response: { ok: boolean; error?: string };
-	};
 	getSubsystemModel: {
 		params: { graphId: string };
 		response: { ok: boolean; error?: string; graph?: StoredSubsystemModel };
@@ -1665,6 +1452,20 @@ export type StudioRequests = {
 	verifySubsystemComponent: {
 		params: { graphId: string; componentAlias: string };
 		response: SubsystemComponentVerificationResult;
+	};
+	/**
+	 * Resolve one symbol referenced by a declaration against the cached graphify
+	 * graph for its repo, returning what graphify knows (declaration / source /
+	 * candidates). Does not run extract — cache must already be ready.
+	 */
+	inspectSubsystemSymbol: {
+		params: {
+			purl: string;
+			file?: string;
+			symbol: string;
+			nodeId?: string;
+		};
+		response: SymbolInspection;
 	};
 	/**
 	 * Dry-run deterministic audit of a whole subsystem model (files, symbols,
@@ -1779,6 +1580,15 @@ export type StudioRequests = {
 			error?: string;
 			deleted?: number;
 		};
+	};
+	/**
+	 * Delete every pending correction proposal for one stored model. Resolved
+	 * proposals are kept; the model file is not mutated. Emits
+	 * `subsystemModelProposalsChanged` for the graph.
+	 */
+	deleteSubsystemModelProposals: {
+		params: { graphId: string };
+		response: { ok: boolean; error?: string };
 	};
 	/**
 	 * Score a pending proposal with the Jev second-opinion gate and persist
@@ -2071,31 +1881,6 @@ export type StudioRequests = {
 			bin?: string;
 			started?: boolean;
 			status?: GraphifyCliStatus;
-		};
-	};
-	openPromptTab: {
-		params: Record<string, never>;
-		response: { ok: boolean; error?: string; tabId?: string };
-	};
-	analyzeSession: {
-		params: {
-			sessionId: string;
-			title?: string;
-			agent?: string;
-			/** Re-run an existing analysis: the record is reset to `pending` and
-			 *  extraction restarts in place (same analysis id, so open tabs stay
-			 *  wired to it). Defaults to false — without it an existing record
-			 *  (even one in `error`) just re-opens its tab. */
-			force?: boolean;
-		};
-		response: {
-			ok: boolean;
-			error?: string;
-			/** The analysis id — an existing analysis for this session when one
-			 *  already exists (the action is idempotent). */
-			analysisId?: string;
-			/** Tab id the analysis opened in, when a tab was created/activated. */
-			tabId?: string;
 		};
 	};
 	openTrailFromCache: {

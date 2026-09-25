@@ -248,7 +248,7 @@ describe('compareSignatures', () => {
 	});
 
 	test('anon param claim with marker and no return claim: matches', () => {
-		// analyzeSessionInBackground shape: inline opts only, no return type.
+		// Inline opts only, no return type.
 		const r = compareSignatures(
 			{ parameters: [{ type: '{ sessionId: string; title: string }' }] },
 			{ parameters: [], hasSignal: false, inlineParameters: 1 },

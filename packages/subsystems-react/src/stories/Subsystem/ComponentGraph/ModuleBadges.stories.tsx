@@ -31,7 +31,7 @@ type Story = StoryObj<typeof meta>;
 
 const PURL = 'pkg:github/principal-ai/subsystem-modeling';
 const DEEP_NODES = 'packages/subsystems-react/src/subsystem/nodes.tsx';
-const DEEP_VIEWS = 'packages/subsystems-studio/src/mainview/views/AnalysisView.tsx';
+const DEEP_VIEWS = 'packages/subsystems-studio/src/mainview/views/SubsystemModelView.tsx';
 
 /**
  * Components sharing a deep `module` path — long enough that the collapsed
@@ -69,14 +69,14 @@ const deepComponents: SubsystemComponent[] = [
     purpose: 'Edge renderer',
   },
   {
-    alias: 'analysis',
-    name: 'AnalysisView',
+    alias: 'model-view',
+    name: 'SubsystemModelView',
     construct: 'function',
-    symbol: 'AnalysisView',
+    symbol: 'SubsystemModelView',
     file: DEEP_VIEWS,
     module: DEEP_VIEWS,
     purl: PURL,
-    purpose: 'Renders an analysis',
+    purpose: 'Renders a subsystem model',
   },
   {
     alias: 'layers',

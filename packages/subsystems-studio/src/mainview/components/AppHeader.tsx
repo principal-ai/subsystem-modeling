@@ -10,7 +10,6 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
-	AlertTriangle,
 	Download,
 	ExternalLink,
 	GitBranch,
@@ -24,8 +23,6 @@ import {
 import { useTheme } from "@principal-ade/industry-theme";
 import { FileCityLogo } from "@principal-ai/logo-component";
 import type {
-	AnalysisSummary,
-	ConceptAnalysis,
 	OpencodeServerStatus,
 	StudioVersionStatus,
 	UserIdentity,
@@ -33,12 +30,9 @@ import type {
 import {
 	electrobun,
 	refreshLibrary,
-	reloadSubscribers,
 	studioVersionChangeSubscribers,
 } from "../rpc";
-import { FailuresModal } from "./FailuresModal";
 import { IntegrationLogos } from "./IntegrationTools";
-import { PendingAnalysesModal } from "./PendingAnalysesModal";
 import { ServerSessionsModal } from "./ServerSessionsModal";
 import { SettingsModal } from "./SettingsModal";
 
@@ -153,102 +147,6 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 		}
 	}, []);
 
-	// In-flight background work (concept analysis extraction). The host
-	// broadcasts tabsChanged when an extraction starts, completes, or fails, so
-	// subscribing here keeps the activity chip live without polling.
-	const [analyses, setAnalyses] = useState<AnalysisSummary[]>([]);
-	const loadAnalyses = useCallback(() => {
-		void electrobun.rpc!.request
-			.listAnalyses({})
-			.then((res) => setAnalyses(res.analyses))
-			.catch(() => {});
-	}, []);
-	useEffect(() => {
-		loadAnalyses();
-		reloadSubscribers.add(loadAnalyses);
-		return () => {
-			reloadSubscribers.delete(loadAnalyses);
-		};
-	}, [loadAnalyses]);
-
-	const pending = analyses.filter((a) => a.status === "pending");
-	const failed = analyses.filter((a) => a.status === "error");
-	const activityLabel = pending.length === 1
-		? pending[0]?.sessionTitle?.trim() || pending[0]?.sessionId.slice(0, 16)
-		: `${pending.length} sessions`;
-
-	// Pending-analysis modal: same lazy-full-fetch pattern as failures — the
-	// header keeps only lightweight summaries; full records (agent, createdAt)
-	// load when the chip is clicked. Discarding removes the record host-side
-	// and the tabsChanged broadcast refreshes the chip automatically.
-	const [showPending, setShowPending] = useState(false);
-	const [pendingFull, setPendingFull] = useState<ConceptAnalysis[]>([]);
-	const [discardingId, setDiscardingId] = useState<string | null>(null);
-
-	const openPending = useCallback(() => {
-		setShowPending(true);
-		void electrobun.rpc!.request
-			.listAnalysesFull({})
-			.then((res) =>
-				setPendingFull(res.analyses.filter((a) => a.status === "pending")),
-			)
-			.catch(() => {});
-	}, []);
-
-	const discardAnalysis = useCallback(async (a: ConceptAnalysis) => {
-		setDiscardingId(a.id);
-		try {
-			await electrobun.rpc!.request.deleteAnalysis({ analysisId: a.id });
-			setPendingFull((prev) => prev.filter((x) => x.id !== a.id));
-		} catch {
-			// The tabsChanged broadcast re-surfaces whatever happened.
-		} finally {
-			setDiscardingId(null);
-		}
-	}, []);
-
-	// Failed-analysis modal: full records (with `error`) are fetched lazily when
-	// the chip is clicked, so the header only pays for the lightweight summaries
-	// on every tabsChanged refresh.
-	const [showFailures, setShowFailures] = useState(false);
-	const [failedFull, setFailedFull] = useState<ConceptAnalysis[]>([]);
-	const [retryingId, setRetryingId] = useState<string | null>(null);
-
-	const openFailures = useCallback(() => {
-		setShowFailures(true);
-		void electrobun.rpc!.request
-			.listAnalysesFull({})
-			.then((res) =>
-				setFailedFull(res.analyses.filter((a) => a.status === "error")),
-			)
-			.catch(() => {});
-	}, []);
-
-	const retryAnalysis = useCallback(async (a: ConceptAnalysis) => {
-		setRetryingId(a.id);
-		try {
-			await electrobun.rpc!.request.analyzeSession({
-				sessionId: a.sessionId,
-				title: a.sessionTitle,
-				agent: a.agent,
-				force: true,
-			});
-		} catch {
-			// The tabsChanged broadcast re-surfaces whatever failed.
-		} finally {
-			setRetryingId(null);
-		}
-	}, []);
-
-	const deleteAnalysis = useCallback((a: ConceptAnalysis) => {
-		void electrobun.rpc!.request
-			.deleteAnalysis({ analysisId: a.id })
-			.then(() =>
-				setFailedFull((prev) => prev.filter((x) => x.id !== a.id)),
-			)
-			.catch(() => {});
-	}, []);
-
 	// const DOWNLOAD_APP_URL = "https://principal-ade.com/download";
 	// const onDownload = useCallback(() => {
 	// 	void electrobun.rpc!.request.openExternal({ url: DOWNLOAD_APP_URL });
@@ -328,92 +226,6 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 				>
 					<RefreshCw size={16} />
 				</button>
-			)}
-			{pending.length > 0 && (
-				<span
-					role="button"
-					tabIndex={0}
-					onClick={openPending}
-					onKeyDown={(e) => {
-						if (e.key === "Enter" || e.key === " ") {
-							e.preventDefault();
-							openPending();
-						}
-					}}
-					style={{
-						display: "flex",
-						alignItems: "center",
-						gap: 6,
-						height: 32,
-						padding: "0 12px",
-						borderRadius: 16,
-						background: theme.colors.background,
-						border: `1px solid ${theme.colors.primary}`,
-						color: theme.colors.text,
-						fontSize: theme.fontSizes[1],
-						fontFamily: theme.fonts.monospace,
-						flexShrink: 0,
-						maxWidth: 260,
-						cursor: "pointer",
-					}}
-					title="View pending concept extractions"
-					aria-haspopup="dialog"
-				>
-					<Loader2 size={14} className="principal-studio-spin" />
-					<span
-						style={{
-							overflow: "hidden",
-							textOverflow: "ellipsis",
-							whiteSpace: "nowrap",
-						}}
-					>
-						Analyzing {activityLabel}…
-					</span>
-				</span>
-			)}
-			{failed.length > 0 && pending.length === 0 && (
-				<span
-					role="button"
-					tabIndex={0}
-					onClick={openFailures}
-					onKeyDown={(e) => {
-						if (e.key === "Enter" || e.key === " ") {
-							e.preventDefault();
-							openFailures();
-						}
-					}}
-					style={{
-						display: "flex",
-						alignItems: "center",
-						gap: 6,
-						height: 32,
-						padding: "0 12px",
-						borderRadius: 16,
-						background: theme.colors.background,
-						border: `1px solid ${theme.colors.error ?? "#e5534b"}`,
-						color: theme.colors.error ?? "#e5534b",
-						fontSize: theme.fontSizes[1],
-						fontFamily: theme.fonts.monospace,
-						flexShrink: 0,
-						maxWidth: 260,
-						cursor: "pointer",
-					}}
-					title="View failed concept extractions and retry them"
-					aria-haspopup="dialog"
-				>
-					<AlertTriangle size={14} />
-					<span
-						style={{
-							overflow: "hidden",
-							textOverflow: "ellipsis",
-							whiteSpace: "nowrap",
-						}}
-					>
-						{failed.length === 1
-							? "1 analysis failed"
-							: `${failed.length} analyses failed`}
-					</span>
-				</span>
 			)}
 			{SHOW_SERVER_CHIP && (
 			<button
@@ -650,25 +462,6 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 			<IdentityModal user={user} onClose={() => setShowIdentityModal(false)} onOpenProfile={onOpenProfile} />,
 			document.body,
 		)}
-		{showPending && createPortal(
-			<PendingAnalysesModal
-				analyses={pendingFull}
-				discardingId={discardingId}
-				onDiscard={discardAnalysis}
-				onClose={() => setShowPending(false)}
-			/>,
-			document.body,
-		)}
-		{showFailures && createPortal(
-			<FailuresModal
-				analyses={failedFull}
-				retryingId={retryingId}
-				onRetry={retryAnalysis}
-				onDelete={deleteAnalysis}
-				onClose={() => setShowFailures(false)}
-			/>,
-			document.body,
-		)}
 		{showSettings && createPortal(
 			<SettingsModal onClose={() => setShowSettings(false)} />,
 			document.body,
@@ -770,7 +563,7 @@ function ProvenanceRow({
 	);
 }
 
-function IdentityModal({
+export function IdentityModal({
 	user,
 	onClose,
 	onOpenProfile,

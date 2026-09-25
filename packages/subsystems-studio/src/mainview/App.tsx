@@ -32,9 +32,7 @@ import { GraphifyReposView } from "./views/GraphifyReposView";
 import { PackageLayersReposView } from "./views/PackageLayersReposView";
 import { OpencodeV2DebugView } from "./views/OpencodeV2DebugView";
 import { MaintainEventsView } from "./views/MaintainEventsView";
-import { AnalysisView } from "./views/AnalysisView";
 import { SessionEventsView } from "./views/SessionEventsView";
-import { PromptView } from "./views/PromptView";
 import { SubsystemModelView } from "./views/SubsystemModelView";
 import { TrailViewer } from "./views/TrailViewer";
 import { TourViewer } from "./views/TourViewer";
@@ -155,14 +153,6 @@ function ActiveTab({
 			try {
 				const tab = await electrobun.rpc!.request.getTab({ id: tabId });
 				if (cancelled) return;
-				if (tab.kind === "analysis") {
-					setState({
-						kind: "analysis",
-						id: tab.id,
-						analysisId: tab.analysisId ?? "",
-					});
-					return;
-				}
 				if (tab.kind === "session-events") {
 					setState({
 						kind: "session-events",
@@ -179,10 +169,6 @@ function ActiveTab({
 						agent: tab.agent,
 						title: tab.title,
 					});
-					return;
-				}
-				if (tab.kind === "prompt") {
-					setState({ kind: "prompt", id: tab.id });
 					return;
 				}
 				if (tab.kind === "subsystem-model") {
@@ -297,9 +283,6 @@ function ActiveTab({
 			/>
 		);
 	}
-	if (state.kind === "analysis") {
-		return <AnalysisView tabId={state.id} analysisId={state.analysisId} />;
-	}
 	if (state.kind === "session-events") {
 		return <SessionEventsView sessionId={state.sessionId} />;
 	}
@@ -311,9 +294,6 @@ function ActiveTab({
 				title={state.title}
 			/>
 		);
-	}
-	if (state.kind === "prompt") {
-		return <PromptView tabId={state.id} />;
 	}
 	if (state.kind === "subsystem-model") {
 		return (
