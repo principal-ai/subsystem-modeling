@@ -1,6 +1,6 @@
 {
   "name": "@principal-ai/principal-studio-cli",
-  "version": "0.39.5",
+  "version": "0.39.6",
   "description": "Principal AI CLI — subsystem models, Subsystems Studio, trails, and agent sessions",
   "main": "dist/index.cjs",
   "types": "dist/index.d.ts",
@@ -46,7 +46,7 @@
     "js-yaml": "4.1.1"
   },
   "optionalDependencies": {
-    "@principal-ai/subsystems-studio": "0.6.13"
+    "@principal-ai/subsystems-studio": "0.6.14"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
