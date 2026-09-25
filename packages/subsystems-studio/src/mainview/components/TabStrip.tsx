@@ -1,6 +1,6 @@
 /**
  * TabStrip — the tab bar above the active view. Renders permanent tabs
- * (Agent Sessions, Trails) plus per-trail tabs, with a close affordance on the
+ * (Agent Sessions, Tours) plus per-tour tabs, with a close affordance on the
  * non-permanent ones.
  */
 

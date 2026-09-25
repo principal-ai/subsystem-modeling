@@ -13,14 +13,6 @@ export function relativeTime(ms: number): string {
 	return `${Math.floor(delta / 86_400_000)}d ago`;
 }
 
-/** Human label for "last loaded N seconds ago" refresh headers. */
-export function lastLoadedLabel(ms: number): string {
-	const sec = Math.floor((Date.now() - ms) / 1000);
-	if (sec <= 0) return "just now";
-	if (sec === 1) return "1 second ago";
-	return `${sec} seconds ago`;
-}
-
 export function CenteredMessage({
 	title,
 	detail,

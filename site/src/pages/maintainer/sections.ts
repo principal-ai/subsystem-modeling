@@ -3,7 +3,7 @@ export type MaintainerSectionId =
   | 'issues'
   | 'construct'
   | 'static-topology'
-  | 'runtime-topology'
+  | 'dynamic-topology'
   | 'walkthrough'
   | 'reference'
 
@@ -46,15 +46,15 @@ export const MAINTAINER_SECTIONS: MaintainerSection[] = [
       { id: 'relation-types', label: 'Relation types' },
       { id: 'topology-mechanical-checks', label: 'Relation checks' },
       { id: 'topology-agents', label: 'Relation agents' },
-      { id: 'package-module-membership', label: 'Package & module' },
-      { id: 'module-membership-agents', label: 'Module agents' },
     ],
   },
   {
-    id: 'runtime-topology',
-    path: '/maintainer/runtime-topology',
-    label: 'Runtime topology',
+    id: 'dynamic-topology',
+    path: '/maintainer/dynamic-topology',
+    label: 'Dynamic topology',
     children: [
+      { id: 'package-module-membership', label: 'Package & module' },
+      { id: 'module-membership-agents', label: 'Module agents' },
       { id: 'process-boundary-checks', label: 'Process' },
       { id: 'process-boundary-agents', label: 'Process agents' },
     ],
@@ -76,7 +76,7 @@ export const MAINTAINER_SECTIONS: MaintainerSection[] = [
     children: [
       { id: 'the-loop', label: 'The loop' },
       { id: 'verdicts', label: 'Verdicts' },
-      { id: 'issue-vs-gap', label: 'Issue vs gap' },
+      { id: 'issue-vs-unconfirmed', label: 'Issue vs unconfirmed' },
     ],
   },
 ]

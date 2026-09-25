@@ -9,7 +9,7 @@
 import { spawn } from 'node:child_process';
 import { Command } from 'commander';
 import { handoffToRunning } from '../lib/viewer-ipc.js';
-import { resolveViewerLaunch } from './trail.js';
+import { resolveViewerLaunch } from '../lib/viewer-launch.js';
 
 export function createOpenStudioCommand(): Command {
   return new Command('open-studio')

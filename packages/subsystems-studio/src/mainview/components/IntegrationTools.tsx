@@ -372,7 +372,7 @@ export function IntegrationLogos() {
 // Modal
 // ---------------------------------------------------------------------------
 
-function IntegrationModal({
+export function IntegrationModal({
 	spec,
 	initial,
 	onClose,

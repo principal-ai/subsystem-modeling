@@ -8,7 +8,7 @@ export function MaintainerReference() {
         <h1>Reference</h1>
         <p>
           Shared vocabulary for the Author → Audit → Verdict → Maintain loop
-          across construct, static topology, runtime topology, and walkthrough.
+          across construct, static topology, dynamic topology, and walkthrough.
         </p>
       </header>
 
@@ -19,15 +19,15 @@ export function MaintainerReference() {
           <li>
             <strong>Author</strong>
             <span>
-              A model claims constructs (nodes), static topology (relations +
-              package/module), runtime topology (<em>process</em>), and
+              A model claims constructs (nodes), static topology (relations),
+              dynamic topology (<em>process</em> + package/<em>module</em>), and
               walkthroughs (ordered hops with file:line sites).
             </span>
           </li>
           <li>
             <strong>Audit</strong>
             <span>
-              Four layers: construct → static topology → runtime topology →
+              Four layers: construct → static topology → dynamic topology →
               walkthrough. Construct, relations, and module/process field checks
               run in Studio audit today; package-layer soft checks and
               walkthrough audit are next.
@@ -43,8 +43,12 @@ export function MaintainerReference() {
           <li>
             <strong>Maintain</strong>
             <span>
-              Construct layer: <em>issue-fixer</em> / <em>gap-filler</em>.
-              Topology and walkthrough Maintain are later, separate passes.
+              Construct: <em>construct-fixer</em> / <em>construct-verifier</em>;
+              static topology: <em>static-topology-fixer</em> /{' '}
+              <em>static-topology-verifier</em>; dynamic topology:{' '}
+              <em>package-module-fixer</em> / <em>package-module-verifier</em> /{' '}
+              <em>runtime-topology-verifier</em>. Walkthrough Maintain is a later,
+              separate pass.
             </span>
           </li>
         </ol>
@@ -56,7 +60,7 @@ export function MaintainerReference() {
           From not checked yet to fully confirmed. Only the three audited states
           mean checks actually ran — <em>unverified</em> means no verification
           has happened. These verdicts are the <em>construct</em> layer today;
-          static/runtime topology and walkthrough get their own status later.
+          static/dynamic topology and walkthrough get their own status later.
         </p>
         <ul className="maintainer-verdicts">
           {VERDICTS.map((v) => (
@@ -72,24 +76,28 @@ export function MaintainerReference() {
       </section>
 
       <section className="maintainer-section">
-        <h2 id="issue-vs-gap">Issue vs gap</h2>
+        <h2 id="issue-vs-unconfirmed">Issue vs unconfirmed</h2>
         <div className="maintainer-split">
           <div>
             <h3>Issue</h3>
             <p>
               A check failed. The model claim disagrees with what we can see in
               source or in the graphify cache. Counts toward{' '}
-              <em>verification failed</em>. Studio Maintain runs{' '}
-              <strong>issue-fixer</strong>.
+              <em>verification failed</em>. Studio Maintain runs a{' '}
+              <strong>fixer</strong> (<em>construct-fixer</em>,{' '}
+              <em>static-topology-fixer</em>, <em>package-module-fixer</em>).
             </p>
           </div>
           <div>
-            <h3>Gap</h3>
+            <h3>Unconfirmed</h3>
             <p>
               Nothing failed, but we could not fully confirm a claim. Counts
-              toward <em>partially verified</em>. Studio Maintain runs{' '}
-              <strong>gap-filler</strong> — judgment proposals, not automatic
-              rewrites.
+              toward <em>partially verified</em>. Studio Maintain runs a{' '}
+              <strong>verifier</strong> (<em>construct-verifier</em>,{' '}
+              <em>static-topology-verifier</em>,{' '}
+              <em>package-module-verifier</em>,{' '}
+              <em>runtime-topology-verifier</em>) — judgment proposals, not
+              automatic rewrites.
             </p>
           </div>
         </div>

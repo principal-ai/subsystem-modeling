@@ -1,16 +1,9 @@
 /**
- * Walks the trail JSON cache (`~/.principal/trails/...`) to power the library
- * tab. Reads enough of each cached file to extract title and repo identity;
- * skips full payload parsing for files we'll only show metadata for.
- *
- * Layout matches `packages/principal-studio-cli/src/lib/trail-cache.ts`:
- *   - `~/.principal/trails/by-id/<id>.json` — fallback for trails we can't
- *     anchor to a Purl.
- *   - `~/.principal/trails/<purl-namespace>/<purl-name>/<id>.json` — primary.
+ * Walks the tour JSON store (`~/.principal/tours/by-id/<id>.json`) to power the
+ * library tab, and resolves local/user identities for the header.
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
 import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
@@ -24,104 +17,15 @@ import type {
 	UserIdentity,
 } from "../shared/contract";
 
-const ROOT = join(homedir(), ".principal", "trails");
-
-export async function walkLibrary(): Promise<LibraryEntry[]> {
-	const entries: LibraryEntry[] = [];
-	let topLevel;
-	try {
-		topLevel = await fs.readdir(ROOT, { withFileTypes: true });
-	} catch {
-		return entries;
-	}
-
-	for (const ns of topLevel) {
-		if (!ns.isDirectory()) continue;
-		const nsDir = join(ROOT, ns.name);
-		if (ns.name === "by-id") {
-			await collectFlat(nsDir, "by-id", entries);
-			continue;
-		}
-		// hierarchical: `<ns>/<name>/<id>.json`
-		let names;
-		try {
-			names = await fs.readdir(nsDir, { withFileTypes: true });
-		} catch {
-			continue;
-		}
-		for (const name of names) {
-			if (!name.isDirectory()) continue;
-			await collectFlat(
-				join(nsDir, name.name),
-				`${ns.name}/${name.name}`,
-				entries,
-			);
-		}
-	}
-
-	entries.sort((a, b) => b.mtimeMs - a.mtimeMs);
-	return entries;
-}
-
-async function collectFlat(
-	dir: string,
-	anchor: string,
-	out: LibraryEntry[],
-): Promise<void> {
-	let files;
-	try {
-		files = await fs.readdir(dir, { withFileTypes: true });
-	} catch {
-		return;
-	}
-	for (const f of files) {
-		if (!f.isFile() || !f.name.endsWith(".json")) continue;
-		const trailFile = join(dir, f.name);
-		const id = f.name.replace(/\.json$/, "");
-		try {
-			const stat = await fs.stat(trailFile);
-			const meta = await readMetadata(trailFile);
-			const localRepoRoot = localRepoRootFromAnchor(anchor);
-			// Local trails rarely record a remote in their payload; recover the
-			// owner/repo from the working tree's git origin instead.
-			let owner = meta.owner;
-			let repo = meta.repo;
-			if ((!owner || !repo) && localRepoRoot) {
-				const identity = resolveLocalRepoIdentity(localRepoRoot);
-				owner = owner ?? identity.owner;
-				repo = repo ?? identity.repo;
-			}
-			out.push({
-				kind: "trail",
-				trailFile,
-				id,
-				title: meta.title ?? id,
-				anchor,
-				owner,
-				repo,
-				localRepoRoot,
-				published: meta.published,
-				mtimeMs: stat.mtimeMs,
-			});
-		} catch {
-			// best-effort: a malformed file shouldn't break the whole listing
-		}
-	}
-}
-
 const TOURS_ROOT = join(homedir(), ".principal", "tours", "by-id");
 
 /**
- * Walks the tour JSON cache (`~/.principal/tours/by-id/<id>.json`) to surface
- * cached File City introduction tours in the same library tab as trails.
+ * Walks the tour JSON store to surface cached File City introduction tours.
  *
- * Tours are stored flat and verbatim as the web-ade wrapper
- * (`{ owner, repo, entry, payload }`), so unlike trails they carry an explicit
- * owner/repo but no on-disk path back to the working tree they were authored
- * against. We recover a best-effort `localRepoRoot` by matching that owner/repo
- * against the local checkouts the trails cache already knows about — clicking a
- * tour then opens it against a real working tree when one is on disk, and falls
- * back to the viewer's "no directory matched" framing when it isn't.
+ * Tours are stored flat and verbatim as the wrapper
+ * (`{ owner, repo, entry, payload }`), so unlike a hand-authored file they carry
+ * an explicit owner/repo but no on-disk path back to the working tree they were
+ * authored against. The local checkout is resolved from Alexandria at open time.
  */
 export async function walkTours(): Promise<LibraryEntry[]> {
 	let files;
@@ -134,24 +38,18 @@ export async function walkTours(): Promise<LibraryEntry[]> {
 	const out: LibraryEntry[] = [];
 	for (const f of files) {
 		if (!f.isFile() || !f.name.endsWith(".json")) continue;
-		const trailFile = join(TOURS_ROOT, f.name);
+		const file = join(TOURS_ROOT, f.name);
 		const id = f.name.replace(/\.json$/, "");
 		try {
-			const stat = await fs.stat(trailFile);
-			const meta = await readTourMetadata(trailFile);
+			const stat = await fs.stat(file);
+			const meta = await readTourMetadata(file);
 			out.push({
-				kind: "tour",
-				trailFile,
+				file,
 				id,
 				title: meta.title ?? id,
 				anchor: "by-id",
 				owner: meta.owner,
 				repo: meta.repo,
-				// The local checkout is resolved from Alexandria at open time (the
-				// registry is authoritative and may change between list and click).
-				localRepoRoot: undefined,
-				// Tours aren't draft/published like trails; the badge renders "Tour".
-				published: false,
 				mtimeMs: stat.mtimeMs,
 			});
 		} catch {
@@ -170,8 +68,7 @@ interface CachedTourMetadata {
 /**
  * Pull title + owner/repo out of a cached tour wrapper. Title prefers the
  * lightweight `entry.title` (always present on a store fetch) and falls back to
- * the full `payload.title`; owner/repo come from the wrapper's top level, which
- * web-ade always stamps.
+ * the full `payload.title`; owner/repo come from the wrapper's top level.
  */
 async function readTourMetadata(path: string): Promise<CachedTourMetadata> {
 	const raw = await fs.readFile(path, "utf8");
@@ -199,93 +96,14 @@ async function readTourMetadata(path: string): Promise<CachedTourMetadata> {
 	return { title: entryTitle ?? payloadTitle, owner, repo };
 }
 
-interface CachedMetadata {
-	title?: string;
-	owner?: string;
-	repo?: string;
-	published: boolean;
-}
-
-async function readMetadata(path: string): Promise<CachedMetadata> {
-	const raw = await fs.readFile(path, "utf8");
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(raw);
-	} catch {
-		return { published: false };
-	}
-	if (typeof parsed !== "object" || parsed === null) return { published: false };
-	const obj = parsed as Record<string, unknown>;
-
-	// web-ade wrapper: { entry, owner, repo, payload }.
-	const wrapperOwner = typeof obj["owner"] === "string" ? (obj["owner"] as string) : undefined;
-	const wrapperRepo = typeof obj["repo"] === "string" ? (obj["repo"] as string) : undefined;
-	const inner =
-		typeof obj["payload"] === "object" && obj["payload"] !== null
-			? (obj["payload"] as Record<string, unknown>)
-			: obj;
-
-	const title =
-		(typeof inner["title"] === "string" ? (inner["title"] as string) : undefined) ??
-		(typeof (obj["entry"] as { title?: unknown } | undefined)?.title === "string"
-			? ((obj["entry"] as { title: string }).title)
-			: undefined);
-
-	let owner = wrapperOwner;
-	let repo = wrapperRepo;
-	if (!owner || !repo) {
-		const repos = inner["repos"];
-		if (Array.isArray(repos) && repos.length > 0) {
-			const remote = (repos[0] as { remote?: { owner?: unknown; name?: unknown } }).remote;
-			if (typeof remote?.owner === "string") owner = remote.owner;
-			if (typeof remote?.name === "string") repo = remote.name;
-		}
-	}
-
-	// Published iff the trail carries a `share.id` — same field the open-trail
-	// header and `persistShareMutation` use. Lives on `inner` (the payload for
-	// wrapped files), mirroring where the share is written.
-	const share = inner["share"];
-	const published =
-		typeof share === "object" &&
-		share !== null &&
-		typeof (share as { id?: unknown }).id === "string";
-
-	return { title, owner, repo, published };
-}
-
 /**
- * Decode a `local/<slug>` cache anchor back to a working-tree path on disk.
+ * Resolve a tab's repo identity from its working tree rather than the payload —
+ * a tour opened against a local checkout shows `owner/name` recovered from that
+ * checkout's GitHub `origin`. When there's no GitHub origin we fall back to
+ * `local / <dir basename>`.
  *
- * The cache writes local trails under `~/.principal/trails/local/<slug>/<id>.json`,
- * where `<slug>` is the abs repo path with `/` replaced by `-` (per
- * `encodePathForPurl` from `@principal-ai/alexandria-core-library`). That
- * encoding is lossy because real path segments can also contain `-`
- * (`web-ade`, `industry-themed-file-city-panels`), so we recover the original
- * by walking the filesystem: at each dash boundary, try the next slash
- * position only if the resulting prefix is an actual directory. Branches that
- * don't exist prune immediately, so this is cheap in practice.
- *
- * Anchor-driven rather than payload-driven on purpose — older trails (pre-
- * `repos[]` schema) carry only `authoredAt.sha` and no repo identity in the
- * payload, but they still land in `local/<slug>/` because the host that
- * authored them used the per-repo cache layout. The directory is the
- * authoritative signal that "this trail belongs to a working tree on disk."
- *
- * Returns `undefined` for non-local anchors and for slugs that don't resolve
- * to any directory. Callers should treat `undefined` as "fall back to remote
- * mode."
- */
-/**
- * Identity for a `local/` trail, resolved from the working tree rather than the
- * payload — local trails almost never record a remote, but the directory they
- * live in usually has a GitHub `origin`. Mirrors the publish path's remote
- * sniffing (`git remote get-url origin` → purl → owner/repo). When there's no
- * GitHub origin we fall back to `local / <dir basename>` so the row at least
- * shows the repo folder instead of the dash-encoded cache path.
- *
- * Memoized by repoRoot: many trails share one working tree, and a fresh
- * `walkLibrary` (on every refresh) would otherwise re-shell `git` per file.
+ * Memoized by repoRoot: many tabs share one working tree, and a fresh listing
+ * would otherwise re-shell `git` per file.
  */
 const repoIdentityCache = new Map<string, { owner: string; repo: string }>();
 
@@ -378,7 +196,7 @@ async function resolveGitHubUserFromToken(
 /** Read `git config user.name` / `user.email`. Always attempted, independent of
  *  GitHub sign-in. When a repoRoot is given we read it with `-C` (picks up any
  *  repo-local override); otherwise we run git plain so the *global* identity
- *  still resolves — the common case when the library tab is showing and no trail
+ *  still resolves — the common case when the library tab is showing and no tab
  *  (hence no repoRoot) is open. Returns undefined when neither value is set. */
 function readGitConfigIdentity(
 	repoRoot: string | undefined,
@@ -444,35 +262,4 @@ export async function resolveUserIdentity(
 
 	userIdentityCache = identity;
 	return identity;
-}
-
-function localRepoRootFromAnchor(anchor: string): string | undefined {
-	const prefix = "local/";
-	if (!anchor.startsWith(prefix)) return undefined;
-	const slug = anchor.slice(prefix.length);
-	if (!slug) return undefined;
-	const parts = slug.split("-");
-	return walkExistingPrefix("/", parts);
-}
-
-function walkExistingPrefix(prefix: string, parts: string[]): string | undefined {
-	if (parts.length === 0) {
-		return isExistingDirectory(prefix) ? prefix : undefined;
-	}
-	for (let i = 1; i <= parts.length; i++) {
-		const segment = parts.slice(0, i).join("-");
-		const next = prefix === "/" ? `/${segment}` : `${prefix}/${segment}`;
-		if (!isExistingDirectory(next)) continue;
-		const result = walkExistingPrefix(next, parts.slice(i));
-		if (result) return result;
-	}
-	return undefined;
-}
-
-function isExistingDirectory(path: string): boolean {
-	try {
-		return existsSync(path) && statSync(path).isDirectory();
-	} catch {
-		return false;
-	}
 }

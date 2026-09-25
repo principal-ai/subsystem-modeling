@@ -3,7 +3,6 @@ import {
   CaseTable,
   GRAPHIFY_CASES,
   MAINTENANCE_AGENTS,
-  RemediationLegend,
   SectionPager,
   SOURCE_CASES,
 } from './shared'
@@ -14,12 +13,6 @@ export function MaintainerConstruct() {
       <section className="maintainer-section maintainer-layer">
         <p className="maintainer-layer-label">Layer 1</p>
         <h1 id="construct-verification">Construct verification</h1>
-        <p className="maintainer-lede">
-          Per component: does this node’s file, symbol, kind, and signature still
-          hold? Evidence from the repo and Graphify. Package/module and process
-          live in the topology layers.
-        </p>
-        <RemediationLegend />
 
         <h2 className="maintainer-subhead" id="source-checks">
           Source checks
@@ -44,7 +37,7 @@ export function MaintainerConstruct() {
         </h2>
         <p className="maintainer-lede">
           Construct layer only. One list action; the host re-audits and picks
-          the agent. Construct issues win over construct gaps — and over
+          the agent. Construct issues win over construct unconfirmed claims — and over
           topology — so relation retargets run against a stable component set.
           Agents propose; you confirm.
         </p>

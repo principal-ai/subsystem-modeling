@@ -27,8 +27,8 @@ const TAB_TOGGLES: Array<{
 	},
 	{
 		key: "trails",
-		label: "Trails",
-		description: "Cached trail and tour library",
+		label: "Tours",
+		description: "Cached tour library",
 	},
 	{
 		key: "graphify",
@@ -111,8 +111,7 @@ const SETTINGS_TABS = [
 		id: "tabs",
 		label: "Default tabs",
 		icon: SlidersHorizontal,
-		description:
-			"Choose which tabs appear in the strip by default. Changes apply immediately and persist across launches.",
+		description: "",
 	},
 	{
 		id: "auditing",
@@ -398,16 +397,18 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 					<span style={{ fontSize: theme.fontSizes[3], fontWeight: 600 }}>
 						Settings
 					</span>
-					<p
-						style={{
-							margin: "4px 0 0",
-							fontSize: theme.fontSizes[0],
-							color: muted,
-							lineHeight: 1.5,
-						}}
-					>
-						{activeTabMeta.description}
-					</p>
+					{activeTabMeta.description && (
+						<p
+							style={{
+								margin: "4px 0 0",
+								fontSize: theme.fontSizes[0],
+								color: muted,
+								lineHeight: 1.5,
+							}}
+						>
+							{activeTabMeta.description}
+						</p>
+					)}
 				</div>
 
 				<div

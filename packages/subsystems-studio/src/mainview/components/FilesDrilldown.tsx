@@ -2,7 +2,8 @@
  * FilesDrilldown — repo overview that drills into ONE repo's files at a time.
  *
  * Left pane lists repo headers (avatar + name + owning-model count);
- * clicking one slides sideways to that repo's file tree with a back row.
+ * clicking one slides sideways to that repo's file tree. Back is an X
+ * beside the GitHub button on the drilled-in repo row.
  * The drilled-in files render with the Pierre `SubsystemFileTree` — the same
  * tree the detail graph sidebar uses — instead of hand-rolled rows.
  *
@@ -11,7 +12,6 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { ChevronLeft as ChevronLeftIcon } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
 	repoAvatarUrl,
@@ -20,10 +20,24 @@ import {
 } from "@principal-ai/subsystems-react";
 import { RepoRow } from "./RepoRow";
 
+/** Share of a repo's checkout referenced by its subsystem models. */
+export interface RepoFileCoverage {
+	/** Rounded 0–100. */
+	percent: number;
+	referenced: number;
+	total: number;
+}
+
 export interface FilesDrilldownProps {
 	groups: RepoGroup[];
 	/** repoKey ("" for purl-less) → distinct owning subsystem-model count. */
 	graphCountByRepo?: ReadonlyMap<string, number>;
+	/**
+	 * Map mode: repoKey → file coverage. When passed, overview rows show this
+	 * percentage instead of the model count. A missing key means the repo's
+	 * tree is still loading, so the badge stays blank.
+	 */
+	fileCoverageByRepo?: ReadonlyMap<string, RepoFileCoverage>;
 	/** Drilled-in repo group key (`drilldownRepoKey`), or null for the overview. */
 	focusedRepo: string | null;
 	/** Toggle drill-down (same key unfocuses). */
@@ -45,40 +59,26 @@ export function drilldownRepoKey(group: Pick<RepoGroup, "repoKey">): string {
 	return group.repoKey ?? "__no-repo__";
 }
 
-function BackRow({ onBack }: { onBack: () => void }) {
-	const { theme } = useTheme();
-	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
-	return (
-		<button
-			type="button"
-			onClick={onBack}
-			title="Back to all repos"
-			onMouseEnter={(e) => {
-				e.currentTarget.style.background = theme.colors.border ?? "#333";
-			}}
-			onMouseLeave={(e) => {
-				e.currentTarget.style.background = "transparent";
-			}}
-			style={{
-				flexShrink: 0,
-				display: "flex",
-				alignItems: "center",
-				gap: 4,
-				padding: "8px 8px 4px",
-				border: "none",
-				borderRadius: 4,
-				background: "transparent",
-				cursor: "pointer",
-				fontFamily: theme.fonts.body,
-				color: muted,
-				fontSize: theme.fontSizes[1],
-				transition: "background 120ms ease",
-			}}
-		>
-			<ChevronLeftIcon size={14} style={{ flexShrink: 0 }} />
-			All repos
-		</button>
-	);
+function overviewBadge(
+	group: RepoGroup,
+	graphCountByRepo: ReadonlyMap<string, number> | undefined,
+	fileCoverageByRepo: ReadonlyMap<string, RepoFileCoverage> | undefined,
+): { badge?: string | number; badgeTitle?: string } {
+	const key = group.repoKey ?? "";
+	if (fileCoverageByRepo) {
+		const coverage = fileCoverageByRepo.get(key);
+		if (!coverage || coverage.total === 0) return {};
+		return {
+			badge: `${coverage.percent}%`,
+			badgeTitle: `${coverage.referenced} of ${coverage.total} files referenced by subsystem models`,
+		};
+	}
+	const count = graphCountByRepo?.get(key);
+	if (count == null) return {};
+	return {
+		badge: count,
+		badgeTitle: `${count} subsystem model${count === 1 ? "" : "s"}`,
+	};
 }
 
 /**
@@ -135,6 +135,7 @@ function FocusedRepoTree({
 export function FilesDrilldown({
 	groups,
 	graphCountByRepo,
+	fileCoverageByRepo,
 	focusedRepo,
 	onFocusRepo,
 	onSelectFile,
@@ -229,12 +230,7 @@ export function FilesDrilldown({
 								}
 								label={group.repo ?? "No repo"}
 								title="Show this repo's files"
-								badge={graphCountByRepo?.get(group.repoKey ?? "")}
-								badgeTitle={
-									graphCountByRepo?.get(group.repoKey ?? "") != null
-										? `${graphCountByRepo!.get(group.repoKey ?? "")!} subsystem model${graphCountByRepo!.get(group.repoKey ?? "")! === 1 ? "" : "s"}`
-										: undefined
-								}
+								{...overviewBadge(group, graphCountByRepo, fileCoverageByRepo)}
 								onPress={() => onFocusRepo(drilldownRepoKey(group))}
 							/>
 						</div>
@@ -243,11 +239,6 @@ export function FilesDrilldown({
 				<div style={{ ...paneStyle, height: "100%", overflow: "hidden" }}>
 					{shown && (
 						<>
-							{!autoKey && (
-								<BackRow
-									onBack={() => focusedRepo && onFocusRepo(focusedRepo)}
-								/>
-							)}
 							<RepoRow
 								avatarUrl={
 									shown.repoKey ? repoAvatarUrl(shown.repoKey) : undefined
@@ -265,6 +256,13 @@ export function FilesDrilldown({
 								showCombinedToggle
 								combinedActive={combinedActive}
 								onToggleCombined={onToggleCombined}
+								onBack={
+									autoKey
+										? undefined
+										: () => {
+												if (focusedRepo) onFocusRepo(focusedRepo);
+											}
+								}
 							/>
 							<FocusedRepoTree
 								key={drilldownRepoKey(shown)}

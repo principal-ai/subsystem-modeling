@@ -1,6 +1,6 @@
 /**
  * Progressive homepage examples — full showcase models projected into
- * constructs → static topology → runtime topology → walkthrough.
+ * constructs → static topology → dynamic topology → walkthrough.
  */
 import type {
   SubsystemComponent,
@@ -14,7 +14,7 @@ import { tracedApiCase } from './cases/traced-api';
 export type HomeCategoryId =
   | 'constructs'
   | 'static-topology'
-  | 'runtime-topology'
+  | 'dynamic-topology'
   | 'walkthrough';
 
 export type HomeCategoryModel = {
@@ -55,7 +55,7 @@ export type HomeProgressionSource = {
 export type HomeProgressionCopy = {
   constructs: { blurb: string; description: string };
   'static-topology': { blurb: string; description: string };
-  'runtime-topology': { blurb: string; description: string };
+  'dynamic-topology': { blurb: string; description: string };
   walkthrough: { blurb: string; description: string };
 };
 
@@ -74,17 +74,19 @@ function constructsOnly(components: readonly SubsystemComponent[]): SubsystemCom
 }
 
 function staticView(components: readonly SubsystemComponent[]): SubsystemComponent[] {
-  return components.map(({ process: _p, ...rest }) => rest);
+  // Static topology = relations only; containment (module) and process are dynamic.
+  return components.map(({ process: _p, module: _m, ...rest }) => rest);
 }
 
-function runtimeView(components: readonly SubsystemComponent[]): SubsystemComponent[] {
-  return components.map(({ module: _m, ...rest }) => rest);
+function dynamicView(components: readonly SubsystemComponent[]): SubsystemComponent[] {
+  // Dynamic topology = process (runtime) + module (containment).
+  return [...components];
 }
 
 const LAYER_LABELS: Record<HomeCategoryId, string> = {
   constructs: 'Constructs',
   'static-topology': 'Static topology',
-  'runtime-topology': 'Runtime topology',
+  'dynamic-topology': 'Dynamic topology',
   walkthrough: 'Walkthrough',
 };
 
@@ -131,13 +133,13 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
       },
     },
     {
-      id: 'runtime-topology',
-      label: LAYER_LABELS['runtime-topology'],
-      blurb: copy['runtime-topology'].blurb,
+      id: 'dynamic-topology',
+      label: LAYER_LABELS['dynamic-topology'],
+      blurb: copy['dynamic-topology'].blurb,
       model: {
         title,
-        description: copy['runtime-topology'].description,
-        components: runtimeView(source.components),
+        description: copy['dynamic-topology'].description,
+        components: dynamicView(source.components),
         relations: source.relations,
         walkthroughs: undefined,
       },
@@ -185,14 +187,14 @@ export const homeProgressionExamples: Record<string, HomeProgressionExample> = {
         description: 'Layer 1 — constructs only. No map, no processes, no walks yet.',
       },
       'static-topology': {
-        blurb: 'Connect them in source — relations and shared modules.',
+        blurb: 'Connect them in source — relations.',
         description:
-          'Layer 2 — add structural relations and module frames. Still no runtime story.',
+          'Layer 2 — add structural relations. Containment and runtime come next.',
       },
-      'runtime-topology': {
+      'dynamic-topology': {
         blurb: 'Mark where each one runs — client vs server.',
         description:
-          'Layer 3 — same nodes, framed by process (booking-web/client · booking-web/server).',
+          'Layer 3 — same nodes, framed by process (booking-web/client · booking-web/server), plus module containment.',
       },
       walkthrough: {
         blurb: 'Follow pick, book, and cancel at the real file:line seams.',
@@ -216,14 +218,14 @@ export const homeProgressionExamples: Record<string, HomeProgressionExample> = {
         description: 'Layer 1 — constructs only. No map, no processes, no walks yet.',
       },
       'static-topology': {
-        blurb: 'Connect routes, services, and the repo in source.',
+        blurb: 'Connect routes and services in source — relations.',
         description:
-          'Layer 2 — add structural relations and module frames. Still no runtime story.',
+          'Layer 2 — add structural relations. Containment and runtime come next.',
       },
-      'runtime-topology': {
+      'dynamic-topology': {
         blurb: 'Mark where each one runs — orders-api vs payments-api.',
         description:
-          'Layer 3 — same nodes, framed by process (orders-api · payments-api).',
+          'Layer 3 — same nodes, framed by process (orders-api · payments-api), plus module containment.',
       },
       walkthrough: {
         blurb: 'Follow a traced GET and POST across the real seams.',

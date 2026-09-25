@@ -1,10 +1,9 @@
 /**
- * Local cache for tour JSON fetched from web-ade.
+ * Local store for tour JSON (`~/.principal/tours`).
  *
  * Sibling of `./trail-cache.ts`, but simpler: tours don't carry a `repos[]`
- * Purl, and the only id we have on a read is the bare tour id, so the cache is
- * a flat `~/.principal/tours/by-id/<id>.json` layout — writes and reads use the
- * same slot, so a recent fetch is actually reused by the next `view`.
+ * Purl, and the only id we have on a read is the bare tour id, so the store is
+ * a flat `~/.principal/tours/by-id/<id>.json` layout.
  */
 
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';

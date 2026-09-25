@@ -10,7 +10,7 @@
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { Command } from 'commander';
-import { tryResolveViewerLaunch } from './trail.js';
+import { tryResolveViewerLaunch } from '../lib/viewer-launch.js';
 import { handoffToRunning } from '../lib/viewer-ipc.js';
 import {
   createSubsystemModel,

@@ -9,7 +9,7 @@ export function MaintainerOverview() {
         <p>
           In order for a diagram to be maintainable by agents, we have dissected
           its components into four concepts: <strong>Constructs</strong>,{' '}
-          <strong>Static topology</strong>, <strong>Runtime topology</strong>,
+          <strong>Static topology</strong>, <strong>Dynamic topology</strong>,
           and <strong>Walkthrough</strong>.
         </p>
         <p>
@@ -18,12 +18,12 @@ export function MaintainerOverview() {
         </p>
         <p>
           <strong>Static topology</strong> is how constructs are arranged in
-          source: what package / module they are in and how they relate to other
-          constructs.
+          source: how they relate to other constructs (<em>relations[]</em>).
         </p>
         <p>
-          <strong>Runtime topology</strong> provides context for how the code
-          executes.
+          <strong>Dynamic topology</strong> is how constructs are arranged at
+          runtime: deployment-unit membership (<em>process</em>) and containment
+          (package / <em>module</em>).
         </p>
         <p>
           <strong>Walkthrough</strong> is the content necessary to help

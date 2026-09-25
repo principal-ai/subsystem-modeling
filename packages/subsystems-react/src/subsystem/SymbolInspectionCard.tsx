@@ -64,7 +64,15 @@ function WrappablePath({ path }: { path: string }) {
 }
 
 /** Label stacked above the value, so long values get the full width. */
-function StackedRow({ label, children }: { label: string; children: ReactNode }) {
+function StackedRow({
+  label,
+  children,
+  labelSize,
+}: {
+  label: string;
+  children: ReactNode;
+  labelSize?: number;
+}) {
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   return (
@@ -73,7 +81,7 @@ function StackedRow({ label, children }: { label: string; children: ReactNode })
         style={{
           color: muted,
           fontFamily: theme.fonts.body,
-          fontSize: theme.fontSizes[0],
+          fontSize: labelSize ?? theme.fontSizes[0],
           textTransform: 'uppercase',
           letterSpacing: 0.4,
         }}
@@ -261,6 +269,7 @@ export function SymbolInspectionCard({
   const mono = theme.fonts.monospace;
   const small = theme.fontSizes[0];
   const body = theme.fontSizes[1];
+  const [hoveredCandidate, setHoveredCandidate] = useState<string | null>(null);
 
   const info = inspection ?? undefined;
   const node = info?.node;
@@ -290,14 +299,15 @@ export function SymbolInspectionCard({
       data-symbol-inspection
       style={{
         position: 'absolute',
-        zIndex: 40,
+        zIndex: 60,
         width: 360,
         maxWidth: 'calc(100vw - 24px)',
+        maxHeight: 'min(70vh, 560px)',
         boxSizing: 'border-box',
         background: theme.colors.backgroundSecondary,
         border: `1px solid ${theme.colors.border}`,
         borderRadius: 8,
-        overflow: 'hidden',
+        overflowY: 'auto',
         boxShadow: '0 8px 24px rgba(0, 0, 0, 0.28)',
         fontFamily: mono,
         fontSize: body,
@@ -353,9 +363,14 @@ export function SymbolInspectionCard({
         )}
 
         {!error && !hasBody && (
-          <span style={{ color: theme.colors.accent ?? theme.colors.secondary, fontWeight: 600 }}>
-            {symbolRef.name}
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ color: theme.colors.accent ?? theme.colors.secondary, fontWeight: 600 }}>
+              {symbolRef.name}
+            </span>
+            <span style={{ color: muted, fontFamily: theme.fonts.body, fontSize: body }}>
+              {statusText}
+            </span>
+          </div>
         )}
       </div>
 
@@ -390,38 +405,47 @@ export function SymbolInspectionCard({
           </StackedRow>
         )}
 
-        {!hasBody && (
-          <span style={{ color: muted, fontFamily: theme.fonts.body, fontSize: small }}>
-            {statusText}
-          </span>
-        )}
-
         {info?.candidates && info.candidates.length > 0 && (
-          <StackedRow label="Candidates">
+          <StackedRow label="Candidates" labelSize={body}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {info.candidates.slice(0, 6).map((c) => (
-                <span key={c.nodeId} style={{ fontFamily: mono, fontSize: small }}>
-                  <span style={{ color: theme.colors.text }}>{c.label}</span>
-                  {c.sourceFile && (
-                    <>
-                      {' '}
-                      <span
-                        role={onOpenFile ? 'button' : undefined}
-                        tabIndex={onOpenFile ? 0 : undefined}
-                        onClick={
-                          onOpenFile ? () => onOpenFile(c.sourceFile!, undefined) : undefined
-                        }
-                        style={{
-                          color: theme.colors.accent ?? theme.colors.secondary,
-                          cursor: onOpenFile ? 'pointer' : 'default',
-                        }}
-                      >
-                        <WrappablePath path={c.sourceFile} />
-                      </span>
-                    </>
-                  )}
-                </span>
-              ))}
+              {info.candidates.slice(0, 6).map((c) =>
+                // Ambiguous candidates share the symbol name, so the file is
+                // the only thing that distinguishes them.
+                c.sourceFile ? (
+                  <span
+                    key={c.nodeId}
+                    role={onOpenFile ? 'button' : undefined}
+                    tabIndex={onOpenFile ? 0 : undefined}
+                    onClick={onOpenFile ? () => onOpenFile(c.sourceFile!, undefined) : undefined}
+                    onMouseEnter={
+                      onOpenFile ? () => setHoveredCandidate(c.nodeId) : undefined
+                    }
+                    onMouseLeave={
+                      onOpenFile
+                        ? () => setHoveredCandidate((h) => (h === c.nodeId ? null : h))
+                        : undefined
+                    }
+                    style={{
+                      fontFamily: mono,
+                      fontSize: body,
+                      color: theme.colors.accent ?? theme.colors.secondary,
+                      cursor: onOpenFile ? 'pointer' : 'default',
+                      textDecorationLine:
+                        onOpenFile && hoveredCandidate === c.nodeId ? 'underline' : 'none',
+                      textUnderlineOffset: 2,
+                    }}
+                  >
+                    <WrappablePath path={c.sourceFile} />
+                  </span>
+                ) : (
+                  <span
+                    key={c.nodeId}
+                    style={{ fontFamily: mono, fontSize: body, color: theme.colors.text }}
+                  >
+                    {c.label}
+                  </span>
+                ),
+              )}
             </div>
           </StackedRow>
         )}

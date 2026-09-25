@@ -13,7 +13,7 @@ function names(declaration: GraphifyComponentDetail | undefined): string[] {
 }
 
 describe('extractDeclarationSymbolRefs — function', () => {
-  test('keeps simple named types, drops primitives and composite types', () => {
+  test('keeps named types (bare or nested), drops primitives', () => {
     const declaration: GraphifyComponentDetail = {
       kind: 'function',
       parameters: [
@@ -26,10 +26,42 @@ describe('extractDeclarationSymbolRefs — function', () => {
       callees: [{ nodeId: 'c2', name: 'toUniversalEvents()', source_location: 'L64' }],
     };
     expect(names(declaration)).toEqual([
+      'ProcessingOptions',
+      'SessionEvent',
       'SessionRecord',
       'capture-session',
       'toUniversalEvents',
     ]);
+  });
+
+  test('surfaces named types nested in composite types', () => {
+    const declaration: GraphifyComponentDetail = {
+      kind: 'function',
+      parameters: [
+        { name: 'doc', type: 'SubsystemModelDocument' },
+        { name: 'opts', type: '{ maxNodeWidth?: number } & BoundaryFrameOptions' },
+      ],
+      returnType: 'Promise<{ nodes: SubsystemGraphNode[]; edges: SubsystemGraphEdge[] }>',
+      callers: [],
+      callees: [],
+    };
+    expect(names(declaration)).toEqual([
+      'BoundaryFrameOptions',
+      'SubsystemGraphEdge',
+      'SubsystemGraphNode',
+      'SubsystemModelDocument',
+    ]);
+  });
+
+  test('drops global/ambient types (JSX.Element, Promise, …)', () => {
+    const declaration: GraphifyComponentDetail = {
+      kind: 'function',
+      parameters: [{ name: 'props', type: 'PierreSnippetViewProps' }],
+      returnType: 'JSX.Element',
+      callers: [],
+      callees: [],
+    };
+    expect(names(declaration)).toEqual(['PierreSnippetViewProps']);
   });
 
   test('carries the reference nodeId/context through', () => {

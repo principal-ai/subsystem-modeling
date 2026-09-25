@@ -2,19 +2,13 @@
  * Principal Studio host (bun process).
  *
  * Boot inputs:
- *   - Trail: argv[2] / TRAIL_FILE, optional TRAIL_MODE=local|remote, and
- *     TRAIL_REPO_ROOT (default cwd).
+ *   - Tour: argv[2] / TRAIL_FILE and TRAIL_REPO_ROOT (default cwd).
  *   - Subsystem model: SUBSYSTEM_MODEL_ID — opens a stored model tab on cold
  *     start (used by `principal-ai subsystem-model create/open`).
  *
  * Opens an Electrobun window and exposes a tiny RPC surface to the mainview
- * so it can render trails, subsystem models, and related surfaces, and
- * resolve slice snippets.
- *
- * Slice resolution has two modes (see docs/PRINCIPAL_STUDIO_MODES.md):
- *   - 'local' (default): files come from the working tree at repoRoot.
- *   - 'remote':          files come from raw.githubusercontent.com keyed by
- *                        each repo's authored sha. Selected via TRAIL_MODE env.
+ * so it can render tours, subsystem models, and related surfaces, and
+ * resolve slice snippets from the working tree (local mode).
  *
  * Replaces the prior OTEL events manager prototype; see git history if you
  * need that back.
@@ -28,16 +22,12 @@ import {
 	type RPCSchema,
 } from "electrobun/bun";
 import { promises as fs } from "node:fs";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { randomUUID } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import {
-	extractPurlFromRemoteUrl,
 	parsePurl,
 } from "@principal-ai/alexandria-core-library";
 import { parseTourOrThrow } from "@principal-ai/file-city-builder";
-import { readFileRemote as fetchRemoteSlice } from "./remote-files";
 import { handoffToRunning, startIpcServer, type LoadTrailMessage } from "./ipc";
 import { startHttpServer } from "./http-server";
 import { resolveSandboxed } from "./sandboxed-path";
@@ -118,7 +108,6 @@ import { ensureGraphifyGraph, listGraphifyGraphs, listGraphifyRepos, assessSubsy
 import { buildMaintenanceOverview } from "./maintenance-overview";
 import { ensurePackageLayers, listPackageLayers, listPackageLayerRepos } from "./package-layer-store";
 import {
-	walkLibrary,
 	walkTours,
 	resolveLocalRepoIdentity,
 	resolveUserIdentity,
@@ -709,7 +698,7 @@ function detectPayloadKind(path: string, payload: unknown): PayloadKind {
 }
 
 /**
- * web-ade's `/api/trails/by-id/<id>` returns a wrapper around the trail
+ * The by-id store returns a wrapper around the trail
  * payload: `{ entry, owner, repo, payload }`. Hand-authored / local files are
  * just the bare TrailPayload. Detect the wrapper and unwrap so the renderer
  * always sees `{ markers, views, ... }` directly. (Tours are handled separately
@@ -1336,115 +1325,6 @@ async function readFileLocal(tab: TrailTabState, path: string): Promise<{ ok: bo
 	}
 }
 
-async function readFileRemote(tab: TrailTabState, path: string, repo?: string): Promise<{ ok: boolean; content?: string; error?: string }> {
-	if (!tab.loaded.ok) return { ok: false, error: tab.loaded.error };
-	return fetchRemoteSlice(
-		tab.loaded.payload,
-		{
-			ghToken: tab.ghToken,
-			fallbackOwner: tab.repoOwner,
-			fallbackName: tab.repoName,
-			fallbackPurl: tab.repoPurl,
-		},
-		path,
-		repo,
-	);
-}
-
-async function getFileTreeRemote(tab: TrailTabState): Promise<{ files: Array<{ path: string; size: number }> }> {
-	if (!tab.loaded.ok || typeof tab.loaded.payload !== "object" || tab.loaded.payload === null) {
-		return { files: [] };
-	}
-	const markers = (tab.loaded.payload as { markers?: Array<{ sourcePath?: unknown }> }).markers;
-	if (!Array.isArray(markers)) return { files: [] };
-
-	const seen = new Set<string>();
-	const files: Array<{ path: string; size: number }> = [];
-	for (const marker of markers) {
-		const raw = marker?.sourcePath;
-		if (typeof raw !== "string" || !raw) continue;
-		const cleaned = raw.replace(/^\/+/, "").replace(/^GitHub\//, "");
-		if (!cleaned || cleaned.includes("..")) continue;
-		if (seen.has(cleaned)) continue;
-		seen.add(cleaned);
-		files.push({ path: cleaned, size: 0 });
-	}
-	return { files };
-}
-
-/**
- * Apply a mutation to the trail's `notes[]` and persist it back to disk.
- *
- * Re-reads the file each call so a concurrent rewrite (e.g. the same trail
- * being edited via another tool's MCP bridge while a tab is open) doesn't get
- * clobbered by stale in-memory state. The `{ entry, payload }` wrapper from
- * web-ade fetches is preserved on write — we only ever mutate the inner
- * payload's `notes` field.
- *
- * On success, also patches `tab.loaded.payload.notes` so subsequent
- * snippet/file-tree resolvers see the new notes array without a reload.
- */
-function persistNoteMutation<T>(
-	tab: TrailTabState,
-	mutate: (notes: unknown[]) => { notes: unknown[]; result: T },
-): { ok: true; result: T } | { ok: false; error: string } {
-	try {
-		const raw = readFileSync(tab.trailFilePath, "utf8");
-		const root = JSON.parse(raw) as Record<string, unknown>;
-		const wrappedInner =
-			typeof root["payload"] === "object" &&
-			root["payload"] !== null &&
-			"markers" in (root["payload"] as Record<string, unknown>)
-				? (root["payload"] as Record<string, unknown>)
-				: null;
-		const inner = wrappedInner ?? root;
-		const existing = Array.isArray(inner["notes"]) ? (inner["notes"] as unknown[]) : [];
-		const { notes, result } = mutate(existing);
-		inner["notes"] = notes;
-		writeFileSync(tab.trailFilePath, `${JSON.stringify(root, null, 2)}\n`, "utf8");
-		if (tab.loaded.ok && typeof tab.loaded.payload === "object" && tab.loaded.payload !== null) {
-			(tab.loaded.payload as Record<string, unknown>)["notes"] = notes;
-		}
-		return { ok: true, result };
-	} catch (err) {
-		return { ok: false, error: (err as Error).message };
-	}
-}
-
-/**
- * Set `payload.share = { id }` on the trail file. Mirrors `persistNoteMutation`'s
- * wrapper-preserving write: re-reads from disk, unwraps `{ entry, payload }`
- * when present, writes the updated root back. Also patches `tab.loaded.payload`
- * so the renderer's next slice fetch sees the new share field without needing
- * a tab reload.
- */
-function persistShareMutation(
-	tab: TrailTabState,
-	share: { id: string },
-): { ok: true } | { ok: false; error: string } {
-	try {
-		const raw = readFileSync(tab.trailFilePath, "utf8");
-		const root = JSON.parse(raw) as Record<string, unknown>;
-		const wrappedInner =
-			typeof root["payload"] === "object" &&
-			root["payload"] !== null &&
-			"markers" in (root["payload"] as Record<string, unknown>)
-				? (root["payload"] as Record<string, unknown>)
-				: null;
-		const inner = wrappedInner ?? root;
-		inner["share"] = share;
-		writeFileSync(tab.trailFilePath, `${JSON.stringify(root, null, 2)}\n`, "utf8");
-		if (tab.loaded.ok && typeof tab.loaded.payload === "object" && tab.loaded.payload !== null) {
-			(tab.loaded.payload as Record<string, unknown>)["share"] = share;
-		}
-		return { ok: true };
-	} catch (err) {
-		return { ok: false, error: (err as Error).message };
-	}
-}
-
-
-
 /**
  * Permanent, non-trail tabs (library, agent sessions, subsystems).
  * They carry no trail payload and don't serve files or notes; several RPC
@@ -1567,7 +1447,7 @@ function fullState(tab: TabState): TabFullState {
 		};
 	}
 	// Resolve repo identity the same way the library listing does: prefer an
-	// explicit owner/name carried by the open message (web-ade / remote trails),
+	// explicit owner/name carried by the open message (remote trails),
 	// otherwise recover it from the working tree's git origin. This is what lets
 	// the tab header show `owner/name` (+ GitHub link) for local trails instead
 	// of `local / <path>`.
@@ -1700,18 +1580,14 @@ const requests: RequestHandlers = {
 				if (!isTrailTab(tab)) {
 					return { ok: false, error: `${tab.kind} tab does not serve files` };
 				}
-				return tab.mode === "remote"
-					? readFileRemote(tab, path, repo)
-					: readFileLocal(tab, path);
+				return readFileLocal(tab, path);
 			},
 			getFileTree: async ({ tabId, path }) => {
 				const walkPath = path ?? null;
 				if (!walkPath) {
 					const tab = getTab(tabId);
 					if (!tab || !isTrailTab(tab)) return { files: [] };
-					return tab.mode === "remote"
-						? getFileTreeRemote(tab)
-						: { files: await walkFiles(tab.repoRoot) };
+					return { files: await walkFiles(tab.repoRoot) };
 				}
 				return { files: await walkFiles(walkPath) };
 			},
@@ -1726,14 +1602,8 @@ const requests: RequestHandlers = {
 					return { files: [], error: (err as Error).message };
 				}
 			},
-			listTrails: async () => {
-				// Merge cached trails and tours into one mtime-sorted list; each row
-				// carries a `kind` so the renderer badges and opens it correctly.
-				const [trails, tours] = await Promise.all([
-					walkLibrary(),
-					walkTours(),
-				]);
-				const entries = [...trails, ...tours].sort(
+			listTours: async () => {
+				const entries = (await walkTours()).sort(
 					(a, b) => b.mtimeMs - a.mtimeMs,
 				);
 				return { entries };
@@ -1746,56 +1616,6 @@ const requests: RequestHandlers = {
 				runs: await listSubsystemModelRuns({ graphId, days, limit }),
 			}),
 
-			createTrailNote: ({ tabId, draft }) => {
-				const tab = getTab(tabId);
-				if (!tab || !isTrailTab(tab)) {
-					return { ok: false, error: `unknown trail tab: ${tabId}` };
-				}
-				if (tab.payloadKind === "tour") {
-					return { ok: false, error: "tours do not support notes" };
-				}
-				if (typeof draft !== "object" || draft === null) {
-					return { ok: false, error: "draft must be an object" };
-				}
-				const now = new Date().toISOString();
-				const note = {
-					...(draft as Record<string, unknown>),
-					id: randomUUID(),
-					createdAt: now,
-					updatedAt: now,
-				};
-				const outcome = persistNoteMutation(tab, (notes) => ({
-					notes: [...notes, note],
-					result: note,
-				}));
-				if (!outcome.ok) return { ok: false, error: outcome.error };
-				return { ok: true, note: outcome.result };
-			},
-			updateTrailNote: ({ tabId, noteId, body }) => {
-				const tab = getTab(tabId);
-				if (!tab || !isTrailTab(tab)) {
-					return { ok: false, error: `unknown trail tab: ${tabId}` };
-				}
-				if (tab.payloadKind === "tour") {
-					return { ok: false, error: "tours do not support notes" };
-				}
-				const now = new Date().toISOString();
-				let updated: unknown = null;
-				const outcome = persistNoteMutation(tab, (notes) => {
-					const next = notes.map((n) => {
-						if (typeof n !== "object" || n === null) return n;
-						const obj = n as Record<string, unknown>;
-						if (obj["id"] !== noteId) return n;
-						const patched = { ...obj, body, updatedAt: now };
-						updated = patched;
-						return patched;
-					});
-					return { notes: next, result: updated };
-				});
-				if (!outcome.ok) return { ok: false, error: outcome.error };
-				if (!outcome.result) return { ok: false, error: `note not found: ${noteId}` };
-				return { ok: true, note: outcome.result };
-			},
 			openExternal: ({ url }) => {
 				if (url.startsWith("debug:")) {
 					console.log("[scroll-debug] " + url.slice(6));
@@ -1842,17 +1662,17 @@ const requests: RequestHandlers = {
 				return { ok: true };
 			},
 			getUserIdentity: async () => {
-				// Source repoRoot/token from a trail tab (the suggested/active one
+				// Source repoRoot/token from a tour tab (the suggested/active one
 				// first, else any) for the git/token fallbacks. The gh-CLI path
 				// needs neither.
 				const active = getTab(suggestedTabId);
-				const trailTab =
+				const tourTab =
 					active && active.kind === "trail"
 						? active
 						: (Array.from(tabs.values()).find(
 								(t): t is TrailTabState => t.kind === "trail",
 						  ) ?? null);
-				return resolveUserIdentity(trailTab?.repoRoot, trailTab?.ghToken);
+				return resolveUserIdentity(tourTab?.repoRoot, tourTab?.ghToken);
 			},
 			getSettings: () => viewerSettings,
 			setSettings: ({ settings }) => {
@@ -1872,120 +1692,15 @@ const requests: RequestHandlers = {
 				setServerEventWatch(active, active ? broadcastServerEvents : undefined);
 				return { ok: true };
 			},
-			shareTrail: ({ tabId }) => {
-				const tab = getTab(tabId);
-				if (!tab || !isTrailTab(tab)) {
-					return { ok: false, error: `unknown trail tab: ${tabId}` };
-				}
-				if (tab.payloadKind === "tour") {
-					return { ok: false, error: "tours cannot be shared" };
-				}
-				// 1. Sniff the GitHub remote from the working tree. The publish
-				//    endpoint gates by `<owner>/<repo>` access; without a remote we
-				//    have no identity to publish under.
-				const gitResult = spawnSync(
-					"git",
-					["-C", tab.repoRoot, "remote", "get-url", "origin"],
-					{ encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
-				);
-				const remoteUrl = gitResult.stdout?.trim() ?? "";
-				if (gitResult.status !== 0 || !remoteUrl) {
-					return {
-						ok: false,
-						error: `No git origin remote at ${tab.repoRoot}. Add one pointing at GitHub before sharing.`,
-					};
-				}
-				const purl = extractPurlFromRemoteUrl(remoteUrl);
-				const parsed = purl ? parsePurl(purl) : null;
-				if (!parsed || parsed.type !== "github" || !parsed.namespace) {
-					return {
-						ok: false,
-						error: `Publishing requires a GitHub remote. Current origin: ${remoteUrl}`,
-					};
-				}
-				const owner = parsed.namespace;
-				const repo = parsed.name;
-
-				// 2. Shell out to the published CLI to publish. Keeps token
-				//    resolution (gh / git credential helper) and the POST in one
-				//    place; we just orchestrate. `PRINCIPAL_AI_CLI` overrides the
-				//    npx fallback for local dev where iterating on the CLI matters.
-				const cliOverride = process.env["PRINCIPAL_AI_CLI"];
-				const [command, baseArgs] = cliOverride
-					? [cliOverride, [] as string[]]
-					: ["npx", ["-y", "@principal-ai/principal-studio-cli@latest"]];
-				const publishResult = spawnSync(
-					command,
-					[
-						...baseArgs,
-						"trail",
-						"publish",
-						tab.trailFilePath,
-						"--owner",
-						owner,
-						"--repo",
-						repo,
-					],
-					{
-						encoding: "utf8",
-						stdio: ["ignore", "pipe", "pipe"],
-						cwd: tab.repoRoot,
-					},
-				);
-				if (publishResult.status !== 0) {
-					const stderr = publishResult.stderr?.trim();
-					return {
-						ok: false,
-						error: stderr || `Publish failed (exit ${publishResult.status})`,
-					};
-				}
-				const shareUrl = publishResult.stdout?.trim() ?? "";
-				const idMatch = shareUrl.match(/\/trail\/([^/?#]+)/);
-				if (!shareUrl || !idMatch) {
-					return {
-						ok: false,
-						error: `Publish succeeded but returned an unparseable URL: '${shareUrl}'`,
-					};
-				}
-				const shareId = idMatch[1]!;
-
-				// 3. Persist `share: { id }` back to the trail JSON. The renderer
-				//    swaps the header chrome based on this — and the next tab open
-				//    will read the persisted value from disk.
-				const outcome = persistShareMutation(tab, { id: shareId });
-				if (!outcome.ok) return { ok: false, error: outcome.error };
-
-				return { ok: true, shareId, shareUrl };
-			},
-			deleteTrailNote: ({ tabId, noteId }) => {
-				const tab = getTab(tabId);
-				if (!tab || !isTrailTab(tab)) {
-					return { ok: false, error: `unknown trail tab: ${tabId}` };
-				}
-				if (tab.payloadKind === "tour") {
-					return { ok: false, error: "tours do not support notes" };
-				}
-				const outcome = persistNoteMutation(tab, (notes) => {
-					const next = notes.filter((n) => {
-						if (typeof n !== "object" || n === null) return true;
-						return (n as Record<string, unknown>)["id"] !== noteId;
-					});
-					return { notes: next, result: undefined };
-				});
-				if (!outcome.ok) return { ok: false, error: outcome.error };
-				return { ok: true };
-			},
-			openTrailFromCache: async ({ trailFile, mode, repoRoot }) => {
+			openTourFromCache: async ({ file, repoRoot }) => {
 				try {
-					// Default mode: `local` when the caller (library tab) has resolved
-					// a working tree on disk, otherwise `remote`. Local trails carry no
-					// `repos[].remote`, so remote mode is guaranteed to fail snippet
-					// fetches; the library row decides which it is and passes both.
-					const resolvedMode = mode ?? (repoRoot ? "local" : "remote");
+					// Tours are always local-mode: they render against a working tree,
+					// never a marker-derived remote file set. The host resolves the
+					// tour's repo from Alexandria when the caller has no repoRoot.
 					const msg: LoadTrailMessage = {
 						kind: "LOAD_TRAIL",
-						trailFile,
-						mode: resolvedMode,
+						trailFile: file,
+						mode: "local",
 					};
 					if (repoRoot) msg.repoRoot = repoRoot;
 					const tabId = addTabFromMessage(msg);
@@ -2355,6 +2070,10 @@ const requests: RequestHandlers = {
 			inspectSubsystemSymbol: async ({ purl, file, symbol, nodeId }) =>
 				inspectSubsystemSymbol({ purl, file, symbol, nodeId }),
 			auditSubsystemModel: async ({ graphId }) => auditSubsystemModel(graphId),
+			auditSubsystemModels: async ({ graphIds }) => {
+				auditSubsystemModelsInBackground(graphIds);
+				return { ok: true, started: true };
+			},
 			applySubsystemModelAuditFix: async ({ graphId, fixId, componentAlias }) =>
 				applySubsystemModelAuditFix({ graphId, fixId, componentAlias }),
 			getSubsystemModelAudit: async ({ graphId }) => {
@@ -3080,6 +2799,30 @@ async function reauditSubsystemModelQuietly(
 		if (surface) auditingGraphIds.delete(graphId);
 		broadcastSubsystemModelChanged({ graphId, reason: "updated" });
 	}
+}
+
+/** Models in a running caller-driven "Audit all" batch (dedupes double-starts). */
+const batchAuditGraphIds = new Set<string>();
+
+/**
+ * Dry-run the audit over several models, one at a time, surfacing each via the
+ * `auditing` flag so the Maintain rows show progress in place. Fire-and-forget.
+ */
+function auditSubsystemModelsInBackground(graphIds: string[]): void {
+	const pending = graphIds.filter(
+		(id) => !batchAuditGraphIds.has(id) && !auditingGraphIds.has(id),
+	);
+	if (pending.length === 0) return;
+	void (async () => {
+		for (const graphId of pending) {
+			batchAuditGraphIds.add(graphId);
+			try {
+				await reauditSubsystemModelQuietly(graphId, { surface: true });
+			} finally {
+				batchAuditGraphIds.delete(graphId);
+			}
+		}
+	})();
 }
 
 const regularAuditScheduler = createRegularAuditScheduler({

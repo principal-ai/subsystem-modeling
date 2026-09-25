@@ -1,13 +1,10 @@
 /**
- * Principal AI CLI — Subsystem Models, Studio, trails, and agent sessions.
+ * Principal AI CLI — Subsystem Models, Studio, tours, and agent sessions.
  */
 
 import { Command } from 'commander';
-import { createTrailCommand } from './commands/trail.js';
 import { createTourCommand } from './commands/tour.js';
 import { createTopicCommand } from './commands/topic.js';
-import { createInboxCommand } from './commands/inbox.js';
-import { createRepoCommand } from './commands/repo.js';
 import { createOpencodeCommand } from './commands/opencode/index.js';
 import { createAgentSessionsCommand } from './commands/agent-sessions.js';
 import { createAgentSessionCommand } from './commands/agent-session.js';
@@ -24,17 +21,14 @@ const program = new Command();
 program
   .name('principal-ai')
   .description(
-    'Principal AI CLI — subsystem models, Subsystems Studio, trails, and agent sessions',
+    'Principal AI CLI — subsystem models, Subsystems Studio, tours, and agent sessions',
   )
   .version(VERSION);
 
 program.addCommand(createSubsystemModelCommand());
 program.addCommand(createOpenStudioCommand());
-program.addCommand(createTrailCommand());
 program.addCommand(createTourCommand());
 program.addCommand(createTopicCommand());
-program.addCommand(createInboxCommand());
-program.addCommand(createRepoCommand());
 program.addCommand(createOpencodeCommand());
 program.addCommand(createAgentSessionsCommand());
 program.addCommand(createAgentSessionCommand());

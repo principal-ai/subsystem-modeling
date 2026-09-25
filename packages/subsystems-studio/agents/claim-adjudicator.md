@@ -1,5 +1,5 @@
 ---
-description: Retired. Use issue-fixer (verification failed) or gap-filler (partially verified).
+description: Retired. Use construct-fixer (hard failures) or construct-verifier (unconfirmed claims).
 mode: all
 temperature: 0
 permission:
@@ -9,7 +9,7 @@ permission:
 
 This agent is **retired**. Subsystem model Maintain now routes by audit verdict:
 
-- **issue-fixer** — verification failed (hard issues)
-- **gap-filler** — partially verified (gaps only)
+- **construct-fixer** — verification failed (hard issues)
+- **construct-verifier** — partially verified (unconfirmed claims)
 
 Do not use `claim-adjudicator`. Prefer the agent selected by Studio Maintain.

@@ -170,8 +170,14 @@ export { WalkthroughsPanel, WALKTHROUGH_PLAY_PAUSE_MS } from './subsystem/Walkth
 export type { WalkthroughsPanelProps } from './subsystem/WalkthroughsPanel';
 export { GraphLayoutCover } from './subsystem/GraphLayoutCover';
 export type { GraphLayoutCoverProps } from './subsystem/GraphLayoutCover';
+export {
+  SubsystemComponentNode,
+  SubsystemCallbacksProvider,
+} from './subsystem/nodes';
+export type { SubsystemGraphCallbacks } from './subsystem/nodes';
 export type {
   SubsystemComponent,
+  SubsystemGraphNodeData,
   SubsystemComponentEdge,
   SubsystemRelation,
   SubsystemRelationType,

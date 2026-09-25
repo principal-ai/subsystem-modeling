@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { AlignLeft, FileText } from 'lucide-react';
 import { useTheme } from '@principal-ade/industry-theme';
 import { resolvePierreSyntaxThemeName } from '../pierre/pierreSyntaxTheme';
@@ -17,6 +18,7 @@ import {
 } from './model';
 import type { SubsystemOpenFileOptions } from './declarationRef';
 import { parseSourceLocation } from './declarationRef';
+import { resolveComponentDeclaration } from './formatDeclaration';
 import { tokenizeComponent } from './tokenizeComponent';
 import { componentColor } from '../pierre/constructColors';
 import type { DeclarationSymbolRef, SymbolInspection } from './symbolRefs';
@@ -343,9 +345,11 @@ export function ComponentDeclaration({
   const declarationTextColor = muted;
 
   // Symbols the declaration references — made clickable for a graphify lookup.
+  // Use the *rendered* declaration (own, else augmentation) so symbols are
+  // clickable however the signature was sourced.
   const symbolRefs = useMemo(
-    () => extractDeclarationSymbolRefs(component.declaration),
-    [component.declaration],
+    () => extractDeclarationSymbolRefs(resolveComponentDeclaration(component)),
+    [component],
   );
   const [inspection, setInspection] = useState<
     | {
@@ -765,6 +769,8 @@ export function ComponentDeclaration({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [printWidth, setPrintWidth] = useState(80);
+  /** Rendered panel width, so the inspection popover can match it. */
+  const [panelWidth, setPanelWidth] = useState(0);
 
   // The "open" segment flips to "close" on hover; clear that when the file
   // closes so a later open doesn't render "close" while unhovered.
@@ -788,6 +794,7 @@ export function ComponentDeclaration({
       const ch = probe.getBoundingClientRect().width || 8.4;
       document.body.removeChild(probe);
       setPrintWidth(Math.max(40, Math.floor(el!.clientWidth / ch)));
+      setPanelWidth(el!.clientWidth);
     }
 
     measureWidth();
@@ -850,15 +857,11 @@ export function ComponentDeclaration({
         setInspection(null);
         return;
       }
-      let x = 0;
-      let y = 0;
-      const cont = containerRef.current;
-      if (cont) {
-        const crect = cont.getBoundingClientRect();
-        const r = el.getBoundingClientRect();
-        x = r.left - crect.left;
-        y = r.bottom - crect.top + 4;
-      }
+      // Viewport coordinates — the card is portaled to <body> with fixed
+      // positioning so parent overflow can't clip it.
+      const r = el.getBoundingClientRect();
+      const x = r.left;
+      const y = r.bottom + 4;
       setInspection({ ref, loading: true, x, y });
       try {
         const info = await onInspectSymbol(ref.name, ref);
@@ -990,15 +993,17 @@ export function ComponentDeclaration({
     );
   }
 
-  const inspectionLeft = inspection
-    ? Math.max(
-        0,
-        Math.min(
-          inspection.x,
-          Math.max(0, (containerRef.current?.clientWidth ?? 320) - 320),
-        ),
-      )
-    : 0;
+  // Popover width tracks the declaration panel (clamped to the viewport), and
+  // its left edge tracks the panel's — so it reads as an extension of the panel
+  // rather than overhanging from the clicked symbol.
+  const cardWidth =
+    typeof window !== 'undefined' && panelWidth > 0
+      ? Math.min(panelWidth, window.innerWidth - 16)
+      : 360;
+  const panelLeft =
+    typeof window !== 'undefined' && containerRef.current
+      ? containerRef.current.getBoundingClientRect().left
+      : inspection?.x ?? 0;
 
   return (
     <div
@@ -1019,17 +1024,26 @@ export function ComponentDeclaration({
       }}
     >
       {lines}
-      {inspection && !inspection.loading && (
-        <SymbolInspectionCard
-          symbolRef={inspection.ref}
-          inspection={inspection.info}
-          error={inspection.error}
-          onClose={() => setInspection(null)}
-          onAddToModel={onAddToModel}
-          onOpenFile={onOpenFile}
-          style={{ left: inspectionLeft, top: inspection.y }}
-        />
-      )}
+      {inspection &&
+        !inspection.loading &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <SymbolInspectionCard
+            symbolRef={inspection.ref}
+            inspection={inspection.info}
+            error={inspection.error}
+            onClose={() => setInspection(null)}
+            onAddToModel={onAddToModel}
+            onOpenFile={onOpenFile}
+            style={{
+              position: 'fixed',
+              width: cardWidth,
+              left: Math.max(8, Math.min(panelLeft, window.innerWidth - cardWidth - 8)),
+              top: Math.max(8, Math.min(inspection.y, window.innerHeight - 240)),
+            }}
+          />,
+          document.body,
+        )}
     </div>
   );
 }

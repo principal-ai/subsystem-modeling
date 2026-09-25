@@ -2317,27 +2317,31 @@ code {
   color: #7ee787;
 }
 
-.maintainer-remediation--issue-fixer {
+.maintainer-remediation--construct-fixer {
   color: #ffa198;
 }
 
-.maintainer-remediation--gap-filler {
+.maintainer-remediation--construct-verifier {
   color: #79c0ff;
 }
 
-.maintainer-remediation--topology-fixer {
+.maintainer-remediation--static-topology-fixer {
   color: #ffa198;
 }
 
-.maintainer-remediation--topology-gap-filler {
+.maintainer-remediation--static-topology-verifier {
   color: #79c0ff;
 }
 
-.maintainer-remediation--boundary-fixer {
+.maintainer-remediation--package-module-fixer {
   color: #e3b341;
 }
 
-.maintainer-remediation--boundary-gap-filler {
+.maintainer-remediation--package-module-verifier {
+  color: #d2a8ff;
+}
+
+.maintainer-remediation--runtime-topology-verifier {
   color: #d2a8ff;
 }
 

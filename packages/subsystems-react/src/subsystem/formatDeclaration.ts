@@ -17,12 +17,20 @@ const TYPE_FAMILY_CONSTRUCTS: ReadonlySet<string> = new Set([
   'enum',
 ]);
 
+/**
+ * The declaration the panel renders: the component's own `declaration`, else an
+ * accepted signature augmentation (which stands in for it with no marker
+ * distinguishing the source). Use this wherever the *rendered* declaration
+ * matters — e.g. extracting the symbols it references.
+ */
+export function resolveComponentDeclaration(
+  component: SubsystemComponent,
+): GraphifyComponentDetail | undefined {
+  return component.declaration ?? declarationFromAugmentation(component);
+}
+
 export function generateDeclarationString(component: SubsystemComponent): string {
-  // An accepted signature augmentation stands in for the model's own
-  // `declaration` when there isn't one — the panel shows the same declaration
-  // either way, with no marker distinguishing the source.
-  const declaration =
-    component.declaration ?? declarationFromAugmentation(component);
+  const declaration = resolveComponentDeclaration(component);
   // Type-family constructs own their rendering even when the declaration
   // payload is the shared `type` shape — the construct says which keyword is honest.
   const construct = TYPE_FAMILY_CONSTRUCTS.has(component.construct)

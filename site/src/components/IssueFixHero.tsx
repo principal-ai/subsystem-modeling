@@ -13,8 +13,8 @@ const WALKTHROUGH_STEP_MS = 3_200
 
 const REMEDIATION_LABEL: Record<IssueFixExample['remediation'], string> = {
   deterministic: 'Apply',
-  'issue-fixer': 'issue-fixer',
-  'topology-fixer': 'topology-fixer',
+  'construct-fixer': 'construct-fixer',
+  'static-topology-fixer': 'static-topology-fixer',
   none: 'report only',
 }
 

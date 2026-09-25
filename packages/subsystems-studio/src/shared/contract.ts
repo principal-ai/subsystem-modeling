@@ -1118,28 +1118,13 @@ export interface TabFullState {
 }
 
 export interface LibraryEntry {
-	/** "trail" or a File City introduction "tour". Drives the row badge and how
-	 *  the row opens (tours are always local-mode). */
-	kind: "trail" | "tour";
-	trailFile: string;
+	/** Absolute path to the cached tour JSON. */
+	file: string;
 	id: string;
 	title: string;
 	anchor: string; // "<ns>/<name>" or "by-id"
 	owner?: string;
 	repo?: string;
-	/**
-	 * For local-purl trails (`pkg:generic/local/<slug>`) whose decoded slug
-	 * resolves to an existing directory on disk. When set, clicking the entry
-	 * opens the trail in `local` mode anchored here, so slice resolution reads
-	 * from the working tree instead of trying to fetch from GitHub.
-	 */
-	localRepoRoot?: string;
-	/**
-	 * True when the trail file carries a `share.id` — i.e. it has been published
-	 * to web-ade. Drives the Draft/Published badge in the library list. Read-only
-	 * derivation of the existing share field; no new on-disk state.
-	 */
-	published: boolean;
 	mtimeMs: number;
 }
 
@@ -1251,7 +1236,7 @@ export type StudioRequests = {
 			error?: string;
 		};
 	};
-	listTrails: {
+	listTours: {
 		params: Record<string, never>;
 		response: { entries: LibraryEntry[] };
 	};
@@ -1482,6 +1467,16 @@ export type StudioRequests = {
 			/** Fingerprint saved with the report (for stale detection). */
 			fingerprint?: string;
 		};
+	};
+	/**
+	 * Dry-run the deterministic audit over several models, one at a time. Each
+	 * model is marked auditing (surfaced via `getMaintenanceOverview.auditing`)
+	 * and broadcast as it finishes, so the Maintain rows show progress in place.
+	 * Fire-and-forget: returns immediately; results land via broadcasts.
+	 */
+	auditSubsystemModels: {
+		params: { graphIds: string[] };
+		response: { ok: boolean; started?: boolean };
 	};
 	/**
 	 * Apply a deterministic audit fix (e.g. adopt graphify signature bags when
@@ -1883,21 +1878,9 @@ export type StudioRequests = {
 			status?: GraphifyCliStatus;
 		};
 	};
-	openTrailFromCache: {
-		params: { trailFile: string; mode?: ViewerMode; repoRoot?: string };
+	openTourFromCache: {
+		params: { file: string; repoRoot?: string };
 		response: { ok: boolean; error?: string; tabId?: string };
-	};
-	createTrailNote: {
-		params: { tabId: string; draft: unknown };
-		response: { ok: boolean; error?: string; note?: unknown };
-	};
-	updateTrailNote: {
-		params: { tabId: string; noteId: string; body: string };
-		response: { ok: boolean; error?: string; note?: unknown };
-	};
-	deleteTrailNote: {
-		params: { tabId: string; noteId: string };
-		response: { ok: boolean; error?: string };
 	};
 	openExternal: {
 		params: { url: string };
@@ -1906,15 +1889,6 @@ export type StudioRequests = {
 	openFile: {
 		params: { purl: string };
 		response: { ok: boolean; error?: string };
-	};
-	shareTrail: {
-		params: { tabId: string };
-		response: {
-			ok: boolean;
-			error?: string;
-			shareId?: string;
-			shareUrl?: string;
-		};
 	};
 	getUserIdentity: {
 		params: Record<string, never>;

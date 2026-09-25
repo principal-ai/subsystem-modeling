@@ -6,7 +6,7 @@
  */
 
 import { useTheme } from "@principal-ade/industry-theme";
-import { MaintenancePanel } from "../components/MaintenanceAgentModal";
+import { MaintenancePanel } from "./MaintenancePanel";
 
 export function MaintenanceView() {
 	const { theme } = useTheme();

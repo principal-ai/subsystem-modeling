@@ -11,9 +11,41 @@
  * last pending proposal resolves). Subscriber sets and helpers mirror the real
  * module's exports so any component that imports them still resolves.
  */
-import type { SubsystemModelProposal } from "../../src/shared/contract";
+import type {
+	SubsystemComponent,
+	SubsystemModelProposal,
+} from "../../src/shared/contract";
 
 type RpcRequest = Record<string, (params?: unknown) => Promise<unknown>>;
+
+/** Minimal model components so a construct proposal can render its node. */
+const MODEL_COMPONENTS: SubsystemComponent[] = [
+	{
+		alias: "tab-registry",
+		name: "tabs",
+		construct: "store",
+		file: "packages/subsystems-studio/src/bun/index.ts",
+		symbol: "tabs",
+		purl: "pkg:github/principal-ai/subsystem-modeling",
+		purpose: "Holds open tab states keyed by id.",
+	},
+	{
+		alias: "open-stamp",
+		name: "touchSubsystemModelOpened",
+		construct: "function",
+		file: "packages/subsystems-studio/src/bun/subsystem-model-store.ts",
+		symbol: "touchSubsystemModelOpened",
+		purl: "pkg:github/principal-ai/subsystem-modeling",
+	},
+	{
+		alias: "store-read",
+		name: "getSubsystemModel",
+		construct: "function",
+		file: "packages/subsystems-studio/src/bun/subsystem-model-store.ts",
+		symbol: "getSubsystemModel",
+		purl: "pkg:github/principal-ai/subsystem-modeling",
+	},
+];
 
 export const reloadSubscribers = new Set<(focusTabId?: string) => void>();
 export const sessionRefreshers = new Set<(sessionIds: string[]) => void>();
@@ -68,6 +100,86 @@ const request: RpcRequest = {
     const target = store.find((p) => p.id === id);
     return { ok: true, proposal: target };
   },
+  getSubsystemModel: async () => ({
+    ok: true,
+    graph: { components: MODEL_COMPONENTS },
+  }),
+  // Settings — ViewerSettings shape the modal reads.
+  getSettings: async () => ({
+    defaultTabs: {
+      sessions: true,
+      maintenanceSessions: true,
+      trails: true,
+      graphify: false,
+      packageLayers: false,
+      subsystems: true,
+      maintenance: true,
+      opencodeV2: false,
+    },
+    autoAcceptSubsystemModelProposals: false,
+    autoAcceptSubsystemModelConfidenceThreshold: 0.9,
+    subsystemMaintainerModel: "opencode-go/deepseek-v4-flash",
+    regularAuditEnabled: true,
+    regularAuditIntervalMinutes: 5,
+    typesafeApiKey: null,
+    maintenanceRepoKey: "principal-ai/subsystem-modeling",
+  }),
+  setSettings: async () => ({ ok: true, settings: {} }),
+  openPromptTab: async () => ({ ok: true }),
+  // Maintainer model picker.
+  getSubsystemMaintainerModels: async () => ({
+    ok: true,
+    resolved: "opencode-go/deepseek-v4-flash",
+    source: "settings",
+    configured: "opencode-go/deepseek-v4-flash",
+    credentialedModels: [
+      {
+        ref: "opencode-go/deepseek-v4-flash",
+        id: "deepseek-v4-flash",
+        providerID: "opencode-go",
+        name: "DeepSeek v4 Flash",
+      },
+    ],
+    freeModels: [
+      { ref: "opencode/zen-free", id: "zen-free", providerID: "opencode", name: "Zen Free" },
+    ],
+    goModels: [
+      {
+        ref: "opencode-go/deepseek-v4-flash",
+        id: "deepseek-v4-flash",
+        providerID: "opencode-go",
+        name: "DeepSeek v4 Flash",
+      },
+    ],
+  }),
+  // Integration / CLI status pills.
+  getGraphifyStatus: async () => ({ installed: true, serving: true }),
+  getOpencodeV2Status: async () => ({ installed: true, running: true }),
+  getOpencodeServerStatus: async () => ({
+    running: true,
+    url: "http://127.0.0.1:4096",
+    version: "0.6.0",
+  }),
+  getGraphifyCli: async () => ({
+    installed: true,
+    bin: "/usr/local/bin/graphify",
+    conventionalBin: "/usr/local/bin/graphify",
+    installCommand: "npm i -g graphify",
+    installedVersion: "0.5.0",
+    latestVersion: "0.5.0",
+    updateAvailable: false,
+    cliBusy: null,
+  }),
+  installGraphify: async () => ({ ok: true }),
+  updateGraphify: async () => ({ ok: true }),
+  uninstallGraphify: async () => ({ ok: true }),
+  installOpencodeV2: async () => ({ ok: true }),
+  updateOpencodeV2: async () => ({ ok: true }),
+  openExternal: async () => ({ ok: true }),
+  updateStudio: async () => ({ ok: true }),
+  analyzeSession: async () => ({ ok: true }),
+  deleteAnalysis: async () => ({ ok: true }),
+  auditSubsystemModel: async () => ({ ok: true }),
   readFile: async () => ({ ok: true, content: "" }),
 };
 

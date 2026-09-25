@@ -26,7 +26,7 @@ import {
 import type { IntroductionTour } from "@principal-ai/file-city-builder";
 import { electrobun } from "../rpc";
 import { nullSlice } from "../types";
-import { GithubMark } from "../components/TrailHeader";
+import { GithubMark } from "../components/GithubMark";
 
 // TourHeader — slim chrome for tour tabs. Tours aren't published or annotated
 // (the tour panel exposes no notes / sign-offs), so this drops the Trail

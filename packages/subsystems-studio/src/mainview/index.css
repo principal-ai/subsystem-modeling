@@ -27,6 +27,7 @@ body {
 	animation: principal-studio-spin 1s linear infinite;
 }
 
+
 @keyframes principal-studio-audit-border {
 	0% {
 		background-position: 0% 50%;
@@ -118,10 +119,3 @@ body {
 	z-index: 1;
 }
 
-@keyframes trail-blip {
-	50% { opacity: 0.2; }
-}
-
-.trail-blip {
-	animation: trail-blip 1s step-end infinite;
-}

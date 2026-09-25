@@ -1,5 +1,5 @@
 /**
- * Trail viewer mainview — bootstrap entry. The App shell (tab dispatch, error
+ * Studio mainview — bootstrap entry. The App shell (tab dispatch, error
  * boundary, view wiring) lives in `App.tsx`; this file only injects the
  * stylesheets that electrobun's views:// scheme drops and mounts the root.
  */

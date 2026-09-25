@@ -7,7 +7,7 @@
  * a component calls `onSelect` (to open the entry point / file).
  */
 
-import { useState } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import {
   Handle,
   Position,
@@ -81,11 +81,44 @@ export interface SubsystemGraphCallbacks {
   maxNodeWidth?: number;
 }
 
-/** Root callbacks carried through node data (injected by the graph component). */
+/**
+ * Root callbacks carried through node data (injected by the graph component).
+ * Kept as a module-scope fallback for the graph; standalone mounts (e.g. a
+ * single node previewed outside the canvas) should scope their own callbacks
+ * via `SubsystemCallbacksProvider` so they never hit the graph's handlers.
+ */
 export const SUBSYSTEM_CALLBACKS: SubsystemGraphCallbacks = {};
+
+const SubsystemCallbacksContext = createContext<SubsystemGraphCallbacks | null>(
+  null,
+);
+
+/**
+ * Scope graph callbacks to a subtree. Wrap a standalone `SubsystemComponentNode`
+ * in this (with `{}` to neutralize clicks/hover) so it doesn't dispatch into the
+ * module-scope `SUBSYSTEM_CALLBACKS` owned by a mounted graph.
+ */
+export function SubsystemCallbacksProvider({
+  value,
+  children,
+}: {
+  value: SubsystemGraphCallbacks;
+  children: ReactNode;
+}) {
+  return (
+    <SubsystemCallbacksContext.Provider value={value}>
+      {children}
+    </SubsystemCallbacksContext.Provider>
+  );
+}
+
+function useSubsystemCallbacks(): SubsystemGraphCallbacks {
+  return useContext(SubsystemCallbacksContext) ?? SUBSYSTEM_CALLBACKS;
+}
 
 export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeData, 'subsystem-component'>>) {
   const { theme, mode } = useTheme();
+  const callbacks = useSubsystemCallbacks();
   const { data, selected, width: nodeWidth, height: nodeHeight } = props;
   const c = data.component;
   // Construct owns node color, derived from the active Pierre syntax theme —
@@ -97,7 +130,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
   // framework stereotype; otherwise the same construct color as the border.
   const badgeColor = constructBadgeColor(c) ?? color;
   const [hover, setHover] = useState(false);
-  const configuredMax = SUBSYSTEM_CALLBACKS.maxNodeWidth;
+  const configuredMax = callbacks.maxNodeWidth;
   const maxWidth = configuredMax ?? 300;
   // `symbol` is the source of truth; `name` is derived from it consistently.
   const displayName = deriveNameFromSymbol(c.symbol, c.construct, c.name, c.file, c.stereotype);
@@ -131,15 +164,15 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
     <div
       onMouseEnter={() => {
         setHover(true);
-        SUBSYSTEM_CALLBACKS.onHover?.(c.alias);
+        callbacks.onHover?.(c.alias);
       }}
       onMouseLeave={() => {
         setHover(false);
-        SUBSYSTEM_CALLBACKS.onHover?.(null);
+        callbacks.onHover?.(null);
       }}
       onClick={(e) => {
         e.stopPropagation();
-        SUBSYSTEM_CALLBACKS.onSelect?.(c.alias);
+        callbacks.onSelect?.(c.alias);
       }}
       style={{
         position: 'relative',
@@ -275,7 +308,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
           onClick={(e) => {
             // Open the file directly; don't also toggle node selection.
             e.stopPropagation();
-            SUBSYSTEM_CALLBACKS.onOpenFile?.(c.alias);
+            callbacks.onOpenFile?.(c.alias);
           }}
         >
           {c.file.split('/').pop()}

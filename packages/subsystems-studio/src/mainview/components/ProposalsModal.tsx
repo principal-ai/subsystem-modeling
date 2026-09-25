@@ -20,6 +20,17 @@ import type {
 	SubsystemModelProposal,
 	SubsystemVerificationLane,
 } from "../../shared/contract";
+import {
+	ReactFlowProvider,
+	type Node,
+	type NodeProps,
+} from "@xyflow/react";
+import {
+	SubsystemComponentNode,
+	SubsystemCallbacksProvider,
+	type SubsystemComponent,
+	type SubsystemGraphNodeData,
+} from "@principal-ai/subsystems-react";
 import { electrobun } from "../rpc";
 
 const LANE_LABEL: Record<SubsystemVerificationLane, string> = {
@@ -29,7 +40,7 @@ const LANE_LABEL: Record<SubsystemVerificationLane, string> = {
 	walkthrough: "Walkthrough",
 };
 
-/** Lane icons — mirrors MaintenanceAgentModal's LANE_META (layer → mark). */
+/** Lane icons — mirrors MaintenancePanel's LANE_META (layer → mark). */
 const LANE_ICON: Record<SubsystemVerificationLane, LucideIcon> = {
 	construct: Component,
 	"static-topology": Network,
@@ -58,6 +69,40 @@ const AGENT_LABEL: Record<string, string> = {
 function agentLabel(author?: string): string | null {
 	if (!author) return null;
 	return AGENT_LABEL[author] ?? author;
+}
+
+/** First component alias a proposal touches, if any. */
+function proposalComponentAlias(p: SubsystemModelProposal): string | null {
+	for (const ch of p.changes) {
+		if ("componentAlias" in ch && ch.componentAlias) return ch.componentAlias;
+	}
+	return p.finding?.componentAlias ?? null;
+}
+
+const NODE_PREVIEW_WIDTH = 230;
+const NODE_PREVIEW_HEIGHT = 84;
+/** Neutral callbacks so a previewed node never dispatches into a mounted graph. */
+const PREVIEW_CALLBACKS = {};
+
+/**
+ * Standalone component node — the same renderer the graph uses, mounted outside
+ * the canvas. `ReactFlowProvider` satisfies the node's invisible <Handle>s;
+ * `SubsystemCallbacksProvider` keeps clicks/hover from reaching the live graph.
+ */
+function ComponentNodePreview({ component }: { component: SubsystemComponent }) {
+	const props = {
+		data: { component } as SubsystemGraphNodeData,
+		selected: false,
+		width: NODE_PREVIEW_WIDTH,
+		height: NODE_PREVIEW_HEIGHT,
+	} as unknown as NodeProps<Node<SubsystemGraphNodeData, "subsystem-component">>;
+	return (
+		<ReactFlowProvider>
+			<SubsystemCallbacksProvider value={PREVIEW_CALLBACKS}>
+				<SubsystemComponentNode {...props} />
+			</SubsystemCallbacksProvider>
+		</ReactFlowProvider>
+	);
 }
 
 function formatValue(v: unknown): string {
@@ -249,10 +294,13 @@ function opinionBadge(
 export function ProposalsModal({
 	graphId,
 	title,
+	lane,
 	onClose,
 }: {
 	graphId: string;
 	title?: string;
+	/** Show only proposals in this verification lane (all lanes when unset). */
+	lane?: SubsystemVerificationLane;
 	onClose: () => void;
 }) {
 	const { theme } = useTheme();
@@ -261,6 +309,10 @@ export function ProposalsModal({
 		null,
 	);
 	const [error, setError] = useState<string | null>(null);
+	// Model components by alias — powers the node preview next to a proposal.
+	const [componentsByAlias, setComponentsByAlias] = useState<
+		Map<string, SubsystemComponent> | null
+	>(null);
 	// Per-card busy state so acting on one proposal never clears another's
 	// in-flight indicator.
 	const [busy, setBusy] = useState<Record<string, "accept" | "reject" | "scoring">>({});
@@ -270,6 +322,18 @@ export function ProposalsModal({
 	const [copiedId, setCopiedId] = useState<string | null>(null);
 	const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	// Escape dismisses the modal.
+	useEffect(() => {
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (e.key === "Escape") {
+				e.preventDefault();
+				onClose();
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [onClose]);
 
 	const onCopyForAgent = useCallback(
 		async (p: SubsystemModelProposal) => {
@@ -311,9 +375,23 @@ export function ProposalsModal({
 		}
 	}, [graphId]);
 
+	/** Load the model once so a construct proposal can render its node. */
+	const loadModel = useCallback(async () => {
+		try {
+			const res = await electrobun.rpc!.request.getSubsystemModel({ graphId });
+			if (!res.ok || !res.graph) return;
+			const map = new Map<string, SubsystemComponent>();
+			for (const c of res.graph.components ?? []) map.set(c.alias, c);
+			setComponentsByAlias(map);
+		} catch {
+			// Preview only — a missing model just hides the node.
+		}
+	}, [graphId]);
+
 	useEffect(() => {
 		void refresh();
-	}, [refresh]);
+		void loadModel();
+	}, [refresh, loadModel]);
 
 	useEffect(() => {
 		return () => {
@@ -446,6 +524,9 @@ setBusy((prev) => ({ ...prev, [proposalId]: "accept" }));
 		[graphId, refresh],
 	);
 
+	// Lane-scoped view (when opened from a lane badge), otherwise all proposals.
+	const shown = (proposals ?? []).filter((p) => !lane || p.lane === lane);
+
 	return (
 		<div
 			role="dialog"
@@ -550,19 +631,25 @@ setBusy((prev) => ({ ...prev, [proposalId]: "accept" }));
 					<p style={{ color: muted, fontSize: theme.fontSizes[1] }}>Loading…</p>
 				)}
 
-				{proposals && proposals.length === 0 && (
+				{proposals && shown.length === 0 && (
 					<p style={{ color: muted, fontSize: theme.fontSizes[1] }}>
-						No pending proposals.
+						{lane ? "No pending proposals in this lane." : "No pending proposals."}
 					</p>
 				)}
 
 				<div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-					{(proposals ?? []).map((p) => {
+					{shown.map((p) => {
 						const cardAction = busy[p.id];
 						const cardBusy = cardAction != null;
 						const accepting = cardAction === "accept";
 						const rejecting = cardAction === "reject";
 						const LaneIcon = p.lane ? LANE_ICON[p.lane] : null;
+						const previewAlias = proposalComponentAlias(p);
+						const previewComponent =
+							componentsByAlias && previewAlias
+								? (componentsByAlias.get(previewAlias) ?? null)
+								: null;
+						const showNode = p.lane === "construct" && previewComponent != null;
 						return (
 							<article
 								key={p.id}
@@ -573,68 +660,82 @@ setBusy((prev) => ({ ...prev, [proposalId]: "accept" }));
 									background: theme.colors.background,
 								}}
 							>
-								<div style={{ marginBottom: 10 }}>
-									<div
-										style={{
-											display: "flex",
-											alignItems: "center",
-											gap: 6,
-											marginBottom: 3,
-											fontSize: theme.fontSizes[0],
-											color: muted,
-										}}
-									>
-										{LaneIcon && (
-											<LaneIcon size={12} style={{ flexShrink: 0 }} />
-										)}
-										<span style={{ whiteSpace: "nowrap" }}>
-											{[
-												p.lane ? LANE_LABEL[p.lane] : null,
-												agentLabel(p.author),
-											]
-												.filter(Boolean)
-												.join(" · ")}
-										</span>
-										<span
-											title={
-												updatesModel(p)
-													? "Accepting rewrites this model's JSON."
-													: "Accepting writes a verification record to the augmentation store. The model JSON is not changed."
-											}
+								<div
+									style={{
+										display: "flex",
+										gap: 12,
+										alignItems: "flex-start",
+										marginBottom: 10,
+									}}
+								>
+									<div style={{ flex: 1, minWidth: 0 }}>
+										<div
 											style={{
-												flexShrink: 0,
-												padding: "1px 6px",
-												borderRadius: 4,
-												border: `1px solid ${
-													updatesModel(p)
-														? theme.colors.primary
-														: theme.colors.border
-												}`,
-												color: updatesModel(p)
-													? theme.colors.primary
-													: muted,
+												display: "flex",
+												alignItems: "center",
+												gap: 6,
+												marginBottom: 3,
 												fontSize: theme.fontSizes[0],
-												whiteSpace: "nowrap",
+												color: muted,
 											}}
 										>
-											{updatesModel(p) ? "Model Change" : "Augmentation"}
-										</span>
+											{LaneIcon && (
+												<LaneIcon size={12} style={{ flexShrink: 0 }} />
+											)}
+											<span style={{ whiteSpace: "nowrap" }}>
+												{[
+													p.lane ? LANE_LABEL[p.lane] : null,
+													agentLabel(p.author),
+												]
+													.filter(Boolean)
+													.join(" · ")}
+											</span>
+											<span
+												title={
+													updatesModel(p)
+														? "Accepting rewrites this model's JSON."
+														: "Accepting writes a verification record to the augmentation store. The model JSON is not changed."
+												}
+												style={{
+													flexShrink: 0,
+													padding: "1px 6px",
+													borderRadius: 4,
+													border: `1px solid ${
+														updatesModel(p)
+															? theme.colors.primary
+															: theme.colors.border
+													}`,
+													color: updatesModel(p)
+														? theme.colors.primary
+														: muted,
+													fontSize: theme.fontSizes[0],
+													whiteSpace: "nowrap",
+												}}
+											>
+												{updatesModel(p) ? "Model Change" : "Augmentation"}
+											</span>
+										</div>
+										<div style={{ display: "flex", minWidth: 0 }}>
+											<span
+												title={p.id}
+												style={{
+													fontSize: theme.fontSizes[2],
+													fontWeight: 600,
+													minWidth: 0,
+													overflow: "hidden",
+													textOverflow: "ellipsis",
+													whiteSpace: "nowrap",
+												}}
+											>
+												{changeHeading(p)}
+											</span>
+										</div>
 									</div>
-									<div style={{ display: "flex", minWidth: 0 }}>
-										<span
-											title={p.id}
-											style={{
-												fontSize: theme.fontSizes[2],
-												fontWeight: 600,
-												minWidth: 0,
-												overflow: "hidden",
-												textOverflow: "ellipsis",
-												whiteSpace: "nowrap",
-											}}
-										>
-											{changeHeading(p)}
-										</span>
-									</div>
+									{showNode && previewComponent && (
+										<div style={{ flexShrink: 0 }}>
+											<ComponentNodePreview component={previewComponent} />
+										</div>
+									)}
 								</div>
 
 								<div

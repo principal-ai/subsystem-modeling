@@ -65,6 +65,7 @@ import { GraphLayoutCover } from './GraphLayoutCover';
 import { GRAPH_NAV_PROPS, GraphChrome } from './graphChrome';
 import { ComponentDeclaration } from './ComponentDeclaration';
 import type { ComponentVerificationState } from './ComponentDeclaration';
+import type { DeclarationSymbolRef, SymbolInspection } from './symbolRefs';
 import { FileDrawer, FILE_DRAWER_HEIGHT_MS } from './FileDrawer';
 import { buildRepoGroups, repoAvatarUrl, type RepoGroup } from './paths';
 import { WalkthroughsPanel, WALKTHROUGH_PLAY_PAUSE_MS } from './WalkthroughsPanel';
@@ -288,6 +289,18 @@ export interface SubsystemComponentGraphProps {
   /** Live verification status for the selected component. */
   componentVerification?: ComponentVerificationState | null;
   /**
+   * Referenced-symbol click in the declaration panel → resolve it against the
+   * host's graphify cache. The graph supplies the selected component's
+   * purl/file so the host can pick the right repo graph; the host returns what
+   * graphify knows (declaration / source / candidates).
+   */
+  onInspectSymbol?: (req: {
+    purl: string;
+    file: string;
+    symbol: string;
+    ref: DeclarationSymbolRef;
+  }) => Promise<SymbolInspection | null> | SymbolInspection | null;
+  /**
    * When set, the graph's walkthrough working set — expanded flows and the
    * selected flow/step — is persisted to `localStorage` under this key and
    * restored on mount. Hosts key it by the model id so each model remembers
@@ -383,7 +396,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, relations, walkthroughs, initialWalkthroughId, onReorderWalkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, componentVerification, persistKey }: InnerProps) {
+function Inner({ components, relations, walkthroughs, initialWalkthroughId, onReorderWalkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, componentVerification, onInspectSymbol, persistKey }: InnerProps) {
   const { theme } = useTheme();
   const { fitView } = useReactFlow();
   const viewport = useViewport();
@@ -2136,6 +2149,17 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
               component={selected}
               onOpenFile={onOpenDeclarationFile}
               onRelatedSelect={resolveRelatedComponent}
+              onInspectSymbol={
+                onInspectSymbol
+                  ? (symbol, ref) =>
+                      onInspectSymbol({
+                        purl: selected.purl,
+                        file: selected.file,
+                        symbol,
+                        ref,
+                      })
+                  : undefined
+              }
               verification={componentVerification}
               fileOpen={
                 drawerTarget?.kind === 'file' &&
@@ -2365,6 +2389,7 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
             renderFileView={props.renderFileView}
             onFileSelect={props.onFileSelect}
             componentVerification={props.componentVerification}
+            onInspectSymbol={props.onInspectSymbol}
           />
         ) : (
           <ReactFlowProvider>

@@ -10,8 +10,8 @@
  * tab; the list no longer surfaces per-model audit state.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Boxes, Check, Component as ComponentIcon, Copy, Info, Loader2, Route as RouteIcon, Share2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Boxes, Check, Component as ComponentIcon, Copy, Info, LayoutGrid, List, Loader2, Route as RouteIcon, Share2 } from "lucide-react";
 import { DocumentView } from "themed-markdown";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
@@ -21,48 +21,183 @@ import {
 	type RepoGroup,
 } from "@principal-ai/subsystems-react";
 import type {
-	RegularAuditStatus,
 	SubsystemModelSummary,
 	StudioMessages,
 } from "../../shared/contract";
 import {
 	electrobun,
 	graphifyChangeSubscribers,
-	regularAuditChangeSubscribers,
 	subsystemModelChangeSubscribers,
 	subsystemModelProposalsChangeSubscribers,
 } from "../rpc";
-import { FilesDrilldown, drilldownRepoKey } from "../components/FilesDrilldown";
+import {
+	FilesDrilldown,
+	drilldownRepoKey,
+	type RepoFileCoverage,
+} from "../components/FilesDrilldown";
 import { ComposedGraphPane } from "./ComposedGraphPane";
-import { CenteredMessage, lastLoadedLabel } from "../ui";
+import { SubsystemReposMap } from "./SubsystemReposMap";
+import { CenteredMessage } from "../ui";
 
 const SUBSYSTEMS_POLL_MS = 10_000;
 const COPY_FEEDBACK_MS = 1500;
-/** Default view hides graphs not edited in the last day. */
-const RECENT_MS = 24 * 60 * 60 * 1000;
 /** Width of the model-list side panel shown beside the composed graph. */
 const COMBINED_LIST_WIDTH = 340;
 
-/** Listing sort offered by the Subsystems tab header. */
-type SubsystemSortKey = "opened" | "edited" | "created";
+/** Which edited-at window the Subsystems list and map are showing. */
+type EditedWindow = "today" | "yesterday" | "week" | "all";
 
-const SUBSYSTEM_SORTS: ReadonlyArray<{ key: SubsystemSortKey; label: string }> = [
-	{ key: "opened", label: "Opened" },
-	{ key: "edited", label: "Edited" },
-	{ key: "created", label: "Created" },
+const EDITED_WINDOWS: ReadonlyArray<{
+	key: EditedWindow;
+	label: string;
+	title: string;
+}> = [
+	{ key: "today", label: "Today", title: "Edited today" },
+	{ key: "yesterday", label: "Yesterday", title: "Edited yesterday" },
+	{ key: "week", label: "This week", title: "Edited this week, Monday through now" },
+	{ key: "all", label: "All", title: "Every subsystem model" },
 ];
 
+function startOfLocalDay(ms: number): number {
+	const d = new Date(ms);
+	d.setHours(0, 0, 0, 0);
+	return d.getTime();
+}
+
+/** Monday 00:00 local for the week that contains `dayStart`. */
+function startOfLocalWeek(dayStartMs: number): number {
+	const d = new Date(dayStartMs);
+	const day = d.getDay();
+	const daysSinceMonday = day === 0 ? 6 : day - 1;
+	d.setDate(d.getDate() - daysSinceMonday);
+	return d.getTime();
+}
+
+function editedInWindow(
+	updatedAt: string,
+	window: EditedWindow,
+	nowMs: number,
+): boolean {
+	if (window === "all") return true;
+	const t = new Date(updatedAt).getTime();
+	if (!Number.isFinite(t)) return false;
+	const startToday = startOfLocalDay(nowMs);
+	if (window === "today") return t >= startToday && t <= nowMs;
+	if (window === "yesterday") {
+		const startYesterday = new Date(startToday);
+		startYesterday.setDate(startYesterday.getDate() - 1);
+		return t >= startYesterday.getTime() && t < startToday;
+	}
+	return t >= startOfLocalWeek(startToday) && t <= nowMs;
+}
+
+/** Next wider edited-at window, for the empty state's way out. */
+function widerEditedWindow(window: EditedWindow): EditedWindow | null {
+	if (window === "today" || window === "yesterday") return "week";
+	if (window === "week") return "all";
+	return null;
+}
+
+function SubsystemEmptyState({
+	title,
+	detail,
+	action,
+}: {
+	title: string;
+	detail?: string;
+	action?: { label: string; onClick: () => void };
+}) {
+	const { theme } = useTheme();
+	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
+	return (
+		<div
+			style={{
+				flex: 1,
+				minHeight: "100%",
+				display: "flex",
+				alignItems: "center",
+				justifyContent: "center",
+				padding: "48px 24px",
+			}}
+		>
+			<div
+				style={{
+					maxWidth: 380,
+					display: "flex",
+					flexDirection: "column",
+					alignItems: "center",
+					textAlign: "center",
+					gap: 12,
+				}}
+			>
+				<div
+					aria-hidden="true"
+					style={{
+						width: 56,
+						height: 56,
+						borderRadius: 16,
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
+						marginBottom: 4,
+						color: theme.colors.primary,
+						background: `${theme.colors.primary}18`,
+						border: `1px solid ${theme.colors.primary}44`,
+					}}
+				>
+					<Boxes size={26} strokeWidth={1.5} />
+				</div>
+				<div
+					style={{
+						fontSize: theme.fontSizes[3],
+						fontWeight: 600,
+						letterSpacing: -0.2,
+						color: theme.colors.text,
+					}}
+				>
+					{title}
+				</div>
+				{detail && (
+					<div
+						style={{
+							fontSize: theme.fontSizes[1],
+							lineHeight: 1.5,
+							color: muted,
+						}}
+					>
+						{detail}
+					</div>
+				)}
+				{action && (
+					<button
+						type="button"
+						onClick={action.onClick}
+						style={{
+							marginTop: 4,
+							fontSize: theme.fontSizes[1],
+							fontFamily: theme.fonts.body,
+							fontWeight: 600,
+							color: theme.colors.primary,
+							background: `${theme.colors.primary}18`,
+							border: `1px solid ${theme.colors.primary}66`,
+							borderRadius: 8,
+							padding: "6px 14px",
+							cursor: "pointer",
+						}}
+					>
+						{action.label}
+					</button>
+				)}
+			</div>
+		</div>
+	);
+}
+
 /**
- * Sort timestamp for a summary row. Last-opened treats never-opened graphs as
- * oldest (stamp is absent), so existing graphs keep their current relative
- * order until opened once.
+ * Last-opened timestamp for list order. Never-opened graphs sort oldest, so
+ * existing graphs keep their relative order until opened once.
  */
-function subsystemModelSortTime(
-	graph: SubsystemModelSummary,
-	sortKey: SubsystemSortKey,
-): number {
-	if (sortKey === "edited") return new Date(graph.updatedAt).getTime();
-	if (sortKey === "created") return new Date(graph.createdAt).getTime();
+function openedSortTime(graph: SubsystemModelSummary): number {
 	const opened = graph.lastOpenedAt ? Date.parse(graph.lastOpenedAt) : NaN;
 	return Number.isFinite(opened) ? opened : 0;
 }
@@ -251,56 +386,20 @@ function WalkthroughButton({
 	);
 }
 
-function formatRegularAuditCountdown(status: RegularAuditStatus, nowMs: number): string {	if (!status.enabled) return "";
-	if (status.running) return "Auditing…";
-	if (!status.nextAuditAt) return "Next audit soon…";
-	const ms = new Date(status.nextAuditAt).getTime() - nowMs;
-	if (!Number.isFinite(ms) || ms <= 0) return "Auditing…";
-	const totalSec = Math.ceil(ms / 1000);
-	const h = Math.floor(totalSec / 3600);
-	const m = Math.floor((totalSec % 3600) / 60);
-	const s = totalSec % 60;
-	if (h > 0) {
-		return `Next audit in ${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-	}
-	return `Next audit in ${m}:${String(s).padStart(2, "0")}`;
-}
-
 function SubsystemsTabHeader({
-	lastLoadedAt,
-	sortBy,
-	onSortChange,
-	showAll,
-	hiddenStaleCount,
-	onToggleShowAll,
-	regularAudit,
-	searchQuery,
-	onSearchChange,
+	editedWindow,
+	onEditedWindowChange,
+	viewMode,
+	onViewModeChange,
 }: {
-	lastLoadedAt: number | null;
-	sortBy: SubsystemSortKey;
-	onSortChange: (key: SubsystemSortKey) => void;
-	showAll?: boolean;
-	hiddenStaleCount?: number;
-	onToggleShowAll?: () => void;
-	regularAudit?: RegularAuditStatus | null;
-	searchQuery?: string;
-	onSearchChange?: (query: string) => void;
+	editedWindow?: EditedWindow;
+	onEditedWindowChange?: (window: EditedWindow) => void;
+	/** List (default) or repo City map. */
+	viewMode?: "list" | "map";
+	onViewModeChange?: (mode: "list" | "map") => void;
 }) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
-	const [, bump] = useState(0);
-
-	useEffect(() => {
-		if (lastLoadedAt == null && !regularAudit?.enabled) return;
-		const id = setInterval(() => bump((n) => n + 1), 1_000);
-		return () => clearInterval(id);
-	}, [lastLoadedAt, regularAudit?.enabled]);
-
-	const auditLabel =
-		regularAudit?.enabled === true
-			? formatRegularAuditCountdown(regularAudit, Date.now())
-			: null;
 
 	return (
 		<div
@@ -316,154 +415,99 @@ function SubsystemsTabHeader({
 			}}
 		>
 			<div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-				{onSearchChange && (
-					<input
-						type="search"
-						value={searchQuery ?? ""}
-						onChange={(e) => onSearchChange(e.target.value)}
-						placeholder="Filter subsystems…"
-						aria-label="Filter subsystem models"
-						style={{
-							fontSize: theme.fontSizes[1],
-							fontFamily: theme.fonts.body,
-							color: theme.colors.text,
-							background: theme.colors.background,
-							border: `1px solid ${theme.colors.border ?? "#333"}`,
-							borderRadius: 6,
-							padding: "4px 10px",
-							width: 200,
-							outline: "none",
-							flexShrink: 0,
-						}}
-					/>
-				)}
-				<div
-					role="group"
-					aria-label="Sort subsystems"
-					style={{ display: "flex", alignItems: "center", gap: 4 }}
-				>
-					{SUBSYSTEM_SORTS.map((s) => {
-						const active = s.key === sortBy;
-						return (
-							<button
-								key={s.key}
-								type="button"
-								title={`Sort by ${s.label.toLowerCase()}`}
-								aria-pressed={active}
-								onClick={() => onSortChange(s.key)}
-								style={{
-									fontSize: theme.fontSizes[0],
-									fontWeight: active ? 600 : 400,
-									letterSpacing: 0.3,
-									textTransform: "uppercase",
-									padding: "1px 7px",
-									borderRadius: 999,
-									border: `1px solid ${
-										active ? theme.colors.primary : "transparent"
-									}`,
-									background: active ? `${theme.colors.primary}22` : "transparent",
-									color: active ? theme.colors.primary : muted,
-									cursor: "pointer",
-									fontFamily: theme.fonts.body,
-								}}
-							>
-						{s.label}
-						</button>
-					);
-				})}
-				</div>
-				{onToggleShowAll && (
-					<>
-						<div
-							aria-hidden="true"
-							style={{
-								width: 1,
-								alignSelf: "stretch",
-								background: theme.colors.border ?? "#333",
-								flexShrink: 0,
-							}}
-						/>
-						<div
-							role="group"
-							aria-label="Filter subsystems"
-							style={{ display: "flex", alignItems: "center", gap: 4 }}
-						>
-							{onToggleShowAll && (
-							<button
-								key="recent"
-								type="button"
-								title={
-									showAll
-										? "Show only graphs edited in the last day"
-										: hiddenStaleCount != null && hiddenStaleCount > 0
-											? `Show ${hiddenStaleCount} older hidden graph${hiddenStaleCount === 1 ? "" : "s"}`
-											: "Show graphs older than a day"
-								}
-								aria-pressed={!showAll}
-								onClick={onToggleShowAll}
-								style={{
-									fontSize: theme.fontSizes[0],
-									fontWeight: !showAll ? 600 : 400,
-									letterSpacing: 0.3,
-									textTransform: "uppercase",
-									padding: "1px 7px",
-									borderRadius: 4,
-									border: `1px solid ${
-										!showAll ? theme.colors.primary : (theme.colors.border ?? "#333")
-									}`,
-									background: !showAll ? `${theme.colors.primary}22` : "transparent",
-									color: !showAll ? theme.colors.primary : muted,
-									cursor: "pointer",
-									fontFamily: theme.fonts.body,
-								}}
-							>
-								Recent
-							</button>
-							)}
-						</div>
-					</>
-				)}
-				{auditLabel && (
+				{onEditedWindowChange && (
 					<div
-						title={
-							regularAudit?.running
-								? "Regular audit is running across stored subsystem models"
-								: `Regular audit every ${regularAudit?.intervalMinutes ?? "?"} min — change in Settings`
-						}
-						style={{
-							display: "inline-flex",
-							alignItems: "center",
-							gap: 6,
-							padding: "3px 10px",
-							borderRadius: 6,
-							border: `1px solid ${theme.colors.border ?? "#333"}`,
-							background: theme.colors.background,
-							color: regularAudit?.running
-								? theme.colors.primary
-								: muted,
-							fontSize: theme.fontSizes[0],
-							fontFamily: theme.fonts.monospace,
-							flexShrink: 0,
-						}}
+						role="group"
+						aria-label="Edited"
+						style={{ display: "flex", alignItems: "center", gap: 4 }}
 					>
-						{regularAudit?.running ? (
-							<Loader2 size={12} className="principal-studio-spin" />
-						) : null}
-						{auditLabel}
+							{EDITED_WINDOWS.map((w) => {
+								const active = (editedWindow ?? "today") === w.key;
+								return (
+									<button
+										key={w.key}
+										type="button"
+										title={w.title}
+										aria-pressed={active}
+										onClick={() => onEditedWindowChange(w.key)}
+										style={{
+											fontSize: theme.fontSizes[0],
+											fontWeight: active ? 600 : 400,
+											letterSpacing: 0.3,
+											textTransform: "uppercase",
+											padding: "1px 7px",
+											borderRadius: 4,
+											border: `1px solid ${
+												active
+													? theme.colors.primary
+													: (theme.colors.border ?? "#333")
+											}`,
+											background: active
+												? `${theme.colors.primary}22`
+												: "transparent",
+											color: active ? theme.colors.primary : muted,
+											cursor: "pointer",
+											fontFamily: theme.fonts.body,
+										}}
+									>
+										{w.label}
+									</button>
+								);
+							})}
 					</div>
 				)}
 			</div>
-			<div
-				style={{
-					fontSize: theme.fontSizes[0],
-					color: muted,
-					fontFamily: theme.fonts.monospace,
-					flexShrink: 0,
-				}}
-			>
-				{lastLoadedAt == null
-					? "Loading…"
-					: `Last loaded ${lastLoadedLabel(lastLoadedAt)}`}
+			<div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+				{onViewModeChange && (
+					<div
+						role="group"
+						aria-label="Subsystems view"
+						style={{ display: "flex", alignItems: "center", gap: 4 }}
+					>
+						{(
+							[
+								["list", "List"],
+								["map", "Map"],
+							] as const
+						).map(([key, label]) => {
+							const active = (viewMode ?? "list") === key;
+							return (
+								<button
+									key={key}
+									type="button"
+									title={`${label} view`}
+									aria-pressed={active}
+									onClick={() => onViewModeChange(key)}
+									style={{
+										display: "inline-flex",
+										alignItems: "center",
+										gap: 4,
+										fontSize: theme.fontSizes[0],
+										fontWeight: active ? 600 : 400,
+										letterSpacing: 0.3,
+										textTransform: "uppercase",
+										padding: "1px 7px",
+										borderRadius: 4,
+										border: `1px solid ${
+											active
+												? theme.colors.primary
+												: theme.colors.border ?? "#333"
+										}`,
+										background: active
+											? `${theme.colors.primary}22`
+											: "transparent",
+										color: active ? theme.colors.primary : muted,
+										cursor: "pointer",
+										fontFamily: theme.fonts.body,
+									}}
+								>
+									{key === "list" ? <List size={12} /> : <LayoutGrid size={12} />}
+									{label}
+								</button>
+							);
+						})}
+					</div>
+				)}
 			</div>
 		</div>
 	);
@@ -497,6 +541,230 @@ function SubsystemsTabShell({ children }: { children: ReactNode }) {
 }
 
 /**
+ * File preview pane — the right-hand `PierreFileView` for a selected file,
+ * read through `readSubsystemFile` (purl + repo-relative path). Shared by the
+ * list view and the repo City map so both open files the same way.
+ *
+ * Positioning is left to the caller via `style` (the two views dock it
+ * differently); the inner layout is fixed.
+ */
+function FilePreviewPane({
+	file,
+	readFile,
+	onClose,
+	style,
+}: {
+	file: { repoKey?: string; displayPath: string; focusLine?: number | null };
+	readFile: (path: string) => Promise<string>;
+	onClose: () => void;
+	style?: CSSProperties;
+}) {
+	const { theme } = useTheme();
+	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
+	// Read the file here (not inside PierreFileView) so the pane can slide in
+	// immediately showing a loading state instead of an empty body. Keep the
+	// latest reader in a ref so the effect only re-runs when the file changes.
+	const readRef = useRef(readFile);
+	readRef.current = readFile;
+	const fileKey = `${file.repoKey ?? ""}\0${file.displayPath}`;
+	const [content, setContent] = useState<string | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	useEffect(() => {
+		let cancelled = false;
+		setContent(null);
+		setError(null);
+		(async () => {
+			try {
+				const text = await readRef.current(file.displayPath);
+				if (!cancelled) setContent(text);
+			} catch (err) {
+				if (!cancelled) {
+					setError(err instanceof Error ? err.message : String(err));
+				}
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [fileKey]);
+	return (
+		<div
+			style={{
+				display: "flex",
+				flexDirection: "column",
+				minHeight: 0,
+				background: theme.colors.background,
+				...style,
+			}}
+		>
+			<div
+				style={{
+					flexShrink: 0,
+					display: "flex",
+					alignItems: "center",
+					gap: 8,
+					padding: "8px 12px",
+					borderBottom: `1px solid ${theme.colors.border ?? "#333"}`,
+				}}
+			>
+				<span
+					style={{
+						flex: 1,
+						minWidth: 0,
+						fontSize: theme.fontSizes[1],
+						fontFamily: theme.fonts.monospace,
+						whiteSpace: "nowrap",
+						overflow: "hidden",
+						textOverflow: "ellipsis",
+					}}
+					title={file.displayPath}
+				>
+					{file.displayPath}
+				</span>
+				<button
+					type="button"
+					onClick={onClose}
+					title="Close preview"
+					aria-label="Close file preview"
+					style={{
+						flexShrink: 0,
+						border: "none",
+						background: "transparent",
+						color: muted,
+						cursor: "pointer",
+						fontSize: theme.fontSizes[1],
+						lineHeight: 1,
+						padding: "2px 6px",
+						borderRadius: 4,
+					}}
+				>
+					✕
+				</button>
+			</div>
+			<div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+				{error ? (
+					<div
+						style={{
+							padding: 16,
+							fontSize: theme.fontSizes[1],
+							color: "#e5534b",
+							fontFamily: theme.fonts.body,
+						}}
+					>
+						{error}
+					</div>
+				) : content == null ? (
+					<div
+						style={{
+							height: "100%",
+							display: "flex",
+							alignItems: "center",
+							justifyContent: "center",
+							gap: 8,
+							color: muted,
+							fontSize: theme.fontSizes[1],
+							fontFamily: theme.fonts.body,
+						}}
+					>
+						<Loader2 size={16} className="principal-studio-spin" />
+						Loading…
+					</div>
+				) : (
+					<PierreFileView
+						key={`${fileKey}\0${file.focusLine ?? ""}`}
+						filePath={file.displayPath}
+						fileName={
+							file.displayPath.split("/").pop() ?? file.displayPath
+						}
+						readFile={async () => content}
+						background={theme.colors.background}
+						focusLine={file.focusLine ?? undefined}
+					/>
+				)}
+			</div>
+		</div>
+	);
+}
+
+/**
+ * Right-docked preview that slides in from / out to the right edge. Keeps the
+ * pane mounted through the exit so the transform animates instead of the pane
+ * vanishing; `file === null` starts the exit.
+ */
+function SlideInPreview({
+	file,
+	readFile,
+	onClose,
+	width,
+	onResizeStart,
+}: {
+	file: { repoKey?: string; displayPath: string; focusLine?: number | null } | null;
+	readFile: (path: string) => Promise<string>;
+	onClose: () => void;
+	width: number;
+	onResizeStart: (e: React.MouseEvent) => void;
+}) {
+	const { theme } = useTheme();
+	const [entered, setEntered] = useState(false);
+	const [displayed, setDisplayed] = useState(file);
+	useEffect(() => {
+		if (file) {
+			setDisplayed(file);
+			const raf = requestAnimationFrame(() => setEntered(true));
+			return () => cancelAnimationFrame(raf);
+		}
+		setEntered(false);
+		const t = setTimeout(() => setDisplayed(null), 220);
+		return () => clearTimeout(t);
+	}, [file]);
+	if (!displayed) return null;
+	return (
+		<div
+			style={{
+				position: "absolute",
+				top: 0,
+				right: 0,
+				bottom: 0,
+				width,
+				maxWidth: "100%",
+				zIndex: 4,
+				display: "flex",
+				transform: entered ? "translateX(0)" : "translateX(100%)",
+				transition: "transform 220ms cubic-bezier(0.4, 0, 0.2, 1)",
+				pointerEvents: entered ? "auto" : "none",
+			}}
+		>
+			<div
+				onMouseDown={onResizeStart}
+				aria-label="Resize file preview"
+				title="Drag to resize"
+				style={{
+					position: "absolute",
+					top: 0,
+					bottom: 0,
+					left: -3,
+					width: 3,
+					zIndex: 5,
+					cursor: "col-resize",
+					background: theme.colors.border,
+				}}
+			/>
+			<FilePreviewPane
+				file={displayed}
+				readFile={readFile}
+				onClose={onClose}
+				style={{
+					flex: 1,
+					minWidth: 0,
+					borderLeft: `1px solid ${theme.colors.border ?? "#333"}`,
+				}}
+			/>
+		</div>
+	);
+}
+
+/**
  * Left file panel for the Subsystems tab: a drill-down over every visible
  * subsystem's files, grouped per repo with `buildRepoGroups` — the same
  * primitives the detail graph sidebar uses. Fed by `summary.files` (the host
@@ -518,14 +786,20 @@ function FilesPanel({
 	combinedActive,
 	onToggleCombined,
 	autoFocusSingleRepo,
+	fileCoverageByRepo,
 }: {
 	graphs: SubsystemModelSummary[];
 	selectedId: string | null;
 	width: number;
 	focusedRepo: string | null;
 	onFocusRepo: (repoKey: string) => void;
-	combinedActive: boolean;
-	onToggleCombined: () => void;
+	/**
+	 * Map mode only. Overview rows show this instead of the model count.
+	 */
+	fileCoverageByRepo?: ReadonlyMap<string, RepoFileCoverage>;
+	/** Combined-graph mode toggle — omitted in map mode (the toggle hides). */
+	combinedActive?: boolean;
+	onToggleCombined?: () => void;
 	/** Showcase single-repo: skip the repo overview and go straight to files. */
 	autoFocusSingleRepo?: boolean;
 	onHighlightGraph: (
@@ -626,6 +900,7 @@ function FilesPanel({
 				<FilesDrilldown
 					groups={groups}
 					graphCountByRepo={graphCountByRepo}
+					fileCoverageByRepo={fileCoverageByRepo}
 					focusedRepo={focusedRepo}
 					onFocusRepo={onFocusRepo}
 					onSelectFile={(group, displayPath) =>
@@ -652,18 +927,12 @@ export function SubsystemModelsView({
 } = {}) {
 	const { theme } = useTheme();
 	const [graphs, setGraphs] = useState<SubsystemModelSummary[] | null>(null);
-	const [lastLoadedAt, setLastLoadedAt] = useState<number | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [confirmId, setConfirmId] = useState<string | null>(null);
 	const [copiedId, setCopiedId] = useState<string | null>(null);
 	const [sharingId, setSharingId] = useState<string | null>(null);
-	const [sortBy, setSortBy] = useState<SubsystemSortKey>("opened");
-	const [showAll, setShowAll] = useState(false);
-	const [searchQuery, setSearchQuery] = useState("");
+	const [editedWindow, setEditedWindow] = useState<EditedWindow>("today");
 	const [message, setMessage] = useState<string | null>(null);
-	const [regularAudit, setRegularAudit] = useState<RegularAuditStatus | null>(
-		null,
-	);
 	/** Selected row highlight (file-tree clicks land here, no new tab). */
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	/** Rows expanded to list all their walkthroughs (row click toggles). */
@@ -695,6 +964,32 @@ export function SubsystemModelsView({
 	const [focusedRepo, setFocusedRepo] = useState<string | null>(null);
 	/** Combined-graph mode: the list swaps for the merged repo graph. */
 	const [combinedActive, setCombinedActive] = useState(false);
+	/** Repo City map replaces the file tree + model list. */
+	const [showMap, setShowMap] = useState(false);
+	/** Map mode: repo key → file coverage, filled as each city tree loads. */
+	const [fileCoverageByRepo, setFileCoverageByRepo] = useState<
+		ReadonlyMap<string, RepoFileCoverage>
+	>(() => new Map());
+	const onFileCoverage = useCallback(
+		(next: ReadonlyMap<string, RepoFileCoverage>) => {
+			setFileCoverageByRepo((prev) => {
+				if (prev.size !== next.size) return next;
+				for (const [key, value] of next) {
+					const old = prev.get(key);
+					if (
+						!old ||
+						old.percent !== value.percent ||
+						old.referenced !== value.referenced ||
+						old.total !== value.total
+					) {
+						return next;
+					}
+				}
+				return prev;
+			});
+		},
+		[],
+	);
 
 	const onFocusRepo = useCallback((repoKey: string) => {
 		setFocusedRepo((current) => (current === repoKey ? null : repoKey));
@@ -748,6 +1043,46 @@ export function SubsystemModelsView({
 			document.removeEventListener("mouseup", onUp);
 		};
 	}, [panelDrag]);
+
+	// Preview pane width (px) — docked right in map mode, draggable by its
+	// left edge. Starts wide and clamps so the map keeps some room.
+	const [previewWidth, setPreviewWidth] = useState(800);
+	const [previewDrag, setPreviewDrag] = useState(false);
+	const previewDragStartX = useRef(0);
+	const previewDragStartWidth = useRef(800);
+	const PREVIEW_MIN_WIDTH = 320;
+
+	const onPreviewResizeStart = useCallback(
+		(e: React.MouseEvent) => {
+			e.preventDefault();
+			previewDragStartX.current = e.clientX;
+			previewDragStartWidth.current = previewWidth;
+			setPreviewDrag(true);
+		},
+		[previewWidth],
+	);
+
+	useEffect(() => {
+		if (!previewDrag) return;
+		const onMove = (e: MouseEvent) => {
+			// The handle sits on the pane's left edge — dragging left widens it.
+			const delta = previewDragStartX.current - e.clientX;
+			setPreviewWidth(
+				Math.min(
+					Math.max(previewDragStartWidth.current + delta, PREVIEW_MIN_WIDTH),
+					Math.max(window.innerWidth - 480, PREVIEW_MIN_WIDTH),
+				),
+			);
+		};
+		const onUp = () => setPreviewDrag(false);
+		document.addEventListener("mousemove", onMove);
+		document.addEventListener("mouseup", onUp);
+		return () => {
+			document.removeEventListener("mousemove", onMove);
+			document.removeEventListener("mouseup", onUp);
+		};
+	}, [previewDrag]);
+
 	const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	/** Defers row expand so a double-click can open instead. */
 	const rowClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -770,26 +1105,6 @@ export function SubsystemModelsView({
 		return () => window.removeEventListener("keydown", onKey);
 	}, [previewFile]);
 
-	useEffect(() => {
-		let alive = true;
-		void electrobun.rpc!.request
-			.getRegularAuditStatus({})
-			.then((status) => {
-				if (alive) setRegularAudit(status);
-			})
-			.catch(() => {
-				/* optional */
-			});
-		const onRegularAudit = (status: StudioMessages["regularAuditChanged"]) => {
-			setRegularAudit(status);
-		};
-		regularAuditChangeSubscribers.add(onRegularAudit);
-		return () => {
-			alive = false;
-			regularAuditChangeSubscribers.delete(onRegularAudit);
-		};
-	}, []);
-
 	const refresh = useCallback(async () => {
 		try {
 			const subResult = await electrobun.rpc!.request.listSubsystemModels({});
@@ -803,7 +1118,6 @@ export function SubsystemModelsView({
 					? prev
 					: subResult.graphs,
 			);
-			setLastLoadedAt(Date.now());
 			setError(null);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
@@ -849,6 +1163,47 @@ export function SubsystemModelsView({
 			});
 		},
 		[],
+	);
+
+	/** Map-mode opener: the repo map only knows model ids. */
+	const onOpenModelById = useCallback(
+		(graphId: string, walkthroughId?: string) => {
+			const graph = graphs?.find((g) => g.id === graphId);
+			if (graph) {
+				void onOpen(graph, walkthroughId);
+				return;
+			}
+			void electrobun.rpc!.request.openSubsystemModel({
+				graphId,
+				...(walkthroughId ? { walkthroughId } : {}),
+			});
+		},
+		[graphs, onOpen],
+	);
+
+	/** Map mode: a file click just selects its owning graph (no preview pane). */
+	const onMapHighlightGraph = useCallback(
+		(graph: SubsystemModelSummary) => setSelectedId(graph.id),
+		[],
+	);
+	const onMapPreviewFile = useCallback(() => {}, []);
+
+	/** Map mode: a city building click opens the file in the shared preview. */
+	const onOpenMapFile = useCallback(
+		(file: { repoKey: string | undefined; displayPath: string }) => {
+			const graph = graphs?.find((g) =>
+				graphReferencesFile(g, file.repoKey, file.displayPath),
+			);
+			setPreviewFile({
+				graphId: graph?.id ?? "",
+				repoKey: file.repoKey,
+				displayPath: file.displayPath,
+				focusLine: graph
+					? firstReferencedLine(graph, file.repoKey, file.displayPath)
+					: null,
+			});
+		},
+		[graphs],
 	);
 
 	/** Row click: expand/collapse its walkthrough list (no new tab). When a
@@ -1056,14 +1411,6 @@ export function SubsystemModelsView({
 	if (error && graphs === null) {
 		return (
 			<SubsystemsTabShell>
-				{!scope && (
-					<SubsystemsTabHeader
-				lastLoadedAt={lastLoadedAt}
-				sortBy={sortBy}
-				onSortChange={setSortBy}
-				regularAudit={regularAudit}
-			/>
-				)}
 				<SubsystemsTabBody>
 					<CenteredMessage title="Could not load subsystem graphs" detail={error} />
 				</SubsystemsTabBody>
@@ -1073,14 +1420,6 @@ export function SubsystemModelsView({
 	if (graphs === null) {
 		return (
 			<SubsystemsTabShell>
-				{!scope && (
-					<SubsystemsTabHeader
-				lastLoadedAt={lastLoadedAt}
-				sortBy={sortBy}
-				onSortChange={setSortBy}
-				regularAudit={regularAudit}
-			/>
-				)}
 				<SubsystemsTabBody>
 					<CenteredMessage title="Loading subsystem graphs…" />
 				</SubsystemsTabBody>
@@ -1090,18 +1429,10 @@ export function SubsystemModelsView({
 	if (graphs.length === 0) {
 		return (
 			<SubsystemsTabShell>
-				{!scope && (
-					<SubsystemsTabHeader
-				lastLoadedAt={lastLoadedAt}
-				sortBy={sortBy}
-				onSortChange={setSortBy}
-				regularAudit={regularAudit}
-			/>
-				)}
 				<SubsystemsTabBody>
-					<CenteredMessage
-						title="No subsystem graphs yet"
-						detail="POST one to http://127.0.0.1:3045/api/subsystem-model to create it."
+					<SubsystemEmptyState
+						title="No subsystem models yet"
+						detail="When a model is saved, it shows up here."
 					/>
 				</SubsystemsTabBody>
 			</SubsystemsTabShell>
@@ -1109,11 +1440,10 @@ export function SubsystemModelsView({
 	}
 
 	const now = Date.now();
-	const isRecent = (g: SubsystemModelSummary) =>
-		now - new Date(g.updatedAt).getTime() <= RECENT_MS;
+	const inEditedWindow = (g: SubsystemModelSummary) =>
+		editedInWindow(g.updatedAt, editedWindow, now);
 	// Showcase scope: an explicit, ordered id set. When present it wins over
-	// repo drilldown, recency hiding and sorting — the agent chose the set and
-	// its order.
+	// repo drilldown and recency hiding — the agent chose the set and its order.
 	const scopeOrder = scope?.ids ?? null;
 	const scopeRank = scopeOrder
 		? new Map(scopeOrder.map((id, i) => [id, i]))
@@ -1143,75 +1473,69 @@ export function SubsystemModelsView({
 				graphReferencesFile(g, previewFile.repoKey, previewFile.displayPath),
 			)
 		: visibleGraphs;
-	const query = searchQuery.trim().toLowerCase();
-	// Search / recency / sort apply identically to both chains; only the
-	// open-file narrowing differs (list vs panel).
+	// The edited-at window applies identically to both chains; only the
+	// open-file narrowing differs (list vs panel). Order stays last-opened,
+	// newest first. Showcase scope skips the window.
 	const applyListFilters = (base: SubsystemModelSummary[]) => {
-		const searched =
-			query.length === 0
-				? base
-				: base.filter((g) => {
-						if (g.title.toLowerCase().includes(query)) return true;
-						if (g.description?.toLowerCase().includes(query)) return true;
-						if (g.id.toLowerCase().includes(query)) return true;
-						for (const r of g.repos ?? []) {
-							if (`${r.owner}/${r.name}`.toLowerCase().includes(query))
-								return true;
-						}
-						return false;
-					});
-		const recent =
-			showAll || scopeOrder ? searched : searched.filter(isRecent);
+		const windowed =
+			scopeOrder || editedWindow === "all" ? base : base.filter(inEditedWindow);
 		return orderByScope(
-			[...recent].sort(
-				(a, b) => subsystemModelSortTime(b, sortBy) - subsystemModelSortTime(a, sortBy),
-			),
+			[...windowed].sort((a, b) => openedSortTime(b) - openedSortTime(a)),
 		);
 	};
-	const searchedGraphs =
-		query.length === 0
+	const windowedGraphs =
+		scopeOrder || editedWindow === "all"
 			? fileVisibleGraphs
-			: fileVisibleGraphs.filter((g) => {
-					if (g.title.toLowerCase().includes(query)) return true;
-					if (g.description?.toLowerCase().includes(query)) return true;
-					if (g.id.toLowerCase().includes(query)) return true;
-					for (const r of g.repos ?? []) {
-						if (`${r.owner}/${r.name}`.toLowerCase().includes(query))
-							return true;
-					}
-					return false;
-				});
-	const recentGraphs =
-		showAll || scopeOrder
-			? searchedGraphs
-			: searchedGraphs.filter(isRecent);
-	const hiddenStaleCount = searchedGraphs.length - recentGraphs.length;
+			: fileVisibleGraphs.filter(inEditedWindow);
 	const sortedGraphs = applyListFilters(fileVisibleGraphs);
 	// The file panel ignores the open-file narrowing so the tree stays stable
-	// while previewing; it still follows every other filter + sort.
+	// while previewing; it still follows the recency filter.
 	const panelGraphs = applyListFilters(visibleGraphs);
 	/** The composed graph is showing, with the model list docked right. */
 	const combinedPane = combinedActive && focusedRepo != null;
 
 	// The model list is rendered either as the main pane or as the
 	// composed-graph side panel — one JSX tree, two placements.
+	const outsideWindow = fileVisibleGraphs.length - windowedGraphs.length;
+	const widenTo =
+		!previewFile && !scopeOrder ? widerEditedWindow(editedWindow) : null;
+	const emptyCopy = previewFile && fileVisibleGraphs.length === 0
+		? {
+				title: "No models for this file",
+				detail: previewFile.displayPath,
+			}
+		: focusedRepo && editedWindow === "all"
+			? {
+					title: "No models in this repo",
+					detail: "None of the subsystem models touch the repo you have open.",
+				}
+			: editedWindow === "today"
+				? { title: "Nothing edited today" }
+				: editedWindow === "yesterday"
+					? { title: "Nothing edited yesterday" }
+					: editedWindow === "week"
+						? { title: "Nothing edited this week" }
+						: { title: "No subsystem models" };
+	const widenLabel = EDITED_WINDOWS.find((w) => w.key === widenTo)?.label;
+	const emptyAction =
+		widenTo && outsideWindow > 0 && widenLabel
+			? {
+					label: `Show ${widenLabel.toLowerCase()}`,
+					onClick: () => setEditedWindow(widenTo),
+				}
+			: focusedRepo && !previewFile
+				? {
+						label: "All repos",
+						onClick: () => onFocusRepo(focusedRepo),
+					}
+				: undefined;
 	const modelList = (
-recentGraphs.length === 0 ? (
-				<div
-					style={{
-						fontSize: theme.fontSizes[1],
-						color: muted,
-						padding: "24px 0",
-					}}
-				>
-					{query.length > 0 && searchedGraphs.length === 0
-						? `No graphs match "${searchQuery.trim()}".`
-						: previewFile && fileVisibleGraphs.length === 0
-							? `No models reference ${previewFile.displayPath}.`
-							: hiddenStaleCount > 0
-								? `No graphs edited in the last day — ${hiddenStaleCount} older hidden.`
-								: "No subsystem graphs."}
-				</div>
+windowedGraphs.length === 0 ? (
+				<SubsystemEmptyState
+					title={emptyCopy.title}
+					detail={emptyCopy.detail}
+					action={emptyAction}
+				/>
 			) : (
 			<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
 				{sortedGraphs.map((graph) => {
@@ -1587,17 +1911,91 @@ recentGraphs.length === 0 ? (
 		<SubsystemsTabShell>
 			{!scope && (
 				<SubsystemsTabHeader
-				lastLoadedAt={lastLoadedAt}
-				sortBy={sortBy}
-				onSortChange={setSortBy}
-				showAll={showAll}
-				hiddenStaleCount={hiddenStaleCount}
-				onToggleShowAll={() => setShowAll((v) => !v)}
-				regularAudit={regularAudit}
-				searchQuery={searchQuery}
-				onSearchChange={setSearchQuery}
+				editedWindow={editedWindow}
+				onEditedWindowChange={setEditedWindow}
+				viewMode={showMap ? "map" : "list"}
+				onViewModeChange={(mode) => {
+					setShowMap(mode === "map");
+					if (mode === "map") setFileCoverageByRepo(new Map());
+				}}
 			/>
 			)}
+			{panelGraphs.length === 0 ? (
+				<SubsystemsTabBody>
+					<SubsystemEmptyState
+						title={emptyCopy.title}
+						detail={emptyCopy.detail}
+						action={emptyAction}
+					/>
+				</SubsystemsTabBody>
+			) : showMap && !scope ? (
+				<SubsystemsTabBody>
+					<div
+						style={{
+							flex: 1,
+							minHeight: 0,
+							display: "flex",
+							flexDirection: "row",
+							position: "relative",
+							userSelect: panelDrag ? "none" : undefined,
+						}}
+					>
+						{/* Reuse the tab's existing repo list/drilldown as the
+						    map's repo-selection chrome (same `focusedRepo`). */}
+						<FilesPanel
+							graphs={panelGraphs}
+							selectedId={selectedId}
+							width={panelWidth}
+							focusedRepo={focusedRepo}
+							onFocusRepo={onFocusRepo}
+							onHighlightGraph={onMapHighlightGraph}
+							onPreviewFile={onMapPreviewFile}
+							autoFocusSingleRepo={false}
+							fileCoverageByRepo={fileCoverageByRepo}
+						/>
+						<div
+							onMouseDown={onPanelResizeStart}
+							aria-label="Resize files panel"
+							title="Drag to resize"
+							style={{
+								width: 3,
+								flexShrink: 0,
+								cursor: "col-resize",
+								background: theme.colors.border,
+								transition: "background 120ms ease",
+								zIndex: 1,
+							}}
+						/>
+						<div
+							style={{
+								flex: 1,
+								minWidth: 0,
+								minHeight: 0,
+								display: "flex",
+								position: "relative",
+								overflow: "hidden",
+								userSelect: previewDrag ? "none" : undefined,
+							}}
+						>
+							<SubsystemReposMap
+								graphs={panelGraphs}
+								onOpenModel={onOpenModelById}
+								onFileCoverage={onFileCoverage}
+								selectedRepoKey={focusedRepo}
+								onSelectRepo={setFocusedRepo}
+								onOpenFile={onOpenMapFile}
+							/>
+							<SlideInPreview
+								file={previewFile}
+								readFile={readPreviewFile}
+								onClose={() => setPreviewFile(null)}
+								width={previewWidth}
+								onResizeStart={onPreviewResizeStart}
+							/>
+						</div>
+					</div>
+				</SubsystemsTabBody>
+			) : (
 			<SubsystemsTabBody>
 				<div
 					style={{
@@ -1753,7 +2151,10 @@ recentGraphs.length === 0 ? (
 			)}
 				</div>
 				{previewFile && (
-					<div
+					<FilePreviewPane
+						file={previewFile}
+						readFile={readPreviewFile}
+						onClose={() => setPreviewFile(null)}
 						style={{
 							position: "absolute",
 							top: 0,
@@ -1769,76 +2170,8 @@ recentGraphs.length === 0 ? (
 									: 0,
 							zIndex: 2,
 							borderLeft: `1px solid ${theme.colors.border ?? "#333"}`,
-							background: theme.colors.background,
-							display: "flex",
-							flexDirection: "column",
-							minHeight: 0,
 						}}
-					>
-						<div
-							style={{
-								flexShrink: 0,
-								display: "flex",
-								alignItems: "center",
-								gap: 8,
-								padding: "8px 12px",
-								borderBottom: `1px solid ${theme.colors.border ?? "#333"}`,
-							}}
-						>
-							<span
-								style={{
-									flex: 1,
-									minWidth: 0,
-									fontSize: theme.fontSizes[1],
-									fontFamily: theme.fonts.monospace,
-									whiteSpace: "nowrap",
-									overflow: "hidden",
-									textOverflow: "ellipsis",
-								}}
-								title={previewFile.displayPath}
-							>
-								{previewFile.displayPath}
-							</span>
-							<button
-								type="button"
-								onClick={() => setPreviewFile(null)}
-								title="Close preview"
-								aria-label="Close file preview"
-								style={{
-									flexShrink: 0,
-									border: "none",
-									background: "transparent",
-									color: muted,
-									cursor: "pointer",
-									fontSize: theme.fontSizes[1],
-									lineHeight: 1,
-									padding: "2px 6px",
-									borderRadius: 4,
-								}}
-							>
-								✕
-							</button>
-						</div>
-						<div
-							style={{
-								flex: 1,
-								minHeight: 0,
-								overflow: "auto",
-							}}
-						>
-							<PierreFileView
-								key={`${previewFile.repoKey ?? ""}\0${previewFile.displayPath}\0${previewFile.focusLine ?? ""}`}
-								filePath={previewFile.displayPath}
-								fileName={
-									previewFile.displayPath.split("/").pop() ??
-									previewFile.displayPath
-								}
-								readFile={readPreviewFile}
-								background={theme.colors.background}
-								focusLine={previewFile.focusLine ?? undefined}
-							/>
-						</div>
-					</div>
+					/>
 				)}
 				{previewFile && !listOverlay && !combinedPane && (
 					<button
@@ -1867,6 +2200,7 @@ recentGraphs.length === 0 ? (
 				)}
 				</div>
 			</SubsystemsTabBody>
+			)}
 		</SubsystemsTabShell>
 	);
 }

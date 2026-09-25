@@ -29,8 +29,8 @@ const MaintainerConstruct = lazy(() =>
 const MaintainerStaticTopology = lazy(() =>
   import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerStaticTopology })),
 )
-const MaintainerRuntimeTopology = lazy(() =>
-  import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerRuntimeTopology })),
+const MaintainerDynamicTopology = lazy(() =>
+  import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerDynamicTopology })),
 )
 const MaintainerWalkthrough = lazy(() =>
   import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerWalkthrough })),
@@ -343,10 +343,10 @@ function App() {
               }
             />
             <Route
-              path="runtime-topology"
+              path="dynamic-topology"
               element={
                 <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
-                  <MaintainerRuntimeTopology />
+                  <MaintainerDynamicTopology />
                 </Suspense>
               }
             />

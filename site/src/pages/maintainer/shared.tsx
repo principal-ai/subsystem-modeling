@@ -10,20 +10,21 @@ export type CaseOutcome = 'pass' | 'issue' | 'gap' | 'neutral'
 /**
  * How this check is remediable today:
  * - deterministic — Studio Apply (finding.fix) with no agent
- * - issue-fixer / gap-filler — construct Maintain agents
- * - topology-fixer / topology-gap-filler — topology Maintain agents
- * - boundary-fixer / boundary-gap-filler — legacy agent ids; module membership
- *   (construct) + process nest (boundary) until Maintain lanes split
+ * - construct-fixer / construct-verifier — construct lane
+ * - static-topology-fixer / static-topology-verifier — static topology (relations)
+ * - package-module-fixer / package-module-verifier — dynamic topology (containment)
+ * - dynamic-topology-verifier — dynamic topology (process)
  * - none — report only; human edit or not yet wired (e.g. package-layer checks)
  */
 export type RemediationLane =
   | 'deterministic'
-  | 'issue-fixer'
-  | 'gap-filler'
-  | 'topology-fixer'
-  | 'topology-gap-filler'
-  | 'boundary-fixer'
-  | 'boundary-gap-filler'
+  | 'construct-fixer'
+  | 'construct-verifier'
+  | 'static-topology-fixer'
+  | 'static-topology-verifier'
+  | 'package-module-fixer'
+  | 'package-module-verifier'
+  | 'dynamic-topology-verifier'
   | 'none'
 
 export type AuditCase = {
@@ -79,9 +80,9 @@ export const SOURCE_CASES: AuditCase[] = [
   {
     example: 'file missing',
     meaning:
-      'File path not found and Graphify cannot uniquely relocate (ambiguous paths or symbol missing). issue-fixer proposes a path.',
+      'File path not found and Graphify cannot uniquely relocate (ambiguous paths or symbol missing). construct-fixer proposes a path.',
     outcome: 'issue',
-    remediation: 'issue-fixer',
+    remediation: 'construct-fixer',
   },
   {
     example: 'no source check',
@@ -102,7 +103,7 @@ export const GRAPHIFY_CASES: AuditCase[] = [
     example: 'no symbol match',
     meaning: 'Symbol’s definition was not in Graphify.',
     outcome: 'issue',
-    remediation: 'issue-fixer',
+    remediation: 'construct-fixer',
   },
   {
     example: 'declaration line matches',
@@ -127,16 +128,16 @@ export const GRAPHIFY_CASES: AuditCase[] = [
   {
     example: 'construct ≠ inferred',
     meaning:
-      'Graphify structure implies a different construct — a weak hint. Never one-click adopt; issue-fixer judges from source.',
+      'Graphify structure implies a different construct — a weak hint. Never one-click adopt; construct-fixer judges from source.',
     outcome: 'issue',
-    remediation: 'issue-fixer',
+    remediation: 'construct-fixer',
   },
   {
     example: 'construct unclassified',
     meaning:
       'Exact symbol found, but Graphify could not classify the kind (common for interfaces, type aliases, module-level values).',
     outcome: 'gap',
-    remediation: 'gap-filler',
+    remediation: 'construct-verifier',
   },
   {
     example: 'signature matches',
@@ -155,15 +156,15 @@ export const GRAPHIFY_CASES: AuditCase[] = [
   {
     example: 'signature mismatch',
     meaning:
-      'Params / return types differ from Graphify while the model already has types. Never auto-adopt; issue-fixer trusts source.',
+      'Params / return types differ from Graphify while the model already has types. Never auto-adopt; construct-fixer trusts source.',
     outcome: 'issue',
-    remediation: 'issue-fixer',
+    remediation: 'construct-fixer',
   },
   {
     example: 'signature not in cache',
     meaning: 'No usable signature edges in Graphify for this function/method.',
     outcome: 'gap',
-    remediation: 'gap-filler',
+    remediation: 'construct-verifier',
   },
   {
     example: 'cache unavailable',
@@ -212,16 +213,16 @@ export const PACKAGE_LAYER_CASES: AuditCase[] = [
   {
     example: 'cache unavailable',
     meaning:
-      'No package-layers cache for this purl at current HEAD(+dirty). Soft gap — do not hard-fail construct checks; Ensure from the Package Layers tab (or Maintain ensure step) then re-audit. Planned.',
+      'No package-layers cache for this purl at current HEAD(+dirty). Unconfirmed — do not hard-fail construct checks; Ensure from the Package Layers tab (or Maintain ensure step) then re-audit. Planned.',
     outcome: 'gap',
     remediation: 'none',
   },
   {
     example: 'purl unknown to discovery',
     meaning:
-      'Cache is ready but no discovered package matches this purl (typo, wrong ecosystem, or stale model). Soft gap until an agent proposes a corrected purl; human confirms. Planned.',
+      'Cache is ready but no discovered package matches this purl (typo, wrong ecosystem, or stale model). Unconfirmed until an agent proposes a corrected purl; human confirms. Planned.',
     outcome: 'gap',
-    remediation: 'gap-filler',
+    remediation: 'construct-verifier',
     snippet: `{
   "purl": "pkg:github/acme/wrong-name"  // ← not in package-layers for this checkout
 }`,
@@ -255,12 +256,13 @@ type AgentRemediation = {
 
 export type MaintenanceAgent = {
   id:
-    | 'issue-fixer'
-    | 'gap-filler'
-    | 'topology-fixer'
-    | 'topology-gap-filler'
-    | 'boundary-fixer'
-    | 'boundary-gap-filler'
+    | 'construct-fixer'
+    | 'construct-verifier'
+    | 'static-topology-fixer'
+    | 'static-topology-verifier'
+    | 'package-module-fixer'
+    | 'package-module-verifier'
+    | 'dynamic-topology-verifier'
   name: string
   runsOn: string
   summary: string
@@ -270,11 +272,11 @@ export type MaintenanceAgent = {
 
 export const MAINTENANCE_AGENTS: MaintenanceAgent[] = [
   {
-    id: 'issue-fixer',
-    name: 'issue-fixer',
+    id: 'construct-fixer',
+    name: 'construct-fixer',
     runsOn: 'Verification failed',
     summary:
-      'Hard failures only — cases whose Remediation lane is issue-fixer. Investigates source, proposes field corrections; you confirm in Studio. Ignores gaps. Graphify inferred construct/signature is a hint — never auto-adopted.',
+      'Hard failures only — cases whose Remediation lane is construct-fixer. Investigates source, proposes field corrections; you confirm in Studio. Ignores gaps. Graphify inferred construct/signature is a hint — never auto-adopted.',
     reviews: [
       {
         tag: 'file missing (ambiguous relocate)',
@@ -325,11 +327,11 @@ export const MAINTENANCE_AGENTS: MaintenanceAgent[] = [
     ],
   },
   {
-    id: 'gap-filler',
-    name: 'gap-filler',
+    id: 'construct-verifier',
+    name: 'construct-verifier',
     runsOn: 'Partially verified',
     summary:
-      'Confirmation holes only — cases whose Remediation lane is gap-filler. Reads source and proposes fills (often augmentations); you confirm in Studio. Does not chase hard failures.',
+      'Confirmation holes only — cases whose Remediation lane is construct-verifier. Reads source and proposes fills (often augmentations); you confirm in Studio. Does not chase hard failures.',
     reviews: [
       {
         tag: 'construct unclassified',
@@ -361,11 +363,11 @@ export const MAINTENANCE_AGENTS: MaintenanceAgent[] = [
 
 export const TOPOLOGY_MAINTENANCE_AGENTS: MaintenanceAgent[] = [
   {
-    id: 'topology-fixer',
-    name: 'topology-fixer',
+    id: 'static-topology-fixer',
+    name: 'static-topology-fixer',
     runsOn: 'Broken relation endpoints (after construct issues are clear)',
     summary:
-      'Topology hard failures only. Proposes drop or retarget for topology_broken_endpoint; you confirm. Ignores soft gaps and construct findings.',
+      'Topology hard failures only. Proposes drop or retarget for topology_broken_endpoint; you confirm. Ignores unconfirmed claims and construct findings.',
     reviews: [
       {
         tag: 'broken relation endpoints',
@@ -387,11 +389,11 @@ export const TOPOLOGY_MAINTENANCE_AGENTS: MaintenanceAgent[] = [
     ],
   },
   {
-    id: 'topology-gap-filler',
-    name: 'topology-gap-filler',
-    runsOn: 'Topology soft gaps (after construct gaps are clear)',
+    id: 'static-topology-verifier',
+    name: 'static-topology-verifier',
+    runsOn: 'Relation unconfirmed (after construct unconfirmed are clear)',
     summary:
-      'Topology soft gaps only. Prefer relation augmentation when the claim is intentional but Graphify is thin; propose drop/retarget only when source shows the typed claim is wrong.',
+      'Relation unconfirmed only. Prefer relation augmentation when the claim is intentional but Graphify is thin; propose drop/retarget only when source shows the typed claim is wrong.',
     reviews: [
       {
         tag: 'relation unconfirmed',
@@ -436,9 +438,9 @@ export const TOPOLOGY_MECHANICAL_CASES: AuditCase[] = [
   {
     example: 'broken relation endpoints',
     meaning:
-      'from or to names a component that was deleted or renamed. Audit issue (topology_broken_endpoint). topology-fixer proposes drop or retarget.',
+      'from or to names a component that was deleted or renamed. Audit issue (topology_broken_endpoint). static-topology-fixer proposes drop or retarget.',
     outcome: 'issue',
-    remediation: 'topology-fixer',
+    remediation: 'static-topology-fixer',
     snippet: `{
   "id": "e-stale",
   "from": "session-reader",
@@ -462,9 +464,9 @@ export const TOPOLOGY_MECHANICAL_CASES: AuditCase[] = [
   {
     example: 'relation unconfirmed',
     meaning:
-      'No Graphify edge (or cache/anchor unavailable). Soft gap (topology_relation_unconfirmed) — never a hard fail. topology-gap-filler proposes a relation augmentation when source supports the claim; drop/retarget when the claim is wrong.',
+      'No Graphify edge (or cache/anchor unavailable). Unconfirmed (topology_relation_unconfirmed) — never a hard fail. static-topology-verifier proposes a relation augmentation when source supports the claim; drop/retarget when the claim is wrong.',
     outcome: 'gap',
-    remediation: 'topology-gap-filler',
+    remediation: 'static-topology-verifier',
     snippet: `// model claims:
 { "from": "Child", "to": "Parent", "relationType": "extends" }
 
@@ -497,9 +499,9 @@ export const MODULE_MEMBERSHIP_CASES: AuditCase[] = [
   {
     example: 'module ≠ file',
     meaning:
-      'module is set but does not match file (and is not a sensible parent path). Soft gap (boundary_module_file_mismatch). Today’s boundary-gap-filler proposes a module augmentation when intentional, or sets module to the file when it was a slip.',
+      'module is set but does not match file (and is not a sensible parent path). Unconfirmed (boundary_module_file_mismatch). package-module-verifier proposes a module augmentation when intentional, or sets module to the file when it was a slip.',
     outcome: 'gap',
-    remediation: 'boundary-gap-filler',
+    remediation: 'package-module-verifier',
     snippet: `{
   "file": "src/session/transcript.ts",
   "module": "src/session/paths.ts"  // ← different file
@@ -508,9 +510,9 @@ export const MODULE_MEMBERSHIP_CASES: AuditCase[] = [
   {
     example: 'module without file',
     meaning:
-      'module is set but file is empty on a non-external, non-proposed node. Audit issue (boundary_module_without_file). Today’s boundary-fixer proposes file and/or clears module.',
+      'module is set but file is empty on a non-external, non-proposed node. Audit issue (boundary_module_without_file). package-module-fixer proposes file and/or clears module.',
     outcome: 'issue',
-    remediation: 'boundary-fixer',
+    remediation: 'package-module-fixer',
     snippet: `{
   "construct": "function",
   "symbol": "boot",
@@ -539,9 +541,9 @@ export const PROCESS_BOUNDARY_CASES: AuditCase[] = [
   {
     example: 'process nest disagrees',
     meaning:
-      'Members of the same module claim different process values. Soft gap (boundary_process_nest_disagree). boundary-gap-filler aligns process (or clears it).',
+      'Members of the same module claim different process values. Unconfirmed (boundary_process_nest_disagree). dynamic-topology-verifier aligns process (or clears it).',
     outcome: 'gap',
-    remediation: 'boundary-gap-filler',
+    remediation: 'dynamic-topology-verifier',
     snippet: `{ "id": "boot",  "module": "src/host/main.ts", "process": "host" }
 { "id": "create", "module": "src/host/main.ts", "process": "renderer" }
 // ← same module, two processes`,
@@ -550,11 +552,11 @@ export const PROCESS_BOUNDARY_CASES: AuditCase[] = [
 
 export const MODULE_MEMBERSHIP_AGENTS: MaintenanceAgent[] = [
   {
-    id: 'boundary-fixer',
-    name: 'boundary-fixer',
+    id: 'package-module-fixer',
+    name: 'package-module-fixer',
     runsOn: 'Module membership issues (after construct issues are clear)',
     summary:
-      'Hard module failures only — module without file. Named boundary-* historically; conceptually static topology membership, not process. Proposes file/module corrections; you confirm.',
+      'Hard containment failures only — module without file. Dynamic topology (package/module), not process. Proposes file/module corrections; you confirm.',
     reviews: [
       {
         tag: 'module without file',
@@ -575,11 +577,11 @@ export const MODULE_MEMBERSHIP_AGENTS: MaintenanceAgent[] = [
     ],
   },
   {
-    id: 'boundary-gap-filler',
-    name: 'boundary-gap-filler',
-    runsOn: 'Module membership soft gaps',
+    id: 'package-module-verifier',
+    name: 'package-module-verifier',
+    runsOn: 'Module membership unconfirmed',
     summary:
-      'Module soft gaps (module≠file): prefer module augmentation when intentional; set module to file when it was a slip. Same host agent also remediates process nest disagree (see process boundary) until lanes split.',
+      'Module containment unconfirmed (module≠file): prefer module augmentation when intentional; set module to file when it was a slip. Dynamic topology (containment), not process.',
     reviews: [
       {
         tag: 'module ≠ file',
@@ -603,11 +605,11 @@ export const MODULE_MEMBERSHIP_AGENTS: MaintenanceAgent[] = [
 
 export const PROCESS_BOUNDARY_AGENTS: MaintenanceAgent[] = [
   {
-    id: 'boundary-gap-filler',
-    name: 'boundary-gap-filler',
-    runsOn: 'Process nest soft gaps (same agent as module gaps today)',
+    id: 'dynamic-topology-verifier',
+    name: 'dynamic-topology-verifier',
+    runsOn: 'Process nest unconfirmed',
     summary:
-      'When multi-member module members disagree on process, align or clear process so nesting stays coherent. Same host agent as module gap-filler until lanes split.',
+      'When multi-member module members disagree on process, align or clear process so nesting stays coherent. Dynamic topology (process).',
     reviews: [
       {
         tag: 'process nest disagrees',
@@ -769,18 +771,19 @@ export const WALKTHROUGH_MECHANISM_CATALOG: CatalogEntry[] = [
 const OUTCOME_LABEL: Record<CaseOutcome, string> = {
   pass: 'Pass',
   issue: 'Issue',
-  gap: 'Gap',
+  gap: 'Unconfirmed',
   neutral: 'N/A',
 }
 
 const REMEDIATION_LABEL: Record<RemediationLane, string> = {
   deterministic: 'Apply',
-  'issue-fixer': 'issue-fixer',
-  'gap-filler': 'gap-filler',
-  'topology-fixer': 'topology-fixer',
-  'topology-gap-filler': 'topology-gap-filler',
-  'boundary-fixer': 'boundary-fixer',
-  'boundary-gap-filler': 'boundary-gap-filler',
+  'construct-fixer': 'construct-fixer',
+  'construct-verifier': 'construct-verifier',
+  'static-topology-fixer': 'static-topology-fixer',
+  'static-topology-verifier': 'static-topology-verifier',
+  'package-module-fixer': 'package-module-fixer',
+  'package-module-verifier': 'package-module-verifier',
+  'dynamic-topology-verifier': 'dynamic-topology-verifier',
   none: '—',
 }
 
@@ -834,12 +837,7 @@ export function CaseTable({ cases }: { cases: AuditCase[] }) {
 }
 
 export function AgentCard({ agent }: { agent: MaintenanceAgent }) {
-  const tone =
-    agent.id === 'issue-fixer' ||
-    agent.id === 'topology-fixer' ||
-    agent.id === 'boundary-fixer'
-      ? 'failed'
-      : 'partial'
+  const tone = agent.id.endsWith('-fixer') ? 'failed' : 'partial'
   return (
     <article className={`maintainer-agent maintainer-agent--${tone}`}>
       <header className="maintainer-agent-header">
@@ -931,43 +929,6 @@ export function LabelCatalog({ entries }: { entries: CatalogEntry[] }) {
         </article>
       ))}
     </div>
-  )
-}
-
-export function RemediationLegend() {
-  return (
-    <p className="maintainer-lede">
-      The <em>Remediation</em> column is the source of truth for how a finding is
-      fixed:{' '}
-      <span className="maintainer-remediation maintainer-remediation--deterministic">
-        Apply
-      </span>{' '}
-      = one-click deterministic fix;{' '}
-      <span className="maintainer-remediation maintainer-remediation--issue-fixer">
-        issue-fixer
-      </span>{' '}
-      /{' '}
-      <span className="maintainer-remediation maintainer-remediation--gap-filler">
-        gap-filler
-      </span>{' '}
-      = construct Maintain;{' '}
-      <span className="maintainer-remediation maintainer-remediation--topology-fixer">
-        topology-fixer
-      </span>{' '}
-      /{' '}
-      <span className="maintainer-remediation maintainer-remediation--topology-gap-filler">
-        topology-gap-filler
-      </span>{' '}
-      = relation Maintain;{' '}
-      <span className="maintainer-remediation maintainer-remediation--boundary-fixer">
-        boundary-fixer
-      </span>{' '}
-      /{' '}
-      <span className="maintainer-remediation maintainer-remediation--boundary-gap-filler">
-        boundary-gap-filler
-      </span>{' '}
-      = module + process (legacy names); <em>—</em> = report only.
-    </p>
   )
 }
 

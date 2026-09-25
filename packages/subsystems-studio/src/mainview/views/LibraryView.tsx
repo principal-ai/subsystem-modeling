@@ -1,7 +1,7 @@
 /**
- * LibraryView — the "Trails" tab: a list of cached trails + tours with badge,
- * repo identity, and relative mtime. Registers its refresh with the AppHeader
- * so the header's refresh button re-fetches this list.
+ * LibraryView — the "Tours" tab: a list of cached File City introduction tours
+ * with repo identity and relative mtime. Registers its refresh with the
+ * AppHeader so the header's refresh button re-fetches this list.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -17,7 +17,7 @@ export function LibraryView() {
 
 	const refresh = useCallback(async () => {
 		try {
-			const result = await electrobun.rpc!.request.listTrails({});
+			const result = await electrobun.rpc!.request.listTours({});
 			setEntries(result.entries);
 			setError(null);
 		} catch (err) {
@@ -36,34 +36,23 @@ export function LibraryView() {
 
 	const onOpen = useCallback(async (entry: LibraryEntry) => {
 		// Tours can only render against a local working tree (they reference whole
-		// directories, not a marker-derived remote file set), so always open them
-		// in local mode. We don't pass a repoRoot — the host resolves the tour's
-		// repo from the Alexandria registry, and surfaces a clear message if it
+		// directories). We don't pass a repoRoot — the host resolves the tour's
+		// repo from the Alexandria registry and surfaces a clear message if it
 		// can't find a local checkout.
-		const localOpen =
-			entry.kind === "tour" || entry.localRepoRoot
-				? {
-						mode: "local" as const,
-						...(entry.localRepoRoot ? { repoRoot: entry.localRepoRoot } : {}),
-					}
-				: {};
-		await electrobun.rpc!.request.openTrailFromCache({
-			trailFile: entry.trailFile,
-			...localOpen,
-		});
+		await electrobun.rpc!.request.openTourFromCache({ file: entry.file });
 	}, []);
 
 	if (error) {
-		return <CenteredMessage title="Could not load library" detail={error} />;
+		return <CenteredMessage title="Could not load tours" detail={error} />;
 	}
 	if (entries === null) {
-		return <CenteredMessage title="Loading library…" />;
+		return <CenteredMessage title="Loading tours…" />;
 	}
 	if (entries.length === 0) {
 		return (
 			<CenteredMessage
-				title="Nothing in your cache yet"
-				detail="Run `principal-ai trail view <id>` or `tour view <id>` to fetch one, or `--file <path>` to open a local JSON."
+				title="No tours yet"
+				detail="Run `principal-ai tour view <file-or-id>` to open one, or `principal-ai tour init` to scaffold a new tour."
 			/>
 		);
 	}
@@ -83,7 +72,7 @@ export function LibraryView() {
 			<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
 				{entries.map((entry) => (
 					<div
-						key={entry.trailFile}
+						key={entry.file}
 						onClick={() => onOpen(entry)}
 						style={{
 							display: "flex",
@@ -109,28 +98,11 @@ export function LibraryView() {
 								textTransform: "uppercase",
 								padding: "2px 7px",
 								borderRadius: 999,
-								...(entry.kind === "tour"
-									? {
-											background: theme.colors.primary,
-											color: theme.colors.background,
-										}
-									: entry.published
-										? {
-												background: theme.colors.accent ?? theme.colors.primary,
-												color: theme.colors.background,
-											}
-										: {
-												background: "transparent",
-												color: theme.colors.textMuted ?? theme.colors.textSecondary,
-												border: `1px solid ${theme.colors.border ?? "#333"}`,
-											}),
+								background: theme.colors.primary,
+								color: theme.colors.background,
 							}}
 						>
-							{entry.kind === "tour"
-								? "Tour"
-								: entry.published
-									? "Published"
-									: "Draft"}
+							Tour
 						</span>
 						<div
 							style={{

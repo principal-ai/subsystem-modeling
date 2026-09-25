@@ -17,7 +17,6 @@ import type { ErrorInfo, ReactNode } from "react";
 import { useTheme } from "@principal-ade/industry-theme";
 import { GitFileTreeBuilder } from "@principal-ai/repository-abstraction";
 import type { IntroductionTour } from "@principal-ai/file-city-builder";
-import type { TrailPayload } from "@industry-theme/file-city-panel";
 import type { TabSummary } from "../shared/contract";
 import { electrobun, reloadSubscribers } from "./rpc";
 import type { TabState } from "./types";
@@ -34,7 +33,6 @@ import { OpencodeV2DebugView } from "./views/OpencodeV2DebugView";
 import { MaintainEventsView } from "./views/MaintainEventsView";
 import { SessionEventsView } from "./views/SessionEventsView";
 import { SubsystemModelView } from "./views/SubsystemModelView";
-import { TrailViewer } from "./views/TrailViewer";
 import { TourViewer } from "./views/TourViewer";
 
 interface BoundaryState {
@@ -79,10 +77,10 @@ class ErrorBoundary extends Component<
 	}
 }
 
-// Permanent, non-trail tab ids. These views stay mounted once visited (hidden
-// while inactive), so heavy views like the library don't reload every time you
-// switch back to them. Trail tabs are excluded — each one mounts a full 3D
-// city, so only the active trail is mounted at a time.
+// Permanent, non-payload tab ids. These views stay mounted once visited
+// (hidden while inactive), so heavy views like the library don't reload every
+// time you switch back to them. Payload tabs are excluded — each one mounts a
+// full 3D city, so only the active payload is mounted at a time.
 const STATIC_TAB_IDS = new Set([
 	"library",
 	"agent-sessions",
@@ -218,14 +216,11 @@ function ActiveTab({
 					});
 					return;
 				}
+				// Only File City introduction tours are rendered; a non-tour cached
+				// payload has no viewer.
 				setState({
-					kind: "ready",
-					id: tab.id,
-					payload: tab.payload as TrailPayload,
-					fileTree,
-					repoRoot: tab.repoRoot ?? "",
-					owner: tab.owner,
-					repo: tab.repo,
+					kind: "error",
+					message: "This payload is not a tour and cannot be rendered.",
 				});
 			} catch (err) {
 				if (cancelled) return;
@@ -253,29 +248,17 @@ function ActiveTab({
 	if (isStaticMounted) return null;
 	if (state.kind === "loading") {
 		// Agent / maintenance sessions mount their own loader — skip the generic
-		// "Loading trail…" flash here.
+		// "Loading…" flash here.
 		if (tabId === "agent-sessions" || tabId === "maintenance-sessions") return null;
-		return <CenteredMessage title="Loading trail…" />;
+		return <CenteredMessage title="Loading…" />;
 	}
 	if (state.kind === "error")
-		return <CenteredMessage title="Could not load trail" detail={state.message} />;
+		return <CenteredMessage title="Could not load view" detail={state.message} />;
 	if (state.kind === "ready-tour") {
 		return (
 			<TourViewer
 				tabId={state.id}
 				tour={state.tour}
-				fileTree={state.fileTree}
-				repoRoot={state.repoRoot}
-				hostOwner={state.owner}
-				hostRepo={state.repo}
-			/>
-		);
-	}
-	if (state.kind === "ready") {
-		return (
-			<TrailViewer
-				tabId={state.id}
-				payload={state.payload}
 				fileTree={state.fileTree}
 				repoRoot={state.repoRoot}
 				hostOwner={state.owner}

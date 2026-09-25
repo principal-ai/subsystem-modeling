@@ -5,9 +5,16 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Wrench } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import { electrobun } from "../rpc";
+import {
+	Modal,
+	ModalBody,
+	ModalButton,
+	ModalFooter,
+	ModalHeader,
+} from "./Modal";
 
 type ModelRow = {
 	ref: string;
@@ -18,16 +25,30 @@ type ModelRow = {
 
 const AUTO = "__auto__";
 
+/** Maintain agent id → display name (mirrors MaintenancePanel's AGENT_META). */
+const AGENT_DISPLAY: Record<string, string> = {
+	"construct-fixer": "Construct Fixer",
+	"static-topology-fixer": "Static Topology Fixer",
+	"package-module-fixer": "Package/Module Fixer",
+	"construct-verifier": "Construct Verifier",
+	"static-topology-verifier": "Static Topology Verifier",
+	"package-module-verifier": "Package/Module Verifier",
+	"runtime-topology-verifier": "Runtime Topology Verifier",
+};
+
 export function MaintainModelPickerModal({
 	graphId,
 	title,
 	mode,
+	agent,
 	onClose,
 	onStarted,
 }: {
 	graphId: string;
 	title: string;
 	mode: "issues" | "verify";
+	/** Exact Maintain agent the next run will use (`nextRoute.agent`). */
+	agent?: string | null;
 	onClose: () => void;
 	onStarted: (info: { model: string; alreadyRunning?: boolean }) => void;
 }) {
@@ -52,11 +73,17 @@ export function MaintainModelPickerModal({
 	const [modelsOpen, setModelsOpen] = useState(false);
 	const modelsFetched = useRef(false);
 
+	// The next stage's agent, when known, is the precise subject; otherwise fall
+	// back to the tier-level list.
+	const hasAgent = !!agent;
 	const agentLabel =
-		mode === "issues"
+		(agent && AGENT_DISPLAY[agent]) ||
+		agent ||
+		(mode === "issues"
 			? "construct-fixer / static-topology-fixer / package-module-fixer"
-			: "construct-verifier / static-topology-verifier / package-module-verifier / runtime-topology-verifier";
-	const actionLabel = "Run maintenance";
+			: "construct-verifier / static-topology-verifier / package-module-verifier / runtime-topology-verifier");
+	// With a known agent the action is "Run <Agent>"; otherwise the generic label.
+	const actionLabel = hasAgent ? `Run ${agentLabel}` : "Run maintenance";
 
 	const load = useCallback(async (refresh?: boolean) => {
 		if (refresh) setRefreshing(true);
@@ -172,62 +199,41 @@ export function MaintainModelPickerModal({
 	const shownFree = tier === "go" ? [] : freeModels;
 
 	return (
-		<div
-			role="dialog"
-			aria-modal
-			aria-label={`Choose model for ${actionLabel}`}
-			onClick={onClose}
-			style={{
-				position: "fixed",
-				inset: 0,
-				zIndex: 2147483000,
-				display: "flex",
-				alignItems: "center",
-				justifyContent: "center",
-				background: "rgba(0,0,0,0.55)",
-				fontFamily: theme.fonts.body,
-			}}
+		<Modal
+			ariaLabel={`Choose model for ${actionLabel}`}
+			width={460}
+			onClose={starting ? undefined : onClose}
 		>
-			<div
-				onClick={(e) => e.stopPropagation()}
-				style={{
-					width: "min(460px, calc(100vw - 48px))",
-					maxHeight: "min(82vh, 680px)",
-					overflow: "auto",
-					background: theme.colors.surface,
-					border: `1px solid ${theme.colors.border}`,
-					borderRadius: 12,
-					padding: 24,
-					boxShadow: "0 12px 48px rgba(0,0,0,0.4)",
-					color: theme.colors.text,
-				}}
-			>
-				<div style={{ marginBottom: 4 }}>
-					<span style={{ fontSize: theme.fontSizes[3], fontWeight: 600 }}>
-						{actionLabel}
-					</span>
-				</div>
-				<p
-					style={{
-						margin: "0 0 14px",
-						fontSize: theme.fontSizes[0],
-						color: muted,
-						lineHeight: 1.5,
-					}}
-				>
-					{title} — pick a model for{" "}
-					<code
+			<ModalHeader icon={Wrench} title={actionLabel} />
+			<ModalBody scroll={false}>
+				{(!hasAgent || (resolved && source)) && (
+					<p
 						style={{
-							fontFamily: theme.fonts.monospace ?? "ui-monospace, monospace",
+							margin: "0 0 14px",
+							fontSize: theme.fontSizes[0],
+							color: muted,
+							lineHeight: 1.5,
 						}}
 					>
-						{agentLabel}
-					</code>
-					.
-					{resolved && source
-						? ` Default right now: ${resolved} (${source}).`
-						: null}
-				</p>
+						{hasAgent ? null : (
+							<>
+								{title} — pick a model for{" "}
+								<code
+									style={{
+										fontFamily:
+											theme.fonts.monospace ?? "ui-monospace, monospace",
+									}}
+								>
+									{agentLabel}
+								</code>
+								.
+							</>
+						)}
+						{resolved && source
+							? ` Default right now: ${resolved} (${source}).`
+							: null}
+					</p>
+				)}
 
 				{note && (
 					<p
@@ -581,86 +587,31 @@ export function MaintainModelPickerModal({
 					/>
 					Remember as default for next Maintain
 				</label>
-
-				<div
-					style={{
-						display: "flex",
-						justifyContent: "space-between",
-						gap: 8,
-						flexWrap: "wrap",
-					}}
+			</ModalBody>
+			<ModalFooter>
+				{modelsOpen && (
+					<ModalButton
+						disabled={loading || refreshing || starting}
+						onClick={() => void load(true)}
+						style={{ marginRight: "auto" }}
+					>
+						{refreshing ? "Refreshing…" : "Refresh list"}
+					</ModalButton>
+				)}
+				<ModalButton disabled={starting} onClick={onClose}>
+					Cancel
+				</ModalButton>
+				<ModalButton
+					variant="primary"
+					icon={Wrench}
+					busy={starting}
+					disabled={!selected}
+					onClick={() => void onRun()}
 				>
-					{modelsOpen && (
-						<button
-							type="button"
-							disabled={loading || refreshing || starting}
-							onClick={() => void load(true)}
-							style={{
-								padding: "0 12px",
-								height: 36,
-								borderRadius: 6,
-								fontSize: theme.fontSizes[1],
-								fontFamily: theme.fonts.body,
-								background: "transparent",
-								color: theme.colors.text,
-								border: `1px solid ${theme.colors.border}`,
-								cursor:
-									loading || refreshing || starting ? "default" : "pointer",
-								opacity: loading || refreshing || starting ? 0.6 : 1,
-							}}
-						>
-							{refreshing ? "Refreshing…" : "Refresh list"}
-						</button>
-					)}
-					<div style={{ display: "flex", gap: 8 }}>
-						<button
-							type="button"
-							disabled={starting}
-							onClick={onClose}
-							style={{
-								padding: "0 12px",
-								height: 36,
-								borderRadius: 6,
-								fontSize: theme.fontSizes[1],
-								fontFamily: theme.fonts.body,
-								background: "transparent",
-								color: theme.colors.text,
-								border: `1px solid ${theme.colors.border}`,
-								cursor: starting ? "default" : "pointer",
-							}}
-						>
-							Cancel
-						</button>
-						<button
-							type="button"
-							disabled={!selected || starting}
-							onClick={() => void onRun()}
-							style={{
-								padding: "0 14px",
-								height: 36,
-								borderRadius: 6,
-								fontSize: theme.fontSizes[1],
-								fontWeight: 500,
-								fontFamily: theme.fonts.body,
-								background: theme.colors.primary,
-								color: theme.colors.background,
-								border: `1px solid ${theme.colors.primary}`,
-								cursor: !selected || starting ? "default" : "pointer",
-								opacity: !selected || starting ? 0.6 : 1,
-								display: "inline-flex",
-								alignItems: "center",
-								gap: 6,
-							}}
-						>
-							{starting && (
-								<Loader2 size={14} className="principal-studio-spin" />
-							)}
-							{starting ? "Starting…" : "Run"}
-						</button>
-					</div>
-				</div>
-			</div>
-		</div>
+					{starting ? "Starting…" : "Run"}
+				</ModalButton>
+			</ModalFooter>
+		</Modal>
 	);
 }
 

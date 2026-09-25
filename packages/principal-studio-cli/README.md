@@ -22,11 +22,8 @@ Bin name: `principal-ai`.
 |---|---|
 | `subsystem-model` | Create / open / list / get / audit / propose / accept / reject |
 | `open-studio` | Launch or focus Subsystems Studio |
-| `trail` | File City trails |
-| `tour` | Introduction tours |
-| `topic` | Topics |
-| `inbox` | Inbox |
-| `repo` | Repo helpers |
+| `tour` | Author / validate / analyze / open introduction tours |
+| `topic` | Open a topic in the desktop app |
 | `opencode` | OpenCode session helpers |
 | `agent-sessions` / `agent-session` | Agent session views |
 

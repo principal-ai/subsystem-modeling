@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import { Network as NetworkIcon } from "lucide-react";
+import { Network as NetworkIcon, X as XIcon } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import { electrobun } from "../rpc";
-import { GithubMark } from "./TrailHeader";
+import { GithubMark } from "./GithubMark";
 
 /**
  * The shared repo-row look every sidebar uses: leading avatar tile, monospace
@@ -15,7 +15,7 @@ export interface RepoRowProps {
 	avatarUrl?: string;
 	/** Leading tile content when no avatar is available. */
 	avatarFallback?: ReactNode;
-	/** Primary label (repo name or a synthetic row like "All repos"). */
+	/** Primary label (repo name). */
 	label: string;
 	/** Tooltip for the label. */
 	title?: string;
@@ -35,6 +35,13 @@ export interface RepoRowProps {
 	showCombinedToggle?: boolean;
 	combinedActive?: boolean;
 	onToggleCombined?: () => void;
+	/**
+	 * Back / close action, rendered as an X immediately beside the GitHub
+	 * button (after it when both are present).
+	 */
+	onBack?: () => void;
+	/** Tooltip for the back button. */
+	backTitle?: string;
 }
 
 export function RepoRow({
@@ -51,6 +58,8 @@ export function RepoRow({
 	showCombinedToggle = false,
 	combinedActive = false,
 	onToggleCombined,
+	onBack,
+	backTitle = "Back to all repos",
 }: RepoRowProps) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -64,7 +73,7 @@ export function RepoRow({
 					alt=""
 					width={28}
 					height={28}
-					style={{ borderRadius: 6, flexShrink: 0 }}
+					style={{ borderRadius: 6, flexShrink: 0, marginRight: 4 }}
 				/>
 			) : avatarFallback ? (
 				<span
@@ -73,6 +82,7 @@ export function RepoRow({
 						height: 28,
 						borderRadius: 6,
 						flexShrink: 0,
+						marginRight: 4,
 						display: "flex",
 						alignItems: "center",
 						justifyContent: "center",
@@ -136,7 +146,7 @@ export function RepoRow({
 				display: "flex",
 				alignItems: "center",
 				gap: 6,
-				padding: "8px 8px 4px",
+				padding: 12,
 				borderRadius: 4,
 				background: active ? hoverBg : "transparent",
 				minWidth: 0,
@@ -247,6 +257,40 @@ export function RepoRow({
 					}}
 				>
 					<GithubMark size={18} />
+				</button>
+			)}
+			{onBack && (
+				<button
+					type="button"
+					title={backTitle}
+					aria-label={backTitle}
+					onClick={(e) => {
+						e.stopPropagation();
+						onBack();
+					}}
+					onMouseEnter={(e) => {
+						e.currentTarget.style.background = hoverBg;
+						e.currentTarget.style.color = theme.colors.text;
+					}}
+					onMouseLeave={(e) => {
+						e.currentTarget.style.background = "transparent";
+						e.currentTarget.style.color = muted;
+					}}
+					style={{
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
+						padding: 4,
+						flexShrink: 0,
+						border: "none",
+						borderRadius: 4,
+						background: "transparent",
+						cursor: "pointer",
+						color: muted,
+						transition: "color 120ms ease",
+					}}
+				>
+					<XIcon size={18} />
 				</button>
 			)}
 		</div>

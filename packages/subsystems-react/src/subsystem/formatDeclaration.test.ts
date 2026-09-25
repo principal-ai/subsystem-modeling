@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { generateDeclarationString } from './formatDeclaration';
+import { generateDeclarationString, resolveComponentDeclaration } from './formatDeclaration';
 import type { SubsystemComponent } from './model';
 
 describe('generateDeclarationString — custom_entity', () => {
@@ -137,6 +137,37 @@ describe('generateDeclarationString — signature augmentation', () => {
         }),
       ),
     ).toBe('function WalkthroughsPanel(arg0: WalkthroughsPanelProps): JSX.Element;');
+  });
+
+  test('resolveComponentDeclaration returns the augmentation when there is no own declaration', () => {
+    const d = resolveComponentDeclaration(
+      base({
+        signatureAugmentation: {
+          parameters: [{ type: 'WalkthroughsPanelProps' }],
+          returnType: 'JSX.Element',
+        },
+      }),
+    );
+    expect(d?.kind).toBe('function');
+    if (d?.kind === 'function') {
+      expect(d.parameters).toEqual([{ type: 'WalkthroughsPanelProps' }]);
+      expect(d.returnType).toBe('JSX.Element');
+    }
+  });
+
+  test('resolveComponentDeclaration prefers the own declaration', () => {
+    const d = resolveComponentDeclaration(
+      base({
+        declaration: {
+          kind: 'function',
+          parameters: [{ name: 'x', type: 'T' }],
+          callers: [],
+          callees: [],
+        },
+        signatureAugmentation: { parameters: [{ type: 'Other' }] },
+      }),
+    );
+    expect(d?.kind === 'function' && d.parameters).toEqual([{ name: 'x', type: 'T' }]);
   });
 
   test('method: hostClass comes from the dotted symbol', () => {

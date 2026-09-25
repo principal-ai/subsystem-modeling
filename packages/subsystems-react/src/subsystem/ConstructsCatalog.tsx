@@ -22,6 +22,7 @@ import {
 import type { SubsystemOpenFileOptions } from './declarationRef';
 import { ComponentDeclaration } from './ComponentDeclaration';
 import type { ComponentVerificationState } from './ComponentDeclaration';
+import type { DeclarationSymbolRef, SymbolInspection } from './symbolRefs';
 import { SubsystemDiagnosticToggle, type SubsystemDiagnostic } from './DiagnosticToggle';
 import { FileDrawer } from './FileDrawer';
 import { componentColor } from '../pierre/constructColors';
@@ -40,6 +41,13 @@ export interface ConstructsCatalogProps {
   renderFileView?: (component: SubsystemComponent) => ReactNode;
   onFileSelect?: (file: string) => void;
   componentVerification?: ComponentVerificationState | null;
+  /** Referenced-symbol click → host graphify lookup (purl/file from the card). */
+  onInspectSymbol?: (req: {
+    purl: string;
+    file: string;
+    symbol: string;
+    ref: DeclarationSymbolRef;
+  }) => Promise<SymbolInspection | null> | SymbolInspection | null;
 }
 
 const FileDrawerContent = memo(function FileDrawerContent({
@@ -145,6 +153,7 @@ export function ConstructsCatalog({
   renderFileView,
   onFileSelect,
   componentVerification,
+  onInspectSymbol,
 }: ConstructsCatalogProps) {
   const { theme, mode } = useTheme();
   const pierreTheme = resolvePierreSyntaxThemeName(mode);
@@ -948,6 +957,17 @@ export function ConstructsCatalog({
                         onOpenFile={fileViewer ? onOpenFile : undefined}
                         defaultShowFile={!!fileViewer}
                         onRelatedSelect={onRelatedSelect}
+                        onInspectSymbol={
+                          onInspectSymbol
+                            ? (symbol, ref) =>
+                                onInspectSymbol({
+                                  purl: c.purl,
+                                  file: c.file,
+                                  symbol,
+                                  ref,
+                                })
+                            : undefined
+                        }
                         fileOpen={fileOpen}
                         declarationOpen={lineOpen}
                         showRepoIdentity={false}

@@ -26,7 +26,7 @@ export type IssueFixExample = {
   blurb: string
   remediation: Extract<
     RemediationLane,
-    'deterministic' | 'issue-fixer' | 'topology-fixer' | 'none'
+    'deterministic' | 'construct-fixer' | 'static-topology-fixer' | 'none'
   >
   graph: {
     edgeView: SubsystemEdgeView
@@ -350,8 +350,8 @@ export const ISSUE_FIX_EXAMPLES: IssueFixExample[] = [
     check: 'construct ≠ inferred',
     layer: 'Construct',
     blurb:
-      'Graphify’s structure says class; the model still claims function. issue-fixer reads source and proposes the construct — never one-click adopt.',
-    remediation: 'issue-fixer',
+      'Graphify’s structure says class; the model still claims function. construct-fixer reads source and proposes the construct — never one-click adopt.',
+    remediation: 'construct-fixer',
     graph: {
       edgeView: 'relations',
       showEdgeLabels: true,
@@ -383,8 +383,8 @@ export const ISSUE_FIX_EXAMPLES: IssueFixExample[] = [
     check: 'broken relation endpoints',
     layer: 'Static topology',
     blurb:
-      'From or to names a component that was deleted. topology-fixer proposes drop or retarget; you confirm.',
-    remediation: 'topology-fixer',
+      'From or to names a component that was deleted. static-topology-fixer proposes drop or retarget; you confirm.',
+    remediation: 'static-topology-fixer',
     graph: {
       edgeView: 'relations',
       showEdgeLabels: true,

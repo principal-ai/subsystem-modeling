@@ -36,7 +36,7 @@
   },
   "devDependencies": {
     "@excalidraw/excalidraw": "^0.18.0",
-    "@industry-theme/file-city-panel": "^0.9.104",
+    "@industry-theme/file-city-panel": "^0.9.106",
     "@pierre/diffs": "^1.3.0",
     "@principal-ade/dynamic-file-tree": "^0.2.45",
     "@principal-ade/industry-theme": "^0.1.24",
@@ -70,7 +70,7 @@
     "@principal-ai/agent-monitoring": "^0.3.43",
     "@principal-ai/codebase-composition": "0.2.58",
     "@principal-ai/subsystems-core": "^0.38.0",
-    "@principal-ai/subsystems-react": "^0.34.0",
+    "@principal-ai/subsystems-react": "^0.35.7",
     "@xyflow/react": "^12.11.3",
     "ajv": "^8.20.0",
     "better-sqlite3": "^13.0.2"

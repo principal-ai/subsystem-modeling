@@ -10,13 +10,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { BadgeCheck, Bot, Check, Component, Copy, History, ListChecks, Loader2, Network, Play, Route, ScanSearch, Server, Square, Trash2, type LucideIcon } from "lucide-react";
+import { BadgeCheck, Bot, Check, Component, Copy, History, Loader2, Network, Route, ScanSearch, Server, Square, Trash2, Wrench, type LucideIcon } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import { repoAvatarUrl } from "@principal-ai/subsystems-react";
 import type {
 	MaintenanceOverview,
 	MaintenanceOverviewModel,
 	MaintenanceOverviewProposal,
+	RegularAuditStatus,
 	StudioMessages,
 	SubsystemModelProposal,
 	SubsystemModelRun,
@@ -26,18 +27,103 @@ import type {
 import {
 	electrobun,
 	opencodeLiveFeedSubscribers,
+	regularAuditChangeSubscribers,
 	subsystemModelChangeSubscribers,
 	subsystemModelMaintainChangeSubscribers,
 	subsystemModelProposalsChangeSubscribers,
 	subsystemModelRunsChangeSubscribers,
 } from "../rpc";
-import { MaintainModelPickerModal } from "./MaintainModelPickerModal";
-import { MaintenanceAuditAllModal } from "./MaintenanceAuditAllModal";
-import { ProposalsModal } from "./ProposalsModal";
-import { RepoRow } from "./RepoRow";
+import { MaintainModelPickerModal } from "../components/MaintainModelPickerModal";
+import { ProposalsModal } from "../components/ProposalsModal";
+import { RepoRow } from "../components/RepoRow";
+import { DeleteAllProposalsDialog } from "../components/DeleteAllProposalsDialog";
+import { RunMaintenanceConfirm } from "../components/RunMaintenanceConfirm";
+import { AcceptConfidentDialog } from "../components/AcceptConfidentDialog";
+import { LaneHelpDialog } from "../components/LaneHelpDialog";
 
 /** Copy-feedback flash duration for a run row's copy button. */
 const RUN_COPY_FEEDBACK_MS = 1500;
+
+function formatRegularAuditCountdown(status: RegularAuditStatus, nowMs: number): string {
+	if (!status.enabled) return "";
+	if (status.running) return "Auditing…";
+	if (!status.nextAuditAt) return "Next audit soon…";
+	const ms = new Date(status.nextAuditAt).getTime() - nowMs;
+	if (!Number.isFinite(ms) || ms <= 0) return "Auditing…";
+	const totalSec = Math.ceil(ms / 1000);
+	const h = Math.floor(totalSec / 3600);
+	const m = Math.floor((totalSec % 3600) / 60);
+	const s = totalSec % 60;
+	if (h > 0) {
+		return `Next audit in ${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+	}
+	return `Next audit in ${m}:${String(s).padStart(2, "0")}`;
+}
+
+/** Scheduled regular-audit countdown, shown in the Maintainer header. */
+function RegularAuditSignal() {
+	const { theme } = useTheme();
+	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
+	const [status, setStatus] = useState<RegularAuditStatus | null>(null);
+	const [, bump] = useState(0);
+
+	useEffect(() => {
+		let alive = true;
+		void electrobun.rpc!.request
+			.getRegularAuditStatus({})
+			.then((next) => {
+				if (alive) setStatus(next);
+			})
+			.catch(() => {
+				/* optional */
+			});
+		const onChange = (next: StudioMessages["regularAuditChanged"]) => {
+			setStatus(next);
+		};
+		regularAuditChangeSubscribers.add(onChange);
+		return () => {
+			alive = false;
+			regularAuditChangeSubscribers.delete(onChange);
+		};
+	}, []);
+
+	useEffect(() => {
+		if (!status?.enabled) return;
+		const id = setInterval(() => bump((n) => n + 1), 1_000);
+		return () => clearInterval(id);
+	}, [status?.enabled]);
+
+	if (!status?.enabled) return null;
+	const label = formatRegularAuditCountdown(status, Date.now());
+	if (!label) return null;
+	return (
+		<div
+			title={
+				status.running
+					? "Regular audit is running across stored subsystem models"
+					: `Regular audit every ${status.intervalMinutes ?? "?"} min — change in Settings`
+			}
+			style={{
+				display: "inline-flex",
+				alignItems: "center",
+				gap: 6,
+				padding: "3px 10px",
+				borderRadius: 6,
+				border: `1px solid ${theme.colors.border ?? "#333"}`,
+				background: theme.colors.background,
+				color: status.running ? theme.colors.primary : muted,
+				fontSize: theme.fontSizes[0],
+				fontFamily: theme.fonts.monospace,
+				flexShrink: 0,
+			}}
+		>
+			{status.running ? (
+				<Loader2 size={12} className="principal-studio-spin" />
+			) : null}
+			{label}
+		</div>
+	);
+}
 
 /**
  * The Maintain agents, in routing priority order (construct → static topology →
@@ -86,7 +172,7 @@ function FixCycleStrip({
 	nextRoute: MaintenanceOverviewModel["nextRoute"];
 }) {
 	const { theme } = useTheme();
-	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
+	const muted = theme.colors.textSecondary;
 	const success = theme.colors.success ?? "#2da44e";
 	const nextIdx = nextRoute
 		? AGENT_META.findIndex((a) => a.agent === nextRoute.agent)
@@ -220,7 +306,7 @@ function RunRow({
 	onOpen?: () => void;
 }) {
 	const { theme } = useTheme();
-	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
+	const muted = theme.colors.textSecondary;
 	const [copied, setCopied] = useState(false);
 	const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 	useEffect(
@@ -434,6 +520,8 @@ function LaneBadges({
 	colors,
 	muted,
 	onOpenLane,
+	proposalCounts,
+	onOpenProposals,
 }: {
 	lanes: Partial<Record<SubsystemVerificationLane, VerificationLaneStatus>>;
 	colors: {
@@ -446,6 +534,9 @@ function LaneBadges({
 	muted: string;
 	/** Open the model with the issues view focused on the clicked lane. */
 	onOpenLane?: (lane: SubsystemVerificationLane) => void;
+	/** Pending proposals per lane — shows a count badge and reroutes the click. */
+	proposalCounts?: Partial<Record<SubsystemVerificationLane, number>>;
+	onOpenProposals?: (lane: SubsystemVerificationLane) => void;
 }) {
 	const { theme } = useTheme();
 	return (
@@ -460,6 +551,58 @@ function LaneBadges({
 			{LANE_META.map(({ lane, label, Icon }) => {
 				const status = lanes[lane] ?? "none";
 				const tint = laneStatusColor(status, colors, muted);
+				const count = proposalCounts?.[lane] ?? 0;
+				// A lane with pending proposals reviews them instead of opening
+				// the model — the badge is the proposal affordance.
+				if (count > 0 && onOpenProposals) {
+					return (
+						<button
+							key={lane}
+							type="button"
+							onClick={(e) => {
+								e.stopPropagation();
+								onOpenProposals(lane);
+							}}
+							aria-label={`Review ${count} ${label} proposal${count === 1 ? "" : "s"}`}
+							title={`Review ${count} ${label} proposal${count === 1 ? "" : "s"}`}
+							style={{
+								position: "relative",
+								display: "inline-flex",
+								alignItems: "center",
+								justifyContent: "center",
+								width: 26,
+								height: 26,
+								padding: 0,
+								border: `1px solid ${theme.colors.primary}`,
+								borderRadius: 6,
+								background: "transparent",
+								color: theme.colors.primary,
+								cursor: "pointer",
+							}}
+						>
+							<Icon size={14} />
+							<span
+								style={{
+									position: "absolute",
+									top: -5,
+									right: -5,
+									minWidth: 14,
+									height: 14,
+									padding: "0 3px",
+									borderRadius: 7,
+									background: theme.colors.primary,
+									color: theme.colors.background,
+									fontSize: 9,
+									fontWeight: 700,
+									lineHeight: "14px",
+									textAlign: "center",
+								}}
+							>
+								{count}
+							</span>
+						</button>
+					);
+				}
 				if (!onOpenLane) {
 					return (
 						<Icon
@@ -653,7 +796,7 @@ function MaintenanceRepoList({
 	scalePad: number;
 }) {
 	const { theme } = useTheme();
-	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
+	const muted = theme.colors.textSecondary;
 
 	return (
 		<div
@@ -708,7 +851,7 @@ export function MaintenancePanel({
 	onClose?: () => void;
 }) {
 	const { theme } = useTheme();
-	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
+	const muted = theme.colors.textSecondary;
 	// The tab view bleeds to its edges (header border, repo list border run full
 	// width); the modal keeps container padding and zero internal pad.
 	const scalePad = overlay ? 0 : 24;
@@ -717,7 +860,7 @@ export function MaintenancePanel({
 	// Graph whose "Run maintenance" click opened the model picker.
 	const [pickTarget, setPickTarget] = useState<MaintenanceOverviewModel | null>(null);
 	// Batch "Audit all" over visible models.
-	const [auditAllOpen, setAuditAllOpen] = useState(false);
+	const [auditAllStarting, setAuditAllStarting] = useState(false);
 	// Batch "Accept confident" over visible pending proposals at/above the
 	// auto-accept confidence threshold.
 	const [acceptConfidentOpen, setAcceptConfidentOpen] = useState(false);
@@ -732,11 +875,20 @@ export function MaintenancePanel({
 	const [acceptBatchRunning, setAcceptBatchRunning] = useState(false);
 	// Jev confidence threshold, mirrored from viewer settings for the gate.
 	const [confidenceThreshold, setConfidenceThreshold] = useState(0.85);
-	// Model whose per-model proposals modal is open (from its row chip).
+	// Model whose per-model proposals modal is open (from its lane badge).
 	const [proposalsTarget, setProposalsTarget] = useState<{
 		graphId: string;
 		title: string;
+		/** Lane the badge belongs to — scopes the modal to that lane. */
+		lane?: SubsystemVerificationLane;
 	} | null>(null);
+	// Run maintenance while proposals exist → confirm deleting them first.
+	const [runConfirm, setRunConfirm] = useState<
+		| { kind: "single"; graphId: string; title: string; count: number }
+		| { kind: "batch"; count: number }
+		| null
+	>(null);
+	const [runConfirmBusy, setRunConfirmBusy] = useState(false);
 	// Which lane's "what does this mean" popover is open (header legend).
 	const [laneHelp, setLaneHelp] = useState<SubsystemVerificationLane | null>(
 		null,
@@ -1031,6 +1183,22 @@ export function MaintenancePanel({
 	const pending = overview?.pendingProposals ?? [];
 	const auditing = overview?.auditing ?? [];
 
+	// Pending proposals per model, grouped by lane — badges the lane icons.
+	const proposalCountsByGraph = useMemo(() => {
+		const map = new Map<
+			string,
+			Partial<Record<SubsystemVerificationLane, number>>
+		>();
+		for (const { graphId, proposal } of pending) {
+			const lane = proposal.lane;
+			if (!lane) continue;
+			const counts = map.get(graphId) ?? {};
+			counts[lane] = (counts[lane] ?? 0) + 1;
+			map.set(graphId, counts);
+		}
+		return map;
+	}, [pending]);
+
 	// Repo filter facets: per-model repos and the distinct repo breaks (with
 	// model counts) fed to the filter sidebar.
 	const reposByGraph = useMemo(() => {
@@ -1088,6 +1256,16 @@ export function MaintenancePanel({
 		() => (overview?.auditing ?? []).filter(inRepo),
 		[overview, activeRepoKey, reposByGraph],
 	);
+	// "Audit all" batch progress, derived from the host's auditing set — no
+	// local counter, so it stays correct across re-renders and broadcasts.
+	const auditAuditTotal = visibleModels.length;
+	const auditAuditedCount = useMemo(
+		() =>
+			visibleModels.filter((m) => !visibleAuditing.includes(m.graphId)).length,
+		[visibleModels, visibleAuditing],
+	);
+	const auditAllActive =
+		!auditAllStarting && visibleAuditing.length > 0 && auditAuditedCount < auditAuditTotal;
 
 	// Visible pending proposals whose Jev second opinion already cleared the
 	// auto-accept confidence bar. Missing opinions / scoring errors never
@@ -1155,7 +1333,7 @@ export function MaintenancePanel({
 	);
 
 	// Run maintenance across the visible (repo-filtered) models, one at a time.
-	// Models with pending proposals are skipped so a human can review them first.
+	// Models with pending proposals have them deleted first (confirmed upstream).
 	const runRepoMaintenance = useCallback(async () => {
 		if (repoBatchActive) return;
 		const targets = visibleModels;
@@ -1171,13 +1349,6 @@ export function MaintenancePanel({
 			for (const m of targets) {
 				// Stop requested: halt after the model already in flight.
 				if (repoBatchCancel.current) break;
-				if (m.pendingProposalCount > 0) {
-					setRepoBatch((prev) => ({
-						...prev,
-						[m.graphId]: { status: "skipped" },
-					}));
-					continue;
-				}
 				setRepoBatch((prev) => ({
 					...prev,
 					[m.graphId]: { status: "running" },
@@ -1234,6 +1405,38 @@ export function MaintenancePanel({
 			setRepoBatchActive(false);
 		}
 	}, [repoBatchActive, visibleModels, waitForMaintainDone]);
+
+	// Confirm deleting existing proposals, then run maintenance.
+	const confirmRunWithProposals = useCallback(async () => {
+		if (!runConfirm) return;
+		setRunConfirmBusy(true);
+		try {
+			if (runConfirm.kind === "single") {
+				await electrobun.rpc!.request.deleteSubsystemModelProposals({
+					graphId: runConfirm.graphId,
+				});
+				const model = (overview?.models ?? []).find(
+					(m) => m.graphId === runConfirm.graphId,
+				);
+				await load();
+				if (model) setPickTarget(model);
+			} else {
+				const withProposals = visibleModels.filter(
+					(m) => m.pendingProposalCount > 0,
+				);
+				for (const m of withProposals) {
+					await electrobun.rpc!.request.deleteSubsystemModelProposals({
+						graphId: m.graphId,
+					});
+				}
+				await load();
+				void runRepoMaintenance();
+			}
+		} finally {
+			setRunConfirmBusy(false);
+			setRunConfirm(null);
+		}
+	}, [runConfirm, overview, visibleModels, load, runRepoMaintenance]);
 
 	const repoBatchDone = Object.values(repoBatch).filter(
 		(e) => e.status === "done",
@@ -1353,19 +1556,29 @@ export function MaintenancePanel({
 					<div
 						style={{
 							display: "flex",
-							alignItems: "baseline",
+							alignItems: "center",
 							gap: 8,
 						}}
 					>
+						<RegularAuditSignal />
 						<button
 							type="button"
-							onClick={() => setAuditAllOpen(true)}
-							title="Dry-run deterministic audit of every visible model (no agent, no mutations)."
+							disabled={auditAllActive || visibleModels.length === 0}
+							onClick={() => {
+								setAuditAllStarting(true);
+								void electrobun.rpc!.request
+									.auditSubsystemModels({
+										graphIds: visibleModels.map((m) => m.graphId),
+									})
+									.finally(() => setAuditAllStarting(false));
+							}}
+							title="Dry-run the deterministic audit on every visible model (no agent, no mutations). Progress shows on each row."
 							style={{
 								background: "transparent",
 								border: `1px solid ${theme.colors.border ?? "#333"}`,
 								color: theme.colors.text,
-								cursor: "pointer",
+								cursor: auditAllActive || visibleModels.length === 0 ? "default" : "pointer",
+								opacity: auditAllActive || visibleModels.length === 0 ? 0.6 : 1,
 								fontSize: theme.fontSizes[2],
 								fontFamily: theme.fonts.body,
 								display: "inline-flex",
@@ -1375,14 +1588,35 @@ export function MaintenancePanel({
 								borderRadius: 6,
 							}}
 						>
-							<ScanSearch size={13} />
-							Audit all
+							{(auditAllActive || auditAllStarting) ? (
+								<Loader2 size={13} className="principal-studio-spin" />
+							) : (
+								<ScanSearch size={13} />
+							)}
+							{auditAllActive
+								? `Auditing ${auditAuditedCount}/${auditAuditTotal}…`
+								: "Audit all"}
 						</button>
 						<button
 							type="button"
 							disabled={repoBatchActive || visibleModels.length === 0}
-							onClick={() => void runRepoMaintenance()}
-							title="Run maintenance on every visible model in this repo, one at a time. Models with pending proposals are skipped."
+							onClick={() => {
+								const withProposals = visibleModels.filter(
+									(m) => m.pendingProposalCount > 0,
+								);
+								if (withProposals.length > 0) {
+									setRunConfirm({
+										kind: "batch",
+										count: withProposals.reduce(
+											(n, m) => n + m.pendingProposalCount,
+											0,
+										),
+									});
+									return;
+								}
+								void runRepoMaintenance();
+							}}
+							title="Run maintenance on every visible model in this repo, one at a time. Existing proposals are deleted first."
 							style={{
 								background: "transparent",
 								border: `1px solid ${theme.colors.primary}`,
@@ -1401,7 +1635,7 @@ export function MaintenancePanel({
 							{repoBatchActive ? (
 								<Loader2 size={13} className="principal-studio-spin" />
 							) : (
-								<Play size={13} />
+								<Wrench size={13} />
 							)}
 							{repoBatchActive
 								? `Running… ${repoBatchDone}/${visibleModels.length}`
@@ -1726,9 +1960,9 @@ export function MaintenancePanel({
 const rowBusy =
 								overview.running.includes(m.graphId) ||
 								auditing.includes(m.graphId);
-								const showRun =
-									(m.open > 0 || m.blocked > 0) &&
-									m.pendingProposalCount === 0;
+								// Always available; when proposals exist the click
+								// asks to delete them before rerunning.
+								const showRun = true;
 								const modelRuns = runsByGraph.get(m.graphId) ?? [];
 								const runsOpen = expandedRunsIds.has(m.graphId);
 								// Which agent is running right now: the live feed's agent
@@ -1834,47 +2068,21 @@ const rowBusy =
 												Runs ({modelRuns.length})
 											</button>
 										)}
-										{m.pendingProposalCount > 0 && (
-											<button
-												type="button"
-												onMouseDown={(e) => e.stopPropagation()}
-												onClick={(e) => {
-													e.stopPropagation();
-													setProposalsTarget({
-														graphId: m.graphId,
-														title: m.title,
-													});
-												}}
-												aria-label={`Review ${m.pendingProposalCount} pending proposal${
-													m.pendingProposalCount === 1 ? "" : "s"
-												} for ${m.title}`}
-												style={{
-													padding: "0 10px",
-													height: 26,
-													borderRadius: 6,
-													fontSize: theme.fontSizes[1],
-													fontFamily: theme.fonts.body,
-													background: "transparent",
-													color: theme.colors.primary,
-													border: `1px solid ${theme.colors.primary}`,
-													cursor: "pointer",
-													display: "inline-flex",
-													alignItems: "center",
-													gap: 6,
-													flexShrink: 0,
-												}}
-											>
-												<ListChecks size={11} />
-												{m.pendingProposalCount} proposal
-												{m.pendingProposalCount === 1 ? "" : "s"}
-											</button>
-										)}
 										{showRun && (
 											<button
 												type="button"
 												disabled={rowBusy}
 												onClick={(e) => {
 													e.stopPropagation();
+													if (m.pendingProposalCount > 0) {
+														setRunConfirm({
+															kind: "single",
+															graphId: m.graphId,
+															title: m.title,
+															count: m.pendingProposalCount,
+														});
+														return;
+													}
 													setPickTarget(m);
 												}}
 												title="Run a background maintenance pass: audits this model and drafts a proposal for the first fixable finding (does not auto-accept)."
@@ -1898,7 +2106,7 @@ const rowBusy =
 												{rowBusy ? (
 													<Loader2 size={11} className="principal-studio-spin" />
 												) : (
-													<Play size={11} />
+													<Wrench size={11} />
 												)}
 												{rowBusy ? "Running…" : "Run maintenance"}
 											</button>
@@ -1908,6 +2116,14 @@ const rowBusy =
 											colors={theme.colors}
 											muted={muted}
 											onOpenLane={(lane) => onModelOpen(m, lane)}
+											proposalCounts={proposalCountsByGraph.get(m.graphId)}
+											onOpenProposals={(lane) =>
+												setProposalsTarget({
+													graphId: m.graphId,
+													title: m.title,
+													lane,
+												})
+											}
 										/>
 										</div>
 										{maintainRunning && (
@@ -2059,422 +2275,61 @@ const rowBusy =
 					graphId={pickTarget.graphId}
 					title={pickTarget.title}
 					mode={pickTarget.verdict === "issues" ? "issues" : "verify"}
+					agent={pickTarget.nextRoute?.agent}
 					onClose={() => setPickTarget(null)}
 					onStarted={onMaintainStarted}
 				/>
 			)}
-			{auditAllOpen && (
-				<MaintenanceAuditAllModal
-					models={visibleModels}
-					onClose={() => {
-						setAuditAllOpen(false);
-						void load();
-					}}
-				/>
-			)}
 			{acceptConfidentOpen &&
 				createPortal(
-					<div
-						role="dialog"
-						aria-modal
-						aria-label="Accept confident proposals"
-						onClick={() => {
-							if (!acceptBatchRunning) setAcceptConfidentOpen(false);
-						}}
-						style={{
-							position: "fixed",
-							inset: 0,
-							zIndex: 2147483000,
-							display: "flex",
-							alignItems: "center",
-							justifyContent: "center",
-							background: "rgba(0,0,0,0.55)",
-							fontFamily: theme.fonts.body,
-						}}
-					>
-						<div
-							onClick={(e) => e.stopPropagation()}
-							style={{
-								width: "min(560px, calc(100vw - 48px))",
-								maxHeight: "min(75vh, 680px)",
-								display: "flex",
-								flexDirection: "column",
-								background: theme.colors.surface,
-								border: `1px solid ${theme.colors.border}`,
-								borderRadius: 12,
-								overflow: "hidden",
-								boxShadow: "0 12px 48px rgba(0,0,0,0.4)",
-								color: theme.colors.text,
-							}}
-						>
-							<div
-								style={{
-									display: "flex",
-									alignItems: "flex-start",
-									justifyContent: "space-between",
-									gap: 12,
-									padding: "14px 20px",
-									borderBottom: `1px solid ${theme.colors.border}`,
-									background: theme.colors.background,
-								}}
-							>
-								<div style={{ minWidth: 0, flex: 1 }}>
-									<div
-										style={{
-											display: "flex",
-											alignItems: "center",
-											gap: 8,
-											marginBottom: 4,
-											fontSize: theme.fontSizes[3],
-											fontWeight: 600,
-										}}
-									>
-										<BadgeCheck
-											size={16}
-											style={{ color: theme.colors.success ?? "#2da44e" }}
-										/>
-										Accept {confidentPending.length} confident proposal
-										{confidentPending.length === 1 ? "" : "s"}
-									</div>
-									<div
-										style={{
-											fontSize: theme.fontSizes[1],
-											color: muted,
-											lineHeight: 1.4,
-										}}
-									>
-										{acceptBatchRunning
-											? "Applying patches…"
-											: `Each cleared the Jev confidence bar of ${Math.round(confidenceThreshold * 100)}%. Lower-scoring proposals stay pending.`}
-									</div>
-								</div>
-							</div>
-
-							<div
-								style={{
-									flex: 1,
-									minHeight: 0,
-									overflowY: "auto",
-									padding: "12px 20px 16px",
-									display: "flex",
-									flexDirection: "column",
-									gap: 6,
-								}}
-							>
-								{confidentPending.map((entry) => {
-									const state = acceptBatch[entry.proposal.id];
-									const pct = Math.round(
-										(entry.proposal.secondOpinion?.confidence ?? 0) * 100,
-									);
-									return (
-										<div
-											key={entry.proposal.id}
-											style={{
-												display: "flex",
-												alignItems: "center",
-												gap: 10,
-												padding: "8px 10px",
-												borderRadius: 6,
-												border: `1px solid ${theme.colors.border}`,
-												background: theme.colors.background,
-												fontSize: theme.fontSizes[2],
-											}}
-										>
-											{state?.status === "running" ? (
-												<Loader2
-													size={13}
-													className="principal-studio-spin"
-													style={{ flexShrink: 0, color: theme.colors.primary }}
-												/>
-											) : state?.status === "error" ? (
-												<span
-													style={{
-														flexShrink: 0,
-														color: theme.colors.error ?? "#e5534b",
-													}}
-												>
-													✕
-												</span>
-											) : state?.status === "done" ? (
-												<Check
-													size={13}
-													style={{
-														flexShrink: 0,
-														color: theme.colors.success ?? "#2da44e",
-													}}
-												/>
-											) : (
-												<span
-													style={{
-														flexShrink: 0,
-														color: theme.colors.success ?? "#2da44e",
-													}}
-												>
-													• {pct}%
-												</span>
-											)}
-											<span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-												{entry.title}
-											</span>
-											<span
-												style={{
-													fontSize: theme.fontSizes[1],
-													color: state?.status === "error"
-														? (theme.colors.error ?? "#e5534b")
-														: muted,
-													maxWidth: 220,
-													overflow: "hidden",
-													textOverflow: "ellipsis",
-													whiteSpace: "nowrap",
-												}}
-											>
-												{state?.error ??
-													(state?.status === "running"
-														? "Accepting…"
-														: state?.status === "done"
-															? "Accepted"
-															: `Jev ${pct}%`)}
-											</span>
-										</div>
-									);
-								})}
-							</div>
-
-							<div
-								style={{
-									display: "flex",
-									justifyContent: "flex-end",
-									gap: 8,
-									padding: "12px 20px",
-									borderTop: `1px solid ${theme.colors.border}`,
-									background: theme.colors.background,
-								}}
-							>
-								<button
-									type="button"
-									disabled={acceptBatchRunning}
-									onClick={() => setAcceptConfidentOpen(false)}
-									style={{
-										padding: "0 12px",
-										height: 32,
-										borderRadius: 6,
-										fontSize: theme.fontSizes[2],
-										fontFamily: theme.fonts.body,
-										background: "transparent",
-										color: theme.colors.text,
-										border: `1px solid ${theme.colors.border}`,
-										cursor: acceptBatchRunning ? "default" : "pointer",
-										opacity: acceptBatchRunning ? 0.6 : 1,
-									}}
-								>
-									{acceptBatchRunning ? "Close" : "Cancel"}
-								</button>
-								{!acceptBatchRunning &&
-									Object.keys(acceptBatch).length === 0 && (
-										<button
-											type="button"
-											onClick={() => void runAcceptConfident(confidentPending)}
-											style={{
-												padding: "0 14px",
-												height: 32,
-												borderRadius: 6,
-												fontSize: theme.fontSizes[2],
-												fontWeight: 500,
-												fontFamily: theme.fonts.body,
-												background: theme.colors.primary,
-												color: theme.colors.background,
-												border: `1px solid ${theme.colors.primary}`,
-												cursor: "pointer",
-												display: "inline-flex",
-												alignItems: "center",
-												gap: 6,
-											}}
-										>
-											<BadgeCheck size={13} />
-											Accept {confidentPending.length}
-										</button>
-									)}
-								{!acceptBatchRunning &&
-									Object.keys(acceptBatch).length > 0 && (
-										<button
-											type="button"
-											onClick={() => {
-												setAcceptConfidentOpen(false);
-												void load();
-											}}
-											style={{
-												padding: "0 14px",
-												height: 32,
-												borderRadius: 6,
-												fontSize: theme.fontSizes[2],
-												fontWeight: 500,
-												fontFamily: theme.fonts.body,
-												background: theme.colors.primary,
-												color: theme.colors.background,
-												border: `1px solid ${theme.colors.primary}`,
-												cursor: "pointer",
-												display: "inline-flex",
-												alignItems: "center",
-												gap: 6,
-											}}
-										>
-											Done
-										</button>
-									)}
-							</div>
-						</div>
-					</div>,
+					<AcceptConfidentDialog
+						entries={confidentPending.map((entry) => ({
+							id: entry.proposal.id,
+							title: entry.title,
+							confidencePct: Math.round(
+								(entry.proposal.secondOpinion?.confidence ?? 0) * 100,
+							),
+						}))}
+						threshold={confidenceThreshold}
+						batch={acceptBatch}
+						running={acceptBatchRunning}
+						onCancel={() => setAcceptConfidentOpen(false)}
+						onAccept={() => void runAcceptConfident(confidentPending)}
+					/>,
 					document.body,
 				)}
-			{deleteAllOpen &&
+						{deleteAllOpen &&
 				createPortal(
-					<div
-						role="dialog"
-						aria-modal
-						aria-label="Delete all proposals"
-						onClick={() => {
-							if (!deleteAllRunning) setDeleteAllOpen(false);
-						}}
-						style={{
-							position: "fixed",
-							inset: 0,
-							zIndex: 2147483000,
-							display: "flex",
-							alignItems: "center",
-							justifyContent: "center",
-							background: "rgba(0,0,0,0.55)",
-							fontFamily: theme.fonts.body,
-						}}
-					>
-						<div
-							onClick={(e) => e.stopPropagation()}
-							style={{
-								width: "min(480px, calc(100vw - 48px))",
-								display: "flex",
-								flexDirection: "column",
-								background: theme.colors.surface,
-								border: `1px solid ${theme.colors.border}`,
-								borderRadius: 12,
-								overflow: "hidden",
-								boxShadow: "0 12px 48px rgba(0,0,0,0.4)",
-								color: theme.colors.text,
-							}}
-						>
-							<div
-								style={{
-									display: "flex",
-									alignItems: "flex-start",
-									justifyContent: "space-between",
-									gap: 12,
-									padding: "14px 20px",
-									borderBottom: `1px solid ${theme.colors.border}`,
-									background: theme.colors.background,
-								}}
-							>
-								<div style={{ minWidth: 0, flex: 1 }}>
-									<div
-										style={{
-											display: "flex",
-											alignItems: "center",
-											gap: 8,
-											marginBottom: 4,
-											fontSize: theme.fontSizes[3],
-											fontWeight: 600,
-										}}
-									>
-										<Trash2
-											size={16}
-											style={{ color: theme.colors.error ?? "#e5534b" }}
-										/>
-										Delete all {pending.length} proposal
-										{pending.length === 1 ? "" : "s"}
-									</div>
-									<div
-										style={{
-											fontSize: theme.fontSizes[1],
-											color: muted,
-											lineHeight: 1.4,
-										}}
-									>
-										{deleteAllRunning
-											? "Deleting…"
-											: "Deletes every pending proposal across all models. Accepted/rejected history is kept and model files are not changed."}
-									</div>
-								</div>
-							</div>
-
-							{deleteAllError && (
-								<div
-									style={{
-										padding: "10px 20px 0",
-										fontSize: theme.fontSizes[1],
-										color: theme.colors.error ?? "#e5534b",
-									}}
-								>
-									{deleteAllError}
-								</div>
-							)}
-
-							<div
-								style={{
-									display: "flex",
-									justifyContent: "flex-end",
-									gap: 8,
-									padding: "12px 20px",
-									borderTop: `1px solid ${theme.colors.border}`,
-									background: theme.colors.background,
-								}}
-							>
-								<button
-									type="button"
-									disabled={deleteAllRunning}
-									onClick={() => setDeleteAllOpen(false)}
-									style={{
-										padding: "0 12px",
-										height: 32,
-										borderRadius: 6,
-										fontSize: theme.fontSizes[2],
-										fontFamily: theme.fonts.body,
-										background: "transparent",
-										color: theme.colors.text,
-										border: `1px solid ${theme.colors.border}`,
-										cursor: deleteAllRunning ? "default" : "pointer",
-										opacity: deleteAllRunning ? 0.6 : 1,
-									}}
-								>
-									{deleteAllRunning ? "Cancel" : "Keep them"}
-								</button>
-								<button
-									type="button"
-									disabled={deleteAllRunning}
-									onClick={() => void runDeleteAll()}
-									style={{
-										padding: "0 14px",
-										height: 32,
-										borderRadius: 6,
-										fontSize: theme.fontSizes[2],
-										fontWeight: 500,
-										fontFamily: theme.fonts.body,
-										background: theme.colors.error ?? "#e5534b",
-										color: theme.colors.background,
-										border: `1px solid ${theme.colors.error ?? "#e5534b"}`,
-										cursor: deleteAllRunning ? "default" : "pointer",
-										opacity: deleteAllRunning ? 0.6 : 1,
-										display: "inline-flex",
-										alignItems: "center",
-										gap: 6,
-									}}
-								>
-									{deleteAllRunning ? (
-										<Loader2 size={13} className="principal-studio-spin" />
-									) : (
-										<Trash2 size={13} />
-									)}
-									{deleteAllRunning ? "Deleting…" : "Delete all"}
-								</button>
-							</div>
-						</div>
-					</div>,
+					<DeleteAllProposalsDialog
+						count={pending.length}
+						running={deleteAllRunning}
+						error={deleteAllError}
+						onCancel={() => setDeleteAllOpen(false)}
+						onConfirm={() => void runDeleteAll()}
+					/>,
+					document.body,
+				)}
+			{runConfirm &&
+				createPortal(
+					<RunMaintenanceConfirm
+						kind={runConfirm.kind}
+						count={runConfirm.count}
+						busy={runConfirmBusy}
+						onCancel={() => setRunConfirm(null)}
+						onConfirm={() => void confirmRunWithProposals()}
+						onViewProposals={
+							runConfirm.kind === "single"
+								? () => {
+									const target = runConfirm;
+									setRunConfirm(null);
+									setProposalsTarget({
+										graphId: target.graphId,
+										title: target.title,
+									});
+								}
+								: undefined
+						}
+					/>,
 					document.body,
 				)}
 			{proposalsTarget &&
@@ -2482,6 +2337,7 @@ const rowBusy =
 					<ProposalsModal
 						graphId={proposalsTarget.graphId}
 						title={proposalsTarget.title}
+						lane={proposalsTarget.lane}
 						onClose={() => {
 							setProposalsTarget(null);
 							void load();
@@ -2492,143 +2348,21 @@ const rowBusy =
 			{laneHelp &&
 				(() => {
 					const meta = LANE_META.find((m) => m.lane === laneHelp)!;
-					const HelpIcon = meta.Icon;
 					return (
-						<div
-							role="dialog"
-							aria-modal
-							aria-label={`${LANE_HELP[laneHelp].name} — what this lane verifies`}
-							onClick={() => setLaneHelp(null)}
-							style={{
-								position: "fixed",
-								inset: 0,
-								zIndex: 2147483000,
-								display: "flex",
-								alignItems: "center",
-								justifyContent: "center",
-								background: "rgba(0,0,0,0.55)",
-								fontFamily: theme.fonts.body,
-							}}
-						>
-							<div
-								onClick={(e) => e.stopPropagation()}
-								style={{
-									width: "min(440px, calc(100vw - 48px))",
-									background: theme.colors.surface,
-									border: `1px solid ${theme.colors.border}`,
-									borderRadius: 12,
-									padding: 20,
-									boxShadow: "0 12px 48px rgba(0,0,0,0.4)",
-									color: theme.colors.text,
-								}}
-							>
-								<div
-									style={{
-										display: "flex",
-										alignItems: "center",
-										gap: 10,
-										marginBottom: 8,
-									}}
-								>
-									<HelpIcon
-										size={26}
-										style={{ color: theme.colors.primary }}
-									/>
-									<span style={{ fontSize: theme.fontSizes[2], fontWeight: 600 }}>
-										{LANE_HELP[laneHelp].name}
-									</span>
-								</div>
-								<p
-									style={{
-										margin: "0 0 14px",
-										fontSize: theme.fontSizes[2],
-										lineHeight: 1.5,
-										color: muted,
-									}}
-								>
-									{LANE_HELP[laneHelp].blurb}
-								</p>
-								<div
-									style={{
-										fontSize: theme.fontSizes[1],
-										textTransform: "uppercase",
-										letterSpacing: 0.3,
-										color: muted,
-										marginBottom: 6,
-									}}
-								>
-									Status colours
-								</div>
-								<div
-									style={{
-										display: "flex",
-										flexDirection: "column",
-										gap: 6,
-									}}
-								>
-									{STATUS_LEGEND.map(({ status, label, desc }) => (
-										<div
-											key={status}
-											style={{
-												display: "flex",
-												alignItems: "baseline",
-												gap: 8,
-												fontSize: theme.fontSizes[1],
-											}}
-										>
-											<span
-												style={{
-													width: 64,
-													flexShrink: 0,
-													fontWeight: 600,
-													color: laneStatusColor(status, theme.colors, muted),
-												}}
-											>
-												{label}
-											</span>
-											<span style={{ color: muted }}>{desc}</span>
-										</div>
-									))}
-								</div>
-								<div
-									style={{
-										display: "flex",
-										justifyContent: "flex-end",
-										marginTop: 16,
-									}}
-								>
-									<button
-										type="button"
-										onClick={() => setLaneHelp(null)}
-										style={{
-											padding: "0 14px",
-											height: 34,
-											borderRadius: 6,
-											fontSize: theme.fontSizes[2],
-											fontWeight: 500,
-											fontFamily: theme.fonts.body,
-											background: theme.colors.primary,
-											color: theme.colors.background,
-											border: `1px solid ${theme.colors.primary}`,
-											cursor: "pointer",
-										}}
-									>
-										Done
-									</button>
-								</div>
-							</div>
-						</div>
+						<LaneHelpDialog
+							Icon={meta.Icon}
+							name={LANE_HELP[laneHelp].name}
+							blurb={LANE_HELP[laneHelp].blurb}
+							legend={STATUS_LEGEND.map(({ status, label, desc }) => ({
+								status,
+								label,
+								desc,
+								color: laneStatusColor(status, theme.colors, muted),
+							}))}
+							onClose={() => setLaneHelp(null)}
+						/>
 					);
 				})()}
-		</div>
+					</div>
 	);
-}
-
-/**
- * Legacy AppHeader chip surface — the monolith as a modal overlay. The pane is
- * graduating into the permanent Maintenance tab (`MaintenanceView`), so this
- * wrapper only re-renders the same `MaintenancePanel` in an overlay.
- */
-export function MaintenanceAgentModal({ onClose }: { onClose: () => void }) {
-	return <MaintenancePanel overlay onClose={onClose} />;
 }

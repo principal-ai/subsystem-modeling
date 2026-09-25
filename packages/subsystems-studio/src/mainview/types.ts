@@ -6,7 +6,6 @@
 
 import type { DataSlice } from "@principal-ade/panel-framework-core";
 import type { FileTree } from "@principal-ai/repository-abstraction";
-import type { TrailPayload } from "@industry-theme/file-city-panel";
 import type { IntroductionTour } from "@principal-ai/file-city-builder";
 
 export type TabState =
@@ -33,15 +32,6 @@ export type TabState =
 	  }
 	| { kind: "subsystem-showcase"; id: string; title: string; ids: string[] }
 	| { kind: "error"; message: string }
-	| {
-			kind: "ready";
-			id: string;
-			payload: TrailPayload;
-			fileTree: FileTree;
-			repoRoot: string;
-			owner?: string;
-			repo?: string;
-		}
 	| {
 			kind: "ready-tour";
 			id: string;

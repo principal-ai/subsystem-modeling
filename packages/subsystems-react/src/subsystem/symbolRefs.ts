@@ -139,12 +139,97 @@ const PRIMITIVES: ReadonlySet<string> = new Set([
   'set',
 ]);
 
+/**
+ * Global / ambient namespaces and utility types. These aren't defined in the
+ * repo, so surfacing them as clickable would only ever dead-end — leave them
+ * plain text.
+ */
+const GLOBAL_NAMESPACES: ReadonlySet<string> = new Set([
+  'JSX',
+  'React',
+  'NodeJS',
+  'Intl',
+  'globalThis',
+]);
+
+const GLOBAL_TYPES: ReadonlySet<string> = new Set([
+  'HTMLElement',
+  'Element',
+  'Event',
+  'Error',
+  'Date',
+  'RegExp',
+  'Function',
+  'Object',
+  'Array',
+  'ReadonlyArray',
+  'ReadonlySet',
+  'ReadonlyMap',
+  'Promise',
+  'PromiseLike',
+  'Map',
+  'Set',
+  'WeakMap',
+  'WeakSet',
+  'Iterable',
+  'Iterator',
+  'AsyncIterable',
+  'Generator',
+  'Partial',
+  'Required',
+  'Readonly',
+  'Record',
+  'Pick',
+  'Omit',
+  'Exclude',
+  'Extract',
+  'ReturnType',
+  'Parameters',
+  'Awaited',
+  'NonNullable',
+  'InstanceType',
+]);
+
+function isKnownGlobal(name: string): boolean {
+  if (PRIMITIVES.has(name) || GLOBAL_TYPES.has(name)) return true;
+  const root = name.includes('.') ? name.split('.')[0]! : name;
+  return GLOBAL_NAMESPACES.has(root);
+}
+
 /** A bare (optionally dotted) identifier we can look up by name. */
 function isSimpleSymbolName(type: string | undefined | null): boolean {
   if (!type) return false;
   const t = type.trim();
   if (!/^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/.test(t)) return false;
-  return !PRIMITIVES.has(t);
+  return !isKnownGlobal(t);
+}
+
+/**
+ * Named types buried in a composite type expression — generic args, inline
+ * object members, unions, callable signatures. Property/parameter names are
+ * dropped (they sit before a `:`); only type-position identifiers survive, and
+ * only PascalCase ones, so `{ nodes: SubsystemGraphNode[] }` yields
+ * `SubsystemGraphNode`, not `nodes`.
+ */
+function extractNestedTypeNames(type: string): string[] {
+  let s = type;
+  s = s.replace(/`(?:\\.|[^`\\])*`/g, ' ');
+  s = s.replace(/'(?:\\.|[^'\\])*'/g, ' ');
+  s = s.replace(/"(?:\\.|[^"\\])*"/g, ' ');
+  // Drop property/parameter names: an identifier immediately before `:`/`?:`.
+  s = s.replace(/([A-Za-z_$][\w$]*)\s*\??\s*:/g, ':');
+  const found = new Set<string>();
+  const re = /[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s)) !== null) {
+    const raw = m[0]!;
+    const root = raw.includes('.') ? raw.split('.')[0]! : raw;
+    // Type names are PascalCase; skips keywords (`keyof`, `typeof`, …).
+    if (!/^[A-Z]/.test(root)) continue;
+    if (isKnownGlobal(raw)) continue;
+    found.add(raw);
+  }
+  return [...found];
 }
 
 /**
@@ -192,8 +277,14 @@ export function extractDeclarationSymbolRefs(
     ref?: GraphifyReferenceInfo,
     context?: string,
   ) => {
-    if (!isSimpleSymbolName(type)) return;
-    add(type!.trim(), { ref, context });
+    if (!type) return;
+    const t = type.trim();
+    if (isSimpleSymbolName(t)) {
+      add(t, { ref, context });
+      return;
+    }
+    // Composite type: surface the named types nested inside it.
+    for (const name of extractNestedTypeNames(t)) add(name, { context });
   };
 
   const addCall = (

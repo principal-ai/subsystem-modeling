@@ -39,7 +39,7 @@ export const reloadSubscribers = new Set<(focusTabId?: string) => void>();
 export const sessionRefreshers = new Set<(sessionIds: string[]) => void>();
 
 // The mounted LibraryView registers its refresh here so the top-level AppHeader
-// can trigger a re-fetch of the trail list without prop-drilling through
+// can trigger a re-fetch of the tour list without prop-drilling through
 // ActiveTab. Only the library tab's view registers, so this is effectively a
 // single-entry set.
 export const libraryRefreshers = new Set<() => void>();

@@ -1,6 +1,6 @@
 /**
  * AppHeader — persistent app chrome above the tab strip. Carries the Principal
- * AI brand (moved up out of the per-trail TrailHeader so it shows on every tab,
+ * AI brand (moved up out of the per-tab chrome so it shows on every tab,
  * including the library) and the Download app CTA. Plus the IdentityModal it
  * portals (clicking the identity chip explains where the name/avatar came from
  * rather than jumping straight to GitHub).
@@ -23,7 +23,6 @@ import {
 import { useTheme } from "@principal-ade/industry-theme";
 import { FileCityLogo } from "@principal-ai/logo-component";
 import type {
-	OpencodeServerStatus,
 	StudioVersionStatus,
 	UserIdentity,
 } from "../../shared/contract";
@@ -33,13 +32,7 @@ import {
 	studioVersionChangeSubscribers,
 } from "../rpc";
 import { IntegrationLogos } from "./IntegrationTools";
-import { ServerSessionsModal } from "./ServerSessionsModal";
 import { SettingsModal } from "./SettingsModal";
-
-// The opencode server status chip (v2 pill + health dot) is hidden for now —
-// flip to true to bring it back. Everything behind it (the 10s health poll,
-// the modal, the RPC) stays wired so the flag is the only change.
-const SHOW_SERVER_CHIP = false;
 
 export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 	const { theme } = useTheme();
@@ -61,32 +54,6 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 			alive = false;
 		};
 	}, []);
-
-	// Whether the opencode v2 server is up. Probed host-side (reads the server's
-	// registration + password from disk, then GETs /api/health) and polled here
-	// every 10s so the chip tracks the server coming and going without the user
-	// refreshing. `null` = first probe not yet answered (or a probe error).
-	const [serverStatus, setServerStatus] = useState<OpencodeServerStatus | null>(null);
-	useEffect(() => {
-		let alive = true;
-		const check = async () => {
-			try {
-				const status = await electrobun.rpc!.request.getOpencodeServerStatus({});
-				if (alive) setServerStatus(status);
-			} catch {
-				if (alive) setServerStatus(null);
-			}
-		};
-		void check();
-		const id = setInterval(() => void check(), 10_000);
-		return () => {
-			alive = false;
-			clearInterval(id);
-		};
-	}, []);
-
-	// Clicking the server chip opens the active/recent session list.
-	const [showServerSessions, setShowServerSessions] = useState(false);
 
 	// Clicking the identity chip explains where the name/avatar came from rather
 	// than jumping straight to GitHub — the profile link lives inside the modal.
@@ -208,8 +175,8 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 				<button
 					type="button"
 					onClick={refreshLibrary}
-					title="Refresh trail library"
-					aria-label="Refresh trail library"
+					title="Refresh tour library"
+					aria-label="Refresh tour library"
 					style={{
 						display: "flex",
 						alignItems: "center",
@@ -226,82 +193,6 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 				>
 					<RefreshCw size={16} />
 				</button>
-			)}
-			{SHOW_SERVER_CHIP && (
-			<button
-				type="button"
-				onClick={() => setShowServerSessions(true)}
-				aria-label={
-					serverStatus === null
-						? "Open active sessions. Server status unknown."
-						: serverStatus.running
-							? `Open active sessions. Server running at ${serverStatus.url}.`
-							: "Open active sessions. Server is not running."
-				}
-				title={
-					serverStatus === null
-						? "Checking the opencode server…"
-						: serverStatus.running
-							? `opencode server running at ${serverStatus.url} — click for active sessions`
-							: "opencode server is not running"
-				}
-				aria-haspopup="dialog"
-				style={{
-					display: "flex",
-					alignItems: "center",
-					gap: 7,
-					height: 32,
-					padding: "0 10px 0 12px",
-					borderRadius: 16,
-					background: theme.colors.background,
-					border: `1px solid ${
-						serverStatus === null
-							? theme.colors.border
-							: serverStatus.running
-								? theme.colors.success
-								: theme.colors.error
-					}`,
-					color: theme.colors.text,
-					fontFamily: theme.fonts.body,
-					cursor: "pointer",
-					flexShrink: 0,
-				}}
-			>
-				{/* opencode mark — recreated from @opencode-ai/ui/logo's Mark
-				    (SolidJS + CSS vars there; inline + theme colors here). */}
-				<svg viewBox="0 0 16 20" width={12} height={15} aria-hidden="true" style={{ flexShrink: 0 }}>
-					<path
-						d="M12 16H4V8H12V16Z"
-						fill={theme.colors.textMuted ?? theme.colors.textSecondary}
-					/>
-					<path d="M12 4H4V16H12V4ZM16 20H0V0H16V20Z" fill={theme.colors.text} />
-				</svg>
-				<span
-					style={{
-						fontFamily: theme.fonts.monospace,
-						fontSize: theme.fontSizes[0],
-						fontWeight: 600,
-						lineHeight: 1,
-						color: theme.colors.text,
-					}}
-				>
-					v2
-				</span>
-				<span
-					style={{
-						width: 8,
-						height: 8,
-						borderRadius: "50%",
-						flexShrink: 0,
-						background:
-							serverStatus === null
-								? theme.colors.textMuted ?? theme.colors.textSecondary
-								: serverStatus.running
-									? theme.colors.success
-									: theme.colors.error,
-					}}
-				/>
-			</button>
 			)}
 			{user && user.source !== "none" && (
 				<button
@@ -454,10 +345,6 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 			</button>
 			*/}
 		</header>
-		{showServerSessions && createPortal(
-			<ServerSessionsModal onClose={() => setShowServerSessions(false)} />,
-			document.body,
-		)}
 		{showIdentityModal && user && createPortal(
 			<IdentityModal user={user} onClose={() => setShowIdentityModal(false)} onOpenProfile={onOpenProfile} />,
 			document.body,

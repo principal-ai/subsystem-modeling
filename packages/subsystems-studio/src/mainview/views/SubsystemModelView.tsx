@@ -17,10 +17,12 @@ import {
 	PierreFileView,
 	PierreSnippetView,
 	PierreWalkthroughCodeView,
+	type DeclarationSymbolRef,
 	type SubsystemDiagnostic,
 	type SubsystemIssue,
 	type SubsystemIssueCategory,
 	type SubsystemOpenFileOptions,
+	type SymbolInspection,
 	type WalkthroughViewerContext,
 } from "@principal-ai/subsystems-react";
 import { electrobun, reloadSubscribers, subsystemModelChangeSubscribers } from "../rpc";
@@ -183,6 +185,24 @@ export function SubsystemModelView({
 		[readFile],
 	);
 
+	// Referenced-symbol click in the declaration panel → resolve it against the
+	// host's graphify cache for the component's repo (display-only).
+	const onInspectSymbol = useCallback(
+		(req: {
+			purl: string;
+			file: string;
+			symbol: string;
+			ref: DeclarationSymbolRef;
+		}): Promise<SymbolInspection> =>
+			electrobun.rpc!.request.inspectSubsystemSymbol({
+				purl: req.purl,
+				file: req.file,
+				symbol: req.symbol,
+				nodeId: req.ref.nodeId,
+			}),
+		[],
+	);
+
 	const renderWalkthroughViewer = useCallback(
 		({
 			walkthrough,
@@ -270,6 +290,7 @@ export function SubsystemModelView({
 				description={graph.description}
 				renderFileViewer={renderFileViewer}
 				renderWalkthroughViewer={renderWalkthroughViewer}
+				onInspectSymbol={onInspectSymbol}
 				diagnostic={diagnostic}
 				issues={auditIssues}
 				showIssues={showIssues}
