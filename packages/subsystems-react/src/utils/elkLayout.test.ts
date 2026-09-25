@@ -1,9 +1,10 @@
 /**
  * Tests for ELK Layout Utility
  *
- * Tests the pure helper functions that don't require the ELK runtime.
- * The computeElkLayout function is tested via Storybook visual tests
- * since ELK requires a web worker environment.
+ * Tests the pure helper functions that don't require the ELK runtime, plus
+ * the compound-group planner. computeElkLayout itself needs a web worker
+ * (elkjs constructs one), so it is covered by Storybook visual tests and by
+ * testing planCompoundGroups — the part that decides which frames exist.
  */
 
 import { describe, test, expect } from 'bun:test';
@@ -11,8 +12,121 @@ import {
   pointsToPath,
   pointsToSmoothPath,
   calculatePathMidpoint,
+  planCompoundGroups,
   type Point,
 } from './elkLayout';
+
+describe('planCompoundGroups', () => {
+  test('drops a single-leaf group by default and promotes its member', () => {
+    const plan = planCompoundGroups(
+      [{ id: 'proc', memberIds: ['solo'] }],
+      ['solo'],
+    );
+    expect(plan.built.map((g) => g.id)).toEqual([]);
+    expect(plan.skipped).toEqual(['proc']);
+  });
+
+  test('keeps a single-leaf group when the caller opts in', () => {
+    const plan = planCompoundGroups(
+      [{ id: 'proc', memberIds: ['solo'] }],
+      ['solo'],
+      true,
+    );
+    expect(plan.skipped).toEqual([]);
+    expect(plan.built).toEqual([{ id: 'proc', childIds: ['solo'], minWidth: undefined }]);
+  });
+
+  test('keeps a multi-leaf group in both modes', () => {
+    const defs = [{ id: 'proc', memberIds: ['a', 'b'] }];
+    for (const keep of [false, true]) {
+      const plan = planCompoundGroups(defs, ['a', 'b'], keep);
+      expect(plan.built.map((g) => g.id)).toEqual(['proc']);
+      expect(plan.skipped).toEqual([]);
+    }
+  });
+
+  test('always drops an empty group even when singletons are kept', () => {
+    const plan = planCompoundGroups([{ id: 'proc', memberIds: [] }], ['a'], true);
+    expect(plan.built).toEqual([]);
+    expect(plan.skipped).toEqual(['proc']);
+  });
+
+  test('counts leaves through nested groups', () => {
+    // process → module(one leaf) is still a single leaf, so both drop by
+    // default even though the process lists one member id.
+    const defs = [
+      { id: 'mod', memberIds: ['a'] },
+      { id: 'proc', memberIds: ['mod'] },
+    ];
+    expect(planCompoundGroups(defs, ['a']).skipped).toEqual(['mod', 'proc']);
+    expect(planCompoundGroups(defs, ['a'], true).built.map((g) => g.id)).toEqual([
+      'mod',
+      'proc',
+    ]);
+  });
+
+  test('a two-leaf module keeps its process alive under the default', () => {
+    const defs = [
+      { id: 'mod', memberIds: ['a', 'b'] },
+      { id: 'proc', memberIds: ['mod'] },
+    ];
+    const plan = planCompoundGroups(defs, ['a', 'b']);
+    expect(plan.built.map((g) => g.id)).toEqual(['mod', 'proc']);
+    expect(plan.built[1]!.childIds).toEqual(['mod']);
+  });
+
+  test('promotes a dropped group member into its built parent', () => {
+    // proc contains a singleton module (dropped) plus a bare leaf, so proc
+    // still has two leaves and survives; the module's leaf is promoted in.
+    const defs = [
+      { id: 'mod', memberIds: ['a'] },
+      { id: 'proc', memberIds: ['mod', 'b'] },
+    ];
+    const plan = planCompoundGroups(defs, ['a', 'b']);
+    expect(plan.skipped).toEqual(['mod']);
+    expect(plan.built.map((g) => g.id)).toEqual(['proc']);
+    expect(plan.built[0]!.childIds.sort()).toEqual(['a', 'b']);
+  });
+
+  test('builds children before parents', () => {
+    const defs = [
+      { id: 'pkg', memberIds: ['procA', 'procB'] },
+      { id: 'procA', memberIds: ['a1', 'a2'] },
+      { id: 'procB', memberIds: ['b1', 'b2'] },
+    ];
+    const plan = planCompoundGroups(defs, ['a1', 'a2', 'b1', 'b2']);
+    const order = plan.built.map((g) => g.id);
+    expect(order.indexOf('procA')).toBeLessThan(order.indexOf('pkg'));
+    expect(order.indexOf('procB')).toBeLessThan(order.indexOf('pkg'));
+  });
+
+  test('drops groups caught in a cycle instead of looping forever', () => {
+    const defs = [
+      { id: 'x', memberIds: ['y'] },
+      { id: 'y', memberIds: ['x'] },
+    ];
+    const plan = planCompoundGroups(defs, ['a']);
+    expect(plan.built).toEqual([]);
+    expect(plan.skipped.sort()).toEqual(['x', 'y']);
+  });
+
+  test('ignores member ids that match no leaf or group', () => {
+    const plan = planCompoundGroups(
+      [{ id: 'proc', memberIds: ['a', 'ghost'] }],
+      ['a'],
+      true,
+    );
+    expect(plan.built[0]!.childIds).toEqual(['a']);
+  });
+
+  test('carries minWidth through to the plan', () => {
+    const plan = planCompoundGroups(
+      [{ id: 'mod', memberIds: ['a', 'b'], minWidth: 220 }],
+      ['a', 'b'],
+    );
+    expect(plan.built[0]!.minWidth).toBe(220);
+  });
+});
 
 describe('elkLayout helper functions', () => {
   describe('pointsToPath', () => {

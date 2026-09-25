@@ -27,8 +27,8 @@ import {
 } from '@xyflow/react';
 import { useTheme } from '@principal-ade/industry-theme';
 import { computeElkLayout } from '../utils/elkLayout';
-import { describeConstructBreakdown, MECHANISM_COLOR } from './model';
-import { GRAPH_NAV_PROPS, GraphChrome } from './graphChrome';
+import { describeConstructBreakdown, MECHANISM_COLOR, assignBoundaryColors, boundaryFill } from './model';
+import { GRAPH_CANVAS_CLASS, GRAPH_NAV_PROPS, GraphChrome, GraphLayerStyle } from './graphChrome';
 
 export interface AggregateFrameMember {
   alias: string;
@@ -91,13 +91,16 @@ function edgeColor(mechanism: string | undefined, fallback: string): string {
 }
 
 function AggregateFrameGroupView(
-  props: NodeProps<Node<{ label: string; kind: 'process' | 'external' }>>,
+  props: NodeProps<Node<{ label: string; color: string; kind: 'process' | 'external' }>>,
 ) {
   const { theme } = useTheme();
   const external = props.data.kind === 'external';
-  const border = external
+  // Processes take the hue assigned to their key, so boundaries read as regions
+  // at a glance; externals keep the warning accent, meaning "outside the repo".
+  // Dashed stays reserved for containment — solid chrome means a real entity.
+  const color = external
     ? (theme.colors.warning ?? theme.colors.accent ?? theme.colors.info)
-    : (theme.colors.border ?? '#333');
+    : props.data.color;
   return (
     <div
       style={{
@@ -105,25 +108,42 @@ function AggregateFrameGroupView(
         height: '100%',
         boxSizing: 'border-box',
         borderRadius: 12,
-        border: `2px ${external ? 'solid' : 'dashed'} ${border}`,
-        background: 'transparent',
+        border: `2px dashed ${color}`,
+        background: external ? 'transparent' : boundaryFill(color),
         pointerEvents: 'none',
       }}
     >
       <span
         style={{
           position: 'absolute',
-          top: -11,
+          // Centred on the frame's top border; translateY keeps it centred as
+          // the padding/border below grow instead of re-tuning a magic `top`.
+          top: 0,
+          transform: 'translateY(-50%)',
           left: 12,
+          // Edges route in through the frame's top edge, right where this
+          // label sits. The solid border + vertical padding give the opaque
+          // chip enough backing to mask a crossing edge with a gap rather than
+          // running flush against the text, and zIndex keeps the label above
+          // sibling frame nodes (mirrors the component graph's badges).
+          zIndex: 1,
           fontFamily: theme.fonts.monospace,
-          fontSize: theme.fontSizes[1],
+          fontSize: theme.fontSizes[2],
+          fontWeight: 600,
           letterSpacing: 0.5,
           textTransform: 'uppercase',
-          color: external
-            ? border
-            : (theme.colors.textMuted ?? theme.colors.textSecondary),
+          lineHeight: '18px',
+          color,
           background: theme.colors.background,
-          padding: '0 8px',
+          // A rounded chip leaves transparent notches at its corners, and an
+          // edge crossing the frame's top border shows through them. The halo
+          // is the same colour as the fill, so it squares the corners back off
+          // invisibly while covering the antialiased boundary row too.
+          boxShadow: `0 0 0 1.5px ${theme.colors.background}`,
+          border: `2px solid ${color}`,
+          borderRadius: 4,
+          padding: '4px 10px',
+          boxSizing: 'border-box',
           whiteSpace: 'nowrap',
         }}
       >
@@ -295,14 +315,35 @@ function Inner({
   const [ready, setReady] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [legendOpen, setLegendOpen] = useState(true);
 
   const layoutKey = useMemo(
     () =>
       [
-        ...frames.map((f) => f.id).sort(),
+        // Group assignment is part of the key: a frame keeps its id when its
+        // majority process flips, and the boundary colors follow the group.
+        ...frames
+          .map((f) => `${f.id}\0${f.group?.kind ?? ''}\0${f.group?.key ?? ''}`)
+          .sort(),
         ...edges.map((e) => `${e.from}\0${e.to}\0${e.steps}`).sort(),
       ].join('\n'),
     [frames, edges, hubs],
+  );
+
+  // Process boundaries and their frame counts. Derived from the frames, so the
+  // legend and the boundary nodes can never drift from what is actually drawn.
+  const processBoundaries = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const f of frames) {
+      if (f.group?.kind !== 'process') continue;
+      counts.set(f.group.key, (counts.get(f.group.key) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [frames]);
+
+  const boundaryColors = useMemo(
+    () => assignBoundaryColors(processBoundaries.map(([key]) => key)),
+    [processBoundaries],
   );
 
   useEffect(() => {
@@ -377,6 +418,11 @@ function Inner({
       // process frames.
       preserveNodePositions: false,
       groups,
+      // Every process and external boundary is real, including one holding a
+      // single frame — a quiet process still has components in it, and
+      // without this ELK drops the boundary and promotes the lone frame to
+      // root, which is indistinguishable from the process not existing.
+      keepSingletonGroups: true,
     })
       .then((result) => {
         if (!alive) return;
@@ -395,6 +441,10 @@ function Inner({
             selectable: false,
             data: {
               label: def?.key ?? id,
+              color:
+                (def?.kind === 'process' ? boundaryColors.get(def.key) : undefined) ??
+                theme.colors.border ??
+                '#333',
               kind: def?.kind ?? 'process',
             },
           });
@@ -429,7 +479,27 @@ function Inner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layoutKey]);
 
+  // A boundary is a container, not an endpoint: edges reference frame/hub
+  // ids, never the group shell's. Hovering one therefore needs its own rule.
+  // Treating the shell as the focus put *nothing* in its neighbour set, so the
+  // boundary's own contents were the ones that dimmed. Instead: keep every node
+  // lit and dim only the edges that do not touch the boundary.
+  const boundaryMembers = useMemo(() => {
+    const focus = hoveredId ?? selectedId;
+    if (!focus) return null;
+    if (nodes.find((n) => n.id === focus)?.type !== 'aggregate-frame-group') {
+      return null;
+    }
+    const members = new Set<string>();
+    for (const n of nodes) {
+      if ((n as { parentId?: string }).parentId === focus) members.add(n.id);
+    }
+    return members;
+  }, [hoveredId, selectedId, nodes]);
+
   const neighborIds = useMemo(() => {
+    // Boundary hover owns its own dimming (edges only) — no node focus set.
+    if (boundaryMembers) return null;
     const focus = hoveredId ?? selectedId;
     if (!focus) return null;
     const set = new Set<string>([focus]);
@@ -438,7 +508,7 @@ function Inner({
       if (e.to === focus) set.add(e.from);
     }
     return set;
-  }, [hoveredId, selectedId, edges]);
+  }, [hoveredId, selectedId, edges, boundaryMembers]);
 
   const selected = selectedId ? (frames.find((f) => f.id === selectedId) ?? null) : null;
 
@@ -458,35 +528,47 @@ function Inner({
         data: {
           ...(n.data as object),
           selected: selectedId === n.id,
-          dimmed: neighborIds ? !neighborIds.has(n.id) : false,
+          // Boundary hover dims everything outside the boundary; otherwise
+          // dim anything outside the focused node's neighbourhood.
+          dimmed: boundaryMembers
+            ? !boundaryMembers.has(n.id)
+            : neighborIds
+              ? !neighborIds.has(n.id)
+              : false,
           // Surviving parentId means ELK built this node's process frame —
           // the node renders nested, so a process box drops its redundant name.
           nested: (n as { parentId?: string }).parentId != null,
         },
       })),
-    [nodes, selectedId, neighborIds],
+    [nodes, selectedId, neighborIds, boundaryMembers],
   );
 
   const displayEdges = useMemo(
     () =>
       rfEdges.map((e) => {
-        const dimmed =
-          neighborIds != null &&
-          !(neighborIds.has(e.source) && neighborIds.has(e.target));
+        // Hovering a boundary keeps only the edges wholly inside it lit — a
+        // boundary-crossing edge has an endpoint outside, so it dims with the
+        // rest. Otherwise fall back to the node-focus rule.
+        const dimmed = boundaryMembers
+          ? !(boundaryMembers.has(e.source) && boundaryMembers.has(e.target))
+          : neighborIds != null &&
+            !(neighborIds.has(e.source) && neighborIds.has(e.target));
         return {
           ...e,
           style: { ...(e.style as object), opacity: dimmed ? 0.12 : 0.9 },
         };
       }),
-    [rfEdges, neighborIds],
+    [rfEdges, neighborIds, boundaryMembers],
   );
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', background: theme.colors.background }}>
+      <GraphLayerStyle />
       <ReactFlow
         nodes={displayNodes}
         edges={displayEdges}
         nodeTypes={nodeTypes}
+        className={GRAPH_CANVAS_CLASS}
         {...GRAPH_NAV_PROPS}
         onNodeClick={onNodeClick}
         onNodeMouseEnter={(_e, node) => setHoveredId(node.id)}
@@ -532,6 +614,94 @@ function Inner({
           }}
         >
           {title}
+        </div>
+      )}
+      {processBoundaries.length > 1 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 12,
+            // Sits opposite the selection panel; shift clear of it while open.
+            right: selected ? 304 : 12,
+            maxHeight: '40%',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 3,
+            background: theme.colors.backgroundSecondary ?? theme.colors.background,
+            border: `1px solid ${theme.colors.border ?? '#333'}`,
+            borderRadius: 6,
+            padding: '6px 10px',
+            // Only the header toggles; the body must not eat canvas panning.
+            pointerEvents: 'none',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setLegendOpen((v) => !v)}
+            aria-expanded={legendOpen}
+            style={{
+              pointerEvents: 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: 0,
+              border: 'none',
+              background: 'none',
+              cursor: 'pointer',
+              fontFamily: theme.fonts.monospace,
+              fontSize: theme.fontSizes[0],
+              letterSpacing: 0.5,
+              textTransform: 'uppercase',
+              color: muted,
+            }}
+          >
+            <span>{legendOpen ? '▾' : '▸'}</span>
+            <span>legend</span>
+          </button>
+          {legendOpen && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 3,
+                maxHeight: '40vh',
+                overflowY: 'auto',
+              }}
+            >
+              {processBoundaries.map(([key, count]) => {
+                const color = boundaryColors.get(key) ?? muted;
+                return (
+                  <span
+                    key={key}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontFamily: theme.fonts.monospace,
+                      fontSize: theme.fontSizes[0],
+                      color: theme.colors.text,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 10,
+                        height: 10,
+                        flexShrink: 0,
+                        borderRadius: 3,
+                        border: `2px dashed ${color}`,
+                        background: boundaryFill(color),
+                      }}
+                    />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 160 }} title={key}>
+                      {key}
+                    </span>
+                    <span style={{ color: muted }}>{count}</span>
+                  </span>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
       {selected && (

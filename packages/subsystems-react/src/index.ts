@@ -151,6 +151,7 @@ export type {
   SubsystemIssueListProps,
 } from './subsystem/IssueList';
 export { MECHANISM_COLOR, MECHANISM_STYLE } from './subsystem/model';
+export { BOUNDARY_COLOR, assignBoundaryColors, boundaryFill } from './subsystem/model';
 export { CONSTRUCT_COLOR, componentColor, constructColorsFromPierreTheme } from './pierre/constructColors';
 export {
   purlRepoKey,

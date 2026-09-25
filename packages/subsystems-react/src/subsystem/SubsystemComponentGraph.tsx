@@ -62,7 +62,7 @@ import {
 } from './IssueList';
 import { SubsystemFileTree } from './SubsystemFileTree';
 import { GraphLayoutCover } from './GraphLayoutCover';
-import { GRAPH_NAV_PROPS, GraphChrome } from './graphChrome';
+import { GRAPH_CANVAS_CLASS, GRAPH_NAV_PROPS, GraphChrome, GraphLayerStyle } from './graphChrome';
 import { ComponentDeclaration } from './ComponentDeclaration';
 import type { ComponentVerificationState } from './ComponentDeclaration';
 import type { DeclarationSymbolRef, SymbolInspection } from './symbolRefs';
@@ -173,6 +173,14 @@ export interface SubsystemComponentGraphProps {
   maxNodeWidth?: number;
   /** Show edge labels (mechanism names) on the graph. @default true */
   showEdgeLabels?: boolean;
+  /**
+   * Keep boundary frames for 1-member process / module / package regions. The
+   * singleton rule (frames need 2+ members) drops these, which also hid quiet
+   * regions like a one-file process that owns real behaviour. Defaults to true
+   * here so the component graph matches the aggregate graph, which always keeps
+   * them; pass false to fall back to the 2+ member rule.
+   */
+  showSingletonFrames?: boolean;
   /**
    * Which edge vocabulary the canvas draws. The relation and walkthrough
    * vocabularies are disjoint, so a graph carrying both shows one or the
@@ -396,7 +404,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, relations, walkthroughs, initialWalkthroughId, onReorderWalkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, componentVerification, onInspectSymbol, persistKey }: InnerProps) {
+function Inner({ components, relations, walkthroughs, initialWalkthroughId, onReorderWalkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, componentVerification, onInspectSymbol, persistKey }: InnerProps) {
   const { theme } = useTheme();
   const { fitView } = useReactFlow();
   const viewport = useViewport();
@@ -657,7 +665,11 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
       relations: relationsRef.current,
       walkthroughs: walkthroughsRef.current,
     };
-    void buildSubsystemGraph(doc, { maxNodeWidth, showEdgeLabels })
+    void buildSubsystemGraph(doc, {
+      maxNodeWidth,
+      showEdgeLabels,
+      showSingletonFrames,
+    })
       .then(({ nodes, edges: e }) => {
         if (!alive) return;
         // Prune dims for removed leaves; keep measurements for stable ids so a
@@ -706,7 +718,7 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
     const gen = ++pass2GenRef.current;
     void buildSubsystemGraph(
       { components, relations, walkthroughs },
-      { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights },
+      { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights, showSingletonFrames },
     )
       .then(({ nodes, edges: e }) => {
         if (gen !== pass2GenRef.current) return;
@@ -1974,12 +1986,14 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
         })}
       </div>
       )}
+      <GraphLayerStyle />
       <ReactFlow
         key={`${baseNodesKey}-${baseEdgesKey}`}
         nodes={dispNodes}
         edges={dispEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        className={GRAPH_CANVAS_CLASS}
         {...GRAPH_NAV_PROPS}
         onNodeClick={onNodeClick}
         onEdgeClick={onEdgeClick}

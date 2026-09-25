@@ -405,6 +405,7 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
     isModule && canToggle ? moduleBadgeHoverLabel(label, availableBadgeWidth) : label;
   const frameRadius = isProcess ? 0 : 12;
   const badgeRadius = isProcess ? 0 : 4;
+  const badgeBg = theme.colors.backgroundSecondary ?? theme.colors.background;
   // Processes are deployment units — solid frame. Modules/packages stay dashed
   // until selected.
   const frameStyle = isProcess || selected ? 'solid' : 'dashed';
@@ -455,12 +456,12 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
           position: 'absolute',
           // Process: badge fill starts with the process fill (inside the
           // frame border); no top badge border so widths don't fight.
-          // Module/package sit astride the top edge like component badges.
-          // Always set left/transform/borderTop explicitly — React Flow reuses
+          // Module/package are centred astride the top edge like component
+          // badges. Always set left/transform explicitly — React Flow reuses
           // group DOM nodes and `undefined` does not clear a prior value.
-          top: isProcess ? 0 : -19,
+          top: 0,
           left: isProcess ? '50%' : 12,
-          transform: isProcess ? 'translateX(-50%)' : 'none',
+          transform: isProcess ? 'translateX(-50%)' : 'translateY(-50%)',
           zIndex: canToggle ? 10 : undefined,
           // Width is explicit while collapsible so hover-reveal of more path
           // text animates; the cap keeps both states inside the frame.
@@ -472,17 +473,19 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
               : undefined,
           transition: 'width 140ms ease, box-shadow 120ms ease',
           cursor: canToggle ? 'pointer' : undefined,
-          boxShadow: canToggle && hover ? `0 2px 10px ${color}55` : undefined,
+          // The trailing halo squares the rounded corners back off in the fill
+          // colour, so an edge crossing a corner can't show through the notch.
+          boxShadow: `${canToggle && hover ? `0 2px 10px ${color}55, ` : ''}0 0 0 1.5px ${badgeBg}`,
           fontFamily: theme.fonts.monospace,
           fontSize: theme.fontSizes[3],
           fontWeight: 700,
           letterSpacing: 0.6,
           color,
-          background: theme.colors.backgroundSecondary ?? theme.colors.background,
-          border: `1px solid ${color}`,
-          borderTopWidth: isProcess ? 0 : 1,
+          background: badgeBg,
+          border: `2px solid ${color}`,
+          borderTopWidth: isProcess ? 0 : 2,
           borderRadius: badgeRadius,
-          padding: '1px 7px',
+          padding: '3px 9px',
           whiteSpace: 'nowrap',
           overflow: 'hidden',
           textOverflow: 'ellipsis',

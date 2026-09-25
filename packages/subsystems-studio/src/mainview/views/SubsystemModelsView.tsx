@@ -1493,6 +1493,13 @@ export function SubsystemModelsView({
 	const panelGraphs = applyListFilters(visibleGraphs);
 	/** The composed graph is showing, with the model list docked right. */
 	const combinedPane = combinedActive && focusedRepo != null;
+	/**
+	 * Model ids the composed graph is built from. Omitting them makes the host
+	 * compose every model touching the repo, so the recency window would filter
+	 * the list but not the graph. Uses the panel list — recency applied, open-file
+	 * narrowing ignored — so previewing a file does not recompose.
+	 */
+	const composedModelIds = scopeOrder ?? panelGraphs.map((g) => g.id);
 
 	// The model list is rendered either as the main pane or as the
 	// composed-graph side panel — one JSX tree, two placements.
@@ -2126,7 +2133,7 @@ windowedGraphs.length === 0 ? (
 						<ComposedGraphPane
 							repoKey={focusedRepo}
 							graphs={graphs}
-							modelIds={scopeOrder ?? undefined}
+							modelIds={composedModelIds}
 							onPreviewFile={onPreviewFile}
 						/>
 					</div>

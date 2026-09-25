@@ -80,6 +80,16 @@ export interface ElkLayoutOptions {
    * Members reference their immediate parent via React Flow `parentId`.
    */
   groups?: Array<{ id: string; memberIds: string[]; parentId?: string; minWidth?: number }>;
+
+  /**
+   * Keep groups that hold a single leaf instead of dropping them and
+   * promoting their member to the parent. A one-child group is still a real
+   * boundary — a process with a single module, or a process whose components
+   * carry no module — so callers that own the grouping semantics opt in here.
+   * Callers must ensure each leaf appears in at most one group, or ELK throws
+   * on the duplicate. @default false
+   */
+  keepSingletonGroups?: boolean;
 }
 
 /** Result of ELK layout computation */
@@ -341,6 +351,126 @@ function getElkOptions(options: ElkLayoutOptions): LayoutOptions {
   return baseOptions;
 }
 
+/** A group definition accepted by {@link planCompoundGroups}. */
+export interface CompoundGroupDef {
+  id: string;
+  memberIds: string[];
+  minWidth?: number;
+}
+
+/** Which groups ELK builds, and which it drops. */
+export interface CompoundGroupPlan {
+  /**
+   * Built groups in build order — a group's children always appear before it,
+   * so callers can map ids to shells in one forward pass.
+   */
+  built: Array<{ id: string; childIds: string[]; minWidth?: number }>;
+  /**
+   * Dropped groups. Their members are promoted into the nearest built
+   * ancestor, so callers must clear those members' `parentId`.
+   */
+  skipped: string[];
+}
+
+/**
+ * Decide which compound groups survive, independently of the ELK runtime.
+ *
+ * Groups resolve bottom-up: a group is ready once every member is a leaf or an
+ * already-resolved group. A group is dropped when it would hold nothing, or —
+ * unless `keepSingletonGroups` — when it holds a single leaf, since a frame
+ * wrapped around one box reads worse than the box alone. Callers that keep
+ * singletons own the grouping semantics and must guarantee each leaf appears
+ * in at most one group, or ELK throws on the duplicate.
+ *
+ * Pure so the skip rules are testable without an ELK worker.
+ */
+export function planCompoundGroups(
+  groupDefs: CompoundGroupDef[],
+  leafIds: Iterable<string>,
+  keepSingletonGroups = false,
+): CompoundGroupPlan {
+  const leaves = new Set(leafIds);
+  const byId = new Map(groupDefs.map((g) => [g.id, g]));
+  const built: CompoundGroupPlan['built'] = [];
+  const skipped = new Set<string>();
+  const pending = [...groupDefs];
+
+  /** Leaves below a group, counting through nested groups. */
+  const leafDescendantCount = (memberIds: string[]): number => {
+    let n = 0;
+    for (const mid of memberIds) {
+      if (leaves.has(mid)) n += 1;
+      else {
+        const g = byId.get(mid);
+        if (g) n += leafDescendantCount(g.memberIds);
+      }
+    }
+    return n;
+  };
+
+  while (pending.length > 0) {
+    let progress = false;
+    for (let i = pending.length - 1; i >= 0; i--) {
+      const g = pending[i]!;
+      const childIds: string[] = [];
+      let ready = true;
+      for (const mid of g.memberIds) {
+        if (leaves.has(mid)) {
+          childIds.push(mid);
+          continue;
+        }
+        if (skipped.has(mid)) {
+          // Promote a dropped group's members into this parent.
+          const dropped = byId.get(mid);
+          if (!dropped) {
+            ready = false;
+            break;
+          }
+          for (const sm of dropped.memberIds) {
+            if (leaves.has(sm) || built.some((b) => b.id === sm)) childIds.push(sm);
+            else if (!skipped.has(sm)) {
+              ready = false;
+              break;
+            }
+          }
+          if (!ready) break;
+          continue;
+        }
+        if (built.some((b) => b.id === mid)) {
+          childIds.push(mid);
+          continue;
+        }
+        if (byId.has(mid)) {
+          ready = false;
+          break;
+        }
+        // Unknown id — ignored (external stubs etc. may be absent).
+      }
+      if (!ready) continue;
+
+      pending.splice(i, 1);
+      progress = true;
+
+      if (
+        childIds.length < 1 ||
+        (!keepSingletonGroups && leafDescendantCount(g.memberIds) < 2)
+      ) {
+        skipped.add(g.id);
+        continue;
+      }
+
+      built.push({ id: g.id, childIds, minWidth: g.minWidth });
+    }
+    if (!progress) {
+      // Cycle or unresolved refs — leave the rest unbuilt.
+      for (const g of pending) skipped.add(g.id);
+      break;
+    }
+  }
+
+  return { built, skipped: [...skipped] };
+}
+
 /**
  * Compute ELK layout for nodes and edges
  *
@@ -354,7 +484,7 @@ export async function computeElkLayout(
   edges: Edge[],
   options: ElkLayoutOptions = {}
 ): Promise<ElkLayoutResult> {
-  const { preserveNodePositions = true } = options;
+  const { preserveNodePositions = true, keepSingletonGroups = false } = options;
   const edgeLabels = options.edgeLabels;
   const direction = options.direction ?? 'RIGHT';
 
@@ -516,89 +646,28 @@ export async function computeElkLayout(
     'elk.spacing.nodeNode': '40',
   };
 
-  /** Descendant leaf count for singleton checks (nested groups count through). */
-  const leafDescendantCount = (memberIds: string[]): number => {
-    let n = 0;
-    for (const mid of memberIds) {
-      if (elkById.has(mid)) n += 1;
-      else {
-        const g = groupById.get(mid);
-        if (g) n += leafDescendantCount(g.memberIds);
-      }
-    }
-    return n;
-  };
-
+  const plan = planCompoundGroups(groupDefs, elkById.keys(), keepSingletonGroups);
+  const skippedGroups = new Set(plan.skipped);
   const builtGroups = new Map<string, ElkNode>();
-  const skippedGroups = new Set<string>();
-  const pending = [...groupDefs];
-  // Build bottom-up: a group is ready when every member is a leaf or an
-  // already-built / skipped group. Skipped groups promote their members.
-  while (pending.length > 0) {
-    let progress = false;
-    for (let i = pending.length - 1; i >= 0; i--) {
-      const g = pending[i]!;
-      const childNodes: ElkNode[] = [];
-      let ready = true;
-      for (const mid of g.memberIds) {
-        if (elkById.has(mid)) {
-          childNodes.push(elkById.get(mid)!);
-          continue;
-        }
-        if (skippedGroups.has(mid)) {
-          // Promote skipped group's members into this parent.
-          const skipped = groupById.get(mid);
-          if (!skipped) {
-            ready = false;
-            break;
-          }
-          for (const sm of skipped.memberIds) {
-            if (elkById.has(sm)) childNodes.push(elkById.get(sm)!);
-            else if (builtGroups.has(sm)) childNodes.push(builtGroups.get(sm)!);
-            else if (!skippedGroups.has(sm)) {
-              ready = false;
-              break;
-            }
-          }
-          if (!ready) break;
-          continue;
-        }
-        if (builtGroups.has(mid)) {
-          childNodes.push(builtGroups.get(mid)!);
-          continue;
-        }
-        if (groupById.has(mid)) {
-          ready = false;
-          break;
-        }
-        // Unknown id — ignore (external stubs etc. may be absent).
+  for (const g of plan.built) {
+    const children: ElkNode[] = [];
+    for (const cid of g.childIds) {
+      const leaf = elkById.get(cid);
+      if (leaf) children.push(leaf);
+      else {
+        const nested = builtGroups.get(cid);
+        if (nested) children.push(nested);
       }
-      if (!ready) continue;
-
-      pending.splice(i, 1);
-      progress = true;
-
-      // Skip frames with fewer than 2 leaf descendants — promote children up.
-      if (leafDescendantCount(g.memberIds) < 2 || childNodes.length < 1) {
-        skippedGroups.add(g.id);
-        continue;
-      }
-
-      builtGroups.set(g.id, {
-        id: g.id,
-        children: childNodes,
-        layoutOptions: g.minWidth == null ? compoundLayoutOptions : {
-          ...compoundLayoutOptions,
-          'elk.nodeSize.constraints': 'MINIMUM_SIZE',
-          'elk.nodeSize.minimum': `(${g.minWidth},0)`,
-        },
-      });
     }
-    if (!progress) {
-      // Cycle or unresolved refs — leave remaining groups unbuilt.
-      for (const g of pending) skippedGroups.add(g.id);
-      break;
-    }
+    builtGroups.set(g.id, {
+      id: g.id,
+      children,
+      layoutOptions: g.minWidth == null ? compoundLayoutOptions : {
+        ...compoundLayoutOptions,
+        'elk.nodeSize.constraints': 'MINIMUM_SIZE',
+        'elk.nodeSize.minimum': `(${g.minWidth},0)`,
+      },
+    });
   }
 
   const groupedLeafIds = new Set<string>();

@@ -138,7 +138,9 @@ export function ComposedGraphPane({
 				</div>
 			) : !aggregate || aggregate.frames.length === 0 ? (
 				<div style={{ fontSize: theme.fontSizes[1], color: muted, padding: "24px 0" }}>
-					No components to compose for this repo.
+					{composedModelIds.length === 0
+						? "No models match the current filter."
+						: "No components to compose for this repo."}
 				</div>
 			) : (
 				<div style={{ flex: 1, minHeight: 0, position: "relative" }}>

@@ -435,6 +435,97 @@ describe('subsystem graph model', () => {
     expect(nodes.find((n) => n.id === processGroupNodeId('app/lonely'))).toBeUndefined();
   });
 
+  // NOTE: buildSubsystemGraph cannot assert ELK-built frames here — elkjs
+  // constructs a Worker, which bun's test env lacks, so every call falls back
+  // to manual positions. Frame existence is covered by planCompoundGroups
+  // tests in utils/elkLayout.test.ts; these cover the grouping inputs.
+
+  test('buildBoundaryLayoutGroups keeps singleton regions only when asked', () => {
+    const doc = {
+      components: [
+        { alias: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
+        { alias: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
+        { alias: 'solo', name: 'solo', construct: 'function', file: 's.ts', purl: 'pkg:github/acme/app', process: 'app/lonely' },
+      ],
+    };
+    const off = buildBoundaryLayoutGroups(doc as never);
+    expect(off.map((g) => g.id)).not.toContain(processGroupNodeId('app/lonely'));
+
+    const on = buildBoundaryLayoutGroups(doc as never, { showSingletonFrames: true });
+    const lonely = on.find((g) => g.id === processGroupNodeId('app/lonely'));
+    expect(lonely).toBeDefined();
+    expect(lonely!.memberAliases).toEqual(['solo']);
+  });
+
+  test('subsystem component graph keeps singleton frames unless opted out', () => {
+    // The component graph's default differs from buildBoundaryLayoutGroups'
+    // own default: SubsystemComponentGraph passes showSingletonFrames=true so
+    // a one-file process keeps its boundary, matching the aggregate graph.
+    // Only an explicit false falls back to the 2+ member rule.
+    const doc = {
+      components: [
+        { alias: 'solo', name: 'solo', construct: 'function', file: 's.ts', purl: 'pkg:github/acme/app', process: 'app/lonely' },
+      ],
+    };
+    // Mirrors the Inner default: `showSingletonFrames = true`.
+    const componentGraphDefault = true;
+    const kept = buildBoundaryLayoutGroups(doc as never, { showSingletonFrames: componentGraphDefault });
+    expect(kept.map((g) => g.id)).toContain(processGroupNodeId('app/lonely'));
+
+    const optedOut = buildBoundaryLayoutGroups(doc as never, { showSingletonFrames: false });
+    expect(optedOut.map((g) => g.id)).not.toContain(processGroupNodeId('app/lonely'));
+  });
+
+  test('buildBoundaryLayoutGroups parents every leaf to exactly one frame', () => {
+    // The invariant that keeps ELK from throwing "value already present".
+    // Singletons do not claim (see buildBoundaryLayoutGroups): they always
+    // nest, so the enclosing frame's own filter has to exclude them. This
+    // asserts the outcome rather than the mechanism.
+    const doc = {
+      components: [
+        { alias: 'solo', name: 'solo', construct: 'function', file: 's.ts', purl: 'pkg:github/acme/app', process: 'app/lonely' },
+        { alias: 'x', name: 'x', construct: 'function', file: 'x.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
+        { alias: 'y', name: 'y', construct: 'function', file: 'y.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
+        { alias: 'z', name: 'z', construct: 'function', file: 'z.ts', purl: 'pkg:github/acme/other', process: 'other/host' },
+        { alias: 'w', name: 'w', construct: 'function', file: 'w.ts', purl: 'pkg:github/acme/other', process: 'other/host' },
+        // module-less leaf in a multi-member process
+        { alias: 'loose', name: 'loose', construct: 'function', file: 'l.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
+      ],
+    };
+    const groups = buildBoundaryLayoutGroups(doc as never, { showSingletonFrames: true });
+    const owners = new Map<string, string[]>();
+    for (const g of groups) {
+      for (const alias of g.memberAliases) {
+        owners.set(alias, [...(owners.get(alias) ?? []), g.id]);
+      }
+    }
+    for (const [alias, claimedBy] of owners) {
+      expect(new Set(claimedBy).size, `leaf ${alias} claimed by ${claimedBy.join(', ')}`).toBe(1);
+    }
+    // The singleton process nests under its package rather than claiming.
+    const lonely = groups.find((g) => g.id === processGroupNodeId('app/lonely'));
+    expect(lonely!.memberAliases).toEqual(['solo']);
+    expect(lonely!.parentId).toBe(packageGroupNodeId('pkg:github/acme/app'));
+  });
+
+  test('buildBoundaryLayoutGroups singleton module claims its leaf from the process', () => {
+    const doc = {
+      components: [
+        { alias: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
+        { alias: 'm1', name: 'm1', construct: 'function', file: 'm1.ts', purl: 'pkg:github/acme/app', module: 'src/one.ts', process: 'app/host' },
+        { alias: 'm2', name: 'm2', construct: 'function', file: 'm1.ts', purl: 'pkg:github/acme/app', module: 'src/one.ts', process: 'app/host' },
+      ],
+    };
+    const groups = buildBoundaryLayoutGroups(doc as never, { showSingletonFrames: true });
+    const mod = groups.find((g) => g.id === moduleGroupNodeId('src/one.ts'));
+    const proc = groups.find((g) => g.id === processGroupNodeId('app/host'));
+    expect(mod!.memberAliases).toEqual(['m1', 'm2']);
+    // The module is nested, so the process lists the module — not its
+    // leaves. `a` has no module, so it stays a direct leaf of the process.
+    expect(proc!.memberAliases).toEqual([moduleGroupNodeId('src/one.ts'), 'a']);
+    expect(proc!.parentId).toBeUndefined();
+  });
+
   test('buildSubsystemGraph frames multi-member modules', async () => {
     const { nodes, regions } = await buildSubsystemGraph({
       components: [

@@ -10,7 +10,7 @@ import {
 } from './aggregateViewFixture';
 
 const meta = {
-  title: 'Subsystem/ComponentGraph/AggregateFrameGraph',
+  title: 'Subsystem/AggregateGraph/AggregateFrameGraph',
   component: SubsystemAggregateGraph,
   parameters: {
     layout: 'fullscreen',

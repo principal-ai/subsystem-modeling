@@ -824,6 +824,13 @@ export function buildBoundaryLayoutGroups(
   // ("value already present"). Mixed-process modules (common in composed
   // graphs, where models frame one file under different processes) never
   // nest — without this claim they land in both frames.
+  //
+  // Singletons deliberately do NOT claim, `showSingletonFrames` or not: a
+  // one-member process spans exactly one package and a one-member module
+  // sits in exactly one process, so each always nests, and the enclosing
+  // frame's own `claimed`/`nestedModuleKeys` filter already excludes the
+  // leaf. Claiming as well would only strip those leaves from a package's
+  // direct leaves for no gain.
   const claimedByModule = new Set<string>();
   for (const r of modules) {
     if (r.memberAliases.length >= 2) {
@@ -832,8 +839,7 @@ export function buildBoundaryLayoutGroups(
   }
   // Same rule one level up: a leaf owned by a multi-member process frame
   // must not also sit directly in a package frame. (Singleton processes
-  // never claim — ELK skips them and promotes the member upward, so the
-  // member has to stay reachable through its package or ungrouped.)
+  // never claim — see above.)
   const claimedByProcess = new Set<string>();
   for (const r of processes) {
     if (r.memberAliases.length >= 2) {
@@ -1045,6 +1051,87 @@ export const MECHANISM_STYLE: Record<SubsystemEdgeMechanism, 'solid' | 'dashed' 
   watches: 'dashed',
   'registers-into': 'dashed',
 };
+
+/**
+ * Region colors for process boundaries in the aggregate graph. Kept separate
+ * from MECHANISM_COLOR on purpose: that palette encodes edge semantics on thin
+ * arrowed strokes, this one encodes containment on wide filled regions, and a
+ * shared hue would make the two readings ambiguous.
+ */
+export const BOUNDARY_COLOR: readonly string[] = [
+  '#6c9eff', // blue
+  '#3fb8a0', // teal
+  '#8fbf5f', // green
+  '#d9a441', // amber
+  '#d67ab1', // magenta
+  '#9d7fe0', // violet
+  '#e8705f', // coral
+  '#4fb0d4', // sky
+  '#c2a83c', // olive
+  '#a876c8', // orchid
+  '#d1487f', // crimson
+  '#a3c94f', // lime
+];
+
+/** Stable 32-bit hash (FNV-1a plus a final mix) so low bits still spread. */
+function hashBoundaryKey(key: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  h ^= h >>> 15;
+  h = Math.imul(h, 0x2545f491);
+  h ^= h >>> 13;
+  return h >>> 0;
+}
+
+/**
+ * Assign each process boundary key a color from BOUNDARY_COLOR.
+ *
+ * A bare `hash % palette.length` collides constantly once a repo has more than
+ * a handful of processes — unrelated boundaries end up the same hue, which
+ * defeats the point of coding them at all. So the hash only picks the
+ * *preferred* slot and collisions probe forward to the next free one, with
+ * keys visited in sorted order to keep the result deterministic. Distinct
+ * boundaries therefore never share a color unless the key count exceeds the
+ * palette, and past that point the least-used hue wins rather than an
+ * arbitrary one, so the busiest boundaries keep unique colors longest.
+ *
+ * Assignment depends on the key set, so filtering the graph can reshuffle
+ * hues. That is the deliberate trade: the legend is always on screen, whereas
+ * a stable-but-colliding mapping is unreadable.
+ */
+export function assignBoundaryColors(keys: readonly string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  const owners = new Map<string, number>();
+  for (const key of [...keys].sort()) {
+    if (out.has(key)) continue;
+    const start = hashBoundaryKey(key) % BOUNDARY_COLOR.length;
+    let picked: string | undefined;
+    for (let i = 0; i < BOUNDARY_COLOR.length; i++) {
+      const candidate = BOUNDARY_COLOR[(start + i) % BOUNDARY_COLOR.length]!;
+      if (owners.get(candidate)) continue;
+      picked = candidate;
+      break;
+    }
+    // Palette exhausted: share the least-used hue, ties going to the earlier
+    // slot so the result stays deterministic.
+    if (!picked) {
+      picked = BOUNDARY_COLOR.reduce((a, b) =>
+        (owners.get(a) ?? 0) <= (owners.get(b) ?? 0) ? a : b,
+      )!;
+    }
+    owners.set(picked, (owners.get(picked) ?? 0) + 1);
+    out.set(key, picked);
+  }
+  return out;
+}
+
+/** Low-alpha fill for a boundary region, from its assigned color. */
+export function boundaryFill(color: string, alpha = '1f'): string {
+  return `${color}${alpha}`;
+}
 
 /** Mechanism → [description, verifiable-with-graphify]. Drives the "not
  *  directly verifiable" styling of edge labels. */
@@ -1552,6 +1639,11 @@ export async function buildSubsystemGraph(
           parentId: g.parentId,
           minWidth: g.region.kind === 'module' ? moduleMinWidthForBadge(g.region.label) : undefined,
         })),
+        // Honour `showSingletonFrames`: a one-member process or module is
+        // still a real boundary. `buildBoundaryLayoutGroups` already made
+        // those regions claim their members, so keeping them here cannot
+        // double-parent a leaf.
+        keepSingletonGroups: showSingletonFrames === true,
       });
       const builtGroupIds = new Set(result.groupBounds.keys());
       // Parents before children — package, then process, then module frames.
