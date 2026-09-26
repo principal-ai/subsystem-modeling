@@ -79,6 +79,13 @@ export type {
 // ELK layout utilities
 export { computeElkLayout, createElkLayouter } from './utils/elkLayout';
 export type { ElkLayoutOptions, ElkLayoutResult, ElkRoutingStyle } from './utils/elkLayout';
+export {
+  EDGE_LABEL_WIDTH,
+  EDGE_LABEL_HEIGHT,
+  EDGE_LABEL_FONT_SIZE,
+  EDGE_LABEL_SIDE_PADDING,
+  EDGE_LABEL_EDGE_GAP,
+} from './utils/edgeLabel';
 export { useElkLayout, applyElkPathsToEdges } from './hooks/useElkLayout';
 export type { UseElkLayoutOptions, UseElkLayoutResult } from './hooks/useElkLayout';
 

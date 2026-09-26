@@ -69,12 +69,13 @@ import type { DeclarationSymbolRef, SymbolInspection } from './symbolRefs';
 import { FileDrawer, FILE_DRAWER_HEIGHT_MS } from './FileDrawer';
 import { buildRepoGroups, repoAvatarUrl, type RepoGroup } from './paths';
 import { WalkthroughsPanel, WALKTHROUGH_PLAY_PAUSE_MS } from './WalkthroughsPanel';
-
-/** Cap screen-space edge labels to this fraction of the edge's on-screen length. */
-const EDGE_LABEL_MAX_EDGE_FRACTION = 0.55;
-/** Rough monospace width at fontSize 10 + horizontal padding/border. */
-const EDGE_LABEL_CHAR_PX = 6.2;
-const EDGE_LABEL_PAD_PX = 18;
+import {
+  EDGE_LABEL_WIDTH,
+  EDGE_LABEL_HEIGHT,
+  EDGE_LABEL_FONT_SIZE,
+  EDGE_LABEL_CLOUD_PATH,
+  EDGE_LABEL_CLOUD_EXTRA_TOP,
+} from '../utils/edgeLabel';
 
 /** Context passed to `renderWalkthroughViewer` when a flow/step is focused. */
 export interface WalkthroughViewerContext {
@@ -1940,14 +1941,6 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
             const text = lbl.stepNos?.length
               ? `${lbl.stepNos.map((n) => `${n}:`).join(' ')} ${lbl.mechanism}`
               : lbl.mechanism;
-            // Labels stay readable at full size until they'd exceed a share of
-            // the edge's screen length, then shrink with zoom.
-            const estWidth = text.length * EDGE_LABEL_CHAR_PX + EDGE_LABEL_PAD_PX;
-            const screenEdgeLen = lbl.pathLength * viewport.zoom;
-            const scale =
-              lbl.pathLength > 0 && estWidth > 0
-                ? Math.min(1, (screenEdgeLen * EDGE_LABEL_MAX_EDGE_FRACTION) / estWidth)
-                : 1;
             return (
               <div
                 key={lbl.id}
@@ -1961,29 +1954,81 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
                 position: 'absolute',
                 left: screenX,
                 top: screenY,
-                // Center on the flow-space midpoint. Labels live in screen
-                // space (fixed size when zoomed out), so top-left anchoring
-                // would drift them right/down of the edge as zoom drops.
-                transform: `translate(-50%, -50%) scale(${scale})`,
+                // Center on the flow-space midpoint, and scale with the graph
+                // (flow-space size): labels shrink as you zoom out instead of
+                // staying fixed-screen-size and dominating the smaller graph.
+                transform: `translate(-50%, -50%) scale(${viewport.zoom})`,
                 transformOrigin: 'center center',
                 display: 'flex',
                 alignItems: 'center',
-                fontSize: 10,
-                lineHeight: 1,
-                fontFamily: theme.fonts.monospace,
-                fontWeight: 500,
-                color,
-                background: 'rgba(21,21,21,0.9)',
-                border: verifiable ? `0.5px solid ${color}` : `1px dashed ${color}`,
-                borderRadius: verifiable ? 4 : '10px 14px 12px 16px / 14px 10px 16px 12px',
-                padding: '3px 8px',
+                justifyContent: 'center',
+                width: EDGE_LABEL_WIDTH,
+                height: EDGE_LABEL_HEIGHT,
+                boxSizing: 'border-box',
+                padding: '7px 8px',
                 cursor: 'pointer',
                 pointerEvents: 'auto',
                 opacity: lbl.dimmed ? 0.15 : 1,
-                whiteSpace: 'nowrap',
               }}
             >
-              {text}
+              {/* Background layer. Opaque theme surface (matches the node fill)
+                  so the edge line behind is hidden. Verifiable mechanisms get a
+                  crisp rounded box; soft / ambiguous ones (uses, feeds,
+                  watches …) get a real lobed cloud silhouette — ambiguous, not
+                  a dashed proposal (or a pill, which border-radius can only
+                  ever make). */}
+              {verifiable ? (
+                <span
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    borderRadius: 4,
+                    border: `0.5px solid ${color}`,
+                    background:
+                      theme.colors.backgroundSecondary ?? theme.colors.background,
+                    pointerEvents: 'none',
+                  }}
+                />
+              ) : (
+                <svg
+                  aria-hidden
+                  width={EDGE_LABEL_WIDTH}
+                  height={EDGE_LABEL_HEIGHT + EDGE_LABEL_CLOUD_EXTRA_TOP}
+                  viewBox={`0 0 ${EDGE_LABEL_WIDTH} ${EDGE_LABEL_HEIGHT + EDGE_LABEL_CLOUD_EXTRA_TOP}`}
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: -EDGE_LABEL_CLOUD_EXTRA_TOP,
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <path
+                    d={EDGE_LABEL_CLOUD_PATH}
+                    fill={theme.colors.backgroundSecondary ?? theme.colors.background}
+                    stroke={hexWithAlpha(color, 0.75)}
+                    strokeWidth={1.2}
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+              <span
+                style={{
+                  position: 'relative',
+                  display: 'block',
+                  maxWidth: '100%',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  fontSize: EDGE_LABEL_FONT_SIZE,
+                  lineHeight: 1,
+                  fontFamily: theme.fonts.monospace,
+                  fontWeight: 500,
+                  color,
+                }}
+              >
+                {text}
+              </span>
             </div>
           );
         })}

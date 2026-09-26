@@ -7,6 +7,11 @@
 
 import ELK, { type ElkNode, type ElkExtendedEdge, type LayoutOptions } from 'elkjs/lib/elk.bundled.js';
 import type { Node, Edge } from '@xyflow/react';
+import {
+  EDGE_LABEL_WIDTH,
+  EDGE_LABEL_HEIGHT,
+  EDGE_LABEL_SIDE_PADDING,
+} from './edgeLabel';
 
 /** ELK layout options for different routing styles */
 export type ElkRoutingStyle = 'orthogonal' | 'splines' | 'polyline';
@@ -53,6 +58,13 @@ export interface ElkLayoutOptions {
    * @default 0
    */
   interLayerSpacing?: number;
+
+  /**
+   * Pull the target end of each edge back from the node border by this many
+   * flow px, so the arrowhead tip touches the node without sitting on its
+   * border. @default 0
+   */
+  endpointInset?: number;
 
   /**
    * Reserve space along edges for inline labels so they don't overlap nodes
@@ -486,6 +498,7 @@ export async function computeElkLayout(
 ): Promise<ElkLayoutResult> {
   const { preserveNodePositions = true, keepSingletonGroups = false } = options;
   const edgeLabels = options.edgeLabels;
+  const endpointInset = options.endpointInset ?? 0;
   const direction = options.direction ?? 'RIGHT';
 
   // Build a map of original node positions BEFORE passing to ELK
@@ -620,13 +633,12 @@ export async function computeElkLayout(
       sources: [sourcePort],
       targets: [targetPort],
     };
-    // Estimated label size so ELK reserves room to render the inline label
-    // without it overlapping nodes or sibling edges.
+    // Reserve the fixed label box so ELK leaves the same room for every label,
+    // regardless of text length. The overlay renders into this exact box.
     if (edgeLabels?.enabled !== false && typeof edge.label === 'string') {
-      const text = edge.label;
-      const labelWidth = Math.max(20, text.length * 7); // ~7px per mono char
-      const labelHeight = 14;
-      elkEdge.labels = [{ text, width: labelWidth, height: labelHeight }];
+      elkEdge.labels = [
+        { text: edge.label, width: EDGE_LABEL_WIDTH, height: EDGE_LABEL_HEIGHT },
+      ];
     }
     return elkEdge;
   });
@@ -647,6 +659,12 @@ export async function computeElkLayout(
     // edge by ~13px) plus a gap before the first child.
     'elk.padding': '[top=64,left=24,bottom=24,right=24]',
     'elk.spacing.nodeNode': '40',
+    // Edges inside a frame host labels too: ELK applies this on both sides of
+    // the reserved label layer, so it is the per-side clearance (same as root).
+    // Labels off falls back to a plain between-layer gap.
+    'elk.layered.spacing.nodeNodeBetweenLayers': String(
+      edgeLabels?.enabled === false ? 40 : EDGE_LABEL_SIDE_PADDING,
+    ),
   };
 
   const plan = planCompoundGroups(groupDefs, elkById.keys(), keepSingletonGroups);
@@ -898,6 +916,23 @@ export async function computeElkLayout(
           }
 
           allPoints.push(end);
+        }
+
+        // Pull the target end back from the node border so the arrowhead tip
+        // touches the node without overlapping its border.
+        if (endpointInset > 0 && allPoints.length >= 2) {
+          const end = allPoints[allPoints.length - 1];
+          const prev = allPoints[allPoints.length - 2];
+          const dx = end.x - prev.x;
+          const dy = end.y - prev.y;
+          const segLen = Math.hypot(dx, dy);
+          if (segLen > endpointInset) {
+            const t = (segLen - endpointInset) / segLen;
+            allPoints[allPoints.length - 1] = {
+              x: prev.x + dx * t,
+              y: prev.y + dy * t,
+            };
+          }
         }
 
         // Convert to path

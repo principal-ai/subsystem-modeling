@@ -18,6 +18,7 @@ import {
   type Node,
 } from '@xyflow/react';
 import { computeElkLayout, calculatePathLength } from '../utils/elkLayout';
+import { EDGE_LABEL_SIDE_PADDING, EDGE_ARROW_INSET } from '../utils/edgeLabel';
 import type { GraphifyComponentDetail } from '../graphify';
 import type { SubsystemDeclarationRef } from './declarationRef';
 import { purlOwnerName, purlRepoKey } from './paths';
@@ -1642,7 +1643,12 @@ export async function buildSubsystemGraph(
         nodeSpacing: 60,
         edgeSpacing: 30,
         edgeNodeSpacing: 60,
-        interLayerSpacing: 120,
+        // With labels on, ELK's CENTER_LAYER strategy applies this spacing on
+        // both sides of the label layer, so it IS the per-side clearance — the
+        // label box itself is reserved separately in elkLayout. A large value
+        // here would be counted twice. Labels off → ordinary layer gap.
+        interLayerSpacing: showEdgeLabels === false ? 120 : EDGE_LABEL_SIDE_PADDING,
+        endpointInset: EDGE_ARROW_INSET,
         preserveNodePositions: false,
         edgeLabels: showEdgeLabels === false ? { enabled: false } : { enabled: true, placement: 'CENTER' },
         groups: layoutGroups.map((g) => ({
