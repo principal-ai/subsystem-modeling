@@ -1169,6 +1169,21 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
     [onFileSelect],
   );
 
+  // Double-click a component opens its declaration in the file drawer — the
+  // `file` + anchored `declarationRef.startLine` when verify resolved one,
+  // else the file top. Uses the same open path as the declaration panel's
+  // file link, so the drawer and file tree stay in sync.
+  const onNodeDoubleClick: NodeMouseHandler = useCallback(
+    (_e, node: Node) => {
+      if (node.type !== 'subsystem-component') return;
+      const comp = (node.data as { component?: SubsystemComponent } | undefined)?.component;
+      if (!comp?.file) return;
+      const startLine = comp.declarationRef?.startLine;
+      onOpenDeclarationFile(comp.file, startLine != null ? { startLine } : undefined);
+    },
+    [onOpenDeclarationFile],
+  );
+
   const onOpenFileFromWalkthrough = useCallback(
     (file: string, opts?: SubsystemOpenFileOptions) => {
       setFileOverlay({ file, startLine: opts?.startLine });
@@ -1538,18 +1553,6 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
     },
     [expandedWalkthroughs, fitOverview, zoomOnWalkthroughFocus],
   );
-
-  // Filename-badge clicks on nodes open the drawer through the same path as
-  // the declaration panel's file link (toggle + tree sync, no start line).
-  useEffect(() => {
-    SUBSYSTEM_CALLBACKS.onOpenFile = (componentAlias: string) => {
-      const comp = components.find((c) => c.alias === componentAlias);
-      if (comp?.file) onOpenDeclarationFile(comp.file);
-    };
-    return () => {
-      SUBSYSTEM_CALLBACKS.onOpenFile = undefined;
-    };
-  }, [components, onOpenDeclarationFile]);
 
   // Detail-panel links: related-name clicks select the matching component —
   // resolved by alias, name, or symbol (call labels may carry a trailing `()`).
@@ -1996,6 +1999,7 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
         className={GRAPH_CANVAS_CLASS}
         {...GRAPH_NAV_PROPS}
         onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
         onEdgeClick={onEdgeClick}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}

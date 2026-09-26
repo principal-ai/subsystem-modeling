@@ -17,7 +17,7 @@ export const description =
 
 export const components: SubsystemComponent[] = [
   {
-    id: 'submit-note',
+    alias: 'submit-note',
     name: 'submitNote',
     construct: 'function',
     symbol: 'submitNote',
@@ -28,7 +28,7 @@ export const components: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'note-service',
+    alias: 'note-service',
     name: 'NoteService',
     construct: 'class',
     symbol: 'NoteService',
@@ -38,7 +38,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'note-service-persist',
+    alias: 'note-service-persist',
     name: 'persist',
     construct: 'method',
     symbol: 'persist',
@@ -48,7 +48,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'note-repository',
+    alias: 'note-repository',
     name: 'NoteRepository',
     construct: 'interface',
     symbol: 'NoteRepository',
@@ -58,7 +58,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'note-id',
+    alias: 'note-id',
     name: 'NoteId',
     construct: 'type_alias',
     symbol: 'NoteId',
@@ -68,7 +68,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'note-kind',
+    alias: 'note-kind',
     name: 'NoteKind',
     construct: 'enum',
     symbol: 'NoteKind',

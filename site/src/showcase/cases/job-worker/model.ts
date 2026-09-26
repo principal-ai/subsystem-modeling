@@ -8,7 +8,7 @@ const PURL = 'pkg:github/you/job-worker';
 
 export const components: SubsystemComponent[] = [
   {
-    id: 'main',
+    alias: 'main',
     process: 'job-worker',
     name: 'main',
     construct: 'function',
@@ -26,7 +26,7 @@ export const components: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'run-worker',
+    alias: 'run-worker',
     process: 'job-worker',
     name: 'run_worker',
     construct: 'function',
@@ -43,7 +43,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'handle-job',
+    alias: 'handle-job',
     process: 'job-worker',
     name: 'handle_job',
     construct: 'function',
@@ -60,7 +60,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'redis-queue',
+    alias: 'redis-queue',
     process: 'job-worker',
     name: 'RedisQueue',
     construct: 'class',
@@ -77,7 +77,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'Redis',
+    alias: 'Redis',
     name: 'Redis',
     construct: 'external',
     role: 'service',
@@ -87,7 +87,7 @@ export const components: SubsystemComponent[] = [
     layer: 4,
   },
   {
-    id: 'Email',
+    alias: 'Email',
     name: 'Email (SMTP)',
     construct: 'external',
     role: 'service',
@@ -111,6 +111,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "src/main.rs",
         "line": 17,
+        "purl": PURL,
         "symbol": "run_worker",
         "annotation": "Tokio main hands off to the consumer loop."
       },
@@ -120,6 +121,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "src/consumer.rs",
         "line": 10,
+        "purl": PURL,
         "symbol": "dequeue",
         "annotation": "Pull the next job (or idle-sleep)."
       },
@@ -129,6 +131,7 @@ export const walkthroughs = [
         "mechanism": "reads",
         "file": "src/queue.rs",
         "line": 32,
+        "purl": PURL,
         "symbol": "dequeue",
         "annotation": "Redis BRPOP — queue is the external."
       },
@@ -138,6 +141,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "src/consumer.rs",
         "line": 13,
+        "purl": PURL,
         "symbol": "handle_job",
         "annotation": "Dispatch into the handler."
       },
@@ -147,6 +151,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "src/handler.rs",
         "line": 9,
+        "purl": PURL,
         "symbol": "send_email",
         "annotation": "Kind-specific side effect (email path)."
       },
@@ -156,6 +161,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "src/consumer.rs",
         "line": 14,
+        "purl": PURL,
         "symbol": "ack",
         "annotation": "Success — remove the job from the queue."
       }
@@ -171,6 +177,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "src/consumer.rs",
         "line": 10,
+        "purl": PURL,
         "symbol": "dequeue",
         "annotation": "Same dequeue path as success."
       },
@@ -180,6 +187,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "src/consumer.rs",
         "line": 13,
+        "purl": PURL,
         "symbol": "handle_job",
         "annotation": "Handler returns Err."
       },
@@ -189,6 +197,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "src/consumer.rs",
         "line": 17,
+        "purl": PURL,
         "symbol": "nack",
         "annotation": "Failure — requeue for retry (LPUSH)."
       },
@@ -198,6 +207,7 @@ export const walkthroughs = [
         "mechanism": "writes",
         "file": "src/queue.rs",
         "line": 41,
+        "purl": PURL,
         "symbol": "nack",
         "annotation": "Redis write puts the job back."
       }

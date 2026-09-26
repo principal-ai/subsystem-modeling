@@ -11,7 +11,7 @@ import type {
 
 const components: SubsystemComponent[] = [
   {
-    id: 'checkout-api',
+    alias: 'checkout-api',
     name: 'checkoutApi',
     construct: 'function',
     symbol: 'checkoutApi',
@@ -20,7 +20,7 @@ const components: SubsystemComponent[] = [
     file: 'src/checkout/api.ts',
   },
   {
-    id: 'cart-store',
+    alias: 'cart-store',
     name: 'cartStore',
     construct: 'store',
     symbol: 'cartStore',
@@ -28,7 +28,7 @@ const components: SubsystemComponent[] = [
     file: 'src/checkout/cartStore.ts',
   },
   {
-    id: 'Stripe',
+    alias: 'Stripe',
     name: 'Stripe',
     construct: 'external',
     role: 'service',
@@ -36,7 +36,7 @@ const components: SubsystemComponent[] = [
     purl: 'external',
   },
   {
-    id: 'Web client',
+    alias: 'Web client',
     name: 'Web client',
     construct: 'external',
     file: '',
@@ -57,6 +57,8 @@ const walkthroughs: SubsystemWalkthrough[] = [
         mechanism: 'calls',
         file: 'src/checkout/api.ts',
         line: 1,
+        purl: 'external',
+        symbol: 'checkoutApi',
       },
       {
         from: 'checkout-api',
@@ -64,6 +66,8 @@ const walkthroughs: SubsystemWalkthrough[] = [
         mechanism: 'writes',
         file: 'src/checkout/api.ts',
         line: 12,
+        purl: 'external',
+        symbol: 'cartStore',
       },
       {
         from: 'checkout-api',
@@ -71,6 +75,8 @@ const walkthroughs: SubsystemWalkthrough[] = [
         mechanism: 'calls',
         file: 'src/checkout/api.ts',
         line: 24,
+        purl: 'external',
+        symbol: 'Stripe',
       },
     ],
   },

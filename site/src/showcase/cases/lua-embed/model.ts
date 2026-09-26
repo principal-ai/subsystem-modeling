@@ -8,7 +8,7 @@ const PURL = 'pkg:github/you/lua-embed';
 
 export const components: SubsystemComponent[] = [
   {
-    id: 'main',
+    alias: 'main',
     process: 'lua-host',
     name: 'main',
     construct: 'function',
@@ -26,7 +26,7 @@ export const components: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'host-log',
+    alias: 'host-log',
     process: 'lua-host',
     name: 'host_log',
     construct: 'function',
@@ -43,7 +43,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'greet',
+    alias: 'greet',
     process: 'lua-guest',
     name: 'greet',
     construct: 'function',
@@ -61,7 +61,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'LuaVM',
+    alias: 'LuaVM',
     name: 'Lua VM',
     construct: 'external',
     role: 'service',
@@ -85,6 +85,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "host/main.c",
         "line": 16,
+        "purl": PURL,
         "symbol": "luaL_newstate",
         "annotation": "Create the embedded VM."
       },
@@ -94,6 +95,7 @@ export const walkthroughs = [
         "mechanism": "registers-into",
         "file": "host/main.c",
         "line": 18,
+        "purl": PURL,
         "symbol": "lua_register(host_log)",
         "annotation": "Expose a native function to Lua."
       },
@@ -103,6 +105,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "host/main.c",
         "line": 20,
+        "purl": PURL,
         "symbol": "luaL_dofile",
         "annotation": "Load script.lua into the VM."
       },
@@ -112,6 +115,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "host/main.c",
         "line": 27,
+        "purl": PURL,
         "symbol": "lua_pcall(greet)",
         "annotation": "Host calls into the guest."
       },
@@ -121,6 +125,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "script.lua",
         "line": 3,
+        "purl": PURL,
         "symbol": "host_log",
         "annotation": "Guest calls back into native host_log."
       },
@@ -130,6 +135,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "host/main.c",
         "line": 11,
+        "purl": PURL,
         "symbol": "printf",
         "annotation": "Native side effect from the callback."
       }

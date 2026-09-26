@@ -8,7 +8,7 @@ const PURL = 'pkg:github/you/terraform-site';
 
 export const components: SubsystemComponent[] = [
   {
-    id: 'root-module',
+    alias: 'root-module',
     process: 'terraform-site',
     name: 'module.site',
     construct: 'custom_entity',
@@ -29,7 +29,7 @@ export const components: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'static-site',
+    alias: 'static-site',
     process: 'terraform-site',
     name: 'static_site',
     construct: 'custom_entity',
@@ -49,7 +49,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'aws-provider',
+    alias: 'aws-provider',
     process: 'terraform-site',
     name: 'provider.aws',
     construct: 'custom_entity',
@@ -67,7 +67,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'AWS',
+    alias: 'AWS',
     name: 'AWS',
     construct: 'external',
     role: 'service',
@@ -91,6 +91,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "main.tf",
         "line": 2,
+        "purl": PURL,
         "symbol": "module \"site\"",
         "annotation": "Root invokes the child module."
       },
@@ -100,6 +101,7 @@ export const walkthroughs = [
         "mechanism": "writes",
         "file": "modules/static_site/main.tf",
         "line": 1,
+        "purl": PURL,
         "symbol": "aws_s3_bucket",
         "annotation": "Module declares the bucket resource."
       },
@@ -109,6 +111,7 @@ export const walkthroughs = [
         "mechanism": "writes",
         "file": "modules/static_site/main.tf",
         "line": 6,
+        "purl": PURL,
         "symbol": "aws_s3_bucket_website_configuration",
         "annotation": "Website hosting config on the same bucket."
       },
@@ -118,6 +121,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "providers.tf",
         "line": 10,
+        "purl": PURL,
         "symbol": "provider \"aws\"",
         "annotation": "Provider authenticates calls to AWS."
       }

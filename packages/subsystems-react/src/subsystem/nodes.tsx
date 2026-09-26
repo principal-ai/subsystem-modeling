@@ -27,7 +27,6 @@ import {
   storageBadgeLabel,
   storageBadgeColor,
   deriveNameFromSymbol,
-  BADGE_EDGE_INSET,
   nodeMinWidthForBadges,
   MODULE_BADGE_INSET,
   moduleBadgeLabel,
@@ -70,9 +69,6 @@ function breakWords(s: string): string {
 export interface SubsystemGraphCallbacks {
   /** Click a component — open its file/entry point. */
   onSelect?: (componentAlias: string) => void;
-  /** Click the filename badge — open that component's file in the drawer
-   *  (same path as clicking the file link in the declaration panel). */
-  onOpenFile?: (componentAlias: string) => void;
   /** Click an edge (or its label) — select the relationship. */
   onEdgeSelect?: (edgeId: string) => void;
   /** Hover a component (null on leave) — associates it with the file tree. */
@@ -121,6 +117,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
   const callbacks = useSubsystemCallbacks();
   const { data, selected, width: nodeWidth, height: nodeHeight } = props;
   const c = data.component;
+  const [hover, setHover] = useState(false);
   // Construct owns node color, derived from the active Pierre syntax theme —
   // the same palette the declaration panel and file drawer render with. Role
   // shows as the hover badge, not as color — for now; a role glyph/accent may
@@ -129,7 +126,6 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
   // Left badge: framework brand (e.g. React cyan) when the label is a
   // framework stereotype; otherwise the same construct color as the border.
   const badgeColor = constructBadgeColor(c) ?? color;
-  const [hover, setHover] = useState(false);
   const configuredMax = callbacks.maxNodeWidth;
   const maxWidth = configuredMax ?? 300;
   // `symbol` is the source of truth; `name` is derived from it consistently.
@@ -145,6 +141,11 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
   // Set while a file is open in the drawer: true → spotlight, false → dim,
   // absent (no file open) → neutral.
   const fileMatch = data.fileMatch as boolean | undefined;
+  // Node fill lifts on hover as the clickability affordance; badges share it
+  // so they read as tabs on the same surface rather than floating patches.
+  const nodeBg = theme.colors.backgroundSecondary ?? theme.colors.background;
+  const hoverBg =
+    theme.colors.backgroundHover ?? theme.colors.backgroundTertiary ?? nodeBg;
   // Border: proposed uses the goldenrod accent (dashed); construct color stays
   // on the left badge. File-open spotlight still wins with primary.
   const borderColor = fileMatch
@@ -159,6 +160,14 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
   const isExternal = c.construct === 'external';
   const nodeRadius = isExternal ? 0 : 8;
   const badgeRadius = isExternal ? 0 : 4;
+  // The border thickens on selection / file-match. Absolutely-positioned
+  // badges are laid out from the padding box (inside the border), so a raw
+  // `top` / `left` would slide with the border. Anchor them to the border box
+  // instead, offsetting by the border width. Side badges sit flush with the
+  // node's left / right edge (`-borderW`); the top reference stays at -9.
+  const borderW = isSelected || fileMatch ? 4 : 2;
+  const badgeTop = -9 - borderW;
+  const badgeEdge = -borderW;
 
   return (
     <div
@@ -187,15 +196,15 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
         maxWidth,
         padding: '6px 10px',
         borderRadius: nodeRadius,
-        background: theme.colors.backgroundSecondary ?? theme.colors.background,
+        background: hover ? hoverBg : nodeBg,
         // Selected / file-matched nodes get a thicker border. Proposed nodes
         // use a dashed goldenrod border; left construct badge keeps construct color.
-        border: `${isSelected || fileMatch ? 4 : 2}px ${c.proposed ? 'dashed' : 'solid'} ${borderColor}`,
+        border: `${borderW}px ${c.proposed ? 'dashed' : 'solid'} ${borderColor}`,
         boxShadow: fileMatch
           ? `0 1px 4px rgba(0,0,0,0.25), 0 0 12px ${theme.colors.primary}55`
           : '0 1px 4px rgba(0,0,0,0.25)',
         opacity: fileMatch === false || data.dimmed === true ? 0.18 : 1,
-        transition: 'opacity 150ms ease',
+        transition: 'opacity 150ms ease, background-color 120ms ease',
         cursor: 'pointer',
         fontFamily: theme.fonts.body,
       }}
@@ -207,8 +216,8 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
       <div
         style={{
           position: 'absolute',
-          top: -11,
-          left: BADGE_EDGE_INSET,
+          top: badgeTop,
+          left: badgeEdge,
           zIndex: 1,
           fontFamily: theme.fonts.monospace,
           fontSize: theme.fontSizes[1],
@@ -217,7 +226,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
           lineHeight: '17px',
           whiteSpace: 'nowrap',
           color: badgeColor,
-          background: theme.colors.backgroundSecondary ?? theme.colors.background,
+          background: nodeBg,
           border: `2px solid ${badgeColor}`,
           borderRadius: badgeRadius,
           padding: '2px 8px',
@@ -226,15 +235,18 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
         {constructBadgeLabel(c)}
       </div>
 
-      {/* Right badge cluster — proposed wins over role when both are set;
+      {/* Secondary badge cluster — proposed wins over role when both are set;
           store storage (retention backing) sits beside, since it is
-          orthogonal to topology. Persistent; pointer-events pass through. */}
+          orthogonal to topology. Persistent; pointer-events pass through.
+          Sits astride the bottom edge, centered (mirroring the top construct
+          badge's straddle), so the top edge stays free for the construct tag. */}
       {(topRightLabel != null || storageLabel != null) && (
         <div
           style={{
             position: 'absolute',
-            top: -11,
-            right: BADGE_EDGE_INSET,
+            bottom: badgeTop,
+            left: '50%',
+            transform: 'translateX(-50%)',
             zIndex: 1,
             display: 'flex',
             gap: 6,
@@ -250,7 +262,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
                 textTransform: 'uppercase',
                 lineHeight: '17px',
                 color: storageColor,
-                background: theme.colors.backgroundSecondary ?? theme.colors.background,
+                background: nodeBg,
                 border: `2px solid ${storageColor}`,
                 borderRadius: badgeRadius,
                 padding: '2px 8px',
@@ -268,7 +280,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
                 textTransform: 'uppercase',
                 lineHeight: '17px',
                 color: topRightColor,
-                background: theme.colors.backgroundSecondary ?? theme.colors.background,
+                background: nodeBg,
                 border: `2px solid ${topRightColor}`,
                 borderRadius: badgeRadius,
                 padding: '2px 8px',
@@ -279,41 +291,6 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
           )}
         </div>
       )}
-
-      {/* Filename badge — a strip across the bottom border, shown on hover
-          and pinned while this node's file is open in the drawer (fileMatch).
-          Mirrors the construct/role tab badges; hidden for fileless nodes. */}
-      {(hover || fileMatch === true) && c.file ? (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: -14,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 1,
-            fontFamily: theme.fonts.monospace,
-            fontSize: theme.fontSizes[1],
-            letterSpacing: 0.5,
-            lineHeight: '17px',
-            whiteSpace: 'nowrap',
-            // filename stays neutral — the construct color belongs to the
-            // borders and badges, not the file name
-            color: theme.colors.text ?? theme.colors.textSecondary,
-            background: theme.colors.backgroundSecondary ?? theme.colors.background,
-            border: `2px solid ${color}`,
-            borderRadius: badgeRadius,
-            padding: '2px 8px',
-            cursor: 'pointer',
-          }}
-          onClick={(e) => {
-            // Open the file directly; don't also toggle node selection.
-            e.stopPropagation();
-            callbacks.onOpenFile?.(c.alias);
-          }}
-        >
-          {c.file.split('/').pop()}
-        </div>
-      ) : null}
 
       {/* Purpose is no longer shown as a hover tooltip below the node — it
           lives in the declaration panel and the graphify detail payload. */}
@@ -454,12 +431,13 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
         } : undefined}
         style={{
           position: 'absolute',
-          // Process: badge fill starts with the process fill (inside the
-          // frame border); no top badge border so widths don't fight.
-          // Module/package are centred astride the top edge like component
-          // badges. Always set left/transform explicitly — React Flow reuses
-          // group DOM nodes and `undefined` does not clear a prior value.
-          top: 0,
+          // Process: the tab sits flush over the frame's top border (`top:
+          // -2` — the frame border is 2px) and carries its own full border, so
+          // the two read as one piece. Module/package are centred astride the
+          // top edge like component badges. Always set left/transform
+          // explicitly — React Flow reuses group DOM nodes and `undefined`
+          // does not clear a prior value.
+          top: isProcess ? -2 : 0,
           left: isProcess ? '50%' : 12,
           transform: isProcess ? 'translateX(-50%)' : 'translateY(-50%)',
           zIndex: canToggle ? 10 : undefined,
@@ -475,7 +453,11 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
           cursor: canToggle ? 'pointer' : undefined,
           // The trailing halo squares the rounded corners back off in the fill
           // colour, so an edge crossing a corner can't show through the notch.
-          boxShadow: `${canToggle && hover ? `0 2px 10px ${color}55, ` : ''}0 0 0 1.5px ${badgeBg}`,
+          // Square (process) badges have no notch, and the halo would erase the
+          // frame border they now sit flush on, so they skip it.
+          boxShadow: isProcess
+            ? undefined
+            : `${canToggle && hover ? `0 2px 10px ${color}55, ` : ''}0 0 0 1.5px ${badgeBg}`,
           fontFamily: theme.fonts.monospace,
           fontSize: theme.fontSizes[3],
           fontWeight: 700,
@@ -483,7 +465,7 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
           color,
           background: badgeBg,
           border: `2px solid ${color}`,
-          borderTopWidth: isProcess ? 0 : 2,
+          borderTopWidth: 2,
           borderRadius: badgeRadius,
           padding: '3px 9px',
           whiteSpace: 'nowrap',

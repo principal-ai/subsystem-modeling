@@ -8,7 +8,7 @@ const PURL = 'pkg:github/you/sensor-controller';
 
 export const components: SubsystemComponent[] = [
   {
-    id: 'main',
+    alias: 'main',
     process: 'sensor-controller',
     name: 'main',
     construct: 'function',
@@ -26,7 +26,7 @@ export const components: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'sensor',
+    alias: 'sensor',
     process: 'sensor-controller',
     name: 'Sensor',
     construct: 'class',
@@ -43,7 +43,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'control-logic',
+    alias: 'control-logic',
     process: 'sensor-controller',
     name: 'ControlLogic',
     construct: 'class',
@@ -60,7 +60,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'actuator',
+    alias: 'actuator',
     process: 'sensor-controller',
     name: 'Actuator',
     construct: 'class',
@@ -77,7 +77,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'SensorHW',
+    alias: 'SensorHW',
     name: 'Sensor hardware',
     construct: 'external',
     role: 'service',
@@ -87,7 +87,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'ActuatorHW',
+    alias: 'ActuatorHW',
     name: 'Actuator hardware',
     construct: 'external',
     role: 'service',
@@ -111,6 +111,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "src/main.cpp",
         "line": 19,
+        "purl": PURL,
         "symbol": "sensor.read",
         "annotation": "One tick starts with a fresh sample."
       },
@@ -120,6 +121,7 @@ export const walkthroughs = [
         "mechanism": "reads",
         "file": "src/sensor.cpp",
         "line": 7,
+        "purl": PURL,
         "symbol": "read",
         "annotation": "ADC → engineering units (hardware read)."
       },
@@ -129,6 +131,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "src/main.cpp",
         "line": 20,
+        "purl": PURL,
         "symbol": "control.decide",
         "annotation": "Pure decision — Heat / Cool / Off."
       },
@@ -138,6 +141,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "src/main.cpp",
         "line": 21,
+        "purl": PURL,
         "symbol": "actuator.apply",
         "annotation": "Drive outputs for this tick."
       },
@@ -147,6 +151,7 @@ export const walkthroughs = [
         "mechanism": "writes",
         "file": "src/actuator.cpp",
         "line": 7,
+        "purl": PURL,
         "symbol": "apply",
         "annotation": "GPIO/PWM write to actuator hardware."
       }
@@ -162,6 +167,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "src/main.cpp",
         "line": 19,
+        "purl": PURL,
         "symbol": "sensor.read",
         "annotation": "Sample comes in cold."
       },
@@ -171,6 +177,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "src/control.cpp",
         "line": 4,
+        "purl": PURL,
         "symbol": "decide",
         "annotation": "celsius < kLow → Command::Heat."
       },
@@ -180,6 +187,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "src/main.cpp",
         "line": 21,
+        "purl": PURL,
         "symbol": "actuator.apply",
         "annotation": "Apply Heat for this tick."
       },
@@ -189,6 +197,7 @@ export const walkthroughs = [
         "mechanism": "writes",
         "file": "src/actuator.cpp",
         "line": 9,
+        "purl": PURL,
         "symbol": "Command::Heat",
         "annotation": "Heater pin asserted."
       }

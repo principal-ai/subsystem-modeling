@@ -9,7 +9,7 @@ const SRC = 'Sources/Notes';
 
 export const components: SubsystemComponent[] = [
   {
-    id: 'content-view',
+    alias: 'content-view',
     process: 'swift-notes',
     name: 'ContentView',
     construct: 'function',
@@ -29,7 +29,7 @@ export const components: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'notes-view-model',
+    alias: 'notes-view-model',
     process: 'swift-notes',
     name: 'NotesViewModel',
     construct: 'class',
@@ -48,7 +48,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'notes-repository',
+    alias: 'notes-repository',
     process: 'swift-notes',
     name: 'NotesRepository',
     construct: 'class',
@@ -65,7 +65,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'notes-store',
+    alias: 'notes-store',
     process: 'swift-notes',
     name: 'NotesStore',
     construct: 'class',
@@ -82,7 +82,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'notes-api',
+    alias: 'notes-api',
     process: 'swift-notes',
     name: 'NotesAPI',
     construct: 'class',
@@ -99,7 +99,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'CoreData',
+    alias: 'CoreData',
     name: 'Core Data',
     construct: 'external',
     role: 'service',
@@ -109,7 +109,7 @@ export const components: SubsystemComponent[] = [
     layer: 4,
   },
   {
-    id: 'NotesBackend',
+    alias: 'NotesBackend',
     name: 'Notes backend',
     construct: 'external',
     role: 'service',
@@ -133,6 +133,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "Sources/Notes/ContentView.swift",
         "line": 17,
+        "purl": PURL,
         "symbol": "load",
         "annotation": "onAppear → view model."
       },
@@ -142,6 +143,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "Sources/Notes/NotesViewModel.swift",
         "line": 16,
+        "purl": PURL,
         "symbol": "fetchAll",
         "annotation": "ViewModel loads via repository."
       },
@@ -151,6 +153,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "Sources/Notes/NotesRepository.swift",
         "line": 14,
+        "purl": PURL,
         "symbol": "fetchAll",
         "annotation": "Repository reads the store."
       },
@@ -160,6 +163,7 @@ export const walkthroughs = [
         "mechanism": "reads",
         "file": "Sources/Notes/NotesStore.swift",
         "line": 7,
+        "purl": PURL,
         "symbol": "fetchAll",
         "annotation": "Local persistence boundary."
       }
@@ -175,6 +179,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "Sources/Notes/ContentView.swift",
         "line": 14,
+        "purl": PURL,
         "symbol": "addNote",
         "annotation": "Toolbar button → view model."
       },
@@ -184,6 +189,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "Sources/Notes/NotesViewModel.swift",
         "line": 22,
+        "purl": PURL,
         "symbol": "insert",
         "annotation": "Validate then repository insert."
       },
@@ -193,6 +199,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "Sources/Notes/NotesRepository.swift",
         "line": 18,
+        "purl": PURL,
         "symbol": "insert",
         "annotation": "Repository owns the write."
       },
@@ -202,6 +209,7 @@ export const walkthroughs = [
         "mechanism": "writes",
         "file": "Sources/Notes/NotesStore.swift",
         "line": 9,
+        "purl": PURL,
         "symbol": "insert",
         "annotation": "Persist locally."
       }
@@ -217,6 +225,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "Sources/Notes/ContentView.swift",
         "line": 15,
+        "purl": PURL,
         "symbol": "refresh",
         "annotation": "Refresh control."
       },
@@ -226,6 +235,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "Sources/Notes/NotesViewModel.swift",
         "line": 27,
+        "purl": PURL,
         "symbol": "refreshFromNetwork",
         "annotation": "ViewModel → repository."
       },
@@ -235,6 +245,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "Sources/Notes/NotesRepository.swift",
         "line": 22,
+        "purl": PURL,
         "symbol": "fetchNotes",
         "annotation": "Network before replace."
       },
@@ -244,6 +255,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "Sources/Notes/NotesStore.swift",
         "line": 16,
+        "purl": PURL,
         "symbol": "fetchNotes",
         "annotation": "HTTP to backend."
       },
@@ -253,6 +265,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "Sources/Notes/NotesRepository.swift",
         "line": 23,
+        "purl": PURL,
         "symbol": "replaceAll",
         "annotation": "Replace local cache."
       }

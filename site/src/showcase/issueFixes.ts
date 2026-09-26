@@ -53,7 +53,7 @@ const constructIssue: IssueFixModel = {
   title: 'Notes intake',
   components: [
     {
-      id: 'submit-note',
+      alias: 'submit-note',
       name: 'submitNote',
       construct: 'function',
       symbol: 'submitNote',
@@ -64,7 +64,7 @@ const constructIssue: IssueFixModel = {
       layer: 1,
     },
     {
-      id: 'note-service',
+      alias: 'note-service',
       name: 'NoteService',
       construct: 'function',
       symbol: 'NoteService',
@@ -74,7 +74,7 @@ const constructIssue: IssueFixModel = {
       layer: 2,
     },
     {
-      id: 'note-service-persist',
+      alias: 'note-service-persist',
       name: 'persist',
       construct: 'method',
       symbol: 'persist',
@@ -84,7 +84,7 @@ const constructIssue: IssueFixModel = {
       layer: 2,
     },
     {
-      id: 'note-repository',
+      alias: 'note-repository',
       name: 'NoteRepository',
       construct: 'interface',
       symbol: 'NoteRepository',
@@ -113,7 +113,7 @@ const constructIssue: IssueFixModel = {
 const constructFix: IssueFixModel = {
   ...constructIssue,
   components: constructIssue.components.map((c) =>
-    c.id === 'note-service'
+    c.alias === 'note-service'
       ? {
           ...c,
           construct: 'class',
@@ -127,7 +127,7 @@ const relationIssue: IssueFixModel = {
   title: 'Session parse',
   components: [
     {
-      id: 'session-reader',
+      alias: 'session-reader',
       name: 'SessionReader',
       construct: 'class',
       symbol: 'SessionReader',
@@ -137,7 +137,7 @@ const relationIssue: IssueFixModel = {
       layer: 1,
     },
     {
-      id: 'session-reader-read',
+      alias: 'session-reader-read',
       name: 'read',
       construct: 'method',
       symbol: 'read',
@@ -147,7 +147,7 @@ const relationIssue: IssueFixModel = {
       layer: 1,
     },
     {
-      id: 'old-parser',
+      alias: 'old-parser',
       name: 'oldParser',
       construct: 'function',
       symbol: 'oldParser',
@@ -178,7 +178,7 @@ const relationFix: IssueFixModel = {
   title: 'Session parse',
   components: [
     {
-      id: 'session-reader',
+      alias: 'session-reader',
       name: 'SessionReader',
       construct: 'class',
       symbol: 'SessionReader',
@@ -188,7 +188,7 @@ const relationFix: IssueFixModel = {
       layer: 1,
     },
     {
-      id: 'session-reader-read',
+      alias: 'session-reader-read',
       name: 'read',
       construct: 'method',
       symbol: 'read',
@@ -198,7 +198,7 @@ const relationFix: IssueFixModel = {
       layer: 1,
     },
     {
-      id: 'parse-transcript',
+      alias: 'parse-transcript',
       name: 'parseTranscript',
       construct: 'function',
       symbol: 'parseTranscript',
@@ -228,7 +228,7 @@ const hopIssue: IssueFixModel = {
   title: 'Checkout',
   components: [
     {
-      id: 'web-client',
+      alias: 'web-client',
       name: 'Web client',
       construct: 'external',
       file: '',
@@ -236,7 +236,7 @@ const hopIssue: IssueFixModel = {
       layer: 1,
     },
     {
-      id: 'checkout-api',
+      alias: 'checkout-api',
       name: 'checkoutApi',
       construct: 'function',
       symbol: 'checkoutApi',
@@ -247,7 +247,7 @@ const hopIssue: IssueFixModel = {
       layer: 2,
     },
     {
-      id: 'old-cart',
+      alias: 'old-cart',
       name: 'legacyCart',
       construct: 'store',
       symbol: 'legacyCart',
@@ -258,7 +258,7 @@ const hopIssue: IssueFixModel = {
       layer: 3,
     },
     {
-      id: 'cart-store',
+      alias: 'cart-store',
       name: 'cartStore',
       construct: 'store',
       symbol: 'cartStore',
@@ -268,7 +268,7 @@ const hopIssue: IssueFixModel = {
       layer: 3,
     },
     {
-      id: 'stripe',
+      alias: 'stripe',
       name: 'Stripe',
       construct: 'external',
       role: 'service',
@@ -289,6 +289,8 @@ const hopIssue: IssueFixModel = {
           mechanism: 'calls',
           file: 'src/checkout/api.ts',
           line: 1,
+          purl: CHECKOUT,
+          symbol: 'checkoutApi',
         },
         {
           from: 'checkout-api',
@@ -296,6 +298,8 @@ const hopIssue: IssueFixModel = {
           mechanism: 'writes',
           file: 'src/checkout/api.ts',
           line: 12,
+          purl: CHECKOUT,
+          symbol: 'legacyCart',
         },
         {
           from: 'checkout-api',
@@ -303,6 +307,8 @@ const hopIssue: IssueFixModel = {
           mechanism: 'calls',
           file: 'src/checkout/api.ts',
           line: 24,
+          purl: CHECKOUT,
+          symbol: 'Stripe',
         },
       ],
     },
@@ -311,7 +317,7 @@ const hopIssue: IssueFixModel = {
 
 const hopFix: IssueFixModel = {
   title: 'Checkout',
-  components: hopIssue.components.filter((c) => c.id !== 'old-cart'),
+  components: hopIssue.components.filter((c) => c.alias !== 'old-cart'),
   relations: [],
   walkthroughs: [
     {
@@ -324,6 +330,8 @@ const hopFix: IssueFixModel = {
           mechanism: 'calls',
           file: 'src/checkout/api.ts',
           line: 1,
+          purl: CHECKOUT,
+          symbol: 'checkoutApi',
         },
         {
           from: 'checkout-api',
@@ -331,6 +339,8 @@ const hopFix: IssueFixModel = {
           mechanism: 'writes',
           file: 'src/checkout/api.ts',
           line: 12,
+          purl: CHECKOUT,
+          symbol: 'cartStore',
         },
         {
           from: 'checkout-api',
@@ -338,6 +348,8 @@ const hopFix: IssueFixModel = {
           mechanism: 'calls',
           file: 'src/checkout/api.ts',
           line: 24,
+          purl: CHECKOUT,
+          symbol: 'Stripe',
         },
       ],
     },

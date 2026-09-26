@@ -8,7 +8,7 @@ const PURL = 'pkg:github/you/dbt-orders';
 
 export const components: SubsystemComponent[] = [
   {
-    id: 'stg-orders',
+    alias: 'stg-orders',
     process: 'dbt-orders',
     name: 'stg_orders',
     construct: 'function',
@@ -29,7 +29,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'fct-daily-orders',
+    alias: 'fct-daily-orders',
     process: 'dbt-orders',
     name: 'fct_daily_orders',
     construct: 'function',
@@ -49,7 +49,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'schema-tests',
+    alias: 'schema-tests',
     process: 'dbt-orders',
     name: 'schema.yml',
     construct: 'custom_entity',
@@ -69,7 +69,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'RawOrders',
+    alias: 'RawOrders',
     name: 'raw.orders',
     construct: 'external',
     role: 'service',
@@ -79,7 +79,7 @@ export const components: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'Warehouse',
+    alias: 'Warehouse',
     name: 'Warehouse',
     construct: 'external',
     role: 'service',
@@ -116,6 +116,7 @@ export const walkthroughs = [
         "mechanism": "reads",
         "file": "models/staging/stg_orders.sql",
         "line": 8,
+        "purl": PURL,
         "symbol": "source('raw','orders')",
         "annotation": "Staging reads the raw source."
       },
@@ -125,6 +126,7 @@ export const walkthroughs = [
         "mechanism": "writes",
         "file": "models/staging/stg_orders.sql",
         "line": 2,
+        "purl": PURL,
         "symbol": "select",
         "annotation": "Materialize stg_orders in the warehouse."
       },
@@ -134,6 +136,7 @@ export const walkthroughs = [
         "mechanism": "reads",
         "file": "models/marts/fct_daily_orders.sql",
         "line": 6,
+        "purl": PURL,
         "symbol": "ref('stg_orders')",
         "annotation": "Mart depends on staging via ref()."
       },
@@ -143,6 +146,7 @@ export const walkthroughs = [
         "mechanism": "writes",
         "file": "models/marts/fct_daily_orders.sql",
         "line": 2,
+        "purl": PURL,
         "symbol": "select",
         "annotation": "Materialize daily facts."
       }

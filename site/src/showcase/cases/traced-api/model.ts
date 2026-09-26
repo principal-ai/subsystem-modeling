@@ -9,7 +9,7 @@ const PAYMENTS_PURL = 'pkg:github/you/payments-api';
 
 export const components: SubsystemComponent[] = [
   {
-    id: 'create-app',
+    alias: 'create-app',
     process: 'orders-api',
     name: 'create_app',
     construct: 'function',
@@ -28,7 +28,7 @@ export const components: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'setup-tracing',
+    alias: 'setup-tracing',
     process: 'orders-api',
     name: 'setup_tracing',
     construct: 'function',
@@ -46,7 +46,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'tracer-provider',
+    alias: 'tracer-provider',
     process: 'orders-api',
     name: 'TracerProvider',
     construct: 'store',
@@ -64,7 +64,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'post-order',
+    alias: 'post-order',
     process: 'orders-api',
     name: 'post_order',
     construct: 'function',
@@ -85,7 +85,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'read-order',
+    alias: 'read-order',
     process: 'orders-api',
     name: 'read_order',
     construct: 'function',
@@ -106,7 +106,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'create-order',
+    alias: 'create-order',
     process: 'orders-api',
     name: 'create_order',
     construct: 'function',
@@ -124,7 +124,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'get-order',
+    alias: 'get-order',
     process: 'orders-api',
     name: 'get_order',
     construct: 'function',
@@ -142,7 +142,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'orders-repo',
+    alias: 'orders-repo',
     process: 'orders-api',
     name: 'orders_repo',
     construct: 'class',
@@ -160,7 +160,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'capture-payment',
+    alias: 'capture-payment',
     process: 'orders-api',
     name: 'capture_payment',
     construct: 'function',
@@ -178,7 +178,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'handle-capture',
+    alias: 'handle-capture',
     process: 'payments-api',
     name: 'handle_capture',
     construct: 'function',
@@ -199,7 +199,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'Postgres',
+    alias: 'Postgres',
     name: 'Postgres',
     construct: 'external',
     role: 'service',
@@ -209,7 +209,7 @@ export const components: SubsystemComponent[] = [
     layer: 4,
   },
   {
-    id: 'OTLPCollector',
+    alias: 'OTLPCollector',
     name: 'OTLP collector',
     construct: 'external',
     role: 'service',
@@ -306,6 +306,7 @@ export const walkthroughs = [
         "mechanism": "produces",
         "file": "app/routes/orders.py",
         "line": 13,
+        "purl": PURL,
         "symbol": "start_as_current_span(\"orders.read\")",
         "annotation": "Runtime: open the route span (not setup)."
       },
@@ -315,6 +316,7 @@ export const walkthroughs = [
         "mechanism": "produces",
         "file": "app/routes/orders.py",
         "line": 15,
+        "purl": PURL,
         "symbol": "add_event(\"orders.read.started\")",
         "annotation": "Span event recorded into the TracerProvider."
       },
@@ -324,6 +326,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/routes/orders.py",
         "line": 16,
+        "purl": PURL,
         "symbol": "get_order",
         "annotation": "Business call under the active span context."
       },
@@ -333,6 +336,7 @@ export const walkthroughs = [
         "mechanism": "produces",
         "file": "app/services/order_service.py",
         "line": 11,
+        "purl": PURL,
         "symbol": "start_as_current_span(\"OrderService.get\")",
         "annotation": "Child span — still the same trace."
       },
@@ -342,6 +346,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/services/order_service.py",
         "line": 13,
+        "purl": PURL,
         "symbol": "find_by_id",
         "annotation": "Service delegates to the repo."
       },
@@ -351,6 +356,7 @@ export const walkthroughs = [
         "mechanism": "produces",
         "file": "app/db.py",
         "line": 13,
+        "purl": PURL,
         "symbol": "start_as_current_span(\"db.orders.find\")",
         "annotation": "DB span + db.query.execute / db.query.done events."
       },
@@ -360,6 +366,7 @@ export const walkthroughs = [
         "mechanism": "reads",
         "file": "app/db.py",
         "line": 17,
+        "purl": PURL,
         "symbol": "_ORDERS.get",
         "annotation": "Actual Postgres read (showcase stand-in)."
       },
@@ -369,6 +376,7 @@ export const walkthroughs = [
         "mechanism": "produces",
         "file": "app/telemetry.py",
         "line": 22,
+        "purl": PURL,
         "symbol": "BatchSpanProcessor",
         "annotation": "When spans end, the processor exports them to the OTLP collector."
       }
@@ -384,6 +392,7 @@ export const walkthroughs = [
         "mechanism": "produces",
         "file": "app/routes/orders.py",
         "line": 26,
+        "purl": PURL,
         "symbol": "start_as_current_span(\"orders.create\")",
         "annotation": "Runtime: route span + orders.create.started event."
       },
@@ -393,6 +402,7 @@ export const walkthroughs = [
         "mechanism": "produces",
         "file": "app/routes/orders.py",
         "line": 28,
+        "purl": PURL,
         "symbol": "add_event(\"orders.create.started\")",
         "annotation": "Event on the parent span before work begins."
       },
@@ -402,6 +412,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/routes/orders.py",
         "line": 29,
+        "purl": PURL,
         "symbol": "create_order",
         "annotation": "Into the service under the active context."
       },
@@ -411,6 +422,7 @@ export const walkthroughs = [
         "mechanism": "produces",
         "file": "app/services/order_service.py",
         "line": 19,
+        "purl": PURL,
         "symbol": "start_as_current_span(\"OrderService.create\")",
         "annotation": "Child span for the write path."
       },
@@ -420,6 +432,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/services/order_service.py",
         "line": 21,
+        "purl": PURL,
         "symbol": "capture_payment",
         "annotation": "Payment before persist."
       },
@@ -429,6 +442,7 @@ export const walkthroughs = [
         "mechanism": "produces",
         "file": "app/clients/payments.py",
         "line": 12,
+        "purl": PURL,
         "symbol": "start_as_current_span(\"payments.capture\")",
         "annotation": "Outbound span + payments.capture.requested event."
       },
@@ -438,6 +452,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/clients/payments.py",
         "line": 16,
+        "purl": PURL,
         "symbol": "inject",
         "annotation": "Cross into payments-api — W3C traceparent continues the trace."
       },
@@ -447,6 +462,7 @@ export const walkthroughs = [
         "mechanism": "produces",
         "file": "payments/handle_capture.py",
         "line": 14,
+        "purl": PURL,
         "symbol": "start_as_current_span(\"payments.handle\")",
         "annotation": "Downstream span in the payments-api process."
       },
@@ -456,6 +472,7 @@ export const walkthroughs = [
         "mechanism": "produces",
         "file": "app/services/order_service.py",
         "line": 23,
+        "purl": PURL,
         "symbol": "add_event(\"service.payment_captured\")",
         "annotation": "Event on the service span after capture returns."
       },
@@ -465,6 +482,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/services/order_service.py",
         "line": 24,
+        "purl": PURL,
         "symbol": "insert",
         "annotation": "Persist with payment id."
       },
@@ -474,6 +492,7 @@ export const walkthroughs = [
         "mechanism": "produces",
         "file": "app/db.py",
         "line": 23,
+        "purl": PURL,
         "symbol": "start_as_current_span(\"db.orders.insert\")",
         "annotation": "DB write span + query events into TracerProvider."
       },
@@ -483,6 +502,7 @@ export const walkthroughs = [
         "mechanism": "writes",
         "file": "app/db.py",
         "line": 29,
+        "purl": PURL,
         "symbol": "_ORDERS[order_id]",
         "annotation": "Actual write (showcase stand-in)."
       },
@@ -492,6 +512,7 @@ export const walkthroughs = [
         "mechanism": "produces",
         "file": "app/telemetry.py",
         "line": 22,
+        "purl": PURL,
         "symbol": "BatchSpanProcessor",
         "annotation": "Finished span tree exports to OTLP."
       }
@@ -507,6 +528,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/main.py",
         "line": 15,
+        "purl": PURL,
         "symbol": "setup_tracing",
         "annotation": "Once at process start — not per request."
       },
@@ -516,6 +538,7 @@ export const walkthroughs = [
         "mechanism": "registers-into",
         "file": "app/telemetry.py",
         "line": 20,
+        "purl": PURL,
         "symbol": "TracerProvider",
         "annotation": "Install the in-process sink tracers will produce into."
       },
@@ -525,6 +548,7 @@ export const walkthroughs = [
         "mechanism": "produces",
         "file": "app/telemetry.py",
         "line": 21,
+        "purl": PURL,
         "symbol": "OTLPSpanExporter",
         "annotation": "Exporter attached; request walkthroughs are what actually fill it."
       }

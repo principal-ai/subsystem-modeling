@@ -2150,7 +2150,7 @@ const rowBusy =
 																alignItems: "center",
 																justifyContent: "center",
 																gap: 5,
-																width: 132,
+																minWidth: 132,
 																height: 26,
 																padding: "0 8px",
 																borderRadius: 6,

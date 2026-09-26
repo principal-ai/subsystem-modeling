@@ -314,6 +314,7 @@ function Inner({
   const [rfEdges, setRfEdges] = useState<Edge[]>([]);
   const [ready, setReady] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [focusedBoundaryId, setFocusedBoundaryId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [legendOpen, setLegendOpen] = useState(true);
 
@@ -350,6 +351,7 @@ function Inner({
     let alive = true;
     setReady(false);
     setSelectedId(null);
+    setFocusedBoundaryId(null);
     // Compound process frames: each box is parented to exactly one process
     // group (its majority process); process member-boxes to their own
     // process; the rest stays root-level. Exclusive assignment by
@@ -514,11 +516,45 @@ function Inner({
 
   const onNodeClick = useCallback(
     (_e: unknown, node: Node) => {
+      // Boundaries are shells, not frames — there is no frame to select, and a
+      // double-click would otherwise toggle the (empty) selection twice.
+      if (node.type === 'aggregate-frame-group') return;
       const next = selectedId === node.id ? null : node.id;
       setSelectedId(next);
       onSelectFrame?.(next);
     },
     [selectedId, onSelectFrame],
+  );
+
+  // Double-click a boundary to zoom to it; double-click it again to zoom back
+  // out to the whole graph. Double-clicking a different boundary moves the
+  // focus. A boundary's interior is covered by the frames inside it, so a hit
+  // on any frame resolves to its enclosing boundary — otherwise double-clicking
+  // "on the boundary" would usually land on a frame and do nothing.
+  const onNodeDoubleClick = useCallback(
+    (_e: unknown, node: Node) => {
+      const boundaryId =
+        node.type === 'aggregate-frame-group'
+          ? node.id
+          : (() => {
+              const parentId = (node as { parentId?: string }).parentId;
+              if (!parentId) return null;
+              return nodes.some(
+                (n) => n.id === parentId && n.type === 'aggregate-frame-group',
+              )
+                ? parentId
+                : null;
+            })();
+      if (!boundaryId) return;
+      if (focusedBoundaryId === boundaryId) {
+        setFocusedBoundaryId(null);
+        void fitView({ padding: 0.15, duration: 400 });
+      } else {
+        setFocusedBoundaryId(boundaryId);
+        void fitView({ nodes: [{ id: boundaryId }], padding: 0.25, duration: 400 });
+      }
+    },
+    [focusedBoundaryId, fitView, nodes],
   );
 
   const displayNodes = useMemo(
@@ -571,10 +607,12 @@ function Inner({
         className={GRAPH_CANVAS_CLASS}
         {...GRAPH_NAV_PROPS}
         onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
         onNodeMouseEnter={(_e, node) => setHoveredId(node.id)}
         onNodeMouseLeave={() => setHoveredId(null)}
         onPaneClick={() => {
           setSelectedId(null);
+          setFocusedBoundaryId(null);
           onSelectFrame?.(null);
         }}
         proOptions={{ hideAttribution: true }}

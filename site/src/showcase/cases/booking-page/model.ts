@@ -8,7 +8,7 @@ const PURL = 'pkg:github/you/scheduling-app';
 
 export const components: SubsystemComponent[] = [
   {
-    id: 'booking-page',
+    alias: 'booking-page',
     process: 'booking-web/client',
     name: 'BookingPage',
     construct: 'function',
@@ -37,7 +37,7 @@ export const components: SubsystemComponent[] = [
     declarationProvenance: 'authored',
   },
   {
-    id: 'capture-event',
+    alias: 'capture-event',
     process: 'booking-web/client',
     name: 'captureEvent',
     construct: 'function',
@@ -66,7 +66,7 @@ export const components: SubsystemComponent[] = [
     declarationProvenance: 'authored',
   },
   {
-    id: 'list-open-slots',
+    alias: 'list-open-slots',
     process: 'booking-web/server',
     name: 'listOpenSlots',
     construct: 'function',
@@ -95,7 +95,7 @@ export const components: SubsystemComponent[] = [
     declarationProvenance: 'authored',
   },
   {
-    id: 'book-slot',
+    alias: 'book-slot',
     process: 'booking-web/server',
     name: 'bookSlot',
     construct: 'function',
@@ -129,7 +129,7 @@ export const components: SubsystemComponent[] = [
     declarationProvenance: 'authored',
   },
   {
-    id: 'cancel-slot',
+    alias: 'cancel-slot',
     process: 'booking-web/server',
     name: 'cancelSlot',
     construct: 'function',
@@ -158,7 +158,7 @@ export const components: SubsystemComponent[] = [
     declarationProvenance: 'authored',
   },
   {
-    id: 'list-slots',
+    alias: 'list-slots',
     process: 'booking-web/server',
     name: 'listSlots',
     construct: 'function',
@@ -184,7 +184,7 @@ export const components: SubsystemComponent[] = [
     declarationProvenance: 'authored',
   },
   {
-    id: 'create-booking',
+    alias: 'create-booking',
     process: 'booking-web/server',
     name: 'createBooking',
     construct: 'function',
@@ -210,7 +210,7 @@ export const components: SubsystemComponent[] = [
     declarationProvenance: 'authored',
   },
   {
-    id: 'cancel-booking',
+    alias: 'cancel-booking',
     process: 'booking-web/server',
     name: 'cancelBooking',
     construct: 'function',
@@ -236,7 +236,7 @@ export const components: SubsystemComponent[] = [
     declarationProvenance: 'authored',
   },
   {
-    id: 'Database',
+    alias: 'Database',
     name: 'Database',
     construct: 'external',
     role: 'service',
@@ -251,7 +251,7 @@ export const components: SubsystemComponent[] = [
     declarationProvenance: 'authored',
   },
   {
-    id: 'PostHog',
+    alias: 'PostHog',
     name: 'PostHog',
     construct: 'external',
     role: 'service',
@@ -347,6 +347,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/book/page.tsx",
         "line": 17,
+        "purl": PURL,
         "symbol": "listOpenSlots",
         "annotation": "Client calls a server action — not the DB."
       },
@@ -356,6 +357,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/book/actions.ts",
         "line": 14,
+        "purl": PURL,
         "symbol": "listSlots",
         "annotation": "Server action crosses into server libs."
       },
@@ -365,6 +367,7 @@ export const walkthroughs = [
         "mechanism": "reads",
         "file": "lib/listSlots.ts",
         "line": 9,
+        "purl": PURL,
         "symbol": "findOpen",
         "annotation": "DB read stays on the server."
       },
@@ -374,6 +377,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/book/page.tsx",
         "line": 19,
+        "purl": PURL,
         "symbol": "captureEvent('slot_viewed')",
         "annotation": "Analytics fires in the browser after slots return."
       },
@@ -383,6 +387,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "lib/captureEvent.ts",
         "line": 7,
+        "purl": PURL,
         "symbol": "captureEvent",
         "annotation": "PostHog from the client — separate from the booking store."
       }
@@ -398,6 +403,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/book/page.tsx",
         "line": 24,
+        "purl": PURL,
         "symbol": "bookSlot",
         "annotation": "Confirm — client → server action wire boundary."
       },
@@ -407,6 +413,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/book/actions.ts",
         "line": 22,
+        "purl": PURL,
         "symbol": "createBooking",
         "annotation": "Server action delegates to the booking lib."
       },
@@ -416,6 +423,7 @@ export const walkthroughs = [
         "mechanism": "writes",
         "file": "lib/createBooking.ts",
         "line": 13,
+        "purl": PURL,
         "symbol": "insert",
         "annotation": "Persist on the server — source of truth."
       },
@@ -425,6 +433,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/book/page.tsx",
         "line": 26,
+        "purl": PURL,
         "symbol": "captureEvent('booking_created')",
         "annotation": "Client records the product moment after success."
       },
@@ -434,6 +443,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "lib/captureEvent.ts",
         "line": 7,
+        "purl": PURL,
         "symbol": "captureEvent",
         "annotation": "PostHog booking_created — not the source of truth."
       }
@@ -449,6 +459,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/book/page.tsx",
         "line": 31,
+        "purl": PURL,
         "symbol": "cancelSlot",
         "annotation": "Same client→server pattern on the release path."
       },
@@ -458,6 +469,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/book/actions.ts",
         "line": 26,
+        "purl": PURL,
         "symbol": "cancelBooking",
         "annotation": "Server action → server lib."
       },
@@ -467,6 +479,7 @@ export const walkthroughs = [
         "mechanism": "writes",
         "file": "lib/cancelBooking.ts",
         "line": 7,
+        "purl": PURL,
         "symbol": "update",
         "annotation": "DB write on the server frees the slot."
       },
@@ -476,6 +489,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/book/page.tsx",
         "line": 32,
+        "purl": PURL,
         "symbol": "captureEvent('booking_cancelled')",
         "annotation": "Browser analytics mirrors the cancel."
       },
@@ -485,6 +499,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "lib/captureEvent.ts",
         "line": 7,
+        "purl": PURL,
         "symbol": "captureEvent",
         "annotation": "PostHog booking_cancelled alongside the server update."
       }

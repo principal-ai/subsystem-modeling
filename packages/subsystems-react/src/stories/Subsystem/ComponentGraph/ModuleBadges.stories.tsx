@@ -105,9 +105,9 @@ const deepComponents: SubsystemComponent[] = [
 const deepEdges = graphSpecFromEdges([
   ['node-comp', 'group-comp', 'references'],
   ['edge-comp', 'group-comp', 'references'],
-  ['analysis', 'layers', 'references'],
-  ['use-drawings', 'analysis', 'references'],
-  ['analysis', 'node-comp', 'references'],
+  ['model-view', 'layers', 'references'],
+  ['use-drawings', 'model-view', 'references'],
+  ['model-view', 'node-comp', 'references'],
 ]);
 
 /** Collapsed module badges show `first/…/last`. Click one to expand the full

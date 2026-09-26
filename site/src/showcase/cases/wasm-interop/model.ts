@@ -9,7 +9,7 @@ const PURL = 'pkg:github/you/wasm-interop';
 export const components: SubsystemComponent[] = [
   // —— browser/main process ——
   {
-    id: 'run-pipeline',
+    alias: 'run-pipeline',
     process: 'browser/main',
     name: 'runPipeline',
     construct: 'function',
@@ -27,7 +27,7 @@ export const components: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'load-guest',
+    alias: 'load-guest',
     process: 'browser/main',
     name: 'loadGuest',
     construct: 'function',
@@ -44,7 +44,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'write-bytes',
+    alias: 'write-bytes',
     process: 'browser/main',
     name: 'writeBytes',
     construct: 'function',
@@ -61,7 +61,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'read-u32',
+    alias: 'read-u32',
     process: 'browser/main',
     name: 'readU32',
     construct: 'function',
@@ -78,7 +78,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'host-trace',
+    alias: 'host-trace',
     process: 'browser/main',
     name: 'host_trace',
     construct: 'function',
@@ -97,7 +97,7 @@ export const components: SubsystemComponent[] = [
 
   // —— wasm/worker process ——
   {
-    id: 'normalize',
+    alias: 'normalize',
     process: 'wasm/worker',
     name: 'normalize',
     construct: 'function',
@@ -115,7 +115,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'checksum',
+    alias: 'checksum',
     process: 'wasm/worker',
     name: 'checksum',
     construct: 'function',
@@ -135,7 +135,7 @@ export const components: SubsystemComponent[] = [
 
   // —— external ——
   {
-    id: 'WasmRuntime',
+    alias: 'WasmRuntime',
     name: 'Wasm runtime',
     construct: 'external',
     role: 'service',
@@ -159,6 +159,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "host/runPipeline.ts",
         "line": 14,
+        "purl": PURL,
         "symbol": "loadGuest",
         "annotation": "Stay on browser/main — load the wasm/worker module."
       },
@@ -168,6 +169,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "host/loadGuest.ts",
         "line": 13,
+        "purl": PURL,
         "symbol": "instantiateStreaming",
         "annotation": "Runtime brings up the wasm/worker process."
       },
@@ -177,6 +179,7 @@ export const walkthroughs = [
         "mechanism": "registers-into",
         "file": "host/loadGuest.ts",
         "line": 16,
+        "purl": PURL,
         "symbol": "host_trace",
         "annotation": "Register the worker→main callback before any worker code runs."
       },
@@ -186,6 +189,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "host/runPipeline.ts",
         "line": 17,
+        "purl": PURL,
         "symbol": "writeBytes",
         "annotation": "Main thread writes input into shared memory (still browser/main)."
       },
@@ -195,6 +199,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "host/runPipeline.ts",
         "line": 20,
+        "purl": PURL,
         "symbol": "guest.normalize",
         "annotation": "Cross into wasm/worker."
       },
@@ -204,6 +209,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "guest/src/lib.rs",
         "line": 22,
+        "purl": PURL,
         "symbol": "host_trace",
         "annotation": "Worker calls back into browser/main (trace normalize)."
       },
@@ -213,6 +219,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "host/runPipeline.ts",
         "line": 21,
+        "purl": PURL,
         "symbol": "guest.checksum",
         "annotation": "Main thread calls the second worker entry (still crossing the boundary)."
       },
@@ -222,6 +229,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "guest/src/lib.rs",
         "line": 41,
+        "purl": PURL,
         "symbol": "host_trace",
         "annotation": "Worker→main again for checksum progress."
       },
@@ -231,6 +239,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "host/runPipeline.ts",
         "line": 24,
+        "purl": PURL,
         "symbol": "readU32",
         "annotation": "Back on browser/main — read the value the worker stashed."
       }
@@ -246,6 +255,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "guest/src/lib.rs",
         "line": 20,
+        "purl": PURL,
         "symbol": "normalize",
         "annotation": "Worker entry — mutate the shared buffer in place."
       },
@@ -255,6 +265,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "guest/src/lib.rs",
         "line": 39,
+        "purl": PURL,
         "symbol": "checksum",
         "annotation": "Second worker entry — hash the normalized slice."
       }

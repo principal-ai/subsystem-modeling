@@ -8,7 +8,7 @@ const PURL = 'pkg:github/you/elixir-cache';
 
 export const components: SubsystemComponent[] = [
   {
-    id: 'application',
+    alias: 'application',
     process: 'elixir-cache',
     name: 'Notes.Application',
     construct: 'class',
@@ -29,7 +29,7 @@ export const components: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'cache',
+    alias: 'cache',
     process: 'elixir-cache',
     name: 'Notes.Cache',
     construct: 'class',
@@ -49,7 +49,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'client',
+    alias: 'client',
     process: 'elixir-cache',
     name: 'Notes.Client',
     construct: 'class',
@@ -67,7 +67,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'Supervisor',
+    alias: 'Supervisor',
     name: 'Notes.Supervisor',
     construct: 'external',
     role: 'service',
@@ -91,6 +91,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "lib/notes/application.ex",
         "line": 12,
+        "purl": PURL,
         "symbol": "Supervisor.start_link",
         "annotation": "Application starts the supervision tree."
       },
@@ -100,6 +101,7 @@ export const walkthroughs = [
         "mechanism": "registers-into",
         "file": "lib/notes/application.ex",
         "line": 8,
+        "purl": PURL,
         "symbol": "Notes.Cache",
         "annotation": "Cache listed as a child spec."
       },
@@ -109,6 +111,7 @@ export const walkthroughs = [
         "mechanism": "watches",
         "file": "lib/notes/cache.ex",
         "line": 7,
+        "purl": PURL,
         "symbol": "start_link",
         "annotation": "Supervisor starts (and can restart) the GenServer."
       }
@@ -124,6 +127,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "lib/notes/client.ex",
         "line": 4,
+        "purl": PURL,
         "symbol": "Cache.get",
         "annotation": "Client issues a call."
       },
@@ -133,6 +137,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "lib/notes/cache.ex",
         "line": 11,
+        "purl": PURL,
         "symbol": "GenServer.call",
         "annotation": "Synchronous request into the GenServer."
       },
@@ -142,6 +147,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "lib/notes/cache.ex",
         "line": 21,
+        "purl": PURL,
         "symbol": "handle_call",
         "annotation": "Server replies from process state."
       }
@@ -157,6 +163,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "lib/notes/client.ex",
         "line": 7,
+        "purl": PURL,
         "symbol": "Cache.put",
         "annotation": "Client casts a write."
       },
@@ -166,6 +173,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "lib/notes/cache.ex",
         "line": 13,
+        "purl": PURL,
         "symbol": "GenServer.cast",
         "annotation": "Asynchronous message — no reply."
       },
@@ -175,6 +183,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "lib/notes/cache.ex",
         "line": 26,
+        "purl": PURL,
         "symbol": "handle_cast",
         "annotation": "Server updates its map state."
       }

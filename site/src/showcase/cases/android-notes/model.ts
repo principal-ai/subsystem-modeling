@@ -9,7 +9,7 @@ const JAVA = 'app/src/main/java/com/example/notes';
 
 export const components: SubsystemComponent[] = [
   {
-    id: 'main-activity',
+    alias: 'main-activity',
     process: 'android-notes',
     name: 'MainActivity',
     construct: 'class',
@@ -29,7 +29,7 @@ export const components: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'notes-view-model',
+    alias: 'notes-view-model',
     process: 'android-notes',
     name: 'NotesViewModel',
     construct: 'class',
@@ -48,7 +48,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'notes-repository',
+    alias: 'notes-repository',
     process: 'android-notes',
     name: 'NotesRepository',
     construct: 'class',
@@ -65,7 +65,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'note-dao',
+    alias: 'note-dao',
     process: 'android-notes',
     name: 'NoteDao',
     construct: 'interface',
@@ -84,7 +84,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'notes-api',
+    alias: 'notes-api',
     process: 'android-notes',
     name: 'NotesApi',
     construct: 'class',
@@ -101,7 +101,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'Room',
+    alias: 'Room',
     name: 'Room',
     construct: 'external',
     role: 'service',
@@ -111,7 +111,7 @@ export const components: SubsystemComponent[] = [
     layer: 4,
   },
   {
-    id: 'NotesBackend',
+    alias: 'NotesBackend',
     name: 'Notes backend',
     construct: 'external',
     role: 'service',
@@ -172,6 +172,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/MainActivity.java",
         "line": 26,
+        "purl": PURL,
         "symbol": "getNotes().observe",
         "annotation": "Activity observes LiveData from the ViewModel."
       },
@@ -181,6 +182,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/NotesViewModel.java",
         "line": 22,
+        "purl": PURL,
         "symbol": "observeNotes",
         "annotation": "ViewModel forwards to the repository."
       },
@@ -190,6 +192,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/NotesRepository.java",
         "line": 22,
+        "purl": PURL,
         "symbol": "observeAll",
         "annotation": "Repository reads through the DAO — not the Activity."
       },
@@ -199,6 +202,7 @@ export const walkthroughs = [
         "mechanism": "reads",
         "file": "app/src/main/java/com/example/notes/NoteDao.java",
         "line": 14,
+        "purl": PURL,
         "symbol": "observeAll",
         "annotation": "Room query powers the list."
       }
@@ -214,6 +218,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/MainActivity.java",
         "line": 27,
+        "purl": PURL,
         "symbol": "addNote",
         "annotation": "Click handler → ViewModel only."
       },
@@ -223,6 +228,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/NotesViewModel.java",
         "line": 27,
+        "purl": PURL,
         "symbol": "insert",
         "annotation": "ViewModel validates, then repository insert."
       },
@@ -232,6 +238,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/NotesRepository.java",
         "line": 26,
+        "purl": PURL,
         "symbol": "insert",
         "annotation": "Repository owns the write."
       },
@@ -241,6 +248,7 @@ export const walkthroughs = [
         "mechanism": "writes",
         "file": "app/src/main/java/com/example/notes/NoteDao.java",
         "line": 17,
+        "purl": PURL,
         "symbol": "insert",
         "annotation": "Room persists on device."
       }
@@ -256,6 +264,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/NotesViewModel.java",
         "line": 31,
+        "purl": PURL,
         "symbol": "refreshFromNetwork",
         "annotation": "Pull-to-refresh style intent."
       },
@@ -265,6 +274,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/NotesRepository.java",
         "line": 30,
+        "purl": PURL,
         "symbol": "fetchNotes",
         "annotation": "Network before touching Room."
       },
@@ -274,6 +284,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/NotesApi.java",
         "line": 8,
+        "purl": PURL,
         "symbol": "fetchNotes",
         "annotation": "HTTP to the notes backend."
       },
@@ -283,6 +294,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/NotesRepository.java",
         "line": 31,
+        "purl": PURL,
         "symbol": "replaceAll",
         "annotation": "Replace local cache with remote payload."
       },
@@ -292,6 +304,7 @@ export const walkthroughs = [
         "mechanism": "writes",
         "file": "app/src/main/java/com/example/notes/NoteDao.java",
         "line": 20,
+        "purl": PURL,
         "symbol": "replaceAll",
         "annotation": "Transactional Room rewrite."
       }

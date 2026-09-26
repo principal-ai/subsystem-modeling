@@ -642,7 +642,10 @@ export async function computeElkLayout(
   const compoundLayoutOptions: LayoutOptions = {
     'elk.algorithm': 'layered',
     'elk.direction': direction,
-    'elk.padding': '[top=48,left=24,bottom=24,right=24]',
+    // `top` is the header band a boundary badge sits in. It has to clear the
+    // badge (~28px tall, and a nested frame's badge can overhang its own top
+    // edge by ~13px) plus a gap before the first child.
+    'elk.padding': '[top=64,left=24,bottom=24,right=24]',
     'elk.spacing.nodeNode': '40',
   };
 

@@ -8,7 +8,7 @@ const PURL = 'pkg:github/you/multiplayer-board';
 
 export const components: SubsystemComponent[] = [
   {
-    id: 'board-page',
+    alias: 'board-page',
     process: 'board-web',
     name: 'BoardPage',
     construct: 'function',
@@ -28,7 +28,7 @@ export const components: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'use-presence',
+    alias: 'use-presence',
     process: 'board-web',
     name: 'usePresence',
     construct: 'function',
@@ -47,7 +47,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'list-shapes',
+    alias: 'list-shapes',
     process: 'board-web',
     name: 'listShapes',
     construct: 'function',
@@ -64,7 +64,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'upsert-shape',
+    alias: 'upsert-shape',
     process: 'board-web',
     name: 'upsertShape',
     construct: 'function',
@@ -81,7 +81,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'list-presence',
+    alias: 'list-presence',
     process: 'board-web',
     name: 'listPresence',
     construct: 'function',
@@ -98,7 +98,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'update-presence',
+    alias: 'update-presence',
     process: 'board-web',
     name: 'updatePresence',
     construct: 'function',
@@ -115,7 +115,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'Convex',
+    alias: 'Convex',
     name: 'Convex',
     construct: 'external',
     role: 'service',
@@ -139,6 +139,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/board/[room]/page.tsx",
         "line": 17,
+        "purl": PURL,
         "symbol": "upsertShape",
         "annotation": "Local pointer-up becomes a Convex mutation."
       },
@@ -148,6 +149,7 @@ export const walkthroughs = [
         "mechanism": "writes",
         "file": "convex/shapes.ts",
         "line": 32,
+        "purl": PURL,
         "symbol": "insert",
         "annotation": "Shape lands in Convex — the shared board state."
       }
@@ -163,6 +165,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/board/[room]/page.tsx",
         "line": 12,
+        "purl": PURL,
         "symbol": "useQuery(listShapes)",
         "annotation": "Same query subscription every client holds open."
       },
@@ -172,6 +175,7 @@ export const walkthroughs = [
         "mechanism": "reads",
         "file": "convex/shapes.ts",
         "line": 8,
+        "purl": PURL,
         "symbol": "ctx.db.query",
         "annotation": "Convex pushes an update; React re-renders the canvas list."
       }
@@ -187,6 +191,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "app/board/[room]/page.tsx",
         "line": 14,
+        "purl": PURL,
         "symbol": "usePresence",
         "annotation": "Board mounts the presence hook alongside shapes."
       },
@@ -196,6 +201,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "lib/usePresence.ts",
         "line": 16,
+        "purl": PURL,
         "symbol": "updatePresence",
         "annotation": "Pointer moves publish local cursor position."
       },
@@ -205,6 +211,7 @@ export const walkthroughs = [
         "mechanism": "writes",
         "file": "convex/presence.ts",
         "line": 30,
+        "purl": PURL,
         "symbol": "patch",
         "annotation": "Presence row updates in Convex for peers to read."
       },
@@ -214,6 +221,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "lib/usePresence.ts",
         "line": 11,
+        "purl": PURL,
         "symbol": "useQuery(listPresence)",
         "annotation": "Peers arrive through the reactive presence query."
       }

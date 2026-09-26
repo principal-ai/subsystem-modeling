@@ -12,6 +12,8 @@ import {
   moduleBadgeHoverLabel,
   moduleBadgeWidth,
   moduleMinWidthForBadge,
+  boundaryMinWidthForBadge,
+  MODULE_BADGE_INSET,
   packageGroupNodeId,
   buildBoundaryLayoutGroups,
   buildSubsystemGraph,
@@ -884,6 +886,18 @@ describe('module badge labels', () => {
 
   test('moduleBadgeWidth estimates a label strictly wider than its shorter precursor', () => {
     expect(moduleBadgeWidth('src/…/nodes.tsx')).toBeLessThan(moduleBadgeWidth('packages/…/nodes.tsx'));
+  });
+});
+
+describe('boundary frame min width (process / package badges)', () => {
+  test('boundaryMinWidthForBadge reserves the full label plus padding', () => {
+    const label = 'principal-studio/worker';
+    const min = boundaryMinWidthForBadge(label);
+    // Clears the bare badge by an inset on both ends plus the frame border.
+    expect(min - moduleBadgeWidth(label)).toBe(MODULE_BADGE_INSET * 2 + 4);
+    expect(min).toBeGreaterThanOrEqual(moduleBadgeWidth(label));
+    // Longer labels need wider frames.
+    expect(boundaryMinWidthForBadge('principal-studio/renderer-worker')).toBeGreaterThan(min);
   });
 });
 

@@ -663,6 +663,18 @@ export function moduleMinWidthForBadge(path: string): number {
   );
 }
 
+/**
+ * Min frame width so a **non-collapsing** boundary badge (process / package)
+ * fits inside with padding at both ends. Process badges are centred on the top
+ * edge and never collapse, so the full label must clear `MODULE_BADGE_INSET` on
+ * each side; ELK receives this as the frame's `minWidth`.
+ */
+export function boundaryMinWidthForBadge(label: string): number {
+  return Math.ceil(
+    moduleBadgeWidth(label) + MODULE_BADGE_INSET * 2 + MODULE_FRAME_BORDER,
+  );
+}
+
 /** React Flow id for a package (repo) boundary group node. */
 export function packageGroupNodeId(packageKey: string): string {
   return `package:${packageKey}`;
@@ -1637,7 +1649,13 @@ export async function buildSubsystemGraph(
           id: g.id,
           memberIds: g.memberAliases,
           parentId: g.parentId,
-          minWidth: g.region.kind === 'module' ? moduleMinWidthForBadge(g.region.label) : undefined,
+          // Modules collapse a long path to `first/…/last`, so they only need
+          // room for the collapsed badge. Processes/packages never collapse:
+          // size the frame to hold the full centered label plus padding.
+          minWidth:
+            g.region.kind === 'module'
+              ? moduleMinWidthForBadge(g.region.label)
+              : boundaryMinWidthForBadge(g.region.label),
         })),
         // Honour `showSingletonFrames`: a one-member process or module is
         // still a real boundary. `buildBoundaryLayoutGroups` already made
@@ -1697,7 +1715,12 @@ export async function buildSubsystemGraph(
           id: g.id,
           type: 'subsystem-group',
           position: { x: 0, y: 0 },
-          width: 400,
+          width: Math.max(
+            400,
+            g.region.kind === 'module'
+              ? moduleMinWidthForBadge(g.region.label)
+              : boundaryMinWidthForBadge(g.region.label),
+          ),
           height: 300,
           ...(g.parentId ? { parentId: g.parentId } : {}),
           data: { region: g.region },

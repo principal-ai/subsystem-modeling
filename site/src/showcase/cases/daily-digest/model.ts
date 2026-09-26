@@ -8,7 +8,7 @@ const PURL = 'pkg:github/you/daily-digest';
 
 export const components: SubsystemComponent[] = [
   {
-    id: 'daily-digest-main',
+    alias: 'daily-digest-main',
     process: 'daily-digest',
     name: 'main',
     construct: 'function',
@@ -26,7 +26,7 @@ export const components: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'fetch-page',
+    alias: 'fetch-page',
     process: 'daily-digest',
     name: 'fetchPage',
     construct: 'function',
@@ -43,7 +43,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'parse-headlines',
+    alias: 'parse-headlines',
     process: 'daily-digest',
     name: 'parseHeadlines',
     construct: 'function',
@@ -60,7 +60,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'write-digest',
+    alias: 'write-digest',
     process: 'daily-digest',
     name: 'writeDigest',
     construct: 'function',
@@ -77,7 +77,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'Website',
+    alias: 'Website',
     name: 'Website',
     construct: 'external',
     role: 'service',
@@ -87,7 +87,7 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
   {
-    id: 'Filesystem',
+    alias: 'Filesystem',
     name: 'Filesystem',
     construct: 'external',
     role: 'service',
@@ -111,6 +111,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "scripts/dailyDigest.ts",
         "line": 17,
+        "purl": PURL,
         "symbol": "fetchPage",
         "annotation": "Cron invoked main — first hop is the network fetch."
       },
@@ -120,6 +121,7 @@ export const walkthroughs = [
         "mechanism": "reads",
         "file": "src/fetchPage.ts",
         "line": 5,
+        "purl": PURL,
         "symbol": "fetch",
         "annotation": "One HTTP GET to the public page; no browser required."
       },
@@ -129,6 +131,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "scripts/dailyDigest.ts",
         "line": 18,
+        "purl": PURL,
         "symbol": "parseHeadlines",
         "annotation": "Turn raw HTML into a short list of strings."
       },
@@ -138,6 +141,7 @@ export const walkthroughs = [
         "mechanism": "calls",
         "file": "scripts/dailyDigest.ts",
         "line": 19,
+        "purl": PURL,
         "symbol": "writeDigest",
         "annotation": "Persist today’s headlines as the run’s side effect."
       },
@@ -147,6 +151,7 @@ export const walkthroughs = [
         "mechanism": "writes",
         "file": "src/writeDigest.ts",
         "line": 13,
+        "purl": PURL,
         "symbol": "appendFile",
         "annotation": "Append a dated block to digest.txt — safe to re-run tomorrow."
       }

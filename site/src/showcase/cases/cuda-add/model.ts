@@ -8,7 +8,7 @@ const PURL = 'pkg:github/you/cuda-add';
 
 export const components: SubsystemComponent[] = [
   {
-    id: 'main',
+    alias: 'main',
     process: 'cuda-host',
     name: 'main',
     construct: 'function',
@@ -26,7 +26,7 @@ export const components: SubsystemComponent[] = [
     layer: 1,
   },
   {
-    id: 'add-kernel',
+    alias: 'add-kernel',
     process: 'cuda-device',
     name: 'add_kernel',
     construct: 'function',
@@ -46,7 +46,7 @@ export const components: SubsystemComponent[] = [
     layer: 2,
   },
   {
-    id: 'GPU',
+    alias: 'GPU',
     name: 'GPU',
     construct: 'external',
     role: 'service',
@@ -64,10 +64,10 @@ export const walkthroughs: SubsystemWalkthrough[] = [
     id: 'tl-launch',
     title: 'Host → kernel → host',
     steps: [
-      { from: 'main', to: 'GPU', mechanism: 'writes', file: 'src/main.cu', line: 26, symbol: 'cudaMemcpy(HtoD)', annotation: 'Upload inputs to device memory.' },
-      { from: 'main', to: 'add-kernel', mechanism: 'calls', file: 'src/main.cu', line: 29, symbol: 'add_kernel<<<>>>', annotation: 'Launch the device grid.' },
-      { from: 'add-kernel', to: 'GPU', mechanism: 'reads', file: 'src/add_kernel.cu', line: 5, symbol: 'out[i] = a[i] + b[i]', annotation: 'Each thread reads device memory and writes the sum.' },
-      { from: 'main', to: 'GPU', mechanism: 'reads', file: 'src/main.cu', line: 32, symbol: 'cudaMemcpy(DtoH)', annotation: 'Copy results back to the host.' },
+      { from: 'main', to: 'GPU', mechanism: 'writes', file: 'src/main.cu', line: 26, purl: PURL, symbol: 'cudaMemcpy(HtoD)', annotation: 'Upload inputs to device memory.' },
+      { from: 'main', to: 'add-kernel', mechanism: 'calls', file: 'src/main.cu', line: 29, purl: PURL, symbol: 'add_kernel<<<>>>', annotation: 'Launch the device grid.' },
+      { from: 'add-kernel', to: 'GPU', mechanism: 'reads', file: 'src/add_kernel.cu', line: 5, purl: PURL, symbol: 'out[i] = a[i] + b[i]', annotation: 'Each thread reads device memory and writes the sum.' },
+      { from: 'main', to: 'GPU', mechanism: 'reads', file: 'src/main.cu', line: 32, purl: PURL, symbol: 'cudaMemcpy(DtoH)', annotation: 'Copy results back to the host.' },
     ],
   },
 ];
