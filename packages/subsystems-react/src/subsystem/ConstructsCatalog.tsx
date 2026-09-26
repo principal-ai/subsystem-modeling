@@ -779,22 +779,33 @@ export function ConstructsCatalog({
                 flex: 1,
                 minHeight: 0,
                 overflow: 'auto',
-                padding: 16,
-                fontSize: theme.fontSizes[0],
-                lineHeight: 1.5,
+                padding: '20px 0 32px',
               }}
             >
-              <IndustryMarkdownSlide
-                content={description}
-                slideIdPrefix="constructs-desc-overlay"
-                slideIndex={0}
-                isVisible
-                theme={theme}
-                disableScroll
-                disableBasePadding
-                enableKeyboardScrolling={false}
-                autoFocusOnVisible={false}
-              />
+              <div
+                style={{
+                  maxWidth: 720,
+                  margin: '0 auto',
+                  fontSize: theme.fontSizes[2] ?? theme.fontSizes[1],
+                  lineHeight: 1.7,
+                  color: theme.colors.text,
+                }}
+              >
+                <IndustryMarkdownSlide
+                  content={description}
+                  slideIdPrefix="constructs-desc-overlay"
+                  slideIndex={0}
+                  isVisible
+                  theme={theme}
+                  disableScroll
+                  disableBasePadding
+                  transparentBackground
+                  additionalPadding={{ left: '24px', right: '24px' }}
+                  fontSizeScale={1.05}
+                  enableKeyboardScrolling={false}
+                  autoFocusOnVisible={false}
+                />
+              </div>
             </div>
           </div>
         )}
