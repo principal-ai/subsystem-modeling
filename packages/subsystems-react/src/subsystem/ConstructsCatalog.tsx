@@ -2,20 +2,20 @@
  * ConstructsCatalog — master/detail for a constructs-only subsystem
  * (components, no topology or walkthrough edges).
  *
- * Left: the model's constructs as a toggle list. Right: signatures for
- * every construct currently on (`ComponentDeclaration`, stacked). File
- * opens still use the bottom FileDrawer when the host injects a viewer.
+ * Left: the model's files as a tree; clicking a file toggles its
+ * constructs. Right: signatures grouped by repo, and within a repo stacked
+ * per file under one combined file header carrying the path and a
+ * description toggle; a declaration with a known line labels just that
+ * construct's line in a file-like gutter. File opens still use the bottom
+ * FileDrawer when the host injects a viewer.
  */
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTheme } from '@principal-ade/industry-theme';
 import { IndustryMarkdownSlide } from 'themed-markdown';
-import { ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react';
+import { AlignLeft, ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react';
 import {
-  constructBadgeColor,
-  constructBadgeLabel,
-  deriveNameFromSymbol,
   formatPurl,
   type SubsystemComponent,
 } from './model';
@@ -140,6 +140,24 @@ function repoLogo(c: SubsystemComponent): string | undefined {
   return undefined;
 }
 
+/**
+ * Split a repo's declarations into consecutive runs that share a `file`, so
+ * each run can render as one connected stack. Components with no `file` are
+ * never merged (they have no shared location to group under).
+ */
+function splitByFileRun(items: SubsystemComponent[]): SubsystemComponent[][] {
+  const runs: SubsystemComponent[][] = [];
+  for (const c of items) {
+    const prev = runs[runs.length - 1];
+    const key = c.file || `alias:${c.alias}`;
+    const prevKey =
+      prev && prev[0] ? prev[0].file || `alias:${prev[0].alias}` : null;
+    if (prev && prevKey === key) prev.push(c);
+    else runs.push([c]);
+  }
+  return runs;
+}
+
 export function ConstructsCatalog({
   components,
   onSelect,
@@ -177,24 +195,20 @@ export function ConstructsCatalog({
       .map((x) => x.c);
   }, [components]);
 
-  const [visibleAliases, setVisibleAliases] = useState<string[]>(() =>
-    orderedComponents[0] ? [orderedComponents[0].alias] : [],
-  );
-  const [focusedAlias, setFocusedAlias] = useState<string | null>(
-    () => orderedComponents[0]?.alias ?? null,
-  );
+  const [visibleAliases, setVisibleAliases] = useState<string[]>([]);
+  const [focusedAlias, setFocusedAlias] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [descriptionVisible, setDescriptionVisible] = useState(false);
   const [descToggleHover, setDescToggleHover] = useState(false);
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
-  const [sidebarTab, setSidebarTab] = useState<'constructs' | 'files'>('files');
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
     new Set(),
   );
+  // Files whose shared-header description toggle is expanded (keyed by file run).
+  const [openPurposes, setOpenPurposes] = useState<Set<string>>(new Set());
   const [drawer, setDrawer] = useState<{ file: string; startLine?: number } | null>(
     null,
   );
-  const focusedAliasRef = useRef<string | null>(focusedAlias);
-  focusedAliasRef.current = focusedAlias;
 
   const visibleSet = useMemo(() => new Set(visibleAliases), [visibleAliases]);
   const visibleComponents = useMemo(
@@ -202,15 +216,38 @@ export function ConstructsCatalog({
     [orderedComponents, visibleSet],
   );
 
+  // When nothing is toggled on, the right pane falls back to a searchable list
+  // of every construct, rendered as if all were selected.
+  const searchActive = visibleComponents.length === 0;
+  const searchResults = useMemo(() => {
+    if (!searchActive) return visibleComponents;
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return orderedComponents;
+    return orderedComponents.filter((c) => {
+      const haystack = [
+        c.name,
+        c.symbol,
+        c.alias,
+        c.file,
+        c.construct,
+        c.stereotype,
+        c.purpose,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [searchActive, searchQuery, orderedComponents, visibleComponents]);
+
   const fileTree = useMemo(() => buildFileTree(orderedComponents), [orderedComponents]);
   const hasFiles = useMemo(
     () => orderedComponents.some((c) => !!c.file),
     [orderedComponents],
   );
-  const effectiveTab = hasFiles ? sidebarTab : 'constructs';
 
-  // Group visible declarations by purl so the repo/app identity (logo + name)
-  // renders once per group instead of on every card.
+  // Group the declarations on screen by purl so the repo/app identity
+  // (logo + name) renders once per group instead of on every card.
   const repoGroups = useMemo(() => {
     const groups: Array<{
       key: string;
@@ -219,7 +256,7 @@ export function ConstructsCatalog({
       items: SubsystemComponent[];
     }> = [];
     const index = new Map<string, number>();
-    for (const c of visibleComponents) {
+    for (const c of searchResults) {
       const key = c.purl || c.alias;
       let at = index.get(key);
       if (at == null) {
@@ -231,12 +268,7 @@ export function ConstructsCatalog({
       groups[at]!.items.push(c);
     }
     return groups;
-  }, [visibleComponents]);
-
-  useEffect(() => {
-    if (!focusedAlias) return;
-    document.getElementById(`construct-${focusedAlias}`)?.scrollIntoView({ block: 'nearest' });
-  }, [focusedAlias]);
+  }, [searchResults]);
 
   useEffect(() => {
     const last = visibleAliases[visibleAliases.length - 1];
@@ -260,30 +292,12 @@ export function ConstructsCatalog({
       ?.scrollIntoView({ block: 'nearest' });
   }, [orderedComponents, drawer]);
 
-  // Drop aliases that left the model; if nothing remains, show the first construct.
+  // Drop aliases that left the model; an empty set is valid (search fallback).
   useEffect(() => {
     const aliases = new Set(orderedComponents.map((c) => c.alias));
-    setVisibleAliases((prev) => {
-      const next = prev.filter((alias) => aliases.has(alias));
-      if (next.length > 0 || orderedComponents.length === 0) return next;
-      return [orderedComponents[0]!.alias];
-    });
-    setFocusedAlias((prev) => {
-      if (prev && aliases.has(prev)) return prev;
-      return orderedComponents[0]?.alias ?? null;
-    });
+    setVisibleAliases((prev) => prev.filter((alias) => aliases.has(alias)));
+    setFocusedAlias((prev) => (prev && aliases.has(prev) ? prev : null));
   }, [orderedComponents]);
-
-  const toggle = useCallback(
-    (alias: string) => {
-      setFocusedAlias(alias);
-      setVisibleAliases((prev) =>
-        prev.includes(alias) ? prev.filter((x) => x !== alias) : [...prev, alias],
-      );
-      onSelect?.(alias);
-    },
-    [onSelect],
-  );
 
   const show = useCallback(
     (alias: string) => {
@@ -292,13 +306,6 @@ export function ConstructsCatalog({
       onSelect?.(alias);
     },
     [onSelect],
-  );
-
-  const focusAt = useCallback(
-    (alias: string) => {
-      setFocusedAlias(alias);
-    },
-    [],
   );
 
   const toggleFolder = useCallback((path: string) => {
@@ -310,8 +317,17 @@ export function ConstructsCatalog({
     });
   }, []);
 
+  const togglePurpose = useCallback((key: string) => {
+    setOpenPurposes((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
   /** File-tree click: show every construct declared in the file, or hide them
-   *  all when they're already shown — mirroring a construct row toggle. */
+   *  all when they're already shown — a bulk toggle of the file's constructs. */
   const toggleFile = useCallback(
     (comps: SubsystemComponent[]) => {
       const aliases = comps.map((c) => c.alias);
@@ -480,9 +496,18 @@ export function ConstructsCatalog({
     (ref: string) => {
       const comp = resolveRelated(components, ref);
       if (!comp) return;
+      // In the all-constructs search fallback nothing needs revealing — just
+      // surface the target. Otherwise add it to the visible set.
+      if (searchActive) {
+        setFocusedAlias(comp.alias);
+        document
+          .getElementById(`construct-signature-${comp.alias}`)
+          ?.scrollIntoView({ block: 'nearest' });
+        return;
+      }
       show(comp.alias);
     },
-    [components, show],
+    [components, show, searchActive],
   );
 
   const fileViewer = useMemo(() => {
@@ -507,60 +532,13 @@ export function ConstructsCatalog({
     [],
   );
 
-  const moveFocus = useCallback(
-    (delta: number) => {
-      if (orderedComponents.length === 0) return;
-      const idx = Math.max(
-        0,
-        orderedComponents.findIndex((c) => c.alias === focusedAliasRef.current),
-      );
-      const next =
-        orderedComponents[
-          (idx + delta + orderedComponents.length) % orderedComponents.length
-        ]!;
-      focusAt(next.alias);
-    },
-    [orderedComponents, focusAt],
-  );
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement | null;
-      if (
-        el &&
-        (el.tagName === 'INPUT' ||
-          el.tagName === 'TEXTAREA' ||
-          el.tagName === 'SELECT' ||
-          el.isContentEditable)
-      ) {
-        return;
-      }
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        moveFocus(1);
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        moveFocus(-1);
-      } else if (e.key === 'Home') {
-        e.preventDefault();
-        if (orderedComponents[0]) focusAt(orderedComponents[0].alias);
-      } else if (e.key === 'End') {
-        e.preventDefault();
-        const last = orderedComponents[orderedComponents.length - 1];
-        if (last) focusAt(last.alias);
-      } else if (e.key === ' ' || e.key === 'Enter') {
-        if (focusedAliasRef.current) {
-          e.preventDefault();
-          toggle(focusedAliasRef.current);
-        }
-      } else if (e.key === 'Escape' && drawer) {
-        setDrawer(null);
-      }
+      if (e.key === 'Escape' && drawer) setDrawer(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [orderedComponents, drawer, moveFocus, focusAt, toggle]);
+  }, [drawer]);
 
   const showChrome =
     !hideSidebar &&
@@ -682,183 +660,7 @@ export function ConstructsCatalog({
             {sidebarAfterDescription}
           </div>
         )}
-        <div
-          role="tablist"
-          aria-label="Sidebar view"
-          style={{
-            display: 'flex',
-            width: '100%',
-            flexShrink: 0,
-            borderBottom: `1px solid ${theme.colors.border}`,
-            background:
-              theme.colors.backgroundSecondary ?? theme.colors.background,
-          }}
-        >
-          {(['files', 'constructs'] as const).map((tab) => {
-            if (tab === 'files' && !hasFiles) return null;
-            const active = effectiveTab === tab;
-            return (
-              <button
-                key={tab}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setSidebarTab(tab)}
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  padding: '8px 8px',
-                  border: 'none',
-                  borderRadius: 0,
-                  background: active
-                    ? theme.colors.background
-                    : 'transparent',
-                  color: active ? theme.colors.text : muted,
-                  fontSize: theme.fontSizes[0],
-                  fontFamily: theme.fonts.monospace,
-                  letterSpacing: 0.4,
-                  textTransform: 'uppercase',
-                  cursor: 'pointer',
-                }}
-              >
-                {tab === 'constructs' ? 'Constructs' : 'Files'}
-              </button>
-            );
-          })}
-        </div>
-        {effectiveTab === 'constructs' ? (
-        <ul
-          role="listbox"
-          aria-label="Constructs"
-          aria-multiselectable="true"
-          aria-activedescendant={focusedAlias ? `construct-${focusedAlias}` : undefined}
-          style={{
-            listStyle: 'none',
-            margin: 0,
-            padding: '0 8px 12px',
-            overflowY: 'auto',
-            flex: 1,
-            minHeight: 0,
-          }}
-        >
-          {orderedComponents.map((c) => {
-            const visible = visibleSet.has(c.alias);
-            const focused = c.alias === focusedAlias;
-            const color = componentColor(c, pierreTheme);
-            const badgeColor = constructBadgeColor(c) ?? color;
-            const badgeLabel = constructBadgeLabel(c);
-            const displayName = deriveNameFromSymbol(
-              c.symbol,
-              c.construct,
-              c.name,
-              c.file,
-              c.stereotype,
-            );
-            const rowOpen =
-              drawer != null &&
-              drawer.startLine != null &&
-              !!c.file &&
-              c.file === drawer.file &&
-              c.declarationRef?.startLine === drawer.startLine;
-            const hovered = hoveredRow === c.alias;
-            return (
-              <li key={c.alias} role="presentation">
-                <button
-                  type="button"
-                  id={`construct-${c.alias}`}
-                  role="option"
-                  aria-selected={visible}
-                  data-testid={`construct-row-${c.alias}`}
-                  onClick={() => toggle(c.alias)}
-                  onMouseEnter={() => setHoveredRow(c.alias)}
-                  onMouseLeave={() =>
-                    setHoveredRow((h) => (h === c.alias ? null : h))
-                  }
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'stretch',
-                    gap: 2,
-                    width: '100%',
-                    margin: '2px 0',
-                    padding: '8px 10px 8px 12px',
-                    textAlign: 'left',
-                    border: 'none',
-                    borderRadius: 6,
-                    background: hovered
-                      ? theme.colors.border
-                      : visible
-                        ? theme.colors.background
-                        : 'transparent',
-                    cursor: 'pointer',
-                    transition: 'background 100ms ease, opacity 100ms ease',
-                    boxShadow: [
-                      visible ? `inset 0 0 0 1px ${theme.colors.border}` : null,
-                      rowOpen ? `inset 2px 0 0 ${accentColor}` : null,
-                    ]
-                      .filter(Boolean)
-                      .join(', ') || undefined,
-                    outline: focused && !visible ? `1px dotted ${muted}` : undefined,
-                    outlineOffset: -1,
-                    opacity: visible ? 1 : hovered ? 1 : 0.72,
-                  }}
-                >
-                  <span
-                    style={{
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      gap: 8,
-                      minWidth: 0,
-                    }}
-                  >
-                    <span
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        fontFamily: theme.fonts.monospace,
-                        fontSize: theme.fontSizes[1],
-                        color,
-                        fontWeight: visible ? 600 : 500,
-                      }}
-                    >
-                      {displayName}
-                    </span>
-                  </span>
-                  {badgeLabel && (
-                    <span
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        minWidth: 0,
-                      }}
-                    >
-                      <span
-                        style={{
-                          flex: 1,
-                          minWidth: 0,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          fontFamily: theme.fonts.monospace,
-                          fontSize: theme.fontSizes[0],
-                          letterSpacing: 0.4,
-                          textTransform: 'uppercase',
-                          color: badgeColor,
-                        }}
-                      >
-                        {badgeLabel}
-                      </span>
-                    </span>
-                  )}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-        ) : (
+        {hasFiles ? (
           <ul
             role="tree"
             aria-label="Files"
@@ -873,6 +675,18 @@ export function ConstructsCatalog({
           >
             {renderTree(fileTree, 0)}
           </ul>
+        ) : (
+          <p
+            style={{
+              margin: 0,
+              padding: '12px 16px',
+              color: muted,
+              fontFamily: theme.fonts.body,
+              fontSize: theme.fontSizes[0],
+            }}
+          >
+            No files in this model.
+          </p>
         )}
       </aside>
       <div
@@ -885,6 +699,30 @@ export function ConstructsCatalog({
           flexDirection: 'column',
         }}
       >
+        {searchActive && (
+          <div style={{ flexShrink: 0, padding: '12px 16px 0' }}>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search constructs…"
+              aria-label="Search constructs"
+              data-testid="construct-search"
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '8px 10px',
+                border: `1px solid ${theme.colors.border}`,
+                borderRadius: 6,
+                background: theme.colors.background,
+                color: theme.colors.text,
+                fontFamily: theme.fonts.monospace,
+                fontSize: theme.fontSizes[1],
+                outline: 'none',
+              }}
+            />
+          </div>
+        )}
         <div
           data-testid="construct-signature"
           style={{
@@ -897,7 +735,7 @@ export function ConstructsCatalog({
             gap: 12,
           }}
         >
-          {visibleComponents.length > 0 ? (
+          {searchResults.length > 0 ? (
             repoGroups.map((group) => (
               <div
                 key={group.key}
@@ -931,53 +769,181 @@ export function ConstructsCatalog({
                     {group.label}
                   </span>
                 </div>
-                {group.items.map((c) => {
-                  // File-level: every declaration sharing the open file shows the
-                  // indicator. Line-level: only the declaration actually being
-                  // highlighted gets the accent border.
-                  const fileOpen = drawer != null && !!c.file && c.file === drawer.file;
-                  const lineOpen =
-                    fileOpen &&
-                    drawer.startLine != null &&
-                    c.declarationRef?.startLine === drawer.startLine;
+                {splitByFileRun(group.items).map((run) => {
+                  const lead = run[0]!;
+                  const hasFile = !!lead.file;
+                  // Every file-backed run gets the combined header, one
+                  // declaration or many, so the style stays consistent.
+                  const showHeader = hasFile;
+                  const runKey = `${group.key}:${lead.file || lead.alias}`;
+                  const runHasPurpose = run.some((c) => !!c.purpose?.trim());
+                  const purposeOpen = openPurposes.has(runKey);
+                  const runFileOpen =
+                    drawer != null && hasFile && lead.file === drawer.file;
                   return (
                     <div
-                      key={c.alias}
-                      id={`construct-signature-${c.alias}`}
+                      key={runKey}
                       style={{
-                        border: `1px solid ${lineOpen ? accentColor : theme.colors.border}`,
-                        boxShadow: lineOpen ? `0 0 0 1px ${accentColor}` : undefined,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        border: `1px solid ${runFileOpen ? accentColor : theme.colors.border}`,
                         borderRadius: 8,
                         overflow: 'hidden',
                         flexShrink: 0,
                       }}
                     >
-                      <ComponentDeclaration
-                        component={c}
-                        onOpenFile={fileViewer ? onOpenFile : undefined}
-                        defaultShowFile={!!fileViewer}
-                        onRelatedSelect={onRelatedSelect}
-                        onInspectSymbol={
-                          onInspectSymbol
-                            ? (symbol, ref) =>
-                                onInspectSymbol({
-                                  purl: c.purl,
-                                  file: c.file,
-                                  symbol,
-                                  ref,
-                                })
-                            : undefined
-                        }
-                        fileOpen={fileOpen}
-                        declarationOpen={lineOpen}
-                        showRepoIdentity={false}
-                        fileBadgeChrome={!!fileViewer}
-                        verification={
-                          componentVerification && focusedAlias === c.alias
-                            ? componentVerification
-                            : undefined
-                        }
-                      />
+                      {showHeader && (
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            padding: '6px 10px',
+                            borderBottom: `1px solid ${
+                              runFileOpen ? accentColor : theme.colors.border
+                            }`,
+                            background: runFileOpen
+                              ? `${accentColor}14`
+                              : theme.colors.backgroundSecondary ??
+                                theme.colors.background,
+                            color: runFileOpen
+                              ? accentColor
+                              : theme.colors.textSecondary ?? muted,
+                            fontFamily: theme.fonts.monospace,
+                            fontSize: theme.fontSizes[0],
+                          }}
+                        >
+                          <button
+                            type="button"
+                            title={fileViewer ? `Open ${lead.file}` : lead.file}
+                            onClick={
+                              fileViewer
+                                ? () => onOpenFile(lead.file)
+                                : undefined
+                            }
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              flex: 1,
+                              minWidth: 0,
+                              padding: 0,
+                              border: 'none',
+                              background: 'transparent',
+                              color: 'inherit',
+                              fontFamily: 'inherit',
+                              fontSize: 'inherit',
+                              textAlign: 'left',
+                              cursor: fileViewer ? 'pointer' : 'default',
+                            }}
+                          >
+                            <FileText size={12} style={{ flexShrink: 0 }} />
+                            <span
+                              style={{
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {lead.file}
+                            </span>
+                          </button>
+                          {runHasPurpose && (
+                            <button
+                              type="button"
+                              title={
+                                purposeOpen ? 'Hide description' : 'Show description'
+                              }
+                              aria-label={
+                                purposeOpen ? 'Hide description' : 'Show description'
+                              }
+                              aria-expanded={purposeOpen}
+                              onClick={() => togglePurpose(runKey)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                                width: 20,
+                                height: 20,
+                                padding: 0,
+                                border: 'none',
+                                borderRadius: 4,
+                                background: 'transparent',
+                                color: purposeOpen
+                                  ? accentColor
+                                  : theme.colors.textSecondary ?? muted,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <AlignLeft size={13} />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {run.map((c, i) => {
+                        // File-level: every declaration sharing the open file
+                        // shows the indicator. Line-level: only the declaration
+                        // actually highlighted gets the inner accent ring.
+                        const fileOpen =
+                          drawer != null && !!c.file && c.file === drawer.file;
+                        const lineOpen =
+                          fileOpen &&
+                          drawer.startLine != null &&
+                          c.declarationRef?.startLine === drawer.startLine;
+                        // A combined header owns the path, so declarations under
+                        // it drop their own badge; those with no known line just
+                        // render unnumbered. Without a header, keep the badge.
+                        const numbered =
+                          hasFile && c.declarationRef?.startLine != null;
+                        return (
+                          <div
+                            key={c.alias}
+                            id={`construct-signature-${c.alias}`}
+                            style={{
+                              borderTop:
+                                i > 0
+                                  ? `1px solid ${theme.colors.border}`
+                                  : undefined,
+                              boxShadow: lineOpen
+                                ? `inset 0 0 0 1px ${accentColor}`
+                                : undefined,
+                            }}
+                          >
+                            <ComponentDeclaration
+                              component={c}
+                              onOpenFile={fileViewer ? onOpenFile : undefined}
+                              defaultShowFile={showHeader ? false : !!fileViewer}
+                              onRelatedSelect={onRelatedSelect}
+                              onInspectSymbol={
+                                onInspectSymbol
+                                  ? (symbol, ref) =>
+                                      onInspectSymbol({
+                                        purl: c.purl,
+                                        file: c.file,
+                                        symbol,
+                                        ref,
+                                      })
+                                  : undefined
+                              }
+                              fileOpen={fileOpen}
+                              declarationOpen={lineOpen}
+                              showRepoIdentity={false}
+                              fileBadgeChrome={showHeader ? false : !!fileViewer}
+                              hideActions={showHeader}
+                              showPurpose={showHeader ? purposeOpen : undefined}
+                              lineNumbers={numbered}
+                              verification={
+                                componentVerification && focusedAlias === c.alias
+                                  ? componentVerification
+                                  : undefined
+                              }
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
@@ -992,7 +958,9 @@ export function ConstructsCatalog({
                 fontSize: theme.fontSizes[1],
               }}
             >
-              Toggle constructs on the left to show their signatures.
+              {searchQuery.trim()
+                ? `No constructs match “${searchQuery.trim()}”.`
+                : 'No constructs in this model.'}
             </p>
           )}
         </div>

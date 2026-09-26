@@ -6,7 +6,7 @@
  * comments. File content lives in the bottom FileDrawer, not here.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AlignLeft, FileText } from 'lucide-react';
 import { useTheme } from '@principal-ade/industry-theme';
@@ -138,6 +138,10 @@ function DetailLink({ children, onClick }: { children: ReactNode; onClick?: () =
   );
 }
 
+/** Width of the `lineNumbers` gutter column and the gap after it. */
+const GUTTER_NUMBER_WIDTH = 40;
+const GUTTER_NUMBER_GAP = 8;
+
 /** Panel props. Callbacks are wired by the graph; standalone usage without
  *  them renders the same panel with nothing clickable. */
 export interface ComponentDeclarationProps {
@@ -174,6 +178,18 @@ export interface ComponentDeclarationProps {
    *  the file badge: drop the top-right `L#` (redundant) and put the
    *  description toggle in the badge after the line segment. */
   fileBadgeChrome?: boolean;
+  /** Suppress the per-declaration action chrome entirely (file toggle, line
+   *  label, description toggle). For hosts that surface those in a shared
+   *  header instead. */
+  hideActions?: boolean;
+  /** Controlled purpose/description visibility. When provided it overrides the
+   *  internal toggle, so a host can drive it from a shared header. */
+  showPurpose?: boolean;
+  /** Render a gutter beside the declaration body and label the construct's own
+   *  line with its known start line — only that line is accurate, so the rest
+   *  of the gutter stays blank and aligned. The label opens the file at that
+   *  line when `onOpenFile` is set. */
+  lineNumbers?: boolean;
 }
 
 function verificationSummary(
@@ -318,6 +334,9 @@ export function ComponentDeclaration({
   declarationOpen = false,
   showRepoIdentity = true,
   fileBadgeChrome = false,
+  hideActions = false,
+  showPurpose: showPurposeProp,
+  lineNumbers = false,
 }: ComponentDeclarationProps) {
   const { theme, mode } = useTheme();
   const pierreSyntaxTheme = resolvePierreSyntaxThemeName(mode);
@@ -325,7 +344,8 @@ export function ComponentDeclaration({
     'path' | 'line' | 'desc' | 'action' | null
   >(null);
   const [showFile, setShowFile] = useState(defaultShowFile);
-  const [showPurpose, setShowPurpose] = useState(false);
+  const [showPurposeState, setShowPurposeState] = useState(false);
+  const showPurpose = showPurposeProp ?? showPurposeState;
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const color = componentColor(component, pierreSyntaxTheme);
   const inlineChrome = fileBadgeChrome && showFile && !!component.file;
@@ -497,7 +517,7 @@ export function ComponentDeclaration({
       {!inlineChrome && lineLocationLabel}
       {!inlineChrome &&
         component.purpose?.trim() &&
-        toggleBtn(showPurpose, () => setShowPurpose((v) => !v), 'Toggle description', AlignLeft)}
+        toggleBtn(showPurpose, () => setShowPurposeState((v) => !v), 'Toggle description', AlignLeft)}
     </span>
   );
 
@@ -560,7 +580,7 @@ export function ComponentDeclaration({
         'purl',
       ),
     );
-  } else if (!showRepoIdentity && !inlineChrome) {
+  } else if (!showRepoIdentity && !inlineChrome && !hideActions) {
     lines.push(line(headerActions, 'actions'));
   }
 
@@ -695,7 +715,7 @@ export function ComponentDeclaration({
                 aria-label={showPurpose ? 'Hide description' : 'Show description'}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setShowPurpose((v) => !v);
+                  setShowPurposeState((v) => !v);
                 }}
                 {...segHover('desc')}
                 style={{
@@ -888,14 +908,17 @@ export function ComponentDeclaration({
   );
 
   const declLines: ReactNode[][] = [[]];
+  const declLineText: string[] = [''];
   let di = 0;
   let offset = 0;
   for (const tok of tokens) {
     if (tok.kind === 'newline') {
       declLines.push([]);
+      declLineText.push('');
       di++;
       continue;
     }
+    declLineText[di] += tok.text;
     const color = tok.color ?? tokenColor[tok.kind] ?? declarationTextColor;
     let i = 0;
     while (i < tok.text.length) {
@@ -956,8 +979,78 @@ export function ComponentDeclaration({
     }
     offset += tok.text.length;
   }
+  // The rendered line carrying the construct's own name gets the known line
+  // number — a method stub wraps it in `class Host {`, so the number belongs on
+  // the member line, not the synthetic first row. Falls back to the first line.
+  const constructName =
+    component.name || component.symbol?.split('.').pop() || '';
+  let labelDi = -1;
+  if (constructName) {
+    for (let li = 0; li < declLines.length; li++) {
+      if (declLines[li].length > 0 && declLineText[li].includes(constructName)) {
+        labelDi = li;
+        break;
+      }
+    }
+  }
+  if (labelDi === -1) {
+    labelDi = declLines.findIndex((l) => l.length > 0);
+  }
   for (let li = 0; li < declLines.length; li++) {
     if (declLines[li].length === 0) continue;
+    if (lineNumbers && declarationStartLine != null) {
+      // Only the construct's own line is known; the rest of the gutter stays
+      // blank (but aligned) since later rendered lines needn't map to source.
+      const n = li === labelDi ? declarationStartLine : null;
+      const interactive = n != null && !!onOpenFile && !!component.file;
+      const gutterStyle: CSSProperties = {
+        flexShrink: 0,
+        width: GUTTER_NUMBER_WIDTH,
+        paddingRight: GUTTER_NUMBER_GAP,
+        border: 'none',
+        background: 'transparent',
+        textAlign: 'right',
+        color: muted,
+        fontFamily: 'inherit',
+        fontSize: 'inherit',
+        lineHeight: 'inherit',
+        cursor: interactive ? 'pointer' : 'default',
+        userSelect: 'none',
+      };
+      lines.push(
+        <div
+          key={`decl-${li}`}
+          style={{ display: 'flex', alignItems: 'flex-start', minWidth: 0 }}
+        >
+          {n == null ? (
+            <span style={gutterStyle} aria-hidden="true" />
+          ) : interactive ? (
+            <button
+              type="button"
+              title={`Open line ${n}`}
+              onClick={() => onOpenFile!(component.file, { startLine: n })}
+              style={gutterStyle}
+            >
+              {n}
+            </button>
+          ) : (
+            <span style={gutterStyle}>{n}</span>
+          )}
+          <div
+            style={{
+              flex: 1,
+              minWidth: 0,
+              whiteSpace: 'pre-wrap',
+              overflowWrap: 'anywhere',
+              minHeight: 18,
+            }}
+          >
+            {declLines[li]}
+          </div>
+        </div>,
+      );
+      continue;
+    }
     lines.push(
       <div
         key={`decl-${li}`}
@@ -986,7 +1079,7 @@ export function ComponentDeclaration({
             {purposeLine.trim()}
           </span>,
           `purpose${i}`,
-          false,
+          lineNumbers ? GUTTER_NUMBER_WIDTH + GUTTER_NUMBER_GAP : false,
           'normal',
         ),
       ),
@@ -1015,7 +1108,7 @@ export function ComponentDeclaration({
         minWidth: 0,
         boxSizing: 'border-box',
         background: theme.colors.backgroundSecondary,
-        padding: '10px 12px',
+        padding: lineNumbers ? '10px 12px 10px 0' : '10px 12px',
         fontFamily: theme.fonts.monospace,
         fontSize: theme.fontSizes[1],
         lineHeight: 1.7,
