@@ -1,6 +1,6 @@
 {
   "name": "@principal-ai/subsystems-react",
-  "version": "0.36.1",
+  "version": "0.36.2",
   "description": "React UI for Subsystem Models — graph, Pierre code views, and session-event feeds",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,7 +11,8 @@
     "test": "bun test",
     "test:watch": "bun test --watch",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "prepack": "bun run clean && bun run build"
   },
   "dependencies": {
     "@pierre/theme": "^2.0.0",
