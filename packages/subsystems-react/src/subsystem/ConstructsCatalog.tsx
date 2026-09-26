@@ -49,6 +49,13 @@ export interface ConstructsCatalogProps {
    * the markdown as an overlay over the construct area.
    */
   description?: string;
+  /**
+   * Controlled open state for the description overlay. When provided the host
+   * owns it (e.g. a button in its own header) and the built-in toggle just
+   * reports changes; otherwise the built-in toggle drives the state.
+   */
+  descriptionOpen?: boolean;
+  onDescriptionOpenChange?: (open: boolean) => void;
   diagnostic?: SubsystemDiagnostic;
   sidebarExtra?: ReactNode;
   sidebarAfterDescription?: ReactNode;
@@ -179,6 +186,8 @@ export function ConstructsCatalog({
   title,
   hideSidebar,
   description,
+  descriptionOpen: descriptionOpenProp,
+  onDescriptionOpenChange,
   diagnostic,
   sidebarExtra,
   sidebarAfterDescription,
@@ -214,6 +223,11 @@ export function ConstructsCatalog({
   const [focusedAlias, setFocusedAlias] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [descriptionVisible, setDescriptionVisible] = useState(false);
+  const descriptionOpen = descriptionOpenProp ?? descriptionVisible;
+  const setDescriptionOpen = (open: boolean) => {
+    setDescriptionVisible(open);
+    onDescriptionOpenChange?.(open);
+  };
   const [descToggleHover, setDescToggleHover] = useState(false);
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
@@ -628,16 +642,16 @@ export function ConstructsCatalog({
                   {description && (
                     <button
                       type="button"
-                      aria-expanded={descriptionVisible}
+                      aria-expanded={descriptionOpen}
                       aria-label={
-                        descriptionVisible ? 'Hide description' : 'Show description'
+                        descriptionOpen ? 'Hide description' : 'Show description'
                       }
                       title={
-                        descriptionVisible ? 'Hide description' : 'Show description'
+                        descriptionOpen ? 'Hide description' : 'Show description'
                       }
                       onMouseEnter={() => setDescToggleHover(true)}
                       onMouseLeave={() => setDescToggleHover(false)}
-                      onClick={() => setDescriptionVisible((v) => !v)}
+                      onClick={() => setDescriptionOpen(!descriptionOpen)}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -648,8 +662,8 @@ export function ConstructsCatalog({
                         padding: 0,
                         border: 'none',
                         borderRadius: 4,
-                        background: descriptionVisible || descToggleHover ? theme.colors.border : 'transparent',
-                        color: descriptionVisible || descToggleHover ? theme.colors.text : muted,
+                        background: descriptionOpen || descToggleHover ? theme.colors.border : 'transparent',
+                        color: descriptionOpen || descToggleHover ? theme.colors.text : muted,
                         cursor: 'pointer',
                       }}
                     >
@@ -701,10 +715,10 @@ export function ConstructsCatalog({
           flexDirection: 'column',
         }}
       >
-        {description && descriptionVisible && (
+        {description && descriptionOpen && (
           <>
             <div
-              onClick={() => setDescriptionVisible(false)}
+              onClick={() => setDescriptionOpen(false)}
               style={{
                 position: 'absolute',
                 inset: 0,
@@ -759,7 +773,7 @@ export function ConstructsCatalog({
                   type="button"
                   aria-label="Close description"
                   title="Close"
-                  onClick={() => setDescriptionVisible(false)}
+                  onClick={() => setDescriptionOpen(false)}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',

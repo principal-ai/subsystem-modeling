@@ -236,6 +236,12 @@ export interface SubsystemComponentGraphProps {
   showWalkthroughTitle?: boolean;
   /** Markdown description rendered in the sidebar. */
   description?: string;
+  /**
+   * Controlled open state for the constructs catalog's description overlay.
+   * When provided, the host owns it (e.g. a button in its own header).
+   */
+  descriptionOpen?: boolean;
+  onDescriptionOpenChange?: (open: boolean) => void;
   /** Rendered over the graph canvas only (not the title/legend sidebar). */
   canvasOverlay?: ReactNode;
   /** Extra controls at the top of the title/legend sidebar. */
@@ -2445,6 +2451,8 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
             title={props.title}
             hideSidebar={props.hideSidebar}
             description={props.description}
+            descriptionOpen={props.descriptionOpen}
+            onDescriptionOpenChange={props.onDescriptionOpenChange}
             diagnostic={props.diagnostic}
             sidebarExtra={props.sidebarExtra}
             sidebarAfterDescription={props.sidebarAfterDescription}

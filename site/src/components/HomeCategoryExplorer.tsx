@@ -33,6 +33,7 @@ function ExplorerInner() {
   // Sticky pause: interacting with the graph pauses auto-advance and it does
   // NOT resume on its own — the play button (or picking another layer) resumes.
   const [paused, setPaused] = useState(false);
+  const [descriptionOpen, setDescriptionOpen] = useState(false);
   const [progress, setProgress] = useState(0);
   const remainingRef = useRef(LAYER_DWELL_MS);
   const fileRenderers = useMemo(
@@ -58,6 +59,7 @@ function ExplorerInner() {
   useEffect(() => {
     remainingRef.current = dwellMs;
     setProgress(0);
+    setDescriptionOpen(false);
   }, [selectedId, dwellMs]);
 
   // Drive progress + advance; freeze while paused (e.g. graph interaction).
@@ -96,23 +98,44 @@ function ExplorerInner() {
       <nav className="home-explorer-nav" aria-label="Subsystem model layers">
         <div className="home-explorer-nav-header">
           <p className="home-explorer-nav-label">Modeling a Subsystem</p>
-          <button
-            type="button"
-            className="home-explorer-play-toggle"
-            onClick={() => setPaused((p) => !p)}
-            aria-label={paused ? 'Play auto-advance' : 'Pause auto-advance'}
-            title={paused ? 'Play' : 'Pause'}
-          >
-            {paused ? (
-              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-                <path d="M4 2.5v11l9-5.5-9-5.5z" fill="currentColor" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-                <path d="M4 2.5h3v11H4zM9 2.5h3v11H9z" fill="currentColor" />
-              </svg>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {selected.id === 'constructs' && selected.model.description && (
+              <button
+                type="button"
+                className="home-explorer-play-toggle"
+                onClick={() => setDescriptionOpen((v) => !v)}
+                aria-expanded={descriptionOpen}
+                aria-label={
+                  descriptionOpen ? 'Hide description' : 'Show description'
+                }
+                title={descriptionOpen ? 'Hide description' : 'Show description'}
+              >
+                <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                  <path
+                    d="M8 1.4a6.6 6.6 0 1 0 0 13.2A6.6 6.6 0 0 0 8 1.4Zm0 2.1a1 1 0 1 1 0 2 1 1 0 0 1 0-2Zm1.1 8.4H6.9V7.1h2.2v4.8Z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
             )}
-          </button>
+            <button
+              type="button"
+              className="home-explorer-play-toggle"
+              onClick={() => setPaused((p) => !p)}
+              aria-label={paused ? 'Play auto-advance' : 'Pause auto-advance'}
+              title={paused ? 'Play' : 'Pause'}
+            >
+              {paused ? (
+                <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                  <path d="M4 2.5v11l9-5.5-9-5.5z" fill="currentColor" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                  <path d="M4 2.5h3v11H4zM9 2.5h3v11H9z" fill="currentColor" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
         <ul className="home-explorer-nav-list">
           {homeCategories.map((cat) => {
@@ -201,6 +224,9 @@ function ExplorerInner() {
             walkthroughs={selected.model.walkthroughs}
             title={selected.model.title}
             hideSidebar
+            description={selected.model.description}
+            descriptionOpen={descriptionOpen}
+            onDescriptionOpenChange={setDescriptionOpen}
             showEdgeLabels={selected.graph.showEdgeLabels}
             edgeView={selected.graph.edgeView}
             autoPlayWalkthroughs={selected.graph.autoPlayWalkthroughs}
