@@ -6,15 +6,26 @@
  * constructs. Right: signatures grouped by repo, and within a repo stacked
  * per file under one combined file header carrying the path and a
  * description toggle; a declaration with a known line labels just that
- * construct's line in a file-like gutter. File opens still use the bottom
- * FileDrawer when the host injects a viewer.
+ * construct's line in a file-like gutter, and `external` constructs get a
+ * header naming their kind with the body naming the construct. The model
+ * description's toggle sits in the left chrome and opens the markdown as an
+ * overlay over the construct area. File opens still use the bottom FileDrawer
+ * when the host injects a viewer.
  */
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTheme } from '@principal-ade/industry-theme';
 import { IndustryMarkdownSlide } from 'themed-markdown';
-import { AlignLeft, ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react';
+import {
+  AlignLeft,
+  Box,
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  Folder,
+  X,
+} from 'lucide-react';
 import {
   formatPurl,
   type SubsystemComponent,
@@ -33,6 +44,10 @@ export interface ConstructsCatalogProps {
   onSelect?: (componentAlias: string) => void;
   title?: string;
   hideSidebar?: boolean;
+  /**
+   * Model description. Its toggle lives in the left chrome; opening it shows
+   * the markdown as an overlay over the construct area.
+   */
   description?: string;
   diagnostic?: SubsystemDiagnostic;
   sidebarExtra?: ReactNode;
@@ -204,8 +219,11 @@ export function ConstructsCatalog({
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
     new Set(),
   );
-  // Files whose shared-header description toggle is expanded (keyed by file run).
-  const [openPurposes, setOpenPurposes] = useState<Set<string>>(new Set());
+  // Explicit description toggles per file run. Unset falls back to the kind's
+  // default (externals open, files closed).
+  const [purposeOverrides, setPurposeOverrides] = useState<
+    Record<string, boolean>
+  >({});
   const [drawer, setDrawer] = useState<{ file: string; startLine?: number } | null>(
     null,
   );
@@ -317,13 +335,8 @@ export function ConstructsCatalog({
     });
   }, []);
 
-  const togglePurpose = useCallback((key: string) => {
-    setOpenPurposes((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  const setPurposeOpen = useCallback((key: string, open: boolean) => {
+    setPurposeOverrides((prev) => ({ ...prev, [key]: open }));
   }, []);
 
   /** File-tree click: show every construct declared in the file, or hide them
@@ -542,8 +555,13 @@ export function ConstructsCatalog({
 
   const showChrome =
     !hideSidebar &&
-    !!(title || description || diagnostic || sidebarExtra || sidebarAfterDescription);
-  const showDesc = !!description && descriptionVisible;
+    !!(
+      title ||
+      description ||
+      diagnostic ||
+      sidebarExtra ||
+      sidebarAfterDescription
+    );
 
   return (
     <div
@@ -573,7 +591,6 @@ export function ConstructsCatalog({
         {showChrome && (
           <div
             style={{
-              flex: showDesc ? '0 0 auto' : undefined,
               padding: '16px 16px 8px',
               display: 'flex',
               flexDirection: 'column',
@@ -642,21 +659,6 @@ export function ConstructsCatalog({
                 </div>
               </div>
             )}
-            {showDesc && (
-              <div style={{ fontSize: theme.fontSizes[0], lineHeight: 1.5 }}>
-                <IndustryMarkdownSlide
-                  content={description!}
-                  slideIdPrefix="constructs-desc"
-                  slideIndex={0}
-                  isVisible={true}
-                  theme={theme}
-                  disableScroll={true}
-                  disableBasePadding
-                  enableKeyboardScrolling={false}
-                  autoFocusOnVisible={false}
-                />
-              </div>
-            )}
             {sidebarAfterDescription}
           </div>
         )}
@@ -699,6 +701,97 @@ export function ConstructsCatalog({
           flexDirection: 'column',
         }}
       >
+        {description && descriptionVisible && (
+          <>
+            <div
+              onClick={() => setDescriptionVisible(false)}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                zIndex: 2,
+                background: 'rgba(0,0,0,0.45)',
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                zIndex: 3,
+                width: 360,
+                maxWidth: 'calc(100% - 16px)',
+                maxHeight: '70%',
+                overflow: 'auto',
+                padding: 16,
+                border: `1px solid ${theme.colors.border}`,
+                borderRadius: 8,
+                background: theme.colors.background,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.28)',
+                fontSize: theme.fontSizes[0],
+                lineHeight: 1.5,
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 12,
+                }}
+              >
+                <h3
+                  style={{
+                    margin: 0,
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: theme.fontSizes[1],
+                    fontWeight: 600,
+                    fontFamily: theme.fonts.monospace,
+                    letterSpacing: 0.4,
+                    textTransform: 'uppercase',
+                    color: theme.colors.textSecondary ?? muted,
+                  }}
+                >
+                  Overview
+                </h3>
+                <button
+                  type="button"
+                  aria-label="Close description"
+                  title="Close"
+                  onClick={() => setDescriptionVisible(false)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    width: 22,
+                    height: 22,
+                    padding: 0,
+                    border: 'none',
+                    borderRadius: 4,
+                    background: 'transparent',
+                    color: muted,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <IndustryMarkdownSlide
+                content={description}
+                slideIdPrefix="constructs-desc-overlay"
+                slideIndex={0}
+                isVisible
+                theme={theme}
+                disableScroll
+                disableBasePadding
+                enableKeyboardScrolling={false}
+                autoFocusOnVisible={false}
+              />
+            </div>
+          </>
+        )}
         {searchActive && (
           <div style={{ flexShrink: 0, padding: '12px 16px 0' }}>
             <input
@@ -772,12 +865,14 @@ export function ConstructsCatalog({
                 {splitByFileRun(group.items).map((run) => {
                   const lead = run[0]!;
                   const hasFile = !!lead.file;
-                  // Every file-backed run gets the combined header, one
-                  // declaration or many, so the style stays consistent.
-                  const showHeader = hasFile;
+                  const isExternal = lead.construct === 'external';
+                  // File-backed runs and externals both get a header; externals
+                  // name their kind instead of a path, so the body doesn't have
+                  // to spell it out.
+                  const showHeader = hasFile || isExternal;
                   const runKey = `${group.key}:${lead.file || lead.alias}`;
                   const runHasPurpose = run.some((c) => !!c.purpose?.trim());
-                  const purposeOpen = openPurposes.has(runKey);
+                  const purposeOpen = purposeOverrides[runKey] ?? isExternal;
                   const runFileOpen =
                     drawer != null && hasFile && lead.file === drawer.file;
                   return (
@@ -815,41 +910,64 @@ export function ConstructsCatalog({
                             fontSize: theme.fontSizes[0],
                           }}
                         >
-                          <button
-                            type="button"
-                            title={fileViewer ? `Open ${lead.file}` : lead.file}
-                            onClick={
-                              fileViewer
-                                ? () => onOpenFile(lead.file)
-                                : undefined
-                            }
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 6,
-                              flex: 1,
-                              minWidth: 0,
-                              padding: 0,
-                              border: 'none',
-                              background: 'transparent',
-                              color: 'inherit',
-                              fontFamily: 'inherit',
-                              fontSize: 'inherit',
-                              textAlign: 'left',
-                              cursor: fileViewer ? 'pointer' : 'default',
-                            }}
-                          >
-                            <FileText size={12} style={{ flexShrink: 0 }} />
+                          {isExternal ? (
                             <span
                               style={{
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                flex: 1,
+                                minWidth: 0,
                               }}
                             >
-                              {lead.file}
+                              <Box size={12} style={{ flexShrink: 0 }} />
+                              <span
+                                style={{
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                external
+                              </span>
                             </span>
-                          </button>
+                          ) : (
+                            <button
+                              type="button"
+                              title={fileViewer ? `Open ${lead.file}` : lead.file}
+                              onClick={
+                                fileViewer
+                                  ? () => onOpenFile(lead.file)
+                                  : undefined
+                              }
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                flex: 1,
+                                minWidth: 0,
+                                padding: 0,
+                                border: 'none',
+                                background: 'transparent',
+                                color: 'inherit',
+                                fontFamily: 'inherit',
+                                fontSize: 'inherit',
+                                textAlign: 'left',
+                                cursor: fileViewer ? 'pointer' : 'default',
+                              }}
+                            >
+                              <FileText size={12} style={{ flexShrink: 0 }} />
+                              <span
+                                style={{
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {lead.file}
+                              </span>
+                            </button>
+                          )}
                           {runHasPurpose && (
                             <button
                               type="button"
@@ -860,7 +978,7 @@ export function ConstructsCatalog({
                                 purposeOpen ? 'Hide description' : 'Show description'
                               }
                               aria-expanded={purposeOpen}
-                              onClick={() => togglePurpose(runKey)}
+                              onClick={() => setPurposeOpen(runKey, !purposeOpen)}
                               style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
@@ -898,6 +1016,9 @@ export function ConstructsCatalog({
                         // render unnumbered. Without a header, keep the badge.
                         const numbered =
                           hasFile && c.declarationRef?.startLine != null;
+                        // The header names the external kind, so the body just
+                        // names the construct.
+                        const isExt = c.construct === 'external';
                         return (
                           <div
                             key={c.alias}
@@ -933,6 +1054,7 @@ export function ConstructsCatalog({
                               showRepoIdentity={false}
                               fileBadgeChrome={showHeader ? false : !!fileViewer}
                               hideActions={showHeader}
+                              externalName={isExt}
                               showPurpose={showHeader ? purposeOpen : undefined}
                               lineNumbers={numbered}
                               verification={

@@ -182,6 +182,9 @@ export interface ComponentDeclarationProps {
    *  label, description toggle). For hosts that surface those in a shared
    *  header instead. */
   hideActions?: boolean;
+  /** For `external` constructs, render the construct name as the body instead
+   *  of `external '…'` — the kind is named by the caller's header. */
+  externalName?: boolean;
   /** Controlled purpose/description visibility. When provided it overrides the
    *  internal toggle, so a host can drive it from a shared header. */
   showPurpose?: boolean;
@@ -335,6 +338,7 @@ export function ComponentDeclaration({
   showRepoIdentity = true,
   fileBadgeChrome = false,
   hideActions = false,
+  externalName = false,
   showPurpose: showPurposeProp,
   lineNumbers = false,
 }: ComponentDeclarationProps) {
@@ -418,6 +422,13 @@ export function ComponentDeclaration({
     verification?.declaration?.ref?.startLine ??
     parseSourceLocation(verification?.anchor?.source_location) ??
     undefined;
+
+  const externalKind =
+    (component.declaration?.kind ?? component.construct) === 'external';
+  const externalNameText =
+    component.name?.trim() ||
+    (component.declaration?.kind === 'external' ? component.declaration.label : '') ||
+    component.alias;
 
   const openDeclarationFile = () => {
     if (!onOpenFile || !component.file) return;
@@ -996,7 +1007,26 @@ export function ComponentDeclaration({
   if (labelDi === -1) {
     labelDi = declLines.findIndex((l) => l.length > 0);
   }
+  const externalNameLine = externalName && externalKind;
+  if (externalNameLine) {
+    // The caller's header names the kind, so the body just names the construct.
+    lines.push(
+      <div
+        key="external-name"
+        style={{
+          display: 'block',
+          whiteSpace: 'pre-wrap',
+          overflowWrap: 'anywhere',
+          minWidth: 0,
+          minHeight: 18,
+        }}
+      >
+        <span style={{ color }}>{externalNameText}</span>
+      </div>,
+    );
+  }
   for (let li = 0; li < declLines.length; li++) {
+    if (externalNameLine) break;
     if (declLines[li].length === 0) continue;
     if (lineNumbers && declarationStartLine != null) {
       // Only the construct's own line is known; the rest of the gutter stays
