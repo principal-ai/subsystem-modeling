@@ -22,10 +22,14 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { SubsystemModelAuditReport } from "../shared/contract";
+import type {
+	SubsystemModelAuditReport,
+	SubsystemModelVerificationLayer,
+} from "../shared/contract";
 import {
 	classifyAuditReport,
 	loadSubsystemModelAudit,
+	summarizeVerification,
 	type SubsystemModelAuditVerdict,
 } from "./audit-report-store";
 import { auditSubsystemModel } from "./verify-subsystem-component";
@@ -530,19 +534,21 @@ function formatGapCheck(
 
 function formatTopologyCheck(
 	c: NonNullable<SubsystemModelAuditReport["topologyChecks"]>[number],
-	mode: MaintainMode,
+	mode: MaintainMode | "all",
 ): string | null {
 	if (mode === "issues" && c.verdict !== "issue") return null;
 	if (mode === "verify" && c.verdict !== "gap") return null;
+	if (mode === "all" && c.verdict !== "issue" && c.verdict !== "gap") return null;
 	return `- ${c.relationId} (${c.relationType} ${c.from}→${c.to}): ${c.verdict}${c.note ? ` — ${c.note}` : ""}`;
 }
 
 function formatBoundaryCheck(
 	c: NonNullable<SubsystemModelAuditReport["boundaryChecks"]>[number],
-	mode: MaintainMode,
+	mode: MaintainMode | "all",
 ): string | null {
 	if (mode === "issues" && c.verdict !== "issue") return null;
 	if (mode === "verify" && c.verdict !== "gap") return null;
+	if (mode === "all" && c.verdict !== "issue" && c.verdict !== "gap") return null;
 	const bits = [
 		c.kind,
 		c.module ? `module=${c.module}` : null,
@@ -833,6 +839,162 @@ export function writeMaintainBrief(opts: {
 	const path = join(BRIEF_DIR, `${opts.graph.id}.brief.md`);
 	writeFileSync(path, buildMaintainBrief(opts), "utf8");
 	return path;
+}
+
+function formatLayerCoverage(l: SubsystemModelVerificationLayer): string {
+	const adjudicable = l.verified + l.open;
+	if (adjudicable === 0) return l.blocked > 0 ? "blocked" : "n/a";
+	return `${l.verified}/${adjudicable} (${Math.round(l.coverage * 100)}%)`;
+}
+
+/**
+ * Route-agnostic brief capturing a model's *verification state* for handoff to
+ * an agent as context (so a person can ask questions about what is and isn't
+ * verified) rather than as a fix task. Unlike `buildMaintainBrief` it does not
+ * filter findings/checks to one agent/lane/mode and does not ask for proposals.
+ */
+export function buildVerificationBrief(opts: {
+	graph: StoredSubsystemModel;
+	/** Persisted audit report, when one exists. */
+	report?: SubsystemModelAuditReport;
+	/** Host-computed: model/graphify inputs changed since the report was saved. */
+	stale?: boolean;
+}): string {
+	const { graph, report, stale } = opts;
+	const id = graph.id;
+	const enc = encodeURIComponent(id);
+	const base = studioHttpBase();
+	const lines: string[] = [];
+	lines.push("# Subsystem model verification brief");
+	lines.push("");
+	lines.push(`- **Title**: ${graph.title}`);
+	lines.push(`- **Model id**: ${id}`);
+	if (graph.description) lines.push(`- **Description**: ${graph.description}`);
+	lines.push(
+		`- **Components**: ${graph.components.length} · **Relations**: ${graph.relations.length}`,
+	);
+	if (report) {
+		const ledger = summarizeVerification(report);
+		lines.push(`- **Verdict**: ${classifyAuditReport(report)}`);
+		lines.push(`- **Audited at**: ${report.checkedAt}`);
+		lines.push(
+			`- **Needs update**: ${report.needsUpdate ? "yes (verification failed)" : "no"}`,
+		);
+		lines.push(
+			`- **Ledger**: ${ledger.verified} verified · ${ledger.open} open (${ledger.blocking} blocking) · ${ledger.blocked} blocked · ${ledger.na} n/a · coverage ${Math.round(ledger.coverage * 100)}%`,
+		);
+		lines.push(
+			`- **By layer**: construct ${formatLayerCoverage(ledger.byLayer.construct)} · boundary ${formatLayerCoverage(ledger.byLayer.boundary)} · topology ${formatLayerCoverage(ledger.byLayer.topology)}`,
+		);
+		if (stale) {
+			lines.push(
+				"- **Stale**: yes — model/graphify inputs changed since this audit; re-audit before trusting it.",
+			);
+		}
+	} else {
+		lines.push("- **Verdict**: unknown (no audit persisted yet)");
+	}
+	lines.push("");
+	lines.push("## Access");
+	lines.push("");
+	lines.push(
+		"**Prefer Studio HTTP** (Studio is running — do not use bare `principal-ai` on PATH; it is often an older unrelated CLI without `subsystem-model`):",
+	);
+	lines.push("");
+	lines.push(`    curl -sS ${base}/api/subsystem-model/${enc}`);
+	lines.push(`    curl -sS ${base}/api/subsystem-model/${enc}/audit`);
+	lines.push(`    curl -sS ${base}/api/subsystem-model/${enc}/proposals`);
+
+	const roots = new Set<string>();
+	for (const c of graph.components) {
+		const r = resolveRepoRootForComponent(c.purl);
+		if (r) roots.add(r);
+	}
+	if (roots.size > 0) {
+		lines.push("");
+		lines.push("**Repo roots** (read source here):");
+		for (const r of roots) lines.push(`- ${r}`);
+	}
+
+	if (!report) {
+		lines.push("");
+		lines.push("## Task");
+		lines.push("");
+		lines.push(
+			"There is no persisted audit for this model yet. Answer from the model JSON (via the get curl) and the source under the repo roots, and say that the verification state is not yet established.",
+		);
+		return lines.join("\n");
+	}
+
+	lines.push("");
+	lines.push("## Audit summary");
+	lines.push("");
+	lines.push(
+		`- components: ${report.summary.components} · files verified: ${report.summary.filesVerified} · symbols verified: ${report.summary.symbolsVerified} · declarations fresh: ${report.summary.declarationsFresh}`,
+	);
+	lines.push(
+		`- construct mismatches: ${report.summary.constructMismatches} · signature mismatches: ${report.summary.signatureMismatches} · missing files: ${report.summary.missingFiles} · missing symbols: ${report.summary.missingSymbols}`,
+	);
+	lines.push(
+		`- graphify confirmed: ${report.summary.graphifyConfirmed} · weak anchors: ${report.summary.weakAnchors} · externals skipped: ${report.summary.externalsSkipped} · unresolved: ${report.summary.unresolved}`,
+	);
+	lines.push(
+		`- relations: ${report.summary.relations} · soft checked: ${report.summary.softChecked} · soft confirmed: ${report.summary.softConfirmed} · soft unconfirmed: ${report.summary.softUnconfirmed} · broken endpoints: ${report.summary.brokenRelationEndpoints}`,
+	);
+
+	lines.push("");
+	lines.push("## Findings");
+	lines.push("");
+	if (report.findings.length === 0) {
+		lines.push("(none)");
+	} else {
+		for (const f of report.findings) lines.push(formatFinding(f));
+	}
+
+	lines.push("");
+	lines.push("## Component checks");
+	lines.push("");
+	const componentChecks = [
+		...report.checks.map(formatIssueCheck),
+		...report.checks.map(formatGapCheck),
+	].filter(Boolean) as string[];
+	if (componentChecks.length === 0) {
+		lines.push("(nothing flagged)");
+	} else {
+		for (const row of componentChecks) lines.push(row);
+	}
+
+	lines.push("");
+	lines.push("## Relation checks");
+	lines.push("");
+	const topologyLines = (report.topologyChecks ?? [])
+		.map((c) => formatTopologyCheck(c, "all"))
+		.filter(Boolean) as string[];
+	if (topologyLines.length === 0) {
+		lines.push("(nothing flagged)");
+	} else {
+		for (const row of topologyLines) lines.push(row);
+	}
+
+	lines.push("");
+	lines.push("## Package/module & process checks");
+	lines.push("");
+	const boundaryLines = (report.boundaryChecks ?? [])
+		.map((c) => formatBoundaryCheck(c, "all"))
+		.filter(Boolean) as string[];
+	if (boundaryLines.length === 0) {
+		lines.push("(nothing flagged)");
+	} else {
+		for (const row of boundaryLines) lines.push(row);
+	}
+
+	lines.push("");
+	lines.push("## Task");
+	lines.push("");
+	lines.push(
+		"Answer questions about this model's verification state. The audit above is the current deterministic verdict — trust it for what is and isn't verified, and read the source under the repo roots when it isn't enough. Do not propose or apply changes unless explicitly asked.",
+	);
+	return lines.join("\n");
 }
 
 /** Run Maintain agent on OpenCode V2 (session create + prompt + live SSE). */

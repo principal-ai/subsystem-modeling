@@ -171,6 +171,8 @@ function FlowsDemo() {
       stepIndex,
       onOpenFile,
       proposedAliases,
+      resolveSymbol,
+      onSymbolClick,
     }: WalkthroughViewerContext) => (
       <PierreWalkthroughCodeView
         walkthrough={walkthrough}
@@ -179,6 +181,8 @@ function FlowsDemo() {
         contextLines={4}
         onOpenFile={onOpenFile}
         proposedAliases={proposedAliases}
+        resolveSymbol={resolveSymbol}
+        onSymbolClick={onSymbolClick}
       />
     ),
     [],
@@ -276,6 +280,8 @@ function ProposedMissingStepDemo() {
       stepIndex,
       onOpenFile,
       proposedAliases,
+      resolveSymbol,
+      onSymbolClick,
     }: WalkthroughViewerContext) => (
       <PierreWalkthroughCodeView
         walkthrough={walkthrough}
@@ -284,6 +290,8 @@ function ProposedMissingStepDemo() {
         contextLines={4}
         onOpenFile={onOpenFile}
         proposedAliases={proposedAliases}
+        resolveSymbol={resolveSymbol}
+        onSymbolClick={onSymbolClick}
       />
     ),
     [],
@@ -318,4 +326,218 @@ function ProposedMissingStepDemo() {
 
 export const ProposedMissingStep: Story = {
   render: () => <ProposedMissingStepDemo />,
+};
+
+// --- Clickable constructs -------------------------------------------------
+//
+// A walkthrough step's line is an edge between two constructs. When the host
+// supplies `resolveSymbol`/`onSymbolClick` (the graph derives them from the
+// step's `from`/`to` components), a token in the snippet that names either
+// endpoint becomes clickable — clicking it opens that construct's file at its
+// declaration line in the bottom drawer. The second endpoint here is a
+// `method` construct (`DrawingStore.list`), so the bare `list` token is
+// clickable and jumps to the method's declaration.
+
+const clickableComponents: SubsystemComponent[] = [
+  {
+    alias: 'load-panel',
+    name: 'LoadPanel',
+    construct: 'function',
+    file: 'src/load/LoadPanel.tsx',
+    purl: 'pkg:github/principal-ai/desktop-app',
+    symbol: 'LoadPanel',
+    purpose: 'loads the drawing list and hands rows to the render surface',
+    process: 'draw-list',
+    declarationRef: {
+      file: 'src/load/LoadPanel.tsx',
+      startLine: 3,
+      lineHash: 'story',
+      capturedAt: '2026-01-01T00:00:00.000Z',
+    },
+    declaration: {
+      kind: 'function',
+      parameters: [],
+      returnType: 'JSX.Element',
+      callers: [],
+      callees: [],
+    },
+    declarationProvenance: 'authored',
+  },
+  {
+    alias: 'drawing-store-list',
+    name: 'list',
+    construct: 'method',
+    file: 'src/store/DrawingStore.ts',
+    purl: 'pkg:github/principal-ai/desktop-app',
+    symbol: 'DrawingStore.list',
+    purpose: 'lists stored drawings for the panel',
+    process: 'draw-list',
+    declarationRef: {
+      file: 'src/store/DrawingStore.ts',
+      startLine: 4,
+      lineHash: 'story',
+      capturedAt: '2026-01-01T00:00:00.000Z',
+    },
+    declaration: {
+      kind: 'method',
+      hostClass: 'DrawingStore',
+      parameters: [],
+      returnType: 'Drawing[]',
+    },
+    declarationProvenance: 'authored',
+  },
+  {
+    alias: 'render-surface',
+    name: 'RenderSurface',
+    construct: 'class',
+    file: 'src/render/RenderSurface.ts',
+    purl: 'pkg:github/principal-ai/desktop-app',
+    symbol: 'RenderSurface',
+    purpose: 'paints a drawing into a surface',
+    process: 'draw-host',
+    declarationRef: {
+      file: 'src/render/RenderSurface.ts',
+      startLine: 3,
+      lineHash: 'story',
+      capturedAt: '2026-01-01T00:00:00.000Z',
+    },
+    declaration: {
+      kind: 'class',
+      methods: [{ nodeId: 'RenderSurface.render', name: 'render' }],
+      properties: [],
+      extends: [],
+      implements: [],
+      instantiations: [],
+      references: [],
+    },
+    declarationProvenance: 'authored',
+  },
+];
+
+const clickableFiles: Record<string, string> = {
+  'src/load/LoadPanel.tsx': [
+    '// src/load/LoadPanel.tsx',
+    '',
+    'export function LoadPanel() {',
+    '  const rows = DrawingStore.list();',
+    '  return rows.map(RenderSurface.render);',
+    '}',
+  ].join('\n'),
+  'src/store/DrawingStore.ts': [
+    '// src/store/DrawingStore.ts',
+    '',
+    'export class DrawingStore {',
+    '  static list() {',
+    '    return RenderSurface.read();',
+    '  }',
+    '}',
+  ].join('\n'),
+};
+
+function readClickableFile(path: string): Promise<string> {
+  const content = clickableFiles[path];
+  if (content == null) {
+    return Promise.reject(new Error(`file not found in graph repos: ${path}`));
+  }
+  return Promise.resolve(content);
+}
+
+const clickableWalkthroughs: SubsystemWalkthrough[] = [
+  {
+    id: 'tl-load',
+    title: 'Load drawings',
+    steps: [
+      {
+        from: 'load-panel',
+        to: 'drawing-store-list',
+        mechanism: 'calls',
+        file: 'src/load/LoadPanel.tsx',
+        line: 4,
+        purl: stepPurl('src/load/LoadPanel.tsx'),
+        symbol: 'LoadPanel.load',
+        annotation:
+          'LoadPanel calls DrawingStore.list — click the `list` (or `DrawingStore`) token to jump to the method.',
+      },
+      {
+        from: 'drawing-store-list',
+        to: 'render-surface',
+        mechanism: 'calls',
+        file: 'src/store/DrawingStore.ts',
+        line: 5,
+        purl: stepPurl('src/store/DrawingStore.ts'),
+        symbol: 'DrawingStore.list',
+        annotation: 'list reads through RenderSurface — click RenderSurface.',
+      },
+    ],
+  },
+];
+
+function ClickableConstructsDemo() {
+  const [opened, setOpened] = React.useState<string | null>(null);
+  const renderWalkthroughViewer = useCallback(
+    ({
+      walkthrough,
+      stepIndex,
+      onOpenFile,
+      proposedAliases,
+      resolveSymbol,
+      onSymbolClick,
+    }: WalkthroughViewerContext) => (
+      <PierreWalkthroughCodeView
+        walkthrough={walkthrough}
+        stepIndex={stepIndex}
+        readFile={readClickableFile}
+        contextLines={4}
+        onOpenFile={onOpenFile}
+        proposedAliases={proposedAliases}
+        resolveSymbol={resolveSymbol}
+        onSymbolClick={onSymbolClick}
+      />
+    ),
+    [],
+  );
+
+  return (
+    <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <div
+        style={{
+          padding: '8px 14px',
+          fontFamily: 'monospace',
+          fontSize: 12,
+          borderBottom: '1px solid #333',
+          background: '#141414',
+          color: '#ddd',
+        }}
+      >
+        Click the <strong>Load drawings</strong> step, then click the dotted-underlined{' '}
+        <code>list</code> <em>(a method)</em> or <code>RenderSurface</code> token in the
+        snippet. It opens that construct's file at its declaration line in the bottom drawer
+        — <code>list</code> jumps to <code>DrawingStore.ts:4</code>.
+        <span style={{ marginLeft: 8, color: '#8fd' }}>opened: {opened ?? '—'}</span>
+      </div>
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <SubsystemComponentGraph
+          components={clickableComponents}
+          relations={[]}
+          walkthroughs={clickableWalkthroughs}
+          initialWalkthroughId="tl-load"
+          title="clickable constructs"
+          description="A walkthrough step's line is an edge to a construct. Tokens that name the step's `from`/`to` components are clickable and open that construct's declaration line in the file drawer — including a **method** endpoint (click `list` to jump to `DrawingStore.list`)."
+          renderWalkthroughViewer={renderWalkthroughViewer}
+          onFileSelect={setOpened}
+          renderFileViewer={(file, opts) => (
+            <div style={{ padding: 12, fontFamily: 'monospace', fontSize: 12, color: '#bbb' }}>
+              {`// ${file}`}
+              {opts?.startLine != null ? `\n  // → focus line ${opts.startLine}` : ''}
+              {'\n  …'}
+            </div>
+          )}
+        />
+      </div>
+    </div>
+  );
+}
+
+export const ClickableConstructs: Story = {
+  render: () => <ClickableConstructsDemo />,
 };

@@ -181,7 +181,36 @@ const request: RpcRequest = {
   deleteAnalysis: async () => ({ ok: true }),
   auditSubsystemModel: async () => ({ ok: true }),
   readFile: async () => ({ ok: true, content: "" }),
+  // MaintenancePanel: aggregate overview + persisted runs.
+  getMaintenanceOverview: async () => ({ ok: true, overview: mockOverview }),
+  listSubsystemModelRuns: async () => ({ ok: true, runs: mockRuns }),
+  getSubsystemModelBrief: async () => ({ ok: true, brief: "# Brief\n\nMock brief." }),
+  openMaintainEvents: async () => ({ ok: true }),
+  openSubsystemModel: async () => ({ ok: true }),
+  deleteSubsystemModelProposals: async () => ({ ok: true }),
+  deleteAllSubsystemModelProposals: async () => ({ ok: true }),
+  maintainSubsystemModel: async () => ({ ok: true, started: true }),
+  auditSubsystemModels: async () => ({ ok: true }),
+  getRegularAuditStatus: async () => ({
+    enabled: true,
+    running: false,
+    intervalMinutes: 15,
+    nextAuditAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+  }),
+  writeClipboard: async () => ({ ok: true }),
 };
+
+let mockOverview: unknown = null;
+let mockRuns: unknown[] = [];
+
+/** Seed the MaintenancePanel overview + run history for whole-tab stories. */
+export function mockMaintenanceOverview(
+  overview: unknown,
+  runs: unknown[] = [],
+): void {
+  mockOverview = overview;
+  mockRuns = runs;
+}
 
 export const electrobun = { rpc: { request } };
 

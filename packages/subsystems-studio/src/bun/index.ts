@@ -53,6 +53,7 @@ import {
 	setProposalSecondOpinion,
 } from "./proposal-store";
 import {
+	buildVerificationBrief,
 	maintainSubsystemModelSequence,
 	nextMaintainRouteForModel,
 } from "./maintain-model";
@@ -1627,6 +1628,27 @@ const requests: RequestHandlers = {
 				const ok = Utils.openExternal(url);
 				return { ok };
 			},
+			writeClipboard: ({ text }) => {
+				// The webview's navigator.clipboard requires the click's transient
+				// activation, which is gone once we await the brief RPC first. Write
+				// from the host instead (macOS-only app).
+				try {
+					const proc = Bun.spawnSync({
+						cmd: ["pbcopy"],
+						stdin: Buffer.from(text),
+						stdout: "pipe",
+						stderr: "pipe",
+					});
+					if (proc.exitCode === 0) return { ok: true };
+					return {
+						ok: false,
+						error:
+							proc.stderr.toString().trim() || `pbcopy exited ${proc.exitCode}`,
+					};
+				} catch (err) {
+					return { ok: false, error: (err as Error).message };
+				}
+			},
 			openFile: ({ purl }) => {
 				const parsed = parsePurl(purl);
 				const owner = parsed?.namespace;
@@ -2096,6 +2118,30 @@ const requests: RequestHandlers = {
 					fingerprint: saved.fingerprint,
 					checkedAt: saved.report.checkedAt,
 					stale: saved.fingerprint !== live,
+				};
+			},
+			getSubsystemModelBrief: async ({ graphId }) => {
+				const full = await getSubsystemModel(graphId);
+				if (!full) return { ok: false, error: `unknown graph: ${graphId}` };
+				const saved = await loadSubsystemModelAudit(graphId);
+				const graphify = await assessSubsystemGraphifyReadiness(
+					full,
+					graphifyBuildingPurls,
+				);
+				const live = await buildAuditFingerprint({
+					updatedAt: full.updatedAt,
+					components: full.components,
+					graphify,
+				});
+				return {
+					ok: true,
+					brief: buildVerificationBrief({
+						graph: full,
+						report: saved?.report,
+						stale: saved ? saved.fingerprint !== live : undefined,
+					}),
+					checkedAt: saved?.report.checkedAt,
+					stale: saved ? saved.fingerprint !== live : undefined,
 				};
 			},
 			listSubsystemModelProposals: async ({ graphId, includeResolved }) => {

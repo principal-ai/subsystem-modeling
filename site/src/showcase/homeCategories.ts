@@ -46,6 +46,8 @@ export type HomeCategory = {
 /** Full portable-ish model fields the home progression needs. */
 export type HomeProgressionSource = {
   title: string;
+  /** Subsystem-level description, shown as the model overview on every layer. */
+  description?: string;
   components: SubsystemComponent[];
   relations: SubsystemRelation[];
   walkthroughs?: SubsystemWalkthrough[];
@@ -102,7 +104,9 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
       blurb: copy.constructs.blurb,
       model: {
         title,
-        description: copy.constructs.description,
+        // The description describes the subsystem, not the constructs layer,
+        // so it stays the same across every layer.
+        description: source.description,
         components: constructsOnly(source.components),
         relations: [],
         walkthroughs: undefined,
@@ -120,7 +124,7 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
       blurb: copy['static-topology'].blurb,
       model: {
         title,
-        description: copy['static-topology'].description,
+        description: source.description,
         components: staticView(source.components),
         relations: source.relations,
         walkthroughs: undefined,
@@ -138,7 +142,7 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
       blurb: copy['dynamic-topology'].blurb,
       model: {
         title,
-        description: copy['dynamic-topology'].description,
+        description: source.description,
         components: dynamicView(source.components),
         relations: source.relations,
         walkthroughs: undefined,
@@ -156,7 +160,7 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
       blurb: copy.walkthrough.blurb,
       model: {
         title,
-        description: copy.walkthrough.description,
+        description: source.description,
         components: source.components,
         relations: source.relations,
         walkthroughs: source.walkthroughs,
@@ -177,6 +181,7 @@ export const homeProgressionExamples: Record<string, HomeProgressionExample> = {
     caseDir: bookingPageCase.caseDir,
     source: {
       title: bookingPageCase.model.title,
+      description: bookingPageCase.model.description,
       components: bookingPageCase.model.components,
       relations: bookingPageCase.model.relations,
       walkthroughs: bookingPageCase.model.walkthroughs,
@@ -208,6 +213,7 @@ export const homeProgressionExamples: Record<string, HomeProgressionExample> = {
     caseDir: tracedApiCase.caseDir,
     source: {
       title: tracedApiCase.model.title,
+      description: tracedApiCase.model.description,
       components: tracedApiCase.model.components,
       relations: tracedApiCase.model.relations,
       walkthroughs: tracedApiCase.model.walkthroughs,

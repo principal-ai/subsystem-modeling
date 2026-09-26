@@ -480,6 +480,37 @@ section h2 {
   outline-offset: 1px;
 }
 
+.home-explorer-description-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+  color: #d1d5db;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.home-explorer-description-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f9fafb;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.home-explorer-description-toggle:focus-visible {
+  outline: 2px solid var(--brand-bright);
+  outline-offset: 1px;
+}
+
 .home-explorer-nav-list {
   list-style: none;
   margin: 0;

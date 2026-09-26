@@ -98,44 +98,23 @@ function ExplorerInner() {
       <nav className="home-explorer-nav" aria-label="Subsystem model layers">
         <div className="home-explorer-nav-header">
           <p className="home-explorer-nav-label">Modeling a Subsystem</p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            {selected.id === 'constructs' && selected.model.description && (
-              <button
-                type="button"
-                className="home-explorer-play-toggle"
-                onClick={() => setDescriptionOpen((v) => !v)}
-                aria-expanded={descriptionOpen}
-                aria-label={
-                  descriptionOpen ? 'Hide description' : 'Show description'
-                }
-                title={descriptionOpen ? 'Hide description' : 'Show description'}
-              >
-                <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-                  <path
-                    d="M8 1.4a6.6 6.6 0 1 0 0 13.2A6.6 6.6 0 0 0 8 1.4Zm0 2.1a1 1 0 1 1 0 2 1 1 0 0 1 0-2Zm1.1 8.4H6.9V7.1h2.2v4.8Z"
-                    fill="currentColor"
-                  />
-                </svg>
-              </button>
+          <button
+            type="button"
+            className="home-explorer-play-toggle"
+            onClick={() => setPaused((p) => !p)}
+            aria-label={paused ? 'Play auto-advance' : 'Pause auto-advance'}
+            title={paused ? 'Play' : 'Pause'}
+          >
+            {paused ? (
+              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                <path d="M4 2.5v11l9-5.5-9-5.5z" fill="currentColor" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                <path d="M4 2.5h3v11H4zM9 2.5h3v11H9z" fill="currentColor" />
+              </svg>
             )}
-            <button
-              type="button"
-              className="home-explorer-play-toggle"
-              onClick={() => setPaused((p) => !p)}
-              aria-label={paused ? 'Play auto-advance' : 'Pause auto-advance'}
-              title={paused ? 'Play' : 'Pause'}
-            >
-              {paused ? (
-                <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-                  <path d="M4 2.5v11l9-5.5-9-5.5z" fill="currentColor" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-                  <path d="M4 2.5h3v11H4zM9 2.5h3v11H9z" fill="currentColor" />
-                </svg>
-              )}
-            </button>
-          </div>
+          </button>
         </div>
         <ul className="home-explorer-nav-list">
           {homeCategories.map((cat) => {
@@ -209,8 +188,33 @@ function ExplorerInner() {
         className="home-explorer-stage"
         style={{ borderColor: border, background: theme.colors.background }}
       >
-        <div className="home-explorer-stage-header">
+        <div
+          className="home-explorer-stage-header"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.75rem',
+          }}
+        >
           <h2 className="home-explorer-stage-title">{selected.model.title}</h2>
+          {selected.id === 'constructs' && selected.model.description && (
+            <button
+              type="button"
+              className="home-explorer-description-toggle"
+              onClick={() => {
+                setPaused(true);
+                setDescriptionOpen((v) => !v);
+              }}
+              aria-expanded={descriptionOpen}
+              aria-label={
+                descriptionOpen ? 'Hide description' : 'Show description'
+              }
+              title={descriptionOpen ? 'Hide description' : 'Show description'}
+            >
+              Description
+            </button>
+          )}
         </div>
         <div
           className="home-explorer-graph"

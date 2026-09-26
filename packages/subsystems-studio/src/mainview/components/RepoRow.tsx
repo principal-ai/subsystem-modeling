@@ -42,6 +42,11 @@ export interface RepoRowProps {
 	onBack?: () => void;
 	/** Tooltip for the back button. */
 	backTitle?: string;
+	/**
+	 * Corner radius for the row / selected highlight. 0 for the Maintenance
+	 * tab's flat full-bleed rows; defaults to the rounded drilldown look.
+	 */
+	borderRadius?: number;
 }
 
 export function RepoRow({
@@ -60,6 +65,7 @@ export function RepoRow({
 	onToggleCombined,
 	onBack,
 	backTitle = "Back to all repos",
+	borderRadius = 4,
 }: RepoRowProps) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -147,7 +153,7 @@ export function RepoRow({
 				alignItems: "center",
 				gap: 6,
 				padding: 12,
-				borderRadius: 4,
+				borderRadius,
 				background: active ? hoverBg : "transparent",
 				minWidth: 0,
 				cursor: onPress ? "pointer" : "default",
@@ -167,7 +173,7 @@ export function RepoRow({
 						gap: 6,
 						padding: 0,
 						border: "none",
-						borderRadius: 4,
+						borderRadius,
 						background: "transparent",
 						cursor: "pointer",
 						fontFamily: theme.fonts.body,

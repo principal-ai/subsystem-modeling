@@ -23,6 +23,7 @@ import {
   type DiffLineAnnotation,
   type LineAnnotation,
 } from '@pierre/diffs/react';
+import type { TokenEventBase } from '@pierre/diffs';
 import { Maximize2 } from 'lucide-react';
 
 /** Mirrors Pierre's CodeViewLineSelection (not re-exported from the React entry). */
@@ -48,6 +49,33 @@ import {
   type SnippetSlice,
 } from './sliceSnippet';
 
+/**
+ * A token the user clicked or hovered inside a step's snippet. `stepIndex` is
+ * the zero-based index of the walkthrough step whose snippet it sits in, so a
+ * host can resolve the token against that step's construct endpoints.
+ */
+export interface WalkthroughSymbolQuery {
+  stepIndex: number;
+  tokenText: string;
+}
+
+/** Ctx item id → step index, for CodeView's `walkthroughId:index` item ids. */
+function stepIndexFromItemContext(context: unknown): number | null {
+  const id = (context as { item?: { id?: string } } | undefined)?.item?.id;
+  if (id == null) return null;
+  const index = Number.parseInt(id.split(':').pop() ?? '', 10);
+  return Number.isFinite(index) ? index : null;
+}
+
+/** Pointer/dotted-underline affordance for a clickable construct token. */
+function paintSymbolToken(el: HTMLElement | undefined, active: boolean): void {
+  if (el == null) return;
+  el.style.cursor = active ? 'pointer' : '';
+  el.style.textDecorationLine = active ? 'underline' : '';
+  el.style.textDecorationStyle = active ? 'dotted' : '';
+  el.style.textUnderlineOffset = active ? '2px' : '';
+}
+
 export interface PierreWalkthroughCodeViewProps {
   walkthrough: SubsystemWalkthrough;
   /** Focused step; `null` shows all snippets without scrolling to a step. */
@@ -65,6 +93,15 @@ export interface PierreWalkthroughCodeViewProps {
    * but whose endpoint is proposed reads as "planned" rather than "missing".
    */
   proposedAliases?: ReadonlySet<string>;
+  /**
+   * Resolve a token to a model construct key (e.g. a component alias) for the
+   * step its snippet belongs to. Return `null` when the token doesn't name a
+   * construct this flow touches. When both this and `onSymbolClick` are set,
+   * matching tokens read as clickable (pointer + dotted underline).
+   */
+  resolveSymbol?: (query: WalkthroughSymbolQuery) => string | null;
+  /** Fired when a token resolved by `resolveSymbol` is clicked. */
+  onSymbolClick?: (symbol: string, query: WalkthroughSymbolQuery) => void;
 }
 
 type FileLoadState =
@@ -157,10 +194,19 @@ export function PierreWalkthroughCodeView({
   background,
   onOpenFile,
   proposedAliases,
+  resolveSymbol,
+  onSymbolClick,
 }: PierreWalkthroughCodeViewProps) {
   const { theme, mode } = useTheme();
   const viewRef = useRef<CodeViewHandle<undefined>>(null);
   const [load, setLoad] = useState<FileLoadState>({ status: 'loading' });
+
+  // Keep the newest symbol callbacks in refs so the Pierre options object stays
+  // stable (host callbacks are recreated per render).
+  const resolveSymbolRef = useRef(resolveSymbol);
+  resolveSymbolRef.current = resolveSymbol;
+  const onSymbolClickRef = useRef(onSymbolClick);
+  onSymbolClickRef.current = onSymbolClick;
 
   // A hop onto a proposed component is planned work; label its missing file
   // accordingly instead of showing a bare "not found".
@@ -415,6 +461,33 @@ export function PierreWalkthroughCodeView({
     [onOpenFile, walkthrough.steps, load],
   );
 
+  // Per-token interactions for construct navigation. Only wired when the host
+  // supplies both callbacks; providing them also switches Pierre into its
+  // token-transformer render path (pointer events land on token spans).
+  const symbolHandlers = useMemo((): Partial<CodeViewReactOptions> => {
+    if (resolveSymbol == null || onSymbolClick == null) return {};
+    const resolveAt = (
+      props: TokenEventBase,
+      context: unknown,
+    ): { symbol: string; query: WalkthroughSymbolQuery } | null => {
+      const stepIndex = stepIndexFromItemContext(context);
+      const tokenText = props?.tokenText;
+      if (stepIndex == null || !tokenText) return null;
+      const symbol = resolveSymbolRef.current?.({ stepIndex, tokenText });
+      return symbol == null ? null : { symbol, query: { stepIndex, tokenText } };
+    };
+    return {
+      onTokenClick: (props, _event, context) => {
+        const hit = resolveAt(props, context);
+        if (hit) onSymbolClickRef.current?.(hit.symbol, hit.query);
+      },
+      onTokenEnter: (props, _event, context) => {
+        if (resolveAt(props, context)) paintSymbolToken(props.tokenElement, true);
+      },
+      onTokenLeave: (props) => paintSymbolToken(props.tokenElement, false),
+    };
+  }, [resolveSymbol, onSymbolClick]);
+
   const options = useMemo((): CodeViewReactOptions => {
     return {
       theme: {
@@ -426,10 +499,11 @@ export function PierreWalkthroughCodeView({
       layout: { paddingTop: 0, paddingBottom: 0, gap: 4 },
       onPostRender,
       ...(onOpenFile ? { onLineClick } : {}),
+      ...symbolHandlers,
       ...(background ? buildPierreOptions(background) : {}),
       ...(mode === 'light' || mode === 'dark' ? { themeType: mode } : {}),
     };
-  }, [background, mode, onPostRender, onOpenFile, onLineClick]);
+  }, [background, mode, onPostRender, onOpenFile, onLineClick, symbolHandlers]);
 
   useEffect(() => {
     if (load.status !== 'ready' || stepIndex == null) return;

@@ -337,7 +337,7 @@ export function SymbolInspectionCard({
         ×
       </button>
 
-      {/* Top: the declaration itself, full-bleed (or status when there's none). */}
+      {/* Top: the declaration itself, full-bleed (or just the name on a miss). */}
       <div
         style={{
           padding: '12px 32px 12px 12px',
@@ -363,20 +363,21 @@ export function SymbolInspectionCard({
         )}
 
         {!error && !hasBody && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ color: theme.colors.accent ?? theme.colors.secondary, fontWeight: 600 }}>
-              {symbolRef.name}
-            </span>
-            <span style={{ color: muted, fontFamily: theme.fonts.body, fontSize: body }}>
-              {statusText}
-            </span>
-          </div>
+          <span style={{ color: theme.colors.accent ?? theme.colors.secondary, fontWeight: 600 }}>
+            {symbolRef.name}
+          </span>
         )}
       </div>
 
       {/* Meta: where it lives, ambiguity, and the action. */}
       {!error && (
         <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {!hasBody && (
+          <span style={{ color: muted, fontFamily: theme.fonts.body, fontSize: body }}>
+            {statusText}
+          </span>
+        )}
+
         {node?.sourceFile && (
           <StackedRow label="Source">
             {onOpenFile ? (

@@ -1515,6 +1515,21 @@ export type StudioRequests = {
 			checkedAt?: string;
 		};
 	};
+	/**
+	 * Build a route-agnostic markdown brief of a model's verification state,
+	 * for copying to an agent as context (ask questions about what is / isn't
+	 * verified). Not filtered to a Maintain agent/lane/mode.
+	 */
+	getSubsystemModelBrief: {
+		params: { graphId: string };
+		response: {
+			ok: boolean;
+			error?: string;
+			brief?: string;
+			checkedAt?: string;
+			stale?: boolean;
+		};
+	};
 	/** Pending (and optionally resolved) agent correction proposals for a model. */
 	listSubsystemModelProposals: {
 		params: { graphId: string; includeResolved?: boolean };
@@ -1885,6 +1900,15 @@ export type StudioRequests = {
 	openExternal: {
 		params: { url: string };
 		response: { ok: boolean };
+	};
+	/**
+	 * Write text to the system clipboard from the host. Unlike the webview's
+	 * `navigator.clipboard`, this needs no transient user activation, so it works
+	 * after an async RPC fetch (e.g. building a brief before copying it).
+	 */
+	writeClipboard: {
+		params: { text: string };
+		response: { ok: boolean; error?: string };
 	};
 	openFile: {
 		params: { purl: string };

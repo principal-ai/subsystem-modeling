@@ -1,8 +1,7 @@
 /**
- * MaintenanceView — the Maintenance permanent tab. Renders the same
- * MaintenancePanel the AppHeader chip used to show as a modal, full-bleed with
- * its repo filter. The panel subscribes to host broadcasts for live updates, so
- * mounting is enough — there's no extra `active` gating needed.
+ * MaintenanceView — the Maintenance permanent tab. Renders the MaintenancePanel
+ * full-bleed with its repo filter. The panel subscribes to host broadcasts for
+ * live updates, so mounting is enough — there's no extra `active` gating needed.
  */
 
 import { useTheme } from "@principal-ade/industry-theme";
@@ -22,7 +21,7 @@ export function MaintenanceView() {
 				fontFamily: theme.fonts.body,
 			}}
 		>
-			<MaintenancePanel overlay={false} />
+			<MaintenancePanel />
 		</div>
 	);
 }

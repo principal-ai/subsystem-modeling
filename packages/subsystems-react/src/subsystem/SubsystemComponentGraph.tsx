@@ -53,6 +53,7 @@ import {
 } from './model';
 import { ConstructsCatalog } from './ConstructsCatalog';
 import type { SubsystemOpenFileOptions } from './declarationRef';
+import type { WalkthroughSymbolQuery } from '../pierre/PierreWalkthroughCodeView';
 import { SubsystemComponentNode, SubsystemGroupNode, SubsystemEdge, SUBSYSTEM_CALLBACKS, hexWithAlpha, EDGE_DIM_ALPHA, fileMatchForNode, flowElementVisibility } from './nodes';
 import { SubsystemDiagnosticToggle, type SubsystemDiagnostic } from './DiagnosticToggle';
 import {
@@ -89,6 +90,28 @@ export interface WalkthroughViewerContext {
    * but whose endpoint is proposed can be labelled as planned, not missing.
    */
   proposedAliases: ReadonlySet<string>;
+  /**
+   * Resolve a token in a step's snippet to a construct the step touches (its
+   * `from`/`to` component), returning that component's alias. `null` when the
+   * token names no touched construct. Forward to the code view so constructs
+   * read as clickable.
+   */
+  resolveSymbol?: (query: WalkthroughSymbolQuery) => string | null;
+  /** A clicked construct token — open that construct's declaration line. */
+  onSymbolClick?: (symbol: string, query: WalkthroughSymbolQuery) => void;
+}
+
+/** Identifiers a token could match to name this component as a construct. */
+function constructIdentifiers(comp: SubsystemComponent): string[] {
+  const ids = new Set<string>();
+  if (comp.name) ids.add(comp.name);
+  if (comp.symbol) {
+    ids.add(comp.symbol);
+    for (const part of comp.symbol.split('.')) {
+      if (part) ids.add(part);
+    }
+  }
+  return [...ids];
 }
 
 type DrawerTarget =
@@ -397,14 +420,29 @@ const WalkthroughDrawerContent = memo(function WalkthroughDrawerContent({
   stepIndex,
   onOpenFile,
   proposedAliases,
+  resolveSymbol,
+  onSymbolClick,
 }: {
   render: (ctx: WalkthroughViewerContext) => ReactNode;
   walkthrough: SubsystemWalkthrough;
   stepIndex: number | null;
   onOpenFile: (path: string, opts?: SubsystemOpenFileOptions) => void;
   proposedAliases: ReadonlySet<string>;
+  resolveSymbol?: (query: WalkthroughSymbolQuery) => string | null;
+  onSymbolClick?: (symbol: string, query: WalkthroughSymbolQuery) => void;
 }) {
-  return <>{render({ walkthrough, stepIndex, onOpenFile, proposedAliases })}</>;
+  return (
+    <>
+      {render({
+        walkthrough,
+        stepIndex,
+        onOpenFile,
+        proposedAliases,
+        resolveSymbol,
+        onSymbolClick,
+      })}
+    </>
+  );
 });
 
 interface InnerProps extends SubsystemComponentGraphProps {
@@ -577,6 +615,10 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
     if (drawerTarget?.kind !== 'walkthrough' || !walkthroughs) return null;
     return walkthroughs.find((t) => t.id === drawerTarget.walkthroughId) ?? null;
   }, [drawerTarget, walkthroughs]);
+  // Ref mirror of the drawer's walkthrough id so the symbol resolver stays
+  // stable across graph re-renders (the drawer is memoized on callback identity).
+  const drawerWalkthroughIdRef = useRef<string | null>(null);
+  drawerWalkthroughIdRef.current = focusedWalkthrough?.id ?? null;
 
   // Walkthrough shown on the canvas title chip (focus or hover/autoplay highlight).
   const overlayWalkthroughTitle = useMemo(() => {
@@ -1583,6 +1625,60 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
     [components, onSelect],
   );
 
+  // Construct tokens inside a walkthrough snippet. A step's line is an edge
+  // between its `from`/`to` components, so a token naming either of those
+  // constructs should navigate to that construct's declaration. Index the
+  // matchable identifiers per step (`walkthroughId:index`).
+  const walkthroughSymbolIndex = useMemo(() => {
+    const byAlias = new Map(components.map((c) => [c.alias, c]));
+    const index = new Map<string, Map<string, string>>();
+    for (const wt of walkthroughs ?? []) {
+      wt.steps.forEach((step, i) => {
+        const tokens = new Map<string, string>();
+        for (const alias of [step.from, step.to]) {
+          const comp = byAlias.get(alias);
+          if (!comp) continue;
+          for (const ident of constructIdentifiers(comp)) tokens.set(ident, alias);
+        }
+        index.set(`${wt.id}:${i}`, tokens);
+      });
+    }
+    return index;
+  }, [components, walkthroughs]);
+  const walkthroughSymbolIndexRef = useRef(walkthroughSymbolIndex);
+  walkthroughSymbolIndexRef.current = walkthroughSymbolIndex;
+
+  // Stable resolver: reads the live index + focused walkthrough from refs so
+  // the memoized walkthrough drawer isn't rebuilt on every graph render.
+  const resolveWalkthroughSymbol = useCallback(
+    (query: WalkthroughSymbolQuery): string | null => {
+      const walkthroughId = drawerWalkthroughIdRef.current;
+      if (walkthroughId == null) return null;
+      return (
+        walkthroughSymbolIndexRef.current
+          .get(`${walkthroughId}:${query.stepIndex}`)
+          ?.get(query.tokenText) ?? null
+      );
+    },
+    [],
+  );
+
+  // A construct token click navigates to that construct's declaration: open
+  // its file at the anchored declaration line (same path as the declaration
+  // panel's file link), falling back to the file top when unanchored.
+  const openConstructDeclaration = useCallback(
+    (alias: string) => {
+      const comp = components.find((c) => c.alias === alias);
+      if (!comp?.file) return;
+      const startLine = comp.declarationRef?.startLine;
+      onOpenDeclarationFile(
+        comp.file,
+        startLine != null ? { startLine } : undefined,
+      );
+    },
+    [components, onOpenDeclarationFile],
+  );
+
   // Edge label data for the overlay (rendered OUTSIDE ReactFlow so the pane
   // doesn't intercept pointer events). Uses ELK-computed label midpoints from
   // the actual edge path (not node-center approximations).
@@ -2261,6 +2357,8 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
             stepIndex={drawerTarget.stepIndex}
             onOpenFile={onOpenFileFromWalkthrough}
             proposedAliases={proposedAliases}
+            resolveSymbol={resolveWalkthroughSymbol}
+            onSymbolClick={openConstructDeclaration}
           />
         ) : drawerTarget?.kind === 'file' ? (
           <FileDrawerContent

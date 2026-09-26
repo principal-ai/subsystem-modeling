@@ -209,6 +209,8 @@ export function SubsystemModelView({
 			stepIndex,
 			onOpenFile,
 			proposedAliases,
+			resolveSymbol,
+			onSymbolClick,
 		}: WalkthroughViewerContext) => (
 			<PierreWalkthroughCodeView
 				walkthrough={walkthrough}
@@ -217,6 +219,8 @@ export function SubsystemModelView({
 				contextLines={8}
 				onOpenFile={onOpenFile}
 				proposedAliases={proposedAliases}
+				resolveSymbol={resolveSymbol}
+				onSymbolClick={onSymbolClick}
 			/>
 		),
 		[readFile],

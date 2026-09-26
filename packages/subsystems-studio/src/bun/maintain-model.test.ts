@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { SubsystemModelAuditReport } from "../shared/contract";
 import {
+	buildVerificationBrief,
 	CONSTRUCT_FIXER_AGENT,
 	CONSTRUCT_VERIFIER_AGENT,
 	PACKAGE_MODULE_FIXER_AGENT,
@@ -10,6 +11,26 @@ import {
 	STATIC_TOPOLOGY_FIXER_AGENT,
 	STATIC_TOPOLOGY_VERIFIER_AGENT,
 } from "./maintain-model";
+import type { StoredSubsystemModel } from "./subsystem-model-store";
+
+function graphFixture(partial?: Partial<StoredSubsystemModel>): StoredSubsystemModel {
+	return {
+		id: "sg-1",
+		title: "Maintain run",
+		description: "how a Maintain run starts",
+		components: [
+			{
+				alias: "maintain-orchestrator",
+				name: "maintainSubsystemModel",
+				purl: "external:no-root",
+			},
+		],
+		relations: [],
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+		...partial,
+	} as unknown as StoredSubsystemModel;
+}
 
 function emptyReport(
 	partial: Partial<SubsystemModelAuditReport> & {
@@ -210,5 +231,34 @@ describe("selectMaintainRoute", () => {
 	test("returns null when clean", () => {
 		const report = emptyReport({ findings: [] });
 		expect(selectMaintainRoute(report)).toBeNull();
+	});
+});
+
+describe("buildVerificationBrief", () => {
+	test("carries identity, verdict, findings, and access commands", () => {
+		const report = emptyReport({
+			findings: [
+				{
+					kind: "construct_unconfirmed",
+					severity: "info",
+					componentAlias: "maintain-orchestrator",
+					message: "Construct unclassified",
+				},
+			],
+		});
+		const brief = buildVerificationBrief({ graph: graphFixture(), report });
+		expect(brief).toContain("# Subsystem model verification brief");
+		expect(brief).toContain("- **Model id**: sg-1");
+		expect(brief).toContain("- **Verdict**: partially_verified");
+		expect(brief).toContain("## Findings");
+		expect(brief).toContain("construct_unconfirmed");
+		expect(brief).toContain("/api/subsystem-model/sg-1/audit");
+		expect(brief).toContain("Answer questions about this model's verification state");
+	});
+
+	test("reports unknown verdict without a persisted audit", () => {
+		const brief = buildVerificationBrief({ graph: graphFixture() });
+		expect(brief).toContain("- **Verdict**: unknown (no audit persisted yet)");
+		expect(brief).toContain("no persisted audit");
 	});
 });

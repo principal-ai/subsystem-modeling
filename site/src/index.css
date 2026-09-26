@@ -70,10 +70,16 @@
   text-align: center;
   min-height: 100svh;
   overflow-y: auto;
+  overscroll-behavior: none;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
   scroll-padding-top: 4.5rem;
+}
+
+html,
+body {
+  overscroll-behavior: none;
 }
 
 body {
