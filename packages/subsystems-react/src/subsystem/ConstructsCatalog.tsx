@@ -716,82 +716,74 @@ export function ConstructsCatalog({
         }}
       >
         {description && descriptionOpen && (
-          <>
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 3,
+              display: 'flex',
+              flexDirection: 'column',
+              background: theme.colors.background,
+            }}
+          >
             <div
-              onClick={() => setDescriptionOpen(false)}
               style={{
-                position: 'absolute',
-                inset: 0,
-                zIndex: 2,
-                background: 'rgba(0,0,0,0.45)',
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '12px 16px',
+                borderBottom: `1px solid ${theme.colors.border}`,
               }}
-            />
+            >
+              <h3
+                style={{
+                  margin: 0,
+                  flex: 1,
+                  minWidth: 0,
+                  fontSize: theme.fontSizes[1],
+                  fontWeight: 600,
+                  fontFamily: theme.fonts.monospace,
+                  letterSpacing: 0.4,
+                  textTransform: 'uppercase',
+                  color: theme.colors.textSecondary ?? muted,
+                }}
+              >
+                Overview
+              </h3>
+              <button
+                type="button"
+                aria-label="Close description"
+                title="Close"
+                onClick={() => setDescriptionOpen(false)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  width: 22,
+                  height: 22,
+                  padding: 0,
+                  border: 'none',
+                  borderRadius: 4,
+                  background: 'transparent',
+                  color: muted,
+                  cursor: 'pointer',
+                }}
+              >
+                <X size={14} />
+              </button>
+            </div>
             <div
               style={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                zIndex: 3,
-                width: 360,
-                maxWidth: 'calc(100% - 16px)',
-                maxHeight: '70%',
+                flex: 1,
+                minHeight: 0,
                 overflow: 'auto',
                 padding: 16,
-                border: `1px solid ${theme.colors.border}`,
-                borderRadius: 8,
-                background: theme.colors.background,
-                boxShadow: '0 8px 24px rgba(0,0,0,0.28)',
                 fontSize: theme.fontSizes[0],
                 lineHeight: 1.5,
               }}
             >
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  marginBottom: 12,
-                }}
-              >
-                <h3
-                  style={{
-                    margin: 0,
-                    flex: 1,
-                    minWidth: 0,
-                    fontSize: theme.fontSizes[1],
-                    fontWeight: 600,
-                    fontFamily: theme.fonts.monospace,
-                    letterSpacing: 0.4,
-                    textTransform: 'uppercase',
-                    color: theme.colors.textSecondary ?? muted,
-                  }}
-                >
-                  Overview
-                </h3>
-                <button
-                  type="button"
-                  aria-label="Close description"
-                  title="Close"
-                  onClick={() => setDescriptionOpen(false)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                    width: 22,
-                    height: 22,
-                    padding: 0,
-                    border: 'none',
-                    borderRadius: 4,
-                    background: 'transparent',
-                    color: muted,
-                    cursor: 'pointer',
-                  }}
-                >
-                  <X size={14} />
-                </button>
-              </div>
               <IndustryMarkdownSlide
                 content={description}
                 slideIdPrefix="constructs-desc-overlay"
@@ -804,7 +796,7 @@ export function ConstructsCatalog({
                 autoFocusOnVisible={false}
               />
             </div>
-          </>
+          </div>
         )}
         {searchActive && (
           <div style={{ flexShrink: 0, padding: '12px 16px 0' }}>
