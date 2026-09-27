@@ -117,10 +117,6 @@ export interface SubsystemDeclarationRef {
   lineHash: string;
   graphifyNodeId?: string;
   capturedAt: string;
-  revision?: {
-    headSha: string;
-    dirtyHash?: string | null;
-  };
 }
 
 export interface SubsystemParamInfo {
@@ -403,6 +399,13 @@ export interface SubsystemWalkthrough {
  * No host paths, provenance, document-level repo, store ids, or verification.
  * Repo identity lives on each component's `purl`.
  */
+/**
+ * A pinned commit for one referenced repo. Keyed by `purlRepoKey` (the purl
+ * with its fragment stripped). Commit-only — a dirty tree has no reproducible
+ * name and is never recorded as a coordinate.
+ */
+export type PurlCommit = string;
+
 export interface SubsystemModelDocument {
   /**
    * Optional pointer to the JSON Schema that describes this file. Lets editors
@@ -417,6 +420,17 @@ export interface SubsystemModelDocument {
   relations: SubsystemRelation[];
   /** Runtime walkthroughs (ordered hops with sites). */
   walkthroughs?: SubsystemWalkthrough[];
+  /**
+   * The commit each referenced repo was at when the model was created. The
+   * coordinate system for every `file:line` in the document: without it, a
+   * line pointer is ambiguous across commits. Immutable after create.
+   */
+  createdAtCommits?: Record<string, PurlCommit>;
+  /**
+   * The commit each referenced repo was at when a full audit last passed
+   * against a clean referenced state. Absent until an audit earns it.
+   */
+  verifiedAtCommits?: Record<string, PurlCommit>;
 }
 
 /**
@@ -469,6 +483,8 @@ export function toPortableDocument(
   if (doc.$schema) out.$schema = doc.$schema;
   if (doc.description) out.description = doc.description;
   if (doc.walkthroughs) out.walkthroughs = doc.walkthroughs;
+  if (doc.createdAtCommits) out.createdAtCommits = doc.createdAtCommits;
+  if (doc.verifiedAtCommits) out.verifiedAtCommits = doc.verifiedAtCommits;
   return out;
 }
 

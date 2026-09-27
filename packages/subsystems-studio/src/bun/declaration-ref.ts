@@ -12,7 +12,6 @@ import {
 	parseSourceLocation,
 	type SubsystemDeclarationRef,
 } from "../../../subsystems-react/src/subsystem/declarationRef";
-import { dirtyFingerprint, gitHeadSha } from "./graphify-store";
 
 export {
 	extractDeclarationLine,
@@ -40,6 +39,8 @@ export async function buildDeclarationRef(input: {
 	startLine: number;
 	lineHash: string;
 	graphifyNodeId?: string;
+	/** Accepted for call-site compatibility; commit provenance now lives on
+	 *  the model-level per-purl commit maps, not per declaration. */
 	repoRoot?: string | null;
 }): Promise<SubsystemDeclarationRef> {
 	const ref: SubsystemDeclarationRef = {
@@ -49,14 +50,5 @@ export async function buildDeclarationRef(input: {
 		capturedAt: new Date().toISOString(),
 	};
 	if (input.graphifyNodeId) ref.graphifyNodeId = input.graphifyNodeId;
-	if (input.repoRoot) {
-		const headSha = await gitHeadSha(input.repoRoot);
-		if (headSha) {
-			ref.revision = {
-				headSha,
-				dirtyHash: await dirtyFingerprint(input.repoRoot),
-			};
-		}
-	}
 	return ref;
 }

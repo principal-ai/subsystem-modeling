@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import {
 	capturePurlCommits,
+	commitsFromDeclarationRefs,
 	commitStatus,
 	purlCommitFreshness,
 	referencedFilesByPurl,
@@ -98,6 +99,36 @@ describe("referencedFilesByPurl", () => {
 			"src/x.ts",
 		]);
 		expect(byPurl.get(KEY_B)?.sort()).toEqual(["src/to-b.ts", "src/y.ts"]);
+	});
+});
+
+describe("commitsFromDeclarationRefs", () => {
+	test("picks the earliest capturedAt per repo; ignores refs without a revision", () => {
+		const out = commitsFromDeclarationRefs([
+			{
+				purl: `${KEY_A}#a.ts`,
+				declarationRef: {
+					capturedAt: "2026-01-02T00:00:00Z",
+					revision: { headSha: "newer" },
+				},
+			},
+			{
+				purl: `${KEY_A}#b.ts`,
+				declarationRef: {
+					capturedAt: "2026-01-01T00:00:00Z",
+					revision: { headSha: "older" },
+				},
+			},
+			{
+				purl: `${KEY_B}#c.ts`,
+				declarationRef: {
+					capturedAt: "2026-01-01T00:00:00Z",
+					revision: { headSha: "b1" },
+				},
+			},
+			{ purl: `${KEY_A}#d.ts` },
+		]);
+		expect(out).toEqual({ [KEY_A]: "older", [KEY_B]: "b1" });
 	});
 });
 

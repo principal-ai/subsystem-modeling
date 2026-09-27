@@ -39,6 +39,14 @@ interface WalkthroughLike {
 	steps?: ReadonlyArray<StepLike>;
 }
 
+interface RefCarrier {
+	purl?: string;
+	declarationRef?: {
+		capturedAt?: string;
+		revision?: { headSha?: string } | null;
+	} | null;
+}
+
 interface CommitOptions {
 	resolveRoot?: (purlOrKey: string) => string | undefined;
 	head?: (repoRoot: string) => Promise<string | null>;
@@ -96,6 +104,29 @@ export function referencedFilesByPurl(
 
 	const out = new Map<string, string[]>();
 	for (const [key, files] of grouped) out.set(key, [...files]);
+	return out;
+}
+
+/**
+ * Best-effort historic pins recovered from the retired per-declaration
+ * `declarationRef.revision.headSha`. Per repo the earliest `capturedAt` is
+ * closest to model creation — a ref re-pinned later would overstate the commit.
+ * Used only to backfill `createdAtCommits` on records that predate it.
+ */
+export function commitsFromDeclarationRefs(
+	components: ReadonlyArray<RefCarrier>,
+): Record<string, PurlCommit> {
+	const best = new Map<string, { sha: string; at: number }>();
+	for (const c of components) {
+		const key = purlRepoKey(c.purl);
+		const sha = c.declarationRef?.revision?.headSha;
+		if (!key || !sha) continue;
+		const at = Date.parse(c.declarationRef?.capturedAt ?? "") || 0;
+		const cur = best.get(key);
+		if (!cur || at < cur.at) best.set(key, { sha, at });
+	}
+	const out: Record<string, PurlCommit> = {};
+	for (const [key, v] of best) out[key] = v.sha;
 	return out;
 }
 

@@ -3,7 +3,6 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { toPortableDocument } from "@principal-ai/subsystems-core";
 import {
 	createSubsystemModel,
 	fileDeclaresSymbol,
@@ -427,16 +426,3 @@ describe("commit provenance", () => {
 	});
 });
 
-describe("portable document", () => {
-	test("drops host-binding commit provenance", () => {
-		const portable = toPortableDocument({
-			title: "t",
-			components: [],
-			relations: [],
-			createdAtCommits: { "pkg:github/a/repo-a": "x" },
-			verifiedAtCommits: { "pkg:github/a/repo-a": "y" },
-		} as unknown as Parameters<typeof toPortableDocument>[0]);
-		expect("createdAtCommits" in portable).toBe(false);
-		expect("verifiedAtCommits" in portable).toBe(false);
-	});
-});

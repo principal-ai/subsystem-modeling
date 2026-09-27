@@ -18,11 +18,6 @@ export interface SubsystemDeclarationRef {
   graphifyNodeId?: string;
   /** ISO timestamp when this ref was recorded. */
   capturedAt: string;
-  /** Repo revision at capture time (optional). */
-  revision?: {
-    headSha: string;
-    dirtyHash?: string | null;
-  };
 }
 
 export type DeclarationFreshness =

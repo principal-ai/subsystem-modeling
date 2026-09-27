@@ -44,6 +44,20 @@
       "items": {
         "$ref": "#/$defs/walkthrough"
       }
+    },
+    "createdAtCommits": {
+      "type": "object",
+      "description": "The commit each referenced repo was at when the model was created — the coordinate system for every file:line. Keyed by purl repo key (purl with fragment stripped), value a commit sha. Immutable after create.",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "verifiedAtCommits": {
+      "type": "object",
+      "description": "The commit each referenced repo was at when a full audit last passed against a clean referenced state. Same keying as createdAtCommits. Absent until an audit earns it.",
+      "additionalProperties": {
+        "type": "string"
+      }
     }
   },
   "$defs": {
@@ -389,24 +403,6 @@
         "capturedAt": {
           "type": "string",
           "description": "ISO timestamp when this ref was recorded."
-        },
-        "revision": {
-          "type": "object",
-          "required": [
-            "headSha"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "headSha": {
-              "type": "string"
-            },
-            "dirtyHash": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
         }
       }
     },
