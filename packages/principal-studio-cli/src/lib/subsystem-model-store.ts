@@ -12,9 +12,22 @@ import { promises as fs } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { deriveGraphEdges } from '@principal-ai/subsystems-core';
+import { capturePurlCommits, type PurlCommit } from './purl-commits.js';
 
-const ROOT = join(homedir(), '.principal', 'subsystem-models');
-const INDEX_PATH = join(ROOT, '_index.json');
+/** Home override for tests (mirrors PRINCIPAL_ALEXANDRIA_HOME); lazy so an
+ * override set after module load still applies. */
+function storeHome(): string {
+  const override = process.env['PRINCIPAL_SUBSYSTEM_MODELS_HOME']?.trim();
+  return override ? override : homedir();
+}
+
+function modelsRoot(): string {
+  return join(storeHome(), '.principal', 'subsystem-models');
+}
+
+function indexFilePath(): string {
+  return join(modelsRoot(), '_index.json');
+}
 
 export const SUBSYSTEM_EDGE_MECHANISMS = [
   'calls',
@@ -78,6 +91,10 @@ export interface StoredSubsystemModel {
   lastOpenedAt?: string;
   /** Host-only GitHub gist link (not portable). */
   gist?: { id: string; fileName?: string };
+  /** Per-purl commit the model was created against (see PurlCommit). */
+  createdAtCommits?: Record<string, PurlCommit>;
+  /** Per-purl commit when a full audit last passed (written by Studio). */
+  verifiedAtCommits?: Record<string, PurlCommit>;
   verification?: unknown;
 }
 
@@ -96,7 +113,7 @@ function graphId(): string {
 }
 
 function graphPath(id: string): string {
-  return join(ROOT, `${id}.json`);
+  return join(modelsRoot(), `${id}.json`);
 }
 
 export function subsystemModelFilePath(id: string): string {
@@ -104,7 +121,7 @@ export function subsystemModelFilePath(id: string): string {
 }
 
 async function ensureDir(): Promise<void> {
-  await fs.mkdir(ROOT, { recursive: true });
+  await fs.mkdir(modelsRoot(), { recursive: true });
 }
 
 export function normalizeDeclarationProvenance(components: unknown): void {
@@ -156,7 +173,7 @@ function indexEntryFor(record: StoredSubsystemModel): SubsystemModelIndexEntry {
 
 async function readIndex(): Promise<SubsystemModelIndexEntry[]> {
   try {
-    const raw = await fs.readFile(INDEX_PATH, 'utf8');
+    const raw = await fs.readFile(indexFilePath(), 'utf8');
     const idx = JSON.parse(raw) as IndexFile;
     if (idx.version === 1) return idx.entries;
   } catch {
@@ -168,7 +185,7 @@ async function readIndex(): Promise<SubsystemModelIndexEntry[]> {
 async function writeIndex(entries: SubsystemModelIndexEntry[]): Promise<void> {
   await ensureDir();
   const idx: IndexFile = { version: 1, entries };
-  await fs.writeFile(INDEX_PATH, JSON.stringify(idx, null, 2), 'utf8');
+  await fs.writeFile(indexFilePath(), JSON.stringify(idx, null, 2), 'utf8');
 }
 
 async function upsertIndexEntry(entry: SubsystemModelIndexEntry): Promise<void> {
@@ -184,14 +201,14 @@ async function rebuildIndex(): Promise<SubsystemModelIndexEntry[]> {
   const entries: SubsystemModelIndexEntry[] = [];
   let files;
   try {
-    files = await fs.readdir(ROOT, { withFileTypes: true });
+    files = await fs.readdir(modelsRoot(), { withFileTypes: true });
   } catch {
     return entries;
   }
   for (const f of files) {
     if (!f.isFile() || !f.name.endsWith('.json') || f.name === '_index.json') continue;
     try {
-      const raw = await fs.readFile(join(ROOT, f.name), 'utf8');
+      const raw = await fs.readFile(join(modelsRoot(), f.name), 'utf8');
       const graph = JSON.parse(raw) as StoredSubsystemModel;
       entries.push(indexEntryFor(graph));
     } catch {
@@ -228,6 +245,10 @@ export async function createSubsystemModel(
     createdAt: now,
     updatedAt: now,
   };
+  // Anchor the model to the commit each referenced repo is at now.
+  record.createdAtCommits = capturePurlCommits(
+    doc.components as ReadonlyArray<{ alias?: string; purl?: string }>,
+  );
   await fs.writeFile(graphPath(record.id), JSON.stringify(record, null, 2), 'utf8');
   await upsertIndexEntry(indexEntryFor(record));
   return record;
