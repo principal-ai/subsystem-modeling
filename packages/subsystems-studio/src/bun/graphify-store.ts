@@ -29,6 +29,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parsePurl } from "@principal-ai/alexandria-core-library";
 import { loadAlexandriaRepos, resolveRepoRootFromAlexandria } from "./alexandria";
+import { gitStdout } from "./git-repo";
 import {
 	edgeCount,
 	loadGraphifyGraph,
@@ -47,9 +48,6 @@ const ROOT = join(homedir(), ".principal", "graphify-graphs");
 
 /** Cap per untracked file when folding bytes into the dirty fingerprint. */
 const UNTRACKED_HASH_MAX_BYTES = 1_048_576;
-
-/** Cap captured git output (matches the old spawnSync maxBuffer). */
-const GIT_STDOUT_MAX_BYTES = 32 * 1024 * 1024;
 
 /** Git probe results are stable for the current tree; short TTL collapses
  * repeated HEAD/dirty reads (per purl × per pass) into one git call. */
@@ -208,28 +206,6 @@ export function cachedMetaPath(
 // ---------------------------------------------------------------------------
 // Git / dirty fingerprint / purl resolve
 // ---------------------------------------------------------------------------
-
-async function gitStdout(
-	repoRoot: string,
-	args: string[],
-): Promise<string | null> {
-	const proc = Bun.spawn({
-		cmd: ["git", "-C", repoRoot, ...args],
-		stdio: ["ignore", "pipe", "ignore"],
-	});
-	const stdout = new Response(proc.stdout).text().catch(() => "");
-	const deadline = Bun.sleep(30_000).then(() => {
-		try {
-			proc.kill();
-		} catch {
-			/* noop */
-		}
-	});
-	const text = await Promise.race([stdout, deadline]);
-	const code = await proc.exited;
-	if (code !== 0) return null;
-	return text.slice(0, GIT_STDOUT_MAX_BYTES);
-}
 
 function computeDirtyHash(
 	status: string,

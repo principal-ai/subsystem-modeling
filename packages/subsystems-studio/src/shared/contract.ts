@@ -184,6 +184,27 @@ export interface SessionEventRow {
 	accumulated: AgentSessionEvent | null;
 }
 
+/**
+ * A per-purl pinned commit. Host-binding provenance — the commit a referenced
+ * purl's repo was at when the model was authored / last fully verified. Keyed
+ * by `purlRepoKey` (fragment stripped). A bare commit sha, not an object and
+ * not a dirty fingerprint: a dirty tree has no reproducible name, so it is
+ * never recorded as evidence.
+ */
+export type PurlCommit = string;
+
+/** One row of per-purl commit freshness for a stored model. */
+export interface SubsystemModelPurlFreshness {
+	/** Repo key (`purlRepoKey`, fragment stripped). */
+	purl: string;
+	/** The pinned commit (verifiedAtCommits, falling back to createdAtCommits). */
+	pinned?: string;
+	/** Current HEAD of the resolved checkout, when one is registered locally. */
+	live?: string;
+	/** `match` | `moved` | `unresolved` (no pinned commit, or no local checkout). */
+	status: "match" | "moved" | "unresolved";
+}
+
 /** On-disk record for a persisted subsystem graph. */
 export interface StoredSubsystemModel {
 	id: string;
@@ -202,6 +223,18 @@ export interface StoredSubsystemModel {
 	 * PATCH an existing gist instead of minting a duplicate.
 	 */
 	gist?: { id: string; fileName?: string };
+	/**
+	 * Host-binding provenance: the commit each referenced purl's repo was at
+	 * when the model was first created. Immutable — later updates never rewrite
+	 * it. Absent on records authored before this field existed.
+	 */
+	createdAtCommits?: Record<string, PurlCommit>;
+	/**
+	 * Host-binding provenance: the commit each referenced purl's repo was at
+	 * when the full audit last passed `fully_verified`, stamped only against a
+	 * clean referenced state. Absent until an audit earns it.
+	 */
+	verifiedAtCommits?: Record<string, PurlCommit>;
 }
 
 /**
@@ -291,6 +324,16 @@ export interface SubsystemModelSummary {
 	};
 	/** Pending agent correction proposals awaiting confirm. */
 	pendingProposalCount?: number;
+	/** Host-binding commit provenance mirrored from the record (see PurlCommit). */
+	createdAtCommits?: Record<string, PurlCommit>;
+	/** Commit pinned when the audit last passed fully_verified, per purl. */
+	verifiedAtCommits?: Record<string, PurlCommit>;
+	/**
+	 * Per-purl comparison of the pinned commit against the current checkout.
+	 * Coarse "the repo moved" signal — anchor-level freshness (did a referenced
+	 * file change?) stays with the per-declaration `lineHash`.
+	 */
+	purlFreshness?: SubsystemModelPurlFreshness[];
 	/**
 	 * Deduped component file anchors, derived from the full model the host
 	 * already loads per listing. Powers the list file panel without extra

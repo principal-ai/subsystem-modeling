@@ -33,6 +33,7 @@ import { startHttpServer } from "./http-server";
 import { resolveSandboxed } from "./sandboxed-path";
 import { deleteSubsystemModel, getSubsystemModel, listSubsystemModels, purlRepoKey, resolveRepoRootForComponent, setSubsystemModelChangeListener, startSubsystemModelDirWatcher, subsystemModelFilePath, touchSubsystemModelOpened, updateSubsystemModel } from "./subsystem-model-store";
 import { mergeSubsystemModels, type MergeInputModel } from "./merge-submodel-models";
+import { purlCommitFreshness } from "./purl-commits";
 import { attachSignatureAugmentations } from "./augmentation-store";
 import { publishSubsystemModelGist } from "./gist-publish";
 import {
@@ -1951,6 +1952,12 @@ const requests: RequestHandlers = {
 							gist: e.gist ?? full?.gist,
 							graphify,
 							lastAudit,
+							createdAtCommits: full?.createdAtCommits,
+							verifiedAtCommits: full?.verifiedAtCommits,
+							purlFreshness:
+								full && (full.createdAtCommits || full.verifiedAtCommits)
+									? await purlCommitFreshness(full, full.components)
+									: undefined,
 							pendingProposalCount: pendingCount > 0 ? pendingCount : undefined,
 						};
 					}),

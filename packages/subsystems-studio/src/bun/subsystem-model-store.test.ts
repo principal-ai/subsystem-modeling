@@ -2,18 +2,24 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { toPortableDocument } from "@principal-ai/subsystems-core";
 import {
+	createSubsystemModel,
 	fileDeclaresSymbol,
+	getSubsystemModel,
 	graphIdFromWatchFilename,
 	migrateLegacySubsystemGraphsDir,
 	normalizeDeclarationProvenance,
 	purlRepoKey,
 	resolveRepoRootForComponent,
 	shouldRestampOpened,
+	stampVerifiedCommits,
 	SUBSYSTEM_DECLARATION_PROVENANCES,
 	SUBSYSTEM_EDGE_MECHANISMS,
 	SUBSYSTEM_EDGE_MECHANISMS_COVER_PUBLISHED_UNION,
 	subsystemModelFilePath,
+	updateSubsystemModel,
 	verifyModelFiles,
 	type SubsystemComponent,
 	type SubsystemWalkthroughStep,
@@ -55,13 +61,29 @@ beforeAll(() => {
 		"utf8",
 	);
 	writeFileSync(join(repoB, "deep", "other.py"), "x = 1\n", "utf8");
+	// repoA is a real git checkout so commit-provenance capture has a HEAD.
+	const runGit = (args: string[]) => {
+		const r = spawnSync("git", ["-C", repoA, ...args], {
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
+	};
+	runGit(["init"]);
+	runGit(["config", "user.email", "test@example.com"]);
+	runGit(["config", "user.name", "test"]);
+	runGit(["add", "-A"]);
+	runGit(["commit", "-m", "init"]);
 	registerProjectInAlexandria(repoA, "https://github.com/a/repo-a.git");
 	registerProjectInAlexandria(repoB, "https://github.com/a/repo-b.git");
+	// Keep the model store (create / stamp writes) in the temp home too.
+	process.env["PRINCIPAL_SUBSYSTEM_MODELS_HOME"] = tmp;
 });
 
 afterAll(() => {
 	rmSync(tmp, { recursive: true, force: true });
 	delete process.env["PRINCIPAL_ALEXANDRIA_HOME"];
+	delete process.env["PRINCIPAL_SUBSYSTEM_MODELS_HOME"];
 });
 
 describe("purlRepoKey (store mirror)", () => {
@@ -334,5 +356,87 @@ describe("walkthrough verify pass", () => {
 		expect(reasons.some((r) => r.includes("out of range"))).toBe(true);
 		expect(reasons.some((r) => r.includes("not found"))).toBe(true);
 		expect(reasons.some((r) => r.includes("blank"))).toBe(true);
+	});
+});
+
+describe("commit provenance", () => {
+	const KEY = "pkg:github/a/repo-a";
+	const components: SubsystemComponent[] = [
+		{
+			alias: "a",
+			name: "a",
+			construct: "function",
+			symbol: "a",
+			file: "exists.ts",
+			purl: `${KEY}#exists.ts`,
+		},
+	];
+
+	test("create captures createdAtCommits for each purl, immutable across updates", async () => {
+		const created = await createSubsystemModel({
+			title: "prov",
+			components,
+			relations: [],
+		});
+		const commits = created.createdAtCommits ?? {};
+		expect(commits[KEY]).toMatch(/^[0-9a-f]{40}$/);
+		expect(created.verifiedAtCommits).toBeUndefined();
+
+		const updated = await updateSubsystemModel(created.id, {
+			description: "edit",
+		});
+		expect(updated?.createdAtCommits).toEqual(commits);
+	});
+
+	test("stampVerifiedCommits records verified pins; update preserves them", async () => {
+		const created = await createSubsystemModel({
+			title: "prov2",
+			components,
+			relations: [],
+		});
+		const pin = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+		const stamped = await stampVerifiedCommits(created.id, { [KEY]: pin });
+		expect(stamped?.verifiedAtCommits).toEqual({ [KEY]: pin });
+
+		const updated = await updateSubsystemModel(created.id, {
+			description: "edit again",
+		});
+		expect(updated?.verifiedAtCommits).toEqual({ [KEY]: pin });
+		expect(updated?.createdAtCommits).toEqual(created.createdAtCommits);
+	});
+
+	test("legacy records without the fields read cleanly as unpinned", async () => {
+		const legacyDir = join(tmp, ".principal", "subsystem-models");
+		mkdirSync(legacyDir, { recursive: true });
+		writeFileSync(
+			join(legacyDir, "sg-legacy-1.json"),
+			JSON.stringify({
+				id: "sg-legacy-1",
+				title: "legacy",
+				components,
+				relations: [],
+				createdAt: new Date().toISOString(),
+				updatedAt: new Date().toISOString(),
+			}),
+			"utf8",
+		);
+		const read = await getSubsystemModel("sg-legacy-1");
+		expect(read).not.toBeNull();
+		expect(read?.createdAtCommits).toBeUndefined();
+		expect(read?.verifiedAtCommits).toBeUndefined();
+	});
+});
+
+describe("portable document", () => {
+	test("drops host-binding commit provenance", () => {
+		const portable = toPortableDocument({
+			title: "t",
+			components: [],
+			relations: [],
+			createdAtCommits: { "pkg:github/a/repo-a": "x" },
+			verifiedAtCommits: { "pkg:github/a/repo-a": "y" },
+		} as unknown as Parameters<typeof toPortableDocument>[0]);
+		expect("createdAtCommits" in portable).toBe(false);
+		expect("verifiedAtCommits" in portable).toBe(false);
 	});
 });

@@ -55,11 +55,17 @@ import {
 import { auditBoundaryFields } from "./boundary-audit";
 import {
 	buildAuditFingerprint,
+	classifyAuditReport,
 	saveSubsystemModelAudit,
 } from "./audit-report-store";
 import {
+	capturePurlCommits,
+	referencedFilesClean,
+} from "./purl-commits";
+import {
 	getSubsystemModel,
 	purlRepoKey,
+	stampVerifiedCommits,
 	updateSubsystemModel,
 	verifyModelFiles,
 } from "./subsystem-model-store";
@@ -1354,6 +1360,24 @@ export async function auditSubsystemModel(
 				err instanceof Error ? err.message : String(err)
 			}`,
 		);
+	}
+
+	// Provenance: a full pass earns the verified pin, but only against a clean
+	// referenced state. A dirty anchored file means the proven state has no
+	// reproducible commit, so we leave verifiedAtCommits unstamped.
+	if (classifyAuditReport(report) === "fully_verified") {
+		try {
+			if (await referencedFilesClean(graph.components, graph.walkthroughs)) {
+				const commits = await capturePurlCommits(graph.components);
+				await stampVerifiedCommits(graphId, commits);
+			}
+		} catch (err) {
+			console.warn(
+				`[audit] failed to stamp verified commits for ${graphId}: ${
+					err instanceof Error ? err.message : String(err)
+				}`,
+			);
+		}
 	}
 
 	return {

@@ -15,7 +15,9 @@ import { homedir } from "node:os";
 import { join, basename } from "node:path";
 import { deriveGraphEdges } from "@principal-ai/subsystems-core";
 import { resolveRepoRootFromAlexandria } from "./alexandria";
+import { capturePurlCommits } from "./purl-commits";
 import type {
+	PurlCommit,
 	SubsystemComponent,
 	SubsystemComponentEdge,
 	SubsystemEdgeMechanism,
@@ -39,9 +41,27 @@ export type {
 	SubsystemWalkthroughStep,
 };
 
-const ROOT = join(homedir(), ".principal", "subsystem-models");
-const LEGACY_ROOT = join(homedir(), ".principal", "subsystem-graphs");
-const INDEX_PATH = join(ROOT, "_index.json");
+/**
+ * Root home for the store. `PRINCIPAL_SUBSYSTEM_MODELS_HOME` overrides
+ * `homedir()` for tests (mirrors PRINCIPAL_ALEXANDRIA_HOME). Resolved lazily so
+ * an override set after module load still applies.
+ */
+function storeHome(): string {
+	const override = process.env["PRINCIPAL_SUBSYSTEM_MODELS_HOME"]?.trim();
+	return override ? override : homedir();
+}
+
+function modelsRoot(): string {
+	return join(storeHome(), ".principal", "subsystem-models");
+}
+
+function legacyModelsRoot(): string {
+	return join(storeHome(), ".principal", "subsystem-graphs");
+}
+
+function indexFilePath(): string {
+	return join(modelsRoot(), "_index.json");
+}
 
 let legacyMigrateAttempted = false;
 
@@ -107,7 +127,7 @@ export async function startSubsystemModelDirWatcher(): Promise<() => void> {
 	}
 	await ensureDir();
 	try {
-		dirWatcher = watch(ROOT, { persistent: false }, (_event, filename) => {
+		dirWatcher = watch(modelsRoot(), { persistent: false }, (_event, filename) => {
 			const id = graphIdFromWatchFilename(
 				typeof filename === "string" ? filename : undefined,
 			);
@@ -131,7 +151,7 @@ export async function startSubsystemModelDirWatcher(): Promise<() => void> {
 		});
 	} catch (err) {
 		console.warn(
-			`[subsystem-model-store] could not watch ${ROOT}: ${(err as Error).message}`,
+			`[subsystem-model-store] could not watch ${modelsRoot()}: ${(err as Error).message}`,
 		);
 		dirWatcher = null;
 	}
@@ -174,6 +194,18 @@ export interface StoredSubsystemModel extends SubsystemModelDocument {
 	 * the same gist instead of creating another.
 	 */
 	gist?: { id: string; fileName?: string };
+	/**
+	 * Host-binding provenance: the commit each referenced purl's repo was at
+	 * when the model was created. Immutable. Keyed by `purlRepoKey`. Absent on
+	 * records authored before this field existed.
+	 */
+	createdAtCommits?: Record<string, PurlCommit>;
+	/**
+	 * Host-binding provenance: the commit each referenced purl's repo was at
+	 * when the audit last passed `fully_verified` against a clean referenced
+	 * state. Absent until an audit earns it.
+	 */
+	verifiedAtCommits?: Record<string, PurlCommit>;
 	/**
 	 * Result of the last file-existence verification pass (run on create and
 	 * on component/root updates). Repos without a known local root are
@@ -592,7 +624,7 @@ function graphId(): string {
 }
 
 function graphPath(id: string): string {
-	return join(ROOT, `${id}.json`);
+	return join(modelsRoot(), `${id}.json`);
 }
 
 /** Absolute on-disk path for a stored subsystem graph JSON file. */
@@ -609,8 +641,8 @@ export async function migrateLegacySubsystemGraphsDir(roots?: {
 	legacyRoot?: string;
 	root?: string;
 }): Promise<boolean> {
-	const legacyRoot = roots?.legacyRoot ?? LEGACY_ROOT;
-	const root = roots?.root ?? ROOT;
+	const legacyRoot = roots?.legacyRoot ?? legacyModelsRoot();
+	const root = roots?.root ?? modelsRoot();
 	const skipOnceGuard = roots != null;
 
 	if (!skipOnceGuard) {
@@ -694,7 +726,7 @@ export async function migrateLegacySubsystemGraphsDir(roots?: {
 
 async function ensureDir(): Promise<void> {
 	await migrateLegacySubsystemGraphsDir();
-	await fs.mkdir(ROOT, { recursive: true });
+	await fs.mkdir(modelsRoot(), { recursive: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -703,7 +735,7 @@ async function ensureDir(): Promise<void> {
 
 async function readIndex(): Promise<SubsystemModelIndexEntry[]> {
 	try {
-		const raw = await fs.readFile(INDEX_PATH, "utf8");
+		const raw = await fs.readFile(indexFilePath(), "utf8");
 		const idx = JSON.parse(raw) as IndexFile;
 		if (idx.version === 1) return idx.entries;
 	} catch {
@@ -733,14 +765,14 @@ async function rebuildIndex(): Promise<SubsystemModelIndexEntry[]> {
 	const entries: SubsystemModelIndexEntry[] = [];
 	let files;
 	try {
-		files = await fs.readdir(ROOT, { withFileTypes: true });
+		files = await fs.readdir(modelsRoot(), { withFileTypes: true });
 	} catch {
 		return entries;
 	}
 	for (const f of files) {
 		if (!f.isFile() || !f.name.endsWith(".json") || f.name === "_index.json") continue;
 		try {
-			const raw = await fs.readFile(join(ROOT, f.name), "utf8");
+			const raw = await fs.readFile(join(modelsRoot(), f.name), "utf8");
 			const graph = JSON.parse(raw) as StoredSubsystemModel;
 			entries.push(indexEntryFor(graph));
 		} catch {
@@ -755,7 +787,7 @@ async function rebuildIndex(): Promise<SubsystemModelIndexEntry[]> {
 async function writeIndex(entries: SubsystemModelIndexEntry[]): Promise<void> {
 	await ensureDir();
 	const idx: IndexFile = { version: 1, entries };
-	await fs.writeFile(INDEX_PATH, JSON.stringify(idx, null, 2), "utf8");
+	await fs.writeFile(indexFilePath(), JSON.stringify(idx, null, 2), "utf8");
 }
 
 async function upsertIndexEntry(entry: SubsystemModelIndexEntry): Promise<void> {
@@ -815,6 +847,8 @@ export async function createSubsystemModel(
 		updatedAt: now,
 	};
 	record.verification = await verifyModelFiles(record);
+	// What the model was authored against — captured once, never rewritten.
+	record.createdAtCommits = await capturePurlCommits(record.components);
 	noteSelfWrite(record.id);
 	await fs.writeFile(graphPath(record.id), JSON.stringify(record, null, 2), "utf8");
 	await upsertIndexEntry(indexEntryFor(record));
@@ -847,6 +881,34 @@ export async function updateSubsystemModel(
 		updatedAt: new Date().toISOString(),
 	};
 	updated.verification = await verifyModelFiles(updated);
+	noteSelfWrite(id);
+	await fs.writeFile(graphPath(id), JSON.stringify(updated, null, 2), "utf8");
+	await upsertIndexEntry(indexEntryFor(updated));
+	emitSubsystemModelChange({ graphId: id, reason: "updated" });
+	return updated;
+}
+
+/**
+ * Record the commit each purl's repo is at now as the model's verified
+ * provenance. Called only by the audit path, and only when the audit returned
+ * `fully_verified` against a clean referenced state.
+ *
+ * Replaces `verifiedAtCommits` wholesale (latest-only): the map reflects the
+ * purls verified in this pass, so a purl that is currently unresolved is not
+ * silently carried over from a previous run. Does not bump `updatedAt` — this
+ * is provenance, not an edit, and bumping it would invalidate the audit
+ * fingerprint that was just saved.
+ */
+export async function stampVerifiedCommits(
+	id: string,
+	commits: Record<string, PurlCommit>,
+): Promise<StoredSubsystemModel | null> {
+	const existing = await getSubsystemModel(id);
+	if (!existing) return null;
+	const updated: StoredSubsystemModel = {
+		...existing,
+		verifiedAtCommits: commits,
+	};
 	noteSelfWrite(id);
 	await fs.writeFile(graphPath(id), JSON.stringify(updated, null, 2), "utf8");
 	await upsertIndexEntry(indexEntryFor(updated));
