@@ -174,8 +174,13 @@ export type {
 } from './subsystem/paths';
 export { SubsystemFileTree } from './subsystem/SubsystemFileTree';
 export type { SubsystemFileTreeProps } from './subsystem/SubsystemFileTree';
-export { WalkthroughsPanel, WALKTHROUGH_PLAY_PAUSE_MS } from './subsystem/WalkthroughsPanel';
+export {
+  WalkthroughsPanel,
+  WALKTHROUGH_PLAY_PAUSE_MS,
+  STEP_COPY_FEEDBACK_MS,
+} from './subsystem/WalkthroughsPanel';
 export type { WalkthroughsPanelProps } from './subsystem/WalkthroughsPanel';
+export { buildStepBrief } from './subsystem/walkthroughBrief';
 export { GraphLayoutCover } from './subsystem/GraphLayoutCover';
 export type { GraphLayoutCoverProps } from './subsystem/GraphLayoutCover';
 export {

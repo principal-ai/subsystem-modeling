@@ -246,6 +246,12 @@ export interface SubsystemComponentGraphProps {
    */
   zoomOnWalkthroughFocus?: boolean;
   /**
+   * Duration (ms) of the camera pan/zoom when a walkthrough step or flow is
+   * focused. Higher = a slower, more legible flight between steps.
+   * @default 300
+   */
+  walkthroughFocusDurationMs?: number;
+  /**
    * Subsystem title rendered as a non-interactive overlay chip on the graph
    * canvas (top-center). Does not trigger the sidebar — for graph-only
    * embeds that still need to name what they show.
@@ -314,6 +320,13 @@ export interface SubsystemComponentGraphProps {
    */
   renderWalkthroughViewer?: (ctx: WalkthroughViewerContext) => ReactNode;
   /**
+   * Suppress the bottom file/walkthrough drawer entirely. Focusing a step then
+   * only frames it on the canvas (and dims the rest) without dropping a snippet
+   * panel below — for embeds that want the camera to tell the story. Defaults
+   * to false.
+   */
+  hideDrawer?: boolean;
+  /**
    * Legacy component-keyed variant, kept for backward compatibility. When
    * `renderFileViewer` is absent, drawer content resolves via the first
    * component whose `file` matches the opened path.
@@ -345,6 +358,14 @@ export interface SubsystemComponentGraphProps {
    * where the user left off. Omit to keep the state purely in-memory.
    */
   persistKey?: string;
+  /**
+   * Explicit frame colors for boundary regions, keyed by region key (the
+   * component's `process` / `module` value, or the package purl key). A key
+   * present here overrides the library's derived `packageColor`. Hosts use this
+   * to pin the colors a given surface cares about (e.g. a marketing hero)
+   * instead of accepting the hash. Unmapped regions keep the derived color.
+   */
+  boundaryColors?: Record<string, string>;
 }
 
 const nodeTypes: NodeTypes = {
@@ -449,9 +470,9 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, relations, walkthroughs, initialWalkthroughId, onReorderWalkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, componentVerification, onInspectSymbol, persistKey }: InnerProps) {
+function Inner({ components, relations, walkthroughs, initialWalkthroughId, onReorderWalkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, walkthroughFocusDurationMs = 300, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, hideDrawer = false, persistKey }: InnerProps) {
   const { theme } = useTheme();
-  const { fitView } = useReactFlow();
+  const { fitView, fitBounds } = useReactFlow();
   const viewport = useViewport();
   // Restored once per mount from `localStorage` (see `readViewState`). Each
   // graph is its own tab/mount, so `persistKey` is stable for a mount.
@@ -460,9 +481,14 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
     () => deriveGraphEdges({ relations, walkthroughs }),
     [relations, walkthroughs],
   );
-  const [built, setBuilt] = useState<{ nodes: Node[]; edges: Edge[] }>({
+  const [built, setBuilt] = useState<{
+    nodes: Node[];
+    edges: Edge[];
+    absoluteRects: Map<string, { x: number; y: number; width: number; height: number }>;
+  }>({
     nodes: [],
     edges: [],
+    absoluteRects: new Map(),
   });
   const [layoutReady, setLayoutReady] = useState(false);
   const [selected, setSelected] = useState<SubsystemComponent | null>(null);
@@ -615,31 +641,50 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
     if (drawerTarget?.kind !== 'walkthrough' || !walkthroughs) return null;
     return walkthroughs.find((t) => t.id === drawerTarget.walkthroughId) ?? null;
   }, [drawerTarget, walkthroughs]);
+  // Autoplay focus: a sidebar-less embed has no expanded flow to "open", so
+  // branding every step as a selection would hide all other nodes. Instead the
+  // autoplay sets this (flow id + step) to frame the hop and dim the rest —
+  // same treatment as hover — without hiding anything. Declared before the
+  // overlay memos, which read it to title the canvas chip + step bar.
+  const [autoPlayFocus, setAutoPlayFocus] = useState<
+    { walkthroughId: string; stepIndex: number } | null
+  >(null);
   // Ref mirror of the drawer's walkthrough id so the symbol resolver stays
   // stable across graph re-renders (the drawer is memoized on callback identity).
   const drawerWalkthroughIdRef = useRef<string | null>(null);
   drawerWalkthroughIdRef.current = focusedWalkthrough?.id ?? null;
 
-  // Walkthrough shown on the canvas title chip (focus or hover/autoplay highlight).
+  // Walkthrough shown on the canvas title chip (focus, hover highlight, or
+  // autoplay focus).
   const overlayWalkthroughTitle = useMemo(() => {
     if (!showWalkthroughTitle || !walkthroughs?.length) return null;
-    const id = focusedWalkthroughId ?? hoveredWalkthroughStep?.walkthroughId;
+    const id =
+      focusedWalkthroughId ??
+      autoPlayFocus?.walkthroughId ??
+      hoveredWalkthroughStep?.walkthroughId;
     if (!id) return null;
     return walkthroughs.find((t) => t.id === id)?.title ?? null;
   }, [
     showWalkthroughTitle,
     walkthroughs,
     focusedWalkthroughId,
+    autoPlayFocus,
     hoveredWalkthroughStep,
   ]);
 
   // Active step for the bottom-of-title progress + annotation chip.
   const overlayWalkthroughStep = useMemo(() => {
     if (!showWalkthroughTitle || !walkthroughs?.length) return null;
-    const tlId = focusedWalkthroughId ?? hoveredWalkthroughStep?.walkthroughId ?? null;
+    const tlId =
+      focusedWalkthroughId ??
+      autoPlayFocus?.walkthroughId ??
+      hoveredWalkthroughStep?.walkthroughId ??
+      null;
     let stepIndex: number | null = null;
     if (focusedWalkthroughId != null) {
       stepIndex = focusedStepIndex;
+    } else if (autoPlayFocus != null) {
+      stepIndex = autoPlayFocus.stepIndex;
     } else if (hoveredWalkthroughStep != null) {
       stepIndex = hoveredWalkthroughStep.stepIndex;
     }
@@ -657,6 +702,7 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
     walkthroughs,
     focusedWalkthroughId,
     focusedStepIndex,
+    autoPlayFocus,
     hoveredWalkthroughStep,
   ]);
 
@@ -719,7 +765,7 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
       showEdgeLabels,
       showSingletonFrames,
     })
-      .then(({ nodes, edges: e }) => {
+      .then(({ nodes, edges: e, absoluteRects }) => {
         if (!alive) return;
         // Prune dims for removed leaves; keep measurements for stable ids so a
         // live update can finish Pass 2 without waiting on new `dimensions` events.
@@ -729,14 +775,14 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
         for (const id of measuredDimsRef.current.keys()) {
           if (!leafIds.has(id)) measuredDimsRef.current.delete(id);
         }
-        setBuilt({ nodes, edges: e as Edge[] });
+        setBuilt({ nodes, edges: e as Edge[], absoluteRects });
         setLayoutReady(false);
       })
       .catch((err) => {
         console.warn('[subsystem-graph] initial layout failed:', err);
         if (!alive) return;
         // Reveal the cover even on failure so the UI is not stuck forever.
-        setBuilt({ nodes: [], edges: [] });
+        setBuilt({ nodes: [], edges: [], absoluteRects: new Map() });
         setLayoutReady(true);
       });
     return () => { alive = false; };
@@ -769,9 +815,9 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
       { components, relations, walkthroughs },
       { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights, showSingletonFrames },
     )
-      .then(({ nodes, edges: e }) => {
+      .then(({ nodes, edges: e, absoluteRects }) => {
         if (gen !== pass2GenRef.current) return;
-        setBuilt({ nodes, edges: e as Edge[] });
+        setBuilt({ nodes, edges: e as Edge[], absoluteRects });
         setLayoutReady(true);
       })
       .catch((err) => {
@@ -871,6 +917,11 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
   // Edge ids in walkthrough focus (an active flow's edge set, or a single
   // step's edge). Used to frame the camera. `null` = no walkthrough focus.
   const focusEdgeIds = useMemo(() => {
+    if (autoPlayFocus) {
+      const tl = walkthroughs?.find((t) => t.id === autoPlayFocus.walkthroughId);
+      const step = tl?.steps[autoPlayFocus.stepIndex];
+      return step ? new Set([walkthroughStepGraphEdgeId(step)]) : null;
+    }
     if (focusedWalkthroughId == null || !walkthroughs) return null;
     const tl = walkthroughs.find((t) => t.id === focusedWalkthroughId);
     if (!tl) return null;
@@ -879,7 +930,7 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
       return step ? new Set([walkthroughStepGraphEdgeId(step)]) : null;
     }
     return new Set(tl.steps.map((s) => walkthroughStepGraphEdgeId(s)));
-  }, [walkthroughs, focusedWalkthroughId, focusedStepIndex]);
+  }, [walkthroughs, focusedWalkthroughId, focusedStepIndex, autoPlayFocus]);
 
   // 1-based step numbers per edge of the active flow (focused or
   // hover/autoplay-highlighted). An edge can appear in more than one step.
@@ -933,12 +984,17 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
   // selected + hovered participants. Whole-flow focus (or no focus) keeps
   // the old hover-replace preview so a step hover still dims the rest.
   const previewEdgeIds = useMemo(() => {
+    // Autoplay drives focus without a hover, so its hop is the preview set.
+    if (autoPlayFocus) return focusEdgeIds;
     if (!hoverEdgeIds) return null;
+    // While hovering with a *step* already selected, brighten the union of
+    // selected + hovered participants; whole-flow focus keeps the old
+    // hover-replace preview so a step hover still dims the rest.
     if (focusedStepIndex == null || !focusEdgeIds) return hoverEdgeIds;
     const ids = new Set(hoverEdgeIds);
     for (const id of focusEdgeIds) ids.add(id);
     return ids;
-  }, [hoverEdgeIds, focusEdgeIds, focusedStepIndex]);
+  }, [hoverEdgeIds, focusEdgeIds, focusedStepIndex, autoPlayFocus]);
   const previewNodeIds = useMemo(
     () => endpointsOf(previewEdgeIds),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -980,42 +1036,54 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
     // While a step/flow is hovered, selected + hovered participants stay
     // bright; everything else among the currently-visible (opened-walkthrough)
     // nodes is dimmed. Nodes outside the opened-walkthrough set stay hidden.
+    // Exception: with no expanded flow at all (a sidebar-less embed), there is
+    // nothing to hide toward — everything shows, and focus/hover only dims.
+    const noOpenedFlow = openedEdgeIds == null;
     return xyflowNodesBase.map((n) => {
       // Boundary frames follow their members: hidden when no member is
       // visible, dimmed when members are dimmed. Never selectable.
       if (n.type === 'subsystem-group') {
-        const memberAliases = ((n.data as { region?: { memberAliases?: string[] } } | undefined)?.region?.memberAliases) ?? [];
+        const region = (n.data as { region?: { key?: string; memberAliases?: string[] } } | undefined)?.region;
+        const memberAliases = region?.memberAliases ?? [];
+        // Hover/autoplay dim-only: never hide a frame (see the node branch).
         const vis = flowElementVisibility({
           inOpened: memberAliases.some((alias) => openedNodeIds?.has(alias) === true),
           inSelected: memberAliases.some((alias) => brightNodeIds?.has(alias) === true),
           anyOpened: openedNodeIds != null,
-          anySelected: brightNodeIds != null,
+          anySelected: brightNodeIds != null || previewNodeIds != null,
         });
         const dimmed = previewNodeIds
           ? vis.hidden || !memberAliases.some((alias) => previewNodeIds.has(alias))
           : vis.dimmed;
-        const hidden = vis.hidden;
+        const hidden = noOpenedFlow ? false : vis.hidden;
+        // Host override wins over the library's derived frame color.
+        const color = region?.key != null ? boundaryColors?.[region.key] : undefined;
         return {
           ...n,
           hidden,
           selectable: false,
           data: {
             ...(n.data as object),
+            ...(color != null && { color }),
             ...(dimmed && { dimmed: true }),
           },
         };
       }
       const comp = (n.data as { component?: SubsystemComponent } | undefined)?.component;
       const fileMatch = fileMatchForNode(comp?.file, openFile, focusNodeIds?.has(n.id) === true);
+      // Hover/autoplay is a dim-only signal: never hide non-participants (there
+      // may be no "opened" flow to reveal them, e.g. a sidebar-less autoplay
+      // embed), only dim them. Bases selection on the focused step, not the
+      // hover preview, so hovering doesn't strip the frame's `isSelected`.
       const isSelected = selected?.alias !== undefined && comp?.alias === selected.alias;
       const vis = flowElementVisibility({
         inOpened: openedNodeIds?.has(n.id) === true,
         inSelected: brightNodeIds?.has(n.id) === true,
         anyOpened: openedNodeIds != null,
-        anySelected: brightNodeIds != null,
+        anySelected: brightNodeIds != null || previewNodeIds != null,
       });
       const dimmed = previewNodeIds ? (vis.hidden || !previewNodeIds.has(n.id)) : vis.dimmed;
-      const hidden = vis.hidden;
+      const hidden = noOpenedFlow ? false : vis.hidden;
       if (fileMatch === undefined && !isSelected && !dimmed) {
         const { fileMatch: _f, isSelected: _s, dimmed: _d, ...rest } = n.data as Record<string, unknown>;
         return { ...n, hidden, data: rest };
@@ -1031,7 +1099,7 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
         },
       };
     });
-  }, [xyflowNodesBase, openFile, selected, focusNodeIds, openedNodeIds, brightNodeIds, previewNodeIds]);
+  }, [xyflowNodesBase, openFile, selected, focusNodeIds, openedNodeIds, brightNodeIds, previewNodeIds, boundaryColors]);
 
   const baseNodesKey = useMemo(() => nodes.map((n) => n.id).sort().join(','), [nodes]);
   const baseEdgesKey = useMemo(
@@ -1222,15 +1290,46 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
   // `file` + anchored `declarationRef.startLine` when verify resolved one,
   // else the file top. Uses the same open path as the declaration panel's
   // file link, so the drawer and file tree stay in sync.
+  // Boundary region currently framed by a double-click, so a second
+  // double-click on the same boundary zooms back out to the whole graph.
+  const [focusedBoundaryKey, setFocusedBoundaryKey] = useState<string | null>(null);
   const onNodeDoubleClick: NodeMouseHandler = useCallback(
     (_e, node: Node) => {
+      // Boundary frame → frame its members on the canvas; double-click again to
+      // zoom back out. User-initiated, so it ignores the walkthrough zoom gate.
+      if (node.type === 'subsystem-group') {
+        const key =
+          (node.data as { region?: { key?: string } } | undefined)?.region?.key;
+        if (!key) return;
+        if (focusedBoundaryKey === key) {
+          setFocusedBoundaryKey(null);
+          fitView({
+            padding: 0.1,
+            includeHiddenNodes: false,
+            minZoom: 0.05,
+            maxZoom: 2,
+            duration: 300,
+          });
+          return;
+        }
+        setFocusedBoundaryKey(key);
+        // Frame the boundary node itself (not its members): the frame extends
+        // above its topmost member for the label, and fitting members alone
+        // clipped that top. The group node carries the full laid-out bounds.
+        fitView({
+          nodes: [{ id: node.id }],
+          padding: 0.25,
+          duration: 300,
+        });
+        return;
+      }
       if (node.type !== 'subsystem-component') return;
       const comp = (node.data as { component?: SubsystemComponent } | undefined)?.component;
       if (!comp?.file) return;
       const startLine = comp.declarationRef?.startLine;
       onOpenDeclarationFile(comp.file, startLine != null ? { startLine } : undefined);
     },
-    [onOpenDeclarationFile],
+    [onOpenDeclarationFile, fitView, focusedBoundaryKey],
   );
 
   const onOpenFileFromWalkthrough = useCallback(
@@ -1274,27 +1373,70 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
     return () => window.removeEventListener('keydown', onKey);
   }, [fileOverlayOpen, closeFileOverlay]);
 
-  // Camera helper shared by the walkthrough interactions: frames the focused
-  // edges' endpoint nodes via `fitView({ nodes })`, which uses the store's
-  // live positions + measured dims — so the frame always includes BOTH
-  // components the edge attaches to (and therefore the edge line between them).
+  // Camera helper shared by the walkthrough interactions. Fits the union of
+  // the focused edges' endpoint rects AND their routed waypoints — the edge
+  // carries its full polyline (`elkPathPoints`, absolute flow coords), so the
+  // frame is the line the hop actually traces. That keeps a hop whose route
+  // bulges out around intervening nodes from being clipped at the viewport
+  // edge, and it is the edge's own geometry doing the guiding, not fudge
+  // padding.
   const fitFocusBounds = useCallback(
     (ids: ReadonlySet<string>) => {
       if (!zoomOnWalkthroughFocus) return;
       const nodeIds = new Set<string>();
+      const points: { x: number; y: number }[] = [];
       for (const e of baseEdges) {
         if (!ids.has(e.id)) continue;
         nodeIds.add(e.source);
         nodeIds.add(e.target);
+        const pts = (e.data as { elkPathPoints?: { x: number; y: number }[] } | undefined)
+          ?.elkPathPoints;
+        if (pts?.length) points.push(...pts);
       }
       if (nodeIds.size === 0) return;
-      fitView({
-        nodes: [...nodeIds].map((id) => ({ id })),
-        padding: 0.25,
-        duration: 300,
+
+      // Box the focused edge(s): endpoint node rects UNION the routed line's
+      // waypoints. Both come from the layout in absolute flow coords, so no
+      // coordinate-space mixing (React Flow's grouped child `position`s are
+      // parent-relative and would skew the box).
+      const rects = built.absoluteRects;
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const id of nodeIds) {
+        const r = rects.get(id);
+        if (!r) continue;
+        minX = Math.min(minX, r.x);
+        minY = Math.min(minY, r.y);
+        maxX = Math.max(maxX, r.x + r.width);
+        maxY = Math.max(maxY, r.y + r.height);
+      }
+      for (const p of points) {
+        minX = Math.min(minX, p.x);
+        minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x);
+        maxY = Math.max(maxY, p.y);
+      }
+      if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
+      const bounds = {
+        x: minX,
+        y: minY,
+        width: Math.max(1, maxX - minX),
+        height: Math.max(1, maxY - minY),
+      };
+      fitBounds(bounds, {
+        padding: 0.15,
+        duration: walkthroughFocusDurationMs,
       });
     },
-    [baseEdges, fitView, zoomOnWalkthroughFocus],
+    [
+      baseEdges,
+      built.absoluteRects,
+      fitBounds,
+      zoomOnWalkthroughFocus,
+      walkthroughFocusDurationMs,
+    ],
   );
 
   // Zoom back out to the full diagram after the last expanded walkthrough
@@ -1468,8 +1610,11 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
     prevPreviewEdgeIdsRef.current = previewEdgeIds;
 
     if (!zoomOnWalkthroughFocus || walkthroughStepMode === 'dim') return;
-    // Camera follows hover only when a specific step is already focused.
-    if (focusedWalkthroughId == null || focusedStepIndex == null) return;
+    // Camera follows hover only when a specific step is already focused (or
+    // autoplay is driving an auto-focus).
+    if (!autoPlayFocus && (focusedWalkthroughId == null || focusedStepIndex == null)) {
+      return;
+    }
 
     if (previewEdgeIds) {
       fitFocusBounds(previewEdgeIds);
@@ -1483,46 +1628,93 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
     focusEdgeIds,
     focusedWalkthroughId,
     focusedStepIndex,
+    autoPlayFocus,
     fitFocusBounds,
     zoomOnWalkthroughFocus,
     walkthroughStepMode,
   ]);
 
-  // Graph-only embeds: cycle walkthrough steps with hover-style dimming.
+  // Graph-only embeds: cycle walkthrough steps. In `focus` mode each step is
+  // selected (camera frames it via fitFocusBounds) and, when a walkthrough
+  // viewer is supplied, its snippet drawer opens; in `dim` mode it only
+  // dim-highlights the step (hover-style) with no camera move.
   useEffect(() => {
-    if (!autoPlayWalkthroughs || !walkthroughs?.length || !layoutReady) return;
+    if (!autoPlayWalkthroughs || walkthroughs == null || walkthroughs.length === 0) return;
+    if (!layoutReady) return;
     const playable = walkthroughs.filter((tl) => tl.steps.length > 0);
     if (playable.length === 0) return;
+    // Only run the cycles that can actually be shown in the current edge view.
+    const inView = playable.filter((tl) =>
+      tl.steps.some((s) =>
+        resolvedEdgeView === 'relations'
+          ? isRelationMechanism(s.mechanism)
+          : isWalkthroughMechanism(s.mechanism),
+      ),
+    );
+    if (inView.length === 0) return;
+    const cyc = inView;
 
     let cancelled = false;
     let tlIdx = 0;
     let stepIdx = 0;
     let timer: number | null = null;
     const interval = Math.max(400, walkthroughAutoPlayIntervalMs);
+    const focusMode = walkthroughStepMode !== 'dim';
+    let cleanup = () => {};
 
     const tick = () => {
       if (cancelled) return;
-      const tl = playable[tlIdx]!;
+      const tl = cyc[tlIdx]!;
       setSelected(null);
       setSelectedEdgeId(null);
-      setFocusedWalkthroughId(null);
-      setFocusedStepIndex(null);
-      setHoveredWalkthroughStep({ walkthroughId: tl.id, stepIndex: stepIdx });
+      if (focusMode) {
+        setHoveredWalkthroughStep(null);
+        setFocusedWalkthroughId(null);
+        setFocusedStepIndex(null);
+        setAutoPlayFocus({ walkthroughId: tl.id, stepIndex: stepIdx });
+        if (!hideDrawer) {
+          const step = tl.steps[stepIdx];
+          if (step) {
+            if (renderWalkthroughViewer) {
+              setDrawerTarget({ kind: 'walkthrough', walkthroughId: tl.id, stepIndex: stepIdx });
+            } else {
+              setDrawerTarget({ kind: 'file', file: step.file, startLine: step.line });
+            }
+          }
+        }
+      } else {
+        setAutoPlayFocus(null);
+        setFocusedWalkthroughId(null);
+        setFocusedStepIndex(null);
+        setHoveredWalkthroughStep({ walkthroughId: tl.id, stepIndex: stepIdx });
+      }
       stepIdx += 1;
       if (stepIdx >= tl.steps.length) {
         stepIdx = 0;
-        tlIdx = (tlIdx + 1) % playable.length;
+        tlIdx = (tlIdx + 1) % cyc.length;
       }
       timer = window.setTimeout(tick, interval);
     };
 
     tick();
-    return () => {
+    cleanup = () => {
       cancelled = true;
       if (timer != null) window.clearTimeout(timer);
       setHoveredWalkthroughStep(null);
+      setFocusedWalkthroughId(null);
+      setFocusedStepIndex(null);
+      setAutoPlayFocus(null);
     };
-  }, [autoPlayWalkthroughs, walkthroughs, walkthroughAutoPlayIntervalMs, layoutReady]);
+    return cleanup;
+  }, [
+    autoPlayWalkthroughs,
+    walkthroughs,
+    walkthroughAutoPlayIntervalMs,
+    layoutReady,
+    walkthroughStepMode,
+    renderWalkthroughViewer,
+    hideDrawer,
+  ]);
 
   // Arrow keys step through the focused walkthrough once a step is active
   // (sidebar click or drawer open). Ignores typing targets and chords.
@@ -2347,6 +2539,7 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
         onClose={closeDrawer}
         fillHeight={drawerFillHeight}
         suppressEscape={fileOverlayOpen}
+        hidden={hideDrawer}
       >
         {drawerTarget?.kind === 'walkthrough' &&
         focusedWalkthrough &&

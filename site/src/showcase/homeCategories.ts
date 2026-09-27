@@ -40,6 +40,8 @@ export type HomeCategory = {
     edgeView: SubsystemEdgeView;
     autoPlayWalkthroughs: boolean;
     showWalkthroughTitle: boolean;
+    /** Explicit boundary frame colors (region key → color); host override. */
+    boundaryColors?: Record<string, string>;
   };
 };
 
@@ -67,6 +69,11 @@ export type HomeProgressionExample = {
   caseDir: string;
   source: HomeProgressionSource;
   copy: HomeProgressionCopy;
+  /**
+   * Explicit boundary frame colors keyed by process region key. Overrides the
+   * library's derived color so the homepage can pin e.g. client vs server.
+   */
+  boundaryColors?: Record<string, string>;
 };
 
 function constructsOnly(components: readonly SubsystemComponent[]): SubsystemComponent[] {
@@ -81,7 +88,8 @@ function staticView(components: readonly SubsystemComponent[]): SubsystemCompone
 }
 
 function dynamicView(components: readonly SubsystemComponent[]): SubsystemComponent[] {
-  // Dynamic topology = process (runtime) + module (containment).
+  // Dynamic topology keeps process (runtime) + module (containment); the layer
+  // switches the edge vocabulary to runtime seams (walkthrough hops).
   return [...components];
 }
 
@@ -116,6 +124,7 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
         edgeView: 'relations',
         autoPlayWalkthroughs: false,
         showWalkthroughTitle: false,
+        boundaryColors: example.boundaryColors,
       },
     },
     {
@@ -134,6 +143,7 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
         edgeView: 'relations',
         autoPlayWalkthroughs: false,
         showWalkthroughTitle: false,
+        boundaryColors: example.boundaryColors,
       },
     },
     {
@@ -144,14 +154,17 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
         title,
         description: source.description,
         components: dynamicView(source.components),
-        relations: source.relations,
-        walkthroughs: undefined,
+        // Runtime layer: mechanism edges from the walkthrough hops replace the
+        // structural relations, over the process/module containment frames.
+        relations: [],
+        walkthroughs: source.walkthroughs,
       },
       graph: {
         showEdgeLabels: true,
-        edgeView: 'relations',
+        edgeView: 'walkthroughs',
         autoPlayWalkthroughs: false,
         showWalkthroughTitle: false,
+        boundaryColors: example.boundaryColors,
       },
     },
     {
@@ -170,6 +183,7 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
         edgeView: 'walkthroughs',
         autoPlayWalkthroughs: true,
         showWalkthroughTitle: true,
+        boundaryColors: example.boundaryColors,
       },
     },
   ];
@@ -179,6 +193,12 @@ export const homeProgressionExamples: Record<string, HomeProgressionExample> = {
   booking: {
     id: 'booking',
     caseDir: bookingPageCase.caseDir,
+    // Pin the client/server frames: the library's hash collides on these two
+    // keys (both reduce to the same slot), so decide them here instead.
+    boundaryColors: {
+      'booking-web/client': '#e3b341',
+      'booking-web/server': '#6c9eff',
+    },
     source: {
       title: bookingPageCase.model.title,
       description: bookingPageCase.model.description,
@@ -197,9 +217,9 @@ export const homeProgressionExamples: Record<string, HomeProgressionExample> = {
           'Layer 2 — add structural relations. Containment and runtime come next.',
       },
       'dynamic-topology': {
-        blurb: 'Mark where each one runs — client vs server.',
+        blurb: 'Same nodes, framed by process — now wired by runtime seams.',
         description:
-          'Layer 3 — same nodes, framed by process (booking-web/client · booking-web/server), plus module containment.',
+          'Layer 3 — process framing (booking-web/client · booking-web/server) plus module containment, with runtime mechanism edges (calls / reads / writes) replacing the structural relations.',
       },
       walkthrough: {
         blurb: 'Follow pick, book, and cancel at the real file:line seams.',
@@ -229,9 +249,9 @@ export const homeProgressionExamples: Record<string, HomeProgressionExample> = {
           'Layer 2 — add structural relations. Containment and runtime come next.',
       },
       'dynamic-topology': {
-        blurb: 'Mark where each one runs — orders-api vs payments-api.',
+        blurb: 'Same nodes, framed by process — now wired by runtime seams.',
         description:
-          'Layer 3 — same nodes, framed by process (orders-api · payments-api), plus module containment.',
+          'Layer 3 — process framing (orders-api · payments-api) plus module containment, with runtime mechanism edges replacing the structural relations.',
       },
       walkthrough: {
         blurb: 'Follow a traced GET and POST across the real seams.',

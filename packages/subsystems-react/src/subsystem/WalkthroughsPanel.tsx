@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import { useTheme } from '@principal-ade/industry-theme';
-import { ChevronDown, GripVertical, Pause, Play } from 'lucide-react';
+import { Check, ChevronDown, Copy, GripVertical, Pause, Play } from 'lucide-react';
 import {
   PROPOSED_COLOR,
   reorderTargetIndex,
@@ -21,9 +21,16 @@ import {
   walkthroughStepGraphEdgeId,
   type SubsystemWalkthrough,
 } from './model';
+import { buildStepBrief } from './walkthroughBrief';
 
 /** Pause (ms) between steps when a walkthrough autoplays. */
 export const WALKTHROUGH_PLAY_PAUSE_MS = 2500;
+
+/** How long a step's copy button flashes its "copied" checkmark (ms). */
+export const STEP_COPY_FEEDBACK_MS = 2000;
+
+/** Square size (px) of a walkthrough header's Play/Collapse control. */
+const WALKTHROUGH_CONTROL_SIZE = 34;
 
 /** Drag state handed to a row's grip while a reorder is in flight. */
 interface WalkthroughReorderHandle {
@@ -93,6 +100,13 @@ function WalkthroughFlow({
   const [gripHover, setGripHover] = useState(false);
   const [hoveredStep, setHoveredStep] = useState<number | null>(null);
   const stepButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  // Per-step copy affordance: revealed while a row is hovered or holds focus.
+  // `focusedStep` tracks focus-within (button or its copy control) so the icon
+  // stays put while the pointer or focus moves between them.
+  const [focusedStep, setFocusedStep] = useState<number | null>(null);
+  const [copyHoverStep, setCopyHoverStep] = useState<number | null>(null);
+  const [copiedStep, setCopiedStep] = useState<number | null>(null);
+  const copyTimerRef = useRef<number | null>(null);
   // Autoplay: stepping through the flow's steps with a pause between each.
   const [playing, setPlaying] = useState(false);
   const playTimerRef = useRef<number | null>(null);
@@ -108,6 +122,38 @@ function WalkthroughFlow({
   // Clear any pending timer on unmount.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => () => stopPlaying(), []);
+
+  const copyStep = useCallback(
+    (stepIndex: number) => {
+      const brief = buildStepBrief(walkthrough, stepIndex);
+      if (brief.length === 0) return;
+      const clipboard = navigator.clipboard;
+      if (!clipboard) return;
+      void clipboard
+        .writeText(brief)
+        .then(() => {
+          setCopiedStep(stepIndex);
+          if (copyTimerRef.current != null) {
+            window.clearTimeout(copyTimerRef.current);
+          }
+          copyTimerRef.current = window.setTimeout(
+            () => setCopiedStep(null),
+            STEP_COPY_FEEDBACK_MS,
+          );
+        })
+        .catch(() => {
+          // best-effort — show nothing when the clipboard is unavailable
+        });
+    },
+    [walkthrough],
+  );
+
+  useEffect(
+    () => () => {
+      if (copyTimerRef.current != null) window.clearTimeout(copyTimerRef.current);
+    },
+    [],
+  );
 
   // Native HTML5 drag suppresses mouse events, so a row hovered when the drag
   // began never gets its mouseleave — its hover styling would stick after the
@@ -172,7 +218,8 @@ function WalkthroughFlow({
           display: 'flex',
           alignItems: 'center',
           gap: 4,
-          padding: '0 16px',
+          height: WALKTHROUGH_CONTROL_SIZE,
+          padding: '0 0 0 16px',
           background: wholeFlowActive || headerHover ? hoverBg : 'transparent',
           transition: 'background 120ms ease',
         }}
@@ -198,7 +245,7 @@ function WalkthroughFlow({
             display: 'flex',
             alignItems: 'center',
             minWidth: 0,
-            padding: '10px 0',
+            padding: 0,
             border: 'none',
             background: 'transparent',
             textAlign: 'left',
@@ -236,11 +283,11 @@ function WalkthroughFlow({
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
-              width: 22,
-              height: 22,
+              alignSelf: 'stretch',
+              width: WALKTHROUGH_CONTROL_SIZE,
               padding: 0,
               border: 'none',
-              borderRadius: 4,
+              borderRadius: 0,
               background: playing || playHover ? theme.colors.border : 'transparent',
               color: playing || playHover ? theme.colors.text : muted,
               cursor: 'pointer',
@@ -265,11 +312,11 @@ function WalkthroughFlow({
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
-              width: 22,
-              height: 22,
+              alignSelf: 'stretch',
+              width: WALKTHROUGH_CONTROL_SIZE,
               padding: 0,
               border: 'none',
-              borderRadius: 4,
+              borderRadius: 0,
               background: collapseHover ? theme.colors.border : 'transparent',
               color: collapseHover ? theme.colors.text : muted,
               cursor: 'pointer',
@@ -298,7 +345,7 @@ function WalkthroughFlow({
               display: 'inline-flex',
               alignItems: 'center',
               flexShrink: 0,
-              marginRight: -8,
+              marginRight: 8,
               padding: '2px 0',
               color: gripHover || reorder.isDragging ? theme.colors.text : muted,
               cursor: reorder.isDragging ? 'grabbing' : 'grab',
@@ -320,65 +367,121 @@ function WalkthroughFlow({
           {walkthrough.steps.map((step, i) => {
             const stepActive = active !== null && active.stepIndex === i;
             const proposed = stepProposed(step.from, step.to);
+            const revealed =
+              stepActive || hoveredStep === i || focusedStep === i || copiedStep === i;
+            const copied = copiedStep === i;
+            const copyHovered = copyHoverStep === i;
             return (
-              <button
+              <div
                 key={`${walkthroughStepGraphEdgeId(step)}-${i}`}
-                ref={(el) => {
-                  stepButtonRefs.current[i] = el;
-                }}
-                type="button"
-                title={proposed ? 'Step touches a proposed component' : undefined}
-                onMouseEnter={() => {
-                  setHoveredStep(i);
-                  onHoverStep(walkthrough, i);
-                }}
-                onClick={() => onFocusStep(walkthrough, i)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  minWidth: 0,
-                  padding: '8px 8px 8px 17px',
-                  textAlign: 'left',
-                  borderRadius: 0,
-                  border: 'none',
-                  outline: 'none',
-                  background: stepActive || hoveredStep === i ? hoverBg : 'transparent',
-                  cursor: 'pointer',
-                  transition: 'background 120ms ease',
+                style={{ position: 'relative' }}
+                onFocus={() => setFocusedStep(i)}
+                onBlur={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                    setFocusedStep((cur) => (cur === i ? null : cur));
+                  }
                 }}
               >
-                <span
-                  style={{
-                    flexShrink: 0,
-                    width: 14,
-                    fontSize: theme.fontSizes[0],
-                    fontFamily: theme.fonts.monospace,
-                    fontWeight: proposed ? 700 : undefined,
-                    color: proposed
-                      ? PROPOSED_COLOR
-                      : stepActive
-                        ? theme.colors.text
-                        : muted,
+                <button
+                  ref={(el) => {
+                    stepButtonRefs.current[i] = el;
                   }}
-                >
-                  {i + 1}
-                </span>
-                <span
+                  type="button"
+                  title={proposed ? 'Step touches a proposed component' : undefined}
+                  onMouseEnter={() => {
+                    setHoveredStep(i);
+                    onHoverStep(walkthrough, i);
+                  }}
+                  onClick={() => onFocusStep(walkthrough, i)}
                   style={{
-                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
                     minWidth: 0,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    fontSize: theme.fontSizes[1],
-                    fontFamily: theme.fonts.monospace,
-                    color: proposed ? PROPOSED_COLOR : theme.colors.text,
+                    width: '100%',
+                    padding: '8px 36px 8px 17px',
+                    textAlign: 'left',
+                    borderRadius: 0,
+                    border: 'none',
+                    outline: 'none',
+                    background: stepActive || hoveredStep === i ? hoverBg : 'transparent',
+                    cursor: 'pointer',
+                    transition: 'background 120ms ease',
                   }}
                 >
-                  {step.symbol}
-                </span>
-              </button>
+                  <span
+                    style={{
+                      flexShrink: 0,
+                      width: 14,
+                      fontSize: theme.fontSizes[0],
+                      fontFamily: theme.fonts.monospace,
+                      fontWeight: proposed ? 700 : undefined,
+                      color: proposed
+                        ? PROPOSED_COLOR
+                        : stepActive
+                          ? theme.colors.text
+                          : muted,
+                    }}
+                  >
+                    {i + 1}
+                  </span>
+                  <span
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      fontSize: theme.fontSizes[1],
+                      fontFamily: theme.fonts.monospace,
+                      color: proposed ? PROPOSED_COLOR : theme.colors.text,
+                    }}
+                  >
+                    {step.symbol}
+                  </span>
+                </button>
+                {revealed && (
+                  <button
+                    type="button"
+                    aria-label={`Copy step ${i + 1} of ${walkthrough.title} for an agent`}
+                    title={copied ? 'Copied' : 'Copy this step for an agent'}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onMouseEnter={() => setCopyHoverStep(i)}
+                    onMouseLeave={() =>
+                      setCopyHoverStep((cur) => (cur === i ? null : cur))
+                    }
+                    onClick={() => copyStep(i)}
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: 0,
+                      bottom: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 'auto',
+                      aspectRatio: '1 / 1',
+                      padding: 0,
+                      border: 'none',
+                      borderRadius: 0,
+                      background: copied
+                        ? 'rgba(16,185,129,0.12)'
+                        : copyHovered
+                          ? theme.colors.border
+                          : 'transparent',
+                      color: copied ? '#10b981' : copyHovered ? theme.colors.text : muted,
+                      cursor: 'pointer',
+                      transition: 'background 120ms ease, color 120ms ease',
+                    }}
+                  >
+                    {copied ? (
+                      <Check size={12} strokeWidth={2} />
+                    ) : (
+                      <Copy size={12} strokeWidth={2} />
+                    )}
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>

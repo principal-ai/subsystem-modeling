@@ -24,6 +24,7 @@ export function FileDrawer({
   onClose,
   fillHeight = false,
   suppressEscape = false,
+  hidden = false,
   children,
 }: {
   /** Drawer chrome title; `null` closes the drawer. */
@@ -33,11 +34,13 @@ export function FileDrawer({
   fillHeight?: boolean;
   /** Skip Escape handling (e.g. while a full-file overlay is on top). */
   suppressEscape?: boolean;
+  /** Suppress the drawer entirely — no spacer, no panel (embeds). */
+  hidden?: boolean;
   children?: ReactNode;
 }) {
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
-  const open = title !== null;
+  const open = title !== null && !hidden;
   const [closeHover, setCloseHover] = useState(false);
   const [maxHover, setMaxHover] = useState(false);
   // Full-height mode: the maximize button or double-clicking the header.

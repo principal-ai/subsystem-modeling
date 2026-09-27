@@ -116,6 +116,13 @@ export interface ElkLayoutResult {
   edgePathPoints: Map<string, Point[]>;
   /** Compound parent bounds from ELK (absolute flow coords), keyed by group id. */
   groupBounds: Map<string, { x: number; y: number; width: number; height: number }>;
+  /**
+   * Absolute flow-coord rect for every laid-out node (leaves and groups),
+   * including grouped children whose React Flow `position` is parent-relative.
+   * Same space as `edgePathPoints`, so callers can union node rects with a
+   * route without mixing coordinate systems.
+   */
+  absoluteRects: Map<string, { x: number; y: number; width: number; height: number }>;
 }
 
 /** Point in 2D space */
@@ -744,10 +751,22 @@ export async function computeElkLayout(
   const elkPositions = new Map<string, { x: number; y: number }>();
   const elkRelativePositions = new Map<string, { x: number; y: number }>();
   const groupBounds = new Map<string, { x: number; y: number; width: number; height: number }>();
+  // Absolute rect per node, in the same space as `edgePathPoints`. Uses ELK's
+  // own sizes so it's valid before React Flow has measured anything.
+  const absoluteRects = new Map<
+    string,
+    { x: number; y: number; width: number; height: number }
+  >();
   const walkElk = (n: ElkNode, ox: number, oy: number) => {
     const ax = ox + (n.x ?? 0);
     const ay = oy + (n.y ?? 0);
     elkAbsOffsets.set(n.id, { x: ax, y: ay });
+    absoluteRects.set(n.id, {
+      x: ax,
+      y: ay,
+      width: n.width ?? 0,
+      height: n.height ?? 0,
+    });
     for (const c of n.children ?? []) walkElk(c, ax, ay);
   };
   walkElk(layoutedGraph, 0, 0);
@@ -969,6 +988,7 @@ export async function computeElkLayout(
     edgeLabelPositions,
     edgePathPoints,
     groupBounds,
+    absoluteRects,
   };
 }
 

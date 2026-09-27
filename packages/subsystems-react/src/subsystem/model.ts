@@ -963,6 +963,8 @@ export interface SubsystemGroupNodeData extends Record<string, unknown> {
   region: SubsystemProcessRegion;
   /** True while the region's members are dimmed by flow focus. */
   dimmed?: boolean;
+  /** Host-supplied frame color override; falls back to the derived color. */
+  color?: string;
 }
 
 export type SubsystemGraphNode =
@@ -982,6 +984,13 @@ export interface SubsystemGraphEdgeData extends Record<string, unknown> {
   pathLength?: number;
   /** ELK-computed SVG edge path (overrides React Flow's default path). */
   elkPath?: string;
+  /**
+   * ELK-computed route waypoints (absolute flow coords) for this edge. Kept so
+   * the camera can include the whole routed line — not just the endpoint nodes
+   * — when framing a focused hop, which otherwise clips edges that bulge out
+   * around their endpoints.
+   */
+  elkPathPoints?: { x: number; y: number }[];
 }
 
 export type SubsystemGraphEdge = Edge<SubsystemGraphEdgeData>;
@@ -1032,17 +1041,17 @@ export function isWalkthroughMechanism(
 }
 
 export const MECHANISM_COLOR: Record<SubsystemEdgeMechanism, string> = {
-  calls: '#4ec9b0', // teal
+  calls: '#22c55e', // green
   extends: '#b48ead', // purple
   inherits: '#9b6fd0', // purple
   implements: '#c586c0', // magenta
   mixes_in: '#d474a8', // pink-magenta
   uses: '#e3b341', // gold
   method: '#c586c0', // magenta
-  references: '#e07a5f', // terracotta
-  feeds: '#22c55e', // green — data-flow into a processor
-  produces: '#e07a5f', // terracotta — emits an output type
-  writes: '#2f9e44', // deep green — mutates retained state
+  references: '#3b82f6', // blue
+  feeds: '#4ec9b0', // teal — data-flow into a processor
+  produces: '#a78bfa', // violet — emits an output type
+  writes: '#e8853a', // orange — mutates retained state
   reads: '#0ea5e9', // sky — pulls from retained state
   watches: '#9ca3af', // gray — observes, owns nothing
   'registers-into': '#ff6b35', // orange
@@ -1186,7 +1195,7 @@ export function packageColor(name: string): string {
  *  are the only surface using it, but pick a distinct value if roles ever
  *  take over node borders. */
 export const ROLE_COLOR: Record<SubsystemComponentRole, string> = {
-  entry: '#ff6b35', // orange — boundary element
+  entry: '#c0c0c0', // silver — boundary element
   service: '#0893d2', // blue — external system
 };
 
@@ -1542,6 +1551,12 @@ export async function buildSubsystemGraph(
   nodes: SubsystemGraphNode[];
   edges: SubsystemGraphEdge[];
   regions: SubsystemProcessRegion[];
+  /**
+   * Absolute flow-coord rect per node id (leaves + groups), same space as each
+   * edge's `elkPathPoints`. Lets the camera union node rects with a routed edge
+   * without mixing React Flow's parent-relative child positions in.
+   */
+  absoluteRects: Map<string, { x: number; y: number; width: number; height: number }>;
 }> {
   const {
     maxNodeWidth,
@@ -1635,6 +1650,10 @@ export async function buildSubsystemGraph(
   let labelPositions = new Map<string, { x: number; y: number }>();
   let elkPathStrings = new Map<string, string>();
   let elkPathPoints = new Map<string, { x: number; y: number }[]>();
+  let absoluteRects = new Map<
+    string,
+    { x: number; y: number; width: number; height: number }
+  >();
   if (nodes.length > 0) {
     try {
       const result = await computeElkLayout(nodes, edges, {
@@ -1709,6 +1728,7 @@ export async function buildSubsystemGraph(
       labelPositions = result.edgeLabelPositions;
       elkPathStrings = result.edgePaths;
       elkPathPoints = result.edgePathPoints;
+      absoluteRects = result.absoluteRects;
     } catch (err) {
       // Fall back to the (unpositioned) grid if ELK is unavailable — still
       // emit multi-member frames so parentId targets exist.
@@ -1762,8 +1782,9 @@ export async function buildSubsystemGraph(
     if (pts && pts.length > 1) {
       const d = (e as SubsystemGraphEdge).data as SubsystemGraphEdgeData;
       d.pathLength = calculatePathLength(pts);
+      d.elkPathPoints = pts;
     }
   }
 
-  return { nodes: placedNodes, edges, regions };
+  return { nodes: placedNodes, edges, regions, absoluteRects };
 }

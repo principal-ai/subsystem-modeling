@@ -33,6 +33,9 @@ function ExplorerInner() {
   // Sticky pause: interacting with the graph pauses auto-advance and it does
   // NOT resume on its own — the play button (or picking another layer) resumes.
   const [paused, setPaused] = useState(false);
+  // Transient pause: while the cursor is over the graph, auto-advance freezes
+  // and resumes on leave (so hovering to inspect doesn't get advanced away).
+  const [hovering, setHovering] = useState(false);
   const [descriptionOpen, setDescriptionOpen] = useState(false);
   const [progress, setProgress] = useState(0);
   const remainingRef = useRef(LAYER_DWELL_MS);
@@ -46,7 +49,8 @@ function ExplorerInner() {
     homeCategories.findIndex((c) => c.id === selectedId),
   );
   const selected = homeCategories[selectedIndex] ?? homeCategories[0]!;
-  const isPaused = paused;
+  // Frozen = explicitly paused (sticky) or hovered (transient).
+  const isPaused = paused || hovering;
 
   const dwellMs = useMemo(() => {
     if (selected.id === 'walkthrough') {
@@ -218,6 +222,8 @@ function ExplorerInner() {
         </div>
         <div
           className="home-explorer-graph"
+          onMouseEnter={() => setHovering(true)}
+          onMouseLeave={() => setHovering(false)}
           onPointerDown={pauseForInteraction}
           onWheel={pauseForInteraction}
         >
@@ -235,9 +241,11 @@ function ExplorerInner() {
             edgeView={selected.graph.edgeView}
             autoPlayWalkthroughs={selected.graph.autoPlayWalkthroughs}
             walkthroughAutoPlayIntervalMs={WALKTHROUGH_STEP_MS}
-            walkthroughStepMode="dim"
-            zoomOnWalkthroughFocus={false}
+            walkthroughStepMode="focus"
+            zoomOnWalkthroughFocus
+            walkthroughFocusDurationMs={900}
             showWalkthroughTitle={selected.graph.showWalkthroughTitle}
+            boundaryColors={selected.graph.boundaryColors}
             renderFileViewer={fileRenderers.renderFileViewer}
             renderWalkthroughViewer={fileRenderers.renderWalkthroughViewer}
           />

@@ -359,7 +359,8 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
     selected?: boolean;
   };
   const region = data.region;
-  const color = packageColor(region?.key ?? 'process');
+  // Explicit host override wins over the derived (hash-based) frame color.
+  const color = data.color ?? packageColor(region?.key ?? 'process');
   const dimmed = data.dimmed === true;
   const hidden = (data as { hidden?: boolean }).hidden === true;
   // Label is the region identity alone (path / process key / owner/name).
@@ -413,6 +414,7 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
         tabIndex={canToggle && !hidden ? 0 : undefined}
         aria-expanded={canToggle ? expanded : undefined}
         aria-label={canToggle ? `${expanded ? 'Collapse' : 'Expand'} module path: ${label}` : undefined}
+        title={isProcess ? 'Double-click to focus this process' : undefined}
         onMouseEnter={canToggle ? () => setHover(true) : undefined}
         onMouseLeave={canToggle ? () => setHover(false) : undefined}
         onClick={canToggle ? (event) => {
@@ -450,7 +452,7 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
                 : Math.min(availableBadgeWidth, moduleBadgeWidth(collapsedLabel))
               : undefined,
           transition: 'width 140ms ease, box-shadow 120ms ease',
-          cursor: canToggle ? 'pointer' : undefined,
+          cursor: canToggle || isProcess ? 'pointer' : undefined,
           // The trailing halo squares the rounded corners back off in the fill
           // colour, so an edge crossing a corner can't show through the notch.
           // Square (process) badges have no notch, and the halo would erase the
