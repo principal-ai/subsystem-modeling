@@ -118,3 +118,36 @@ export function constructsMatch(
 	if (TYPE_FAMILY.has(claimed)) return inferred === 'type';
 	return claimed === inferred;
 }
+
+export interface ConstructCheckOutcome {
+	/** true = confirmed, false = known mismatch, null = unconfirmed (needs agent). */
+	match: boolean | null;
+	/** Confirming construct from an accepted augmentation, when that is what confirmed it. */
+	augmentedBy?: string;
+}
+
+/**
+ * Resolve a claimed construct against Graphify's inferred construct, allowing an
+ * accepted, agent-confirmed augmentation to stand in for Graphify when it is
+ * silent (`unknown`) or when it disagrees.
+ *
+ * Graphify's inferred construct is a *structural hint*, never ground truth: its
+ * vocabulary (`class | function | method | type | module | unknown`) has no
+ * `store` or `custom_entity`, and a call-style accessor label biases it to
+ * `function`. When source-reading confirms the model's claim, that confirmation
+ * (recorded as an accepted augmentation) wins over the hint.
+ */
+export function resolveConstructMatch(
+	claimed: string | undefined,
+	inferred: InferredGraphifyConstruct,
+	augmentedConstruct?: string | null,
+): ConstructCheckOutcome {
+	const aug = augmentedConstruct?.trim();
+	if (!claimed || claimed === 'external') return { match: true };
+	const augConfirms = !!aug && aug === claimed;
+	if (inferred === 'unknown') {
+		return augConfirms ? { match: true, augmentedBy: aug } : { match: null };
+	}
+	if (constructsMatch(claimed, inferred)) return { match: true };
+	return augConfirms ? { match: true, augmentedBy: aug } : { match: false };
+}

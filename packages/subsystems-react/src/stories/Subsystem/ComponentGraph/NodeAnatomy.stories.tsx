@@ -1,21 +1,27 @@
 import React from 'react';
 import '@xyflow/react/dist/style.css';
 import type { Meta, StoryObj } from '@storybook/react';
-import { ReactFlowProvider, type NodeProps } from '@xyflow/react';
+import { ReactFlowProvider, type Node, type NodeProps } from '@xyflow/react';
 import { ThemeProvider, defaultEditorTheme, useTheme } from '@principal-ade/industry-theme';
-import { FileX, Search, MapPin, Shapes, Sigma } from 'lucide-react';
 import { SubsystemComponentNode } from '../../../subsystem/nodes';
 import type { GraphifyComponentDetail } from '../../../graphify';
-import type { SubsystemComponent, SubsystemGraphNode } from '../../../subsystem/model';
+import type {
+  SubsystemComponent,
+  SubsystemGraphNodeData,
+  SubsystemNodeIssue,
+} from '../../../subsystem/model';
 
 /**
  * NodeAnatomy — a dissection of the component node's visual language.
  *
  * Section 1 lays out every channel the node already spends (border, corners,
  * left badge, right badge cluster, fill) so an added channel can be chosen
- * against it. Section 2 shows the *proposed* diagnostics layer (severity ring +
- * earliest-rung corner chip) composed over real nodes. Nothing here is wired
- * into the production node yet — this is the reference to design against.
+ * against it. Section 2 shows the diagnostics layer (dotted border +
+ * earliest-rung corner chip) composed over real nodes — now wired into the
+ * production node as `data.issue` (see `NodeIssueOverlay` in `nodes.tsx` and
+ * `issueBadgeByAlias` in `SubsystemComponentGraph`); this story stays the
+ * visual reference. Sections 3–4 (verification ladder, diagnostic hover) are
+ * still proposals.
  */
 const meta = {
   title: 'Subsystem/ComponentGraph/NodeAnatomy',
@@ -42,14 +48,19 @@ const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
 
 function nodeProps(
   component: SubsystemComponent,
-  opts?: { selected?: boolean; width?: number; height?: number },
-): NodeProps<SubsystemGraphNode> {
+  opts?: {
+    selected?: boolean;
+    width?: number;
+    height?: number;
+    issue?: SubsystemNodeIssue;
+  },
+): NodeProps<Node<SubsystemGraphNodeData, 'subsystem-component'>> {
   return {
-    data: { component },
+    data: { component, ...(opts?.issue ? { issue: opts.issue } : {}) },
     selected: opts?.selected ?? false,
     width: opts?.width ?? NODE_W,
     height: opts?.height ?? NODE_H,
-  } as unknown as NodeProps<SubsystemGraphNode>;
+  } as unknown as NodeProps<Node<SubsystemGraphNodeData, 'subsystem-component'>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +230,7 @@ function ChannelCell({ channel }: { channel: Channel }) {
 
 const LEGEND: Array<[string, string]> = [
   ['border color', 'construct kind (Pierre palette) — or primary when a file is open (spotlight)'],
-  ['border style', 'solid normally; dashed goldenrod when `proposed`'],
+  ['border style', 'solid normally; dashed goldenrod when `proposed`; dotted when the node has findings'],
   ['border width', '2px; 4px when selected or file-matched'],
   ['corners', '8px rounded; square for `external`'],
   ['left badge (top edge)', 'construct / framework stereotype / entityKind'],
@@ -290,14 +301,6 @@ function Legend() {
 type Severity = 'error' | 'info';
 type Rung = 'file' | 'symbol' | 'declaration' | 'type' | 'signature';
 
-const RUNG_ICON = {
-  file: FileX,
-  symbol: Search,
-  declaration: MapPin,
-  type: Shapes,
-  signature: Sigma,
-} as const;
-
 const RUNG_LABEL: Record<Rung, string> = {
   file: 'file',
   symbol: 'symbol',
@@ -317,51 +320,13 @@ function IssueOverlayNode({
   rung: Rung;
   count?: number;
 }) {
-  const { theme } = useTheme();
-  const color =
-    severity === 'error'
-      ? (theme.colors.error ?? '#e5534b')
-      : (theme.colors.info ?? '#0893d2');
-  // Gaps (info) read hollow/dashed — "couldn't confirm"; errors solid.
-  const dashed = severity === 'info';
-  const Icon = RUNG_ICON[rung];
-  const badgeBg = theme.colors.backgroundSecondary ?? theme.colors.background;
+  // The diagnostics layer is wired into the production node — the border turns
+  // dotted (construct color kept) and the chip carries severity + rung + count.
   return (
     <div style={{ position: 'relative', width: NODE_W, height: NODE_H }}>
-      <SubsystemComponentNode {...nodeProps(component)} />
-      {/* severity ring — additive, outside the construct-colored border */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: -5,
-          borderRadius: 11,
-          border: `2px ${dashed ? 'dashed' : 'solid'} ${color}`,
-          pointerEvents: 'none',
-        }}
+      <SubsystemComponentNode
+        {...nodeProps(component, { issue: { severity, rung, count } })}
       />
-      {/* earliest-rung corner chip + count */}
-      <div
-        style={{
-          position: 'absolute',
-          right: -8,
-          bottom: -7,
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 3,
-          padding: '1px 6px',
-          borderRadius: 999,
-          border: `1.5px solid ${color}`,
-          background: badgeBg,
-          color,
-          fontFamily: MONO,
-          fontSize: 10,
-          fontWeight: 600,
-          lineHeight: 1.4,
-        }}
-      >
-        <Icon size={11} color={color} />
-        {count > 1 ? <span>{count}</span> : null}
-      </div>
     </div>
   );
 }
@@ -454,7 +419,7 @@ const ISSUE_EXAMPLES: Array<{
   },
 ];
 
-/** Proposed diagnostics layer over real nodes — ring by severity, chip = earliest rung. */
+/** Diagnostics layer over real nodes — dotted border + earliest-rung chip. */
 export const IssueOverlayProposal: Story = {
   render: () => {
     return (
@@ -470,20 +435,22 @@ export const IssueOverlayProposal: Story = {
               marginBottom: 10,
             }}
           >
-            Proposed · not wired yet
+            Wired · data.issue
           </div>
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.7, color: '#b0b0b0' }}>
             <li>
-              <b>Ring</b> (outside the construct border): <b>solid</b> = error (contradicts
-              source), <b>dashed</b> = info/gap (couldn&apos;t confirm). Color = severity.
+              <b>Dotted border</b> (keeps the construct color) = the node has findings — a sibling of
+              <b> proposed</b>&apos;s dashed, kept distinct so the two don&apos;t read alike.
             </li>
             <li>
-              <b>Corner chip</b> = the <i>earliest failing rung</i> by verification order (file →
-              symbol → declaration → type → signature), with a count when a node has more than one.
+              <b>Corner chip</b> carries severity (<b>red</b> = error / contradicts source,{' '}
+              <b>amber</b> = info/gap / couldn&apos;t confirm) and the <i>earliest failing rung</i> by
+              verification order (file → symbol → declaration → type → signature), with a count when a
+              node has more than one.
             </li>
             <li>
-              First cell is the clean node for contrast — no ring, no chip. Compose with selection,
-              file-open spotlight, and dimming without touching the border.
+              First cell is the clean node for contrast — solid border, no chip. Severity rides on the
+              chip so it never competes with the construct palette.
             </li>
           </ul>
         </div>
@@ -526,7 +493,7 @@ function VerificationSquares({ statuses }: { statuses: RungStatus[] }) {
   const { theme } = useTheme();
   const success = theme.colors.success ?? '#2da44e';
   const error = theme.colors.error ?? '#e5534b';
-  const info = theme.colors.info ?? '#0893d2';
+  const warning = theme.colors.warning ?? '#d4a017';
   const dim = theme.colors.border ?? '#444';
   const nodeBg = theme.colors.backgroundSecondary ?? theme.colors.background;
   return (
@@ -549,7 +516,7 @@ function VerificationSquares({ statuses }: { statuses: RungStatus[] }) {
         if (status === 'failed') return <span key={i} style={{ ...base, background: error }} />;
         if (status === 'unconfirmed')
           return (
-            <span key={i} style={{ ...base, boxShadow: `inset 0 0 0 1.5px ${info}` }} />
+            <span key={i} style={{ ...base, boxShadow: `inset 0 0 0 1.5px ${warning}` }} />
           );
         // not reached / skipped — a filled neutral so it stays legible on the node
         return <span key={i} style={{ ...base, background: dim }} />;
@@ -653,7 +620,7 @@ export const VerificationSteps: Story = {
         </div>
         <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.7, color: '#b0b0b0' }}>
           <li>
-            <b>green</b> = verified, <b>red</b> = failed, <b>hollow blue</b> = unconfirmed (info),
+            <b>green</b> = verified, <b>red</b> = failed, <b>hollow amber</b> = unconfirmed (info),
             <b> grey</b> = skipped / not reached.
           </li>
           <li>
@@ -694,7 +661,7 @@ function IssueHoverBadge({ severity, label }: { severity: Severity; label: strin
   const color =
     severity === 'error'
       ? (theme.colors.error ?? '#e5534b')
-      : (theme.colors.info ?? '#0893d2');
+      : (theme.colors.warning ?? '#d4a017');
   return (
     <div
       style={{

@@ -12,7 +12,10 @@ import {
 	type ComponentAnchorResult,
 } from "../../../subsystems-react/src/graphify/anchor";
 import { normalizeSourcePath } from "../../../subsystems-react/src/graphify/ids";
-import { inferConstructFromGraphify, constructsMatch } from "../../../subsystems-react/src/graphify/construct";
+import {
+	inferConstructFromGraphify,
+	resolveConstructMatch,
+} from "../../../subsystems-react/src/graphify/construct";
 import {
 	compareSignatures,
 	extractGraphifySignature,
@@ -64,6 +67,7 @@ import {
 } from "./purl-commits";
 import {
 	getSubsystemModel,
+	isRepoPurl,
 	purlRepoKey,
 	stampVerifiedCommits,
 	updateSubsystemModel,
@@ -558,80 +562,75 @@ export async function verifySubsystemComponent(
 	const inferred = inferConstructFromGraphify(anchor.node, edges);
 	const claimed = String(component.construct ?? "");
 
-	let construct: NonNullable<SubsystemComponentVerificationResult["construct"]>;
+	// Accepted, agent-confirmed construct for this file+symbol, if any. Graphify's
+	// inferred construct is a structural hint, not ground truth — an augmentation
+	// can confirm the claim when Graphify is silent (`unknown`) *or* disagrees
+	// (its vocabulary has no `store`/`custom_entity`, and a call-style accessor
+	// label biases it to `function`).
+	const aug =
+		claimed && component.file && component.symbol
+			? await findAcceptedConstructAugmentation({
+					purl: purlKey,
+					file: component.file,
+					symbol: component.symbol,
+				})
+			: null;
+	const augConstruct = aug?.claims.construct?.trim();
 
-	// Inferred unknown = unconfirmed unless an accepted augmentation confirms
-	// the claimed construct for this file+symbol.
-	if (inferred.construct === "unknown") {
-		const aug =
-			claimed && component.file && component.symbol
-				? await findAcceptedConstructAugmentation({
-						purl: purlKey,
-						file: component.file,
-						symbol: component.symbol,
-					})
-				: null;
-		const augConstruct = aug?.claims.construct?.trim();
-		if (augConstruct && augConstruct === claimed) {
-			construct = {
-				claimed,
-				inferred: "unknown",
-				match: true,
-				evidence: [
-					...inferred.evidence,
-					`augmented construct ${augConstruct}`,
-					...(aug?.evidence ?? []),
-				],
-			};
-		} else {
-			return finalizeResult(
-				graphId,
-				graph.components,
-				component,
-				anchor,
-				fileContent,
-				repoRoot,
-				{
-					...base,
-					ok: true,
-					code: "construct_unconfirmed",
-					construct: {
-						claimed,
-						inferred: "unknown",
-						match: null,
-						evidence: inferred.evidence,
-					},
-				},
-				opts,
-			);
-		}
-	} else {
-		const match = constructsMatch(claimed, inferred.construct);
-		construct = {
+	const outcome = resolveConstructMatch(
+		claimed,
+		inferred.construct,
+		augConstruct,
+	);
+	const augmentedEvidence = outcome.augmentedBy
+		? [
+				`augmented construct ${outcome.augmentedBy} (agent-confirmed, graphify inferred ${inferred.construct})`,
+				...(aug?.evidence ?? []),
+			]
+		: [];
+	const construct: NonNullable<SubsystemComponentVerificationResult["construct"]> =
+		{
 			claimed,
 			inferred: inferred.construct,
-			match,
-			evidence: inferred.evidence,
+			match: outcome.match,
+			evidence: [...inferred.evidence, ...augmentedEvidence],
+			...(outcome.augmentedBy ? { augmented: outcome.augmentedBy } : {}),
 		};
 
-		if (!match) {
-			return finalizeResult(
-				graphId,
-				graph.components,
-				component,
-				anchor,
-				fileContent,
-				repoRoot,
-				{
-					...base,
-					ok: false,
-					code: "construct_mismatch",
-					error: `construct mismatch: claimed ${claimed}, inferred ${inferred.construct}`,
-					construct,
-				},
-				opts,
-			);
-		}
+	if (outcome.match === null) {
+		return finalizeResult(
+			graphId,
+			graph.components,
+			component,
+			anchor,
+			fileContent,
+			repoRoot,
+			{
+				...base,
+				ok: true,
+				code: "construct_unconfirmed",
+				construct,
+			},
+			opts,
+		);
+	}
+	if (outcome.match === false) {
+		return finalizeResult(
+			graphId,
+			graph.components,
+			component,
+			anchor,
+			fileContent,
+			repoRoot,
+			{
+				...base,
+				ok: false,
+				code: "construct_mismatch",
+				error: `construct mismatch: claimed ${claimed}, inferred ${inferred.construct}`,
+				construct,
+			},
+			opts,
+		);
 	}
 
 	const withKind: SubsystemComponentVerificationResult = { ...base, construct };
@@ -770,6 +769,12 @@ export function verifyVerdict(
 		return {
 			category: "construct_unconfirmed",
 			detail: `claimed ${r.construct?.claimed}, inferred unknown`,
+		};
+	}
+	if (r.construct?.augmented) {
+		return {
+			category: "construct_augmented",
+			detail: `claimed ${r.construct.claimed}, graphify inferred ${r.construct.inferred}, agent-confirmed`,
 		};
 	}
 	if (r.cache && r.cache.status !== "ready") {
@@ -999,11 +1004,14 @@ export async function auditSubsystemModel(
 
 		if (!r.file?.repoRoot) {
 			const purl = (c.purl || "").trim();
+			const repoPurl = isRepoPurl(purl);
 			check.fileExists = null;
 			check.graphify = "unavailable";
-			check.note = `No local repoRoot for ${c.purl || c.file || c.alias}`;
+			check.note = repoPurl
+				? `No local repoRoot for ${purl || c.file || c.alias}`
+				: `Internal / declaration-only — no code repo for ${purl || c.alias}`;
 			check.verdict = "skipped";
-			if (purl && !repoUnresolvedPurls.has(purl)) {
+			if (repoPurl && !repoUnresolvedPurls.has(purl)) {
 				repoUnresolvedPurls.add(purl);
 				findings.push({
 					kind: "repo_unresolved",

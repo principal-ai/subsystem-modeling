@@ -1038,6 +1038,50 @@ export interface SubsystemGraphNodeData extends Record<string, unknown> {
   fileMatch?: boolean;
   /** True while this node is on an opened-but-unselected flow. */
   dimmed?: boolean;
+  /** Diagnostics badge — see `SubsystemNodeIssue`. Absent when no findings. */
+  issue?: SubsystemNodeIssue;
+}
+
+/**
+ * The per-construct verification ladder, in order. A finding's rung is the
+ * earliest step it fails: file → symbol → declaration → type → signature.
+ */
+export type SubsystemIssueRung =
+  | 'file'
+  | 'symbol'
+  | 'declaration'
+  | 'type'
+  | 'signature';
+
+/**
+ * Per-node diagnostics badge — the proposed issue overlay (severity ring +
+ * earliest-rung corner chip). The graph derives one per component from the
+ * audit issues whose component target resolves to that node. Absent when the
+ * node has no rung-mapped findings.
+ */
+export interface SubsystemNodeIssue {
+  /** Worst severity on the node — `error` (contradicts source) beats `info`. */
+  severity: 'error' | 'info';
+  /** Earliest failing rung across the node's findings. */
+  rung: SubsystemIssueRung;
+  /** Total findings on this node. */
+  count: number;
+}
+
+/**
+ * Per-frame diagnostics badge — a finding about the BOUNDARY itself (its
+ * containment / nesting), not about any member construct. Separate from
+ * `SubsystemNodeIssue` because these have no construct rung to report: the
+ * fault is the region's shape, which is also why it badges the frame rather
+ * than a leaf. `kind` selects the icon (see `ISSUE_KIND_ICON`).
+ */
+export interface SubsystemRegionIssue {
+  /** Worst severity across the region's findings — `error` beats `info`. */
+  severity: 'error' | 'info';
+  /** The kind that supplies the badge icon. */
+  kind: string;
+  /** Total findings on this region. */
+  count: number;
 }
 
 export interface SubsystemGroupNodeData extends Record<string, unknown> {
@@ -1046,6 +1090,8 @@ export interface SubsystemGroupNodeData extends Record<string, unknown> {
   dimmed?: boolean;
   /** Host-supplied frame color override; falls back to the derived color. */
   color?: string;
+  /** Boundary diagnostics badge — see `SubsystemRegionIssue`. */
+  issue?: SubsystemRegionIssue;
 }
 
 export type SubsystemGraphNode =

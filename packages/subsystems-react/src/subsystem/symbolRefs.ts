@@ -335,6 +335,8 @@ export function extractDeclarationSymbolRefs(
       for (const alt of declaration.unionOf ?? []) addType(alt, undefined, 'union');
       break;
     case 'store':
+      // The store's own value type (`valueTypeRef`), then its members.
+      addType(declaration.valueType, declaration.valueTypeRef, 'field');
       for (const p of declaration.properties ?? []) {
         addType(p.type, p.typeRef, 'field');
       }

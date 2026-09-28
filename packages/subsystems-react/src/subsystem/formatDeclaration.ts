@@ -223,19 +223,34 @@ function generateType(
 }
 
 /**
- * A store renders as its retained state — ambient `declare const` lines for
- * the state members, never a class/method stub. The node's name labels the
- * block; the access mechanism lives in separate accessor nodes.
+ * A store renders as its retained state — the declaration of what it holds,
+ * the way every other construct renders its signature. The node's name labels
+ * the block; the access mechanism lives in separate accessor nodes.
+ *
+ * Order: the backing comment, then the store's own typed declaration
+ * (`valueType` when declared, otherwise the named members as a body), then any
+ * remaining members. A store that declares neither says so explicitly rather
+ * than rendering as an empty block.
  */
 function generateStore(name: string, declaration?: GraphifyComponentDetail): string {
   const store = declaration?.kind === 'store' ? declaration : undefined;
   const backing = store?.storage ? `\n// backing: ${store.storage}` : '';
-  const props = (store?.properties ?? [])
+  const members = store?.properties ?? [];
+  const props = members
     .map((p) => `declare const ${p.name}${p.type ? `: ${p.type}` : ''};`)
     .join('\n');
 
+  if (store?.valueType) {
+    const named = members.length
+      ? `\n${members
+          .map((p) => `  ${p.name}${p.type ? `: ${p.type}` : ''};`)
+          .join('\n')}`
+      : '';
+    return `// store: ${name} — ${store.valueType}${backing}${named}`;
+  }
+
   if (!props) {
-    return `// store: ${name} — no captured state members${backing}`;
+    return `// store: ${name} — no declared type (no valueType or state members)${backing}`;
   }
   return `// store: ${name}${backing}\n${props}`;
 }

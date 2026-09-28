@@ -778,6 +778,14 @@
           "type": "string",
           "enum": ["memory", "disk", "external"],
           "description": "Where the retained state physically lives / who mediates access. Authored — graphify cannot infer it: `memory` = process-lifetime RAM, `disk` = this process reads/writes the filesystem, `external` = mediated by another system (db/service)."
+        },
+        "valueType": {
+          "type": "string",
+          "description": "The type of the retained state itself, as a declaration declares its type: `Map<string, FeedState>` for a state block, a row/record type for a table. Orthogonal to `storage`. A store with no `properties` and no `valueType` has no declared type."
+        },
+        "valueTypeRef": {
+          "$ref": "#/$defs/referenceInfo",
+          "description": "Resolvable target of `valueType` when the graph has an edge for it — makes the store's type navigable like a property `typeRef`."
         }
       }
     },

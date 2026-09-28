@@ -105,11 +105,37 @@ Graphify’s inferred construct is a **structural hint**, not ground truth. Do
      `field: "construct"` with the corrected value.
    - **Claim right / intentional** — source matches the claim, or the claim is a
      deliberate higher-level construct (`store`, `module`, `custom_entity`, …)
-     that Graphify cannot express → **skip**. Say so in the summary. Do not
-     “fix” by adopting inferred.
+     that Graphify cannot express → propose a **construct augmentation**
+     confirming the claim. Do **not** adopt the inferred value, and do **not**
+     re-propose the same `component.construct` value (that does not clear the
+     finding). Only skip if you cannot read the source.
    - **Wrong symbol / file** — mismatch is really an identity error → propose
      `file` / `symbol` (or both), not a blind construct flip.
 3. If unsure after reading source, skip — do not guess taxonomy.
+
+Augmentation example (preferred when the model claim is already right):
+
+```json
+{
+  "rationale": "Source confirms `shared`/`landed` is retained in-memory state; the model claim `store` is right — Graphify’s `function` is inferred from the accessor’s call-style label.",
+  "author": "construct-fixer",
+  "finding": {
+    "kind": "construct_mismatch",
+    "componentAlias": "…",
+    "message": "…"
+  },
+  "changes": [
+    {
+      "target": "augmentation",
+      "componentAlias": "…",
+      "field": "construct",
+      "value": "store"
+    }
+  ]
+}
+```
+
+Model-construct correction example (only when the claim itself is wrong):
 
 ```json
 {
@@ -171,6 +197,9 @@ claims).
 
 Allowed change fields:
 
+- augmentation: `construct` | `signature` (accept writes the augmentation
+  store, not the model JSON; `file` / `symbol` / `purl` default from the
+  component)
 - component: `file` | `symbol` | `construct` | `name` | `purl` | `declarationRef`
 - walkthrough-step: `file` | `line` | `symbol` | `from` | `to` | `mechanism` | `annotation`
 

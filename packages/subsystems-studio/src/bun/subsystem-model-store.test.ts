@@ -8,6 +8,7 @@ import {
 	fileDeclaresSymbol,
 	getSubsystemModel,
 	graphIdFromWatchFilename,
+	isRepoPurl,
 	migrateLegacySubsystemGraphsDir,
 	normalizeDeclarationProvenance,
 	purlRepoKey,
@@ -169,6 +170,27 @@ describe("resolveRepoRootForComponent", () => {
 	test("returns undefined for unregistered repos and empty purls", () => {
 		expect(resolveRepoRootForComponent("pkg:github/a/never-registered")).toBeUndefined();
 		expect(resolveRepoRootForComponent(undefined)).toBeUndefined();
+	});
+
+	test("returns undefined for internal / non-repo purls", () => {
+		expect(
+			resolveRepoRootForComponent("external:file:~/.principal/subsystem-models"),
+		).toBeUndefined();
+		expect(resolveRepoRootForComponent("external:proposed")).toBeUndefined();
+	});
+});
+
+describe("isRepoPurl", () => {
+	test("is true only for pkg:github repos", () => {
+		expect(isRepoPurl("pkg:github/a/b#src/x.ts")).toBe(true);
+		expect(isRepoPurl("pkg:github/A/B")).toBe(true);
+	});
+
+	test("is false for internal / pseudo purls", () => {
+		expect(isRepoPurl("external:file:~/.principal/subsystem-models")).toBe(false);
+		expect(isRepoPurl("external:proposed")).toBe(false);
+		expect(isRepoPurl("pkg:npm/lodash")).toBe(false);
+		expect(isRepoPurl(undefined)).toBe(false);
 	});
 });
 

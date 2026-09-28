@@ -38,6 +38,9 @@ const MaintainerWalkthrough = lazy(() =>
 const MaintainerReference = lazy(() =>
   import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerReference })),
 )
+const MaintainerCommonIssues = lazy(() =>
+  import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerCommonIssues })),
+)
 
 const HeroGraphic = lazy(() =>
   import('./components/HeroGraphic').then((m) => ({ default: m.HeroGraphic })),
@@ -363,6 +366,14 @@ function App() {
               element={
                 <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
                   <MaintainerReference />
+                </Suspense>
+              }
+            />
+            <Route
+              path="gaps"
+              element={
+                <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
+                  <MaintainerCommonIssues />
                 </Suspense>
               }
             />

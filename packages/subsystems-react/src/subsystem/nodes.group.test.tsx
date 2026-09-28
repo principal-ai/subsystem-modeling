@@ -62,3 +62,55 @@ describe('SubsystemGroupNode frame color', () => {
     expect(frame.style.border).toContain('#ff6b35');
   });
 });
+
+describe('SubsystemGroupNode boundary badge', () => {
+  // A boundary finding is a property of the region's shape, so it badges the
+  // frame with its own icon rather than borrowing the verification-rung chips
+  // that leaf constructs wear.
+  const moduleRegion = {
+    kind: 'module' as const,
+    key: 'src/bun/index.ts',
+    label: 'src/bun/index.ts',
+    memberAliases: ['a', 'b', 'c'],
+  };
+
+  test('a boundary finding badges the frame with its own icon', () => {
+    const { container } = renderGroup({
+      region: moduleRegion,
+      issue: {
+        severity: 'info',
+        kind: 'boundary_process_nest_disagree',
+        count: 1,
+      },
+    });
+    // The chip is aria-hidden and inert; its lucide icon carries the class.
+    expect(container.querySelector('.lucide-split')).not.toBeNull();
+  });
+
+  test('a finding with no dedicated frame icon is not badged', () => {
+    // `construct_unconfirmed` belongs on a leaf node, not the frame — badging
+    // the region with it would imply the region is at fault.
+    const { container } = renderGroup({
+      region: moduleRegion,
+      issue: { severity: 'error', kind: 'construct_unconfirmed', count: 1 },
+    });
+    expect(container.querySelector('svg')).toBeNull();
+  });
+
+  test('a region with no findings renders no chip', () => {
+    const { container } = renderGroup({ region: moduleRegion });
+    expect(container.querySelector('svg')).toBeNull();
+  });
+
+  test('the chip shows a count when the region has more than one finding', () => {
+    const { container } = renderGroup({
+      region: moduleRegion,
+      issue: {
+        severity: 'error',
+        kind: 'boundary_process_nest_disagree',
+        count: 3,
+      },
+    });
+    expect(container.textContent).toContain('3');
+  });
+});

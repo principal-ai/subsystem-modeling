@@ -235,6 +235,19 @@ export interface SubsystemStoreDeclaration {
    *  reads/writes files), or `external` (another system — db/service; carries
    *  no `process`). */
   storage?: 'memory' | 'disk' | 'external';
+  /**
+   * The type of the retained state itself — a store declares its type the way
+   * every other declaration does. A state block names its value type
+   * (`Map<string, FeedState>`, `Set<Listener>`); a table names its row/record
+   * type. Orthogonal to `storage`: an in-memory store still has a value type.
+   *
+   * Optional because a store with neither a `valueType` nor named `properties`
+   * has no declared type — that is a gap the audit can flag, not an error.
+   */
+  valueType?: string;
+  /** Resolvable target of `valueType` — makes the type navigable like a
+   *  property's `typeRef`. */
+  valueTypeRef?: SubsystemReferenceInfo;
   properties: SubsystemPropertyInfo[];
 }
 

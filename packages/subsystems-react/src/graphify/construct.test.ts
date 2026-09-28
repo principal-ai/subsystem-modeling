@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { GraphifyEdge, GraphifyNode } from './types';
-import { inferConstructFromGraphify, constructsMatch } from './construct';
+import {
+	inferConstructFromGraphify,
+	constructsMatch,
+	resolveConstructMatch,
+} from './construct';
 
 function node(
 	id: string,
@@ -104,5 +108,61 @@ describe('constructsMatch', () => {
 	test('no class≈function alias', () => {
 		expect(constructsMatch('class', 'function')).toBe(false);
 		expect(constructsMatch('function', 'class')).toBe(false);
+	});
+});
+
+describe('resolveConstructMatch', () => {
+	test('structural match is enough (no augmentation)', () => {
+		expect(resolveConstructMatch('function', 'function')).toEqual({
+			match: true,
+		});
+	});
+
+	test('plain mismatch without augmentation stays a hard failure', () => {
+		expect(resolveConstructMatch('function', 'class')).toEqual({
+			match: false,
+		});
+	});
+
+	test('unknown without augmentation is unconfirmed, not a mismatch', () => {
+		expect(resolveConstructMatch('store', 'unknown')).toEqual({ match: null });
+	});
+
+	test('accepted augmentation confirms a claim Graphify infers differently', () => {
+		expect(resolveConstructMatch('store', 'function', 'store')).toEqual({
+			match: true,
+			augmentedBy: 'store',
+		});
+	});
+
+	test('accepted augmentation confirms a claim Graphify leaves unknown', () => {
+		expect(resolveConstructMatch('interface', 'unknown', 'interface')).toEqual({
+			match: true,
+			augmentedBy: 'interface',
+		});
+	});
+
+	test('augmentation only confirms its own claim, not a different one', () => {
+		expect(resolveConstructMatch('store', 'function', 'module')).toEqual({
+			match: false,
+		});
+		expect(resolveConstructMatch('store', 'unknown', 'module')).toEqual({
+			match: null,
+		});
+	});
+
+	test('blank augmentation is ignored', () => {
+		expect(resolveConstructMatch('store', 'function', '  ')).toEqual({
+			match: false,
+		});
+	});
+
+	test('external / missing claimed still short-circuits to match', () => {
+		expect(resolveConstructMatch('external', 'function')).toEqual({
+			match: true,
+		});
+		expect(resolveConstructMatch(undefined, 'unknown')).toEqual({
+			match: true,
+		});
 	});
 });

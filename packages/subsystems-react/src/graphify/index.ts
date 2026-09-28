@@ -61,8 +61,13 @@ export {
 export type {
 	InferredGraphifyConstruct,
 	InferConstructFromGraphifyResult,
+	ConstructCheckOutcome,
 } from './construct';
-export { inferConstructFromGraphify, constructsMatch } from './construct';
+export {
+	inferConstructFromGraphify,
+	constructsMatch,
+	resolveConstructMatch,
+} from './construct';
 export type {
   GraphifyInferredSignature,
   ClaimedSignature,

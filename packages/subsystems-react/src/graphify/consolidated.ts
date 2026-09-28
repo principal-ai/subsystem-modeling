@@ -240,6 +240,14 @@ export interface GraphifyStoreDetail {
    * system (db/service; carries no `process`).
    */
   storage?: 'memory' | 'disk' | 'external';
+  /**
+   * The type of the retained state itself — a store declares its type the way
+   * every other declaration does (`Map<string, FeedState>`, `Set<Listener>`,
+   * a table's row type). Orthogonal to `storage`.
+   */
+  valueType?: string;
+  /** Backing edge target for `valueType`, when the graph has one. */
+  valueTypeRef?: GraphifyReferenceInfo;
 }
 
 /** A standalone method selected from its owning class. */

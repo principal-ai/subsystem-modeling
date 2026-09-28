@@ -36,9 +36,12 @@ import {
   type SubsystemGraphNodeData,
   type SubsystemGroupNodeData,
   type SubsystemGraphEdge,
+  type SubsystemNodeIssue,
 } from './model';
 import { componentColor } from '../pierre/constructColors';
 import { resolvePierreSyntaxThemeName } from '../pierre/pierreSyntaxTheme';
+import { ISSUE_KIND_ICON, ISSUE_RUNG_ICON } from './IssueList';
+import type { LucideIcon } from 'lucide-react';
 
 export const CONSTRUCT_LABEL: Record<string, string> = {
   class: 'class',
@@ -112,6 +115,80 @@ function useSubsystemCallbacks(): SubsystemGraphCallbacks {
   return useContext(SubsystemCallbacksContext) ?? SUBSYSTEM_CALLBACKS;
 }
 
+/**
+ * The diagnostics overlay for a component node: the node's own border turns
+ * dotted (see the node's `borderStyle`) and an earliest-failing-rung corner
+ * chip (file → symbol → declaration → type → signature) carries the severity
+ * color, with a count when the node has more than one finding. The chip is
+ * purely additive and non-interactive; the border stays construct-colored, so
+ * severity never has to compete with the construct palette.
+ */
+function NodeIssueOverlay({ issue }: { issue: SubsystemNodeIssue }) {
+  const { theme } = useTheme();
+  const isError = issue.severity === 'error';
+  const color = isError
+    ? (theme.colors.error ?? '#e5534b')
+    : (theme.colors.warning ?? '#d4a017');
+  return (
+    <IssueChip
+      color={color}
+      Icon={ISSUE_RUNG_ICON[issue.rung]}
+      count={issue.count}
+      anchor={{ right: -9, bottom: -8 }}
+    />
+  );
+}
+
+/**
+ * The shared severity chip: a severity-colored ring around the finding's icon,
+ * with a count when there is more than one. Component nodes anchor it to the
+ * bottom-right corner; a region frame anchors it to the top-right so it never
+ * collides with the frame's own name badge. `aria-hidden` and inert — the
+ * canvas badge never competes with the sidebar card for the interaction.
+ */
+function IssueChip({
+  color,
+  Icon,
+  count,
+  anchor,
+}: {
+  color: string;
+  Icon: LucideIcon;
+  count: number;
+  anchor: React.CSSProperties;
+}) {
+  const { theme } = useTheme();
+  const badgeBg = theme.colors.backgroundSecondary ?? theme.colors.background;
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: 'absolute',
+        zIndex: 2,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        minWidth: 22,
+        padding: '3px 5px',
+        borderRadius: 5,
+        border: `2px solid ${color}`,
+        background: badgeBg,
+        color,
+        fontFamily: theme.fonts.monospace,
+        fontSize: theme.fontSizes[1],
+        fontWeight: 700,
+        lineHeight: 1.1,
+        pointerEvents: 'none',
+        ...anchor,
+      }}
+    >
+      <Icon size={14} color={color} />
+      {count > 1 ? <span>{count}</span> : null}
+    </div>
+  );
+}
+
 export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeData, 'subsystem-component'>>) {
   const { theme, mode } = useTheme();
   const callbacks = useSubsystemCallbacks();
@@ -168,6 +245,12 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
   const borderW = isSelected || fileMatch ? 4 : 2;
   const badgeTop = -9 - borderW;
   const badgeEdge = -borderW;
+  // A node with diagnostics turns its border dotted — a "something's off"
+  // sibling of `proposed`'s dashed, but distinct so the two don't read alike.
+  // The border keeps its construct color; the severity rides on the chip.
+  // Verification skips `proposed` nodes, so the two rarely stack — issue wins.
+  const hasIssue = data.issue != null;
+  const borderStyle = hasIssue ? 'dotted' : c.proposed ? 'dashed' : 'solid';
 
   return (
     <div
@@ -198,8 +281,9 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
         borderRadius: nodeRadius,
         background: hover ? hoverBg : nodeBg,
         // Selected / file-matched nodes get a thicker border. Proposed nodes
-        // use a dashed goldenrod border; left construct badge keeps construct color.
-        border: `${borderW}px ${c.proposed ? 'dashed' : 'solid'} ${borderColor}`,
+        // use a dashed goldenrod border, issue nodes a dotted construct-colored
+        // one; the left construct badge keeps construct color either way.
+        border: `${borderW}px ${borderStyle} ${borderColor}`,
         boxShadow: fileMatch
           ? `0 1px 4px rgba(0,0,0,0.25), 0 0 12px ${theme.colors.primary}55`
           : '0 1px 4px rgba(0,0,0,0.25)',
@@ -338,6 +422,8 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
           {c.symbol}
         </div>
       )}
+
+      {data.issue && <NodeIssueOverlay issue={data.issue} />}
 
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
       <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
@@ -494,6 +580,20 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
           label
         )}
       </div>
+      {/* Boundary diagnostics badge — top-right, opposite the name badge, so the
+          two never collide however long the module path grows. */}
+      {data.issue && ISSUE_KIND_ICON[data.issue.kind] && (
+        <IssueChip
+          color={
+            data.issue.severity === 'error'
+              ? (theme.colors.error ?? '#e5534b')
+              : (theme.colors.warning ?? '#d4a017')
+          }
+          Icon={ISSUE_KIND_ICON[data.issue.kind]!}
+          count={data.issue.count}
+          anchor={{ right: 12, top: 0, transform: 'translateY(-50%)' }}
+        />
+      )}
     </div>
   );
 }

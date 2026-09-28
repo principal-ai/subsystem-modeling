@@ -180,8 +180,13 @@ export function registerProjectInAlexandria(
   }
 }
 
-/** Resolve a purl repo key (`pkg:github/owner/name`) to a local checkout. */
+/**
+ * Resolve a purl repo key (`pkg:github/owner/name`) to a local checkout.
+ * Non-repo / internal pseudo-purls (`external:file:…`, `external:proposed`, …)
+ * are not checkouts and resolve to undefined rather than a fabricated owner/name.
+ */
 export function resolveRepoRootForPurlKey(key: string): string | undefined {
+  if (!/^pkg:github\//i.test(key)) return undefined;
   const parts = key.split('/');
   const name = parts.pop();
   const owner = parts.pop();

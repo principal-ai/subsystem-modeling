@@ -66,7 +66,13 @@ const ISSUES: SubsystemIssue[] = [
     severity: 'info',
     kind: 'walkthrough',
     message: 'Step 2 references a line that moved (was :42).',
-    target: { kind: 'walkthrough', id: 'flow-1', label: 'Checkout', detail: 'step 2' },
+    target: {
+      kind: 'step',
+      id: 'flow-1',
+      label: 'Checkout',
+      detail: 'step 2',
+      stepIndex: 1,
+    },
   },
   {
     id: 'i7',

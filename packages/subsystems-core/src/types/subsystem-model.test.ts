@@ -51,4 +51,11 @@ describe("subsystem-model schema", () => {
 	test("no longer carries per-declaration revision (superseded by the model-level pin)", () => {
 		expect(schema.$defs.declarationRef?.properties?.revision).toBeUndefined();
 	});
+
+	test("a store declares its own value type", () => {
+		// `additionalProperties: false` on the store declaration, so the field
+		// has to be declared here or every typed store would be rejected.
+		expect(schema.$defs.storeDeclaration?.properties?.valueType).toBeDefined();
+		expect(schema.$defs.storeDeclaration?.properties?.valueTypeRef).toBeDefined();
+	});
 });

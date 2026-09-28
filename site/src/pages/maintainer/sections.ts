@@ -6,6 +6,7 @@ export type MaintainerSectionId =
   | 'dynamic-topology'
   | 'walkthrough'
   | 'reference'
+  | 'gaps'
 
 export type MaintainerSection = {
   id: MaintainerSectionId
@@ -77,6 +78,19 @@ export const MAINTAINER_SECTIONS: MaintainerSection[] = [
       { id: 'the-loop', label: 'The loop' },
       { id: 'verdicts', label: 'Verdicts' },
       { id: 'issue-vs-unconfirmed', label: 'Issue vs unconfirmed' },
+    ],
+  },
+  {
+    id: 'gaps',
+    path: '/maintainer/gaps',
+    label: 'Diagramming gaps',
+    shortLabel: 'Gaps',
+    children: [
+      { id: 'store-behind-accessor', label: 'Store behind an accessor' },
+      { id: 'store-value-type', label: 'Store value type' },
+      { id: 'graphify-vocabulary', label: 'Graphify vocabulary' },
+      { id: 'store-two-nodes', label: 'Class-mediated store' },
+      { id: 'closure-local-anchor', label: 'Non-addressable state' },
     ],
   },
 ]

@@ -37,7 +37,7 @@ import {
 	runGraphifyExtract,
 	type GraphifyGraphSmoke,
 } from "./graphify-runner";
-import { purlRepoKey } from "./subsystem-model-store";
+import { isRepoPurl, purlRepoKey } from "./subsystem-model-store";
 import type {
 	SubsystemGraphifyAggregateStatus,
 	SubsystemGraphifyPurlReadiness,
@@ -884,7 +884,9 @@ export async function ensureCurrentGraphifyCachesForModel(
 			continue;
 		}
 		const key = purlRepoKey(c.purl);
-		if (!key || key === "external" || byPurl.has(key)) continue;
+		// Only real repo purls get a graphify cache; internal surfaces
+		// (e.g. `external:file:…`) are not checkouts.
+		if (!key || !isRepoPurl(key) || byPurl.has(key)) continue;
 		const repoRoot = resolveRepoRootForPurl(key) ?? undefined;
 		byPurl.set(key, { purl: key, repoRoot });
 	}
@@ -935,7 +937,8 @@ export async function assessSubsystemGraphifyReadiness(
 
 	for (const c of graph.components) {
 		const key = purlRepoKey(c.purl);
-		if (!key || byPurl.has(key)) continue;
+		// Skip internal/non-repo purls — they have no checkout to become ready.
+		if (!key || !isRepoPurl(key) || byPurl.has(key)) continue;
 
 		const repoRoot = resolveRepoRootForPurl(key);
 

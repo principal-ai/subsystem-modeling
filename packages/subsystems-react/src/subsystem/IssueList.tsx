@@ -11,20 +11,28 @@
  * (e.g. focus the node on the graph, or apply the fix in the report).
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   ChevronDown,
   ChevronRight,
   CircleCheck,
   Component,
+  FileX,
   FolderGit2,
+  Footprints,
+  MapPin,
   Network,
   Route,
+  Search,
   Server,
+  Shapes,
+  Sigma,
+  Split,
   Wrench,
 } from 'lucide-react';
 import { useTheme } from '@principal-ade/industry-theme';
+import type { SubsystemIssueRung } from './model';
 
 export type SubsystemIssueSeverity = 'error' | 'info';
 
@@ -33,6 +41,7 @@ export type SubsystemIssueTargetKind =
   | 'relation'
   | 'module'
   | 'walkthrough'
+  | 'step'
   | 'repo'
   | 'graph';
 
@@ -109,6 +118,71 @@ export function issueCategory(issue: SubsystemIssue): SubsystemIssueCategory {
   return issue.category ?? KIND_CATEGORY[issue.kind] ?? 'construct';
 }
 
+/**
+ * Construct-layer verification rung for a finding kind (file → symbol →
+ * declaration → type → signature), or null for findings outside that ladder
+ * (topology / walkthrough / repo). Drives the node overlay's earliest-rung chip.
+ */
+const KIND_RUNG: Record<string, SubsystemIssueRung> = {
+  missing_file: 'file',
+  symbol_unmatched: 'symbol',
+  symbol_ambiguous: 'symbol',
+  stale_declaration: 'declaration',
+  construct_unconfirmed: 'type',
+  construct_mismatch: 'type',
+  signature_unconfirmed: 'signature',
+  signature_mismatch: 'signature',
+};
+
+/** The rung a finding fails at, or null when it is not a construct finding. */
+export function issueRung(kind: string): SubsystemIssueRung | null {
+  return KIND_RUNG[kind] ?? null;
+}
+
+/** Order of the verification rungs; smaller = earlier (shallower) failure. */
+export const ISSUE_RUNG_ORDER: Record<SubsystemIssueRung, number> = {
+  file: 0,
+  symbol: 1,
+  declaration: 2,
+  type: 3,
+  signature: 4,
+};
+
+/** Rung icon shared by the node overlay chip and the issue list. */
+export const ISSUE_RUNG_ICON: Record<SubsystemIssueRung, LucideIcon> = {
+  file: FileX,
+  symbol: Search,
+  declaration: MapPin,
+  type: Shapes,
+  signature: Sigma,
+};
+
+/**
+ * Icons for findings that are about a BOUNDARY rather than a construct, so they
+ * have no rung to key off. These are what earns a frame badge: a kind listed
+ * here is badged on the region node it names (see `ISSUE_KIND_ICON` consumers),
+ * because the finding is a property of the region's shape — no single member
+ * construct is at fault.
+ */
+export const ISSUE_KIND_ICON: Record<string, LucideIcon> = {
+  // One module, more than one claimed process parent — a containment that can't
+  // be drawn, which is why the region sits at the root instead of nested.
+  boundary_process_nest_disagree: Split,
+};
+
+/**
+ * Icons for target SHAPES that are more specific than their verification lane.
+ * An audit `kind` of `walkthrough` covers the whole flow, so a finding about
+ * one step of it would otherwise wear the lane's `Route` icon and read as a
+ * comment on the flow rather than on the step that is actually wrong.
+ */
+export const ISSUE_TARGET_KIND_ICON: Partial<
+  Record<SubsystemIssueTargetKind, LucideIcon>
+> = {
+  // A step in a flow: a footprint along the path, distinct from the path itself.
+  step: Footprints,
+};
+
 export interface SubsystemIssueTarget {
   kind: SubsystemIssueTargetKind;
   /** Stable id used to group and to focus the target on the graph. */
@@ -117,6 +191,13 @@ export interface SubsystemIssueTarget {
   label: string;
   /** Optional sub-label (relation type, step number, …). */
   detail?: string;
+  /**
+   * For a `step` target: the walkthrough id, plus a 0-based index into that
+   * walkthrough's steps. Carried structurally rather than parsed back out of
+   * `detail` ("step 7") so focusing a step is exact rather than best-effort —
+   * `detail` is a display string and is free to change its phrasing.
+   */
+  stepIndex?: number;
 }
 
 /** One issue to surface in the sidebar (and later, on the graph). */
@@ -324,6 +405,14 @@ export function groupIssuesByCategory(
   });
 }
 
+/** `#rrggbb` → `rgba(...)`; used for hover washes on translucent surfaces. */
+function withAlpha(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const n = parseInt(full.slice(0, 6), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
 function severityColor(
   severity: SubsystemIssueSeverity,
   colors: { error: string; info: string; warning: string },
@@ -333,39 +422,58 @@ function severityColor(
   return colors.warning ?? '#d4a017';
 }
 
-const TARGET_KIND_LABEL: Record<SubsystemIssueTargetKind, string> = {
-  component: 'component',
-  relation: 'relationship',
-  module: 'module',
-  walkthrough: 'flow',
-  repo: 'repo',
-  graph: 'model',
-};
-
 export interface SubsystemIssueCardProps {
   issue: SubsystemIssue;
   onSelect?: (issue: SubsystemIssue) => void;
+  /** The card was collapsed again — undo whatever `onSelect` focused. */
+  onDeselect?: (issue: SubsystemIssue) => void;
   onApplyFix?: (issue: SubsystemIssue) => void;
   onHover?: (issue: SubsystemIssue | null) => void;
+  /**
+   * This card expanded / collapsed, for any reason. The list needs it because a
+   * collapsed CATEGORY unmounts its cards outright, so a card can stop being
+   * expanded without ever toggling itself — and a host that focused something
+   * on expand has to hear about it.
+   */
+  onExpandedChange?: (issue: SubsystemIssue, expanded: boolean) => void;
 }
 
 export function SubsystemIssueCard({
   issue,
   onSelect,
+  onDeselect,
   onApplyFix,
   onHover,
+  onExpandedChange,
 }: SubsystemIssueCardProps) {
   const { theme } = useTheme();
   const [hover, setHover] = useState(false);
+  const [fixHover, setFixHover] = useState(false);
   // Every issue is collapsed to its kind by default so the list scans as a
   // catalogue of problems; clicking a card reveals the message and any fix.
   const [expanded, setExpanded] = useState(false);
   const showDetail = expanded;
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const color = severityColor(issue.severity, theme.colors);
+  // Leading icon: the verification rung when the finding maps to one, else the
+  // layer's icon — every row reads with an icon.
+  const rung = issueRung(issue.kind);
+  // Rung icons are the construct ladder; a boundary finding names its own icon
+  // (it has no rung); everything else falls back to its layer's icon.
+  const targetIcon = issue.target?.kind
+    ? ISSUE_TARGET_KIND_ICON[issue.target.kind]
+    : undefined;
+  const RowIcon: LucideIcon = rung
+    ? ISSUE_RUNG_ICON[rung]
+    : (ISSUE_KIND_ICON[issue.kind] ??
+      targetIcon ??
+      SUBSYSTEM_ISSUE_CATEGORY_ICON[issueCategory(issue)]);
   const activate = () => {
-    setExpanded((v) => !v);
-    onSelect?.(issue);
+    const next = !expanded;
+    setExpanded(next);
+    onExpandedChange?.(issue, next);
+    if (next) onSelect?.(issue);
+    else onDeselect?.(issue);
   };
 
   return (
@@ -400,96 +508,99 @@ export function SubsystemIssueCard({
         fontFamily: theme.fonts.body,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, minWidth: 0 }}>
-        <div
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <RowIcon size={15} color={color} style={{ flexShrink: 0 }} aria-hidden />
+        <span
           style={{
             flex: 1,
             minWidth: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 1,
+            fontFamily: theme.fonts.monospace,
+            fontSize: theme.fontSizes[1],
+            color: theme.colors.text,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
           }}
         >
-          <span
-            style={{
-              fontFamily: theme.fonts.monospace,
-              fontSize: theme.fontSizes[0],
-              fontWeight: 600,
-              letterSpacing: 0.3,
-              textTransform: 'uppercase',
-              color,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {issueKindLabel(issue)}
-          </span>
-          {issue.target && (
-            <span
-              style={{
-                minWidth: 0,
-                fontFamily: theme.fonts.monospace,
-                fontSize: theme.fontSizes[0],
-                color: theme.colors.text,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-              title={`${TARGET_KIND_LABEL[issue.target.kind]} · ${issue.target.label}`}
-            >
-              {issue.target.label}
-            </span>
-          )}
-        </div>
+          {issue.target?.label ?? issueKindLabel(issue)}
+        </span>
         <span
           style={{
             display: 'inline-flex',
             color: muted,
             flexShrink: 0,
-            marginTop: 1,
           }}
         >
-          {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </span>
       </div>
       {showDetail && (
-        <div
-          style={{
-            fontSize: theme.fontSizes[0],
-            color: theme.colors.text,
-            lineHeight: 1.45,
-            overflowWrap: 'anywhere',
-          }}
-        >
-          {issue.message}
-        </div>
-      )}
-      {showDetail && issue.fix && (
-        <div style={{ display: 'flex', marginTop: 1 }}>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onApplyFix?.(issue);
-            }}
-            disabled={onApplyFix == null}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, paddingTop: 4 }}>
+          {issue.target && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              <span
+                style={{
+                  minWidth: 0,
+                  fontFamily: theme.fonts.monospace,
+                  fontSize: theme.fontSizes[1],
+                  fontWeight: 600,
+                  letterSpacing: 0.3,
+                  textTransform: 'uppercase',
+                  color,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {issueKindLabel(issue)}
+              </span>
+            </div>
+          )}
+          <div
             style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              padding: '3px 8px',
-              border: `1px solid ${theme.colors.primary}`,
-              borderRadius: 4,
-              background: 'transparent',
-              color: theme.colors.primary,
-              fontFamily: theme.fonts.monospace,
-              fontSize: theme.fontSizes[0],
-              cursor: onApplyFix == null ? 'default' : 'pointer',
-              opacity: onApplyFix == null ? 0.5 : 1,
+              fontSize: theme.fontSizes[1],
+              color: theme.colors.text,
+              lineHeight: 1.45,
+              overflowWrap: 'anywhere',
             }}
           >
-            <Wrench size={12} />
-            {issue.fix.label}
-          </button>
+            {issue.message}
+          </div>
+          {issue.fix && (
+            <div style={{ display: 'flex' }}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onApplyFix?.(issue);
+                }}
+                disabled={onApplyFix == null}
+                onMouseEnter={() => setFixHover(true)}
+                onMouseLeave={() => setFixHover(false)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '3px 8px',
+                  border: `1px solid ${theme.colors.success ?? '#2da44e'}`,
+                  borderRadius: 4,
+                  background:
+                    onApplyFix != null && fixHover
+                      ? withAlpha(theme.colors.success ?? '#2da44e', 0.16)
+                      : 'transparent',
+                  color: theme.colors.success ?? '#2da44e',
+                  fontFamily: theme.fonts.monospace,
+                  fontSize: theme.fontSizes[1],
+                  cursor: onApplyFix == null ? 'default' : 'pointer',
+                  opacity: onApplyFix == null ? 0.5 : 1,
+                  transition: 'background 120ms ease',
+                }}
+              >
+                <Wrench size={12} />
+                {issue.fix.label}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -499,6 +610,8 @@ export function SubsystemIssueCard({
 export interface SubsystemIssueListProps {
   issues: SubsystemIssue[];
   onSelectIssue?: (issue: SubsystemIssue) => void;
+  /** A card was collapsed again — the counterpart to `onSelectIssue`. */
+  onDeselectIssue?: (issue: SubsystemIssue) => void;
   onApplyFix?: (issue: SubsystemIssue) => void;
   onHoverIssue?: (issue: SubsystemIssue | null) => void;
   /**
@@ -509,28 +622,38 @@ export interface SubsystemIssueListProps {
    * honoured without an extra click.
    */
   focusCategory?: SubsystemIssueCategory;
+  /**
+   * Fires whenever the expanded-layer set changes. Publishers use it to focus
+   * the canvas on the layer's findings — dimming everything the expanded
+   * layers do not implicate. Emits [] when every layer is collapsed.
+   */
+  onExpandedCategoriesChange?: (categories: SubsystemIssueCategory[]) => void;
 }
 
 export function SubsystemIssueList({
   issues,
   onSelectIssue,
+  onDeselectIssue,
   onApplyFix,
   onHoverIssue,
   focusCategory,
+  onExpandedCategoriesChange,
 }: SubsystemIssueListProps) {
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const categories = groupIssuesByCategory(issues);
-  // Collapsed categories (by id). Everything starts expanded, unless the list
-  // was opened focused on a single layer — then every other layer starts
-  // collapsed so the focused category's findings are what you land on.
+  // Collapsed categories (by id). Every layer starts collapsed, so the list
+  // opens as a scannable summary of layers + counts; a layer opens on click.
+  // When the list was opened focused on a single layer, that one starts
+  // expanded and all others stay collapsed, so the caller's intent — "show me
+  // this layer's findings" — is honoured without an extra click.
   const [collapsed, setCollapsed] = useState<Set<SubsystemIssueCategory>>(
     () =>
       focusCategory
         ? new Set(
             SUBSYSTEM_ISSUE_CATEGORIES.filter((c) => c !== focusCategory),
           )
-        : new Set(),
+        : new Set(SUBSYSTEM_ISSUE_CATEGORIES),
   );
   const [hovered, setHovered] = useState<SubsystemIssueCategory | null>(null);
   // Re-apply the focus when it changes on an already-mounted list (e.g. the
@@ -539,16 +662,43 @@ export function SubsystemIssueList({
     setCollapsed(
       focusCategory
         ? new Set(SUBSYSTEM_ISSUE_CATEGORIES.filter((c) => c !== focusCategory))
-        : new Set(),
+        : new Set(SUBSYSTEM_ISSUE_CATEGORIES),
     );
   }, [focusCategory]);
+  // Publish the expanded-layer set so a host can focus the canvas on it. Read
+  // the callback through a ref so an unstable host closure can't re-trigger the
+  // effect (and loop) on every render.
+  const onExpandedRef = useRef(onExpandedCategoriesChange);
+  onExpandedRef.current = onExpandedCategoriesChange;
+  useEffect(() => {
+    onExpandedRef.current?.(
+      SUBSYSTEM_ISSUE_CATEGORIES.filter((c) => !collapsed.has(c)),
+    );
+  }, [collapsed]);
+  // The card currently expanded, if any. Tracked here (not just inside the card)
+  // because closing a CATEGORY unmounts its cards, so a card can stop being
+  // expanded without toggling itself — and the host that focused a target on
+  // expand must be told to let it go.
+  const expandedIssueRef = useRef<SubsystemIssue | null>(null);
+  const trackExpanded = (issue: SubsystemIssue, expanded: boolean) => {
+    expandedIssueRef.current = expanded ? issue : null;
+  };
   const toggleCollapsed = (category: SubsystemIssueCategory) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(category)) next.delete(category);
-      else next.add(category);
-      return next;
-    });
+    // Accordion: at most one layer open. Opening one collapses the rest;
+    // clicking the open one collapses all. That keeps the canvas dim driven by
+    // exactly one layer at a time.
+    const next = collapsed.has(category)
+      ? new Set(SUBSYSTEM_ISSUE_CATEGORIES.filter((c) => c !== category))
+      : new Set(SUBSYSTEM_ISSUE_CATEGORIES);
+    // Retract the focus before this layer's cards unmount. Test the NEXT set,
+    // not the current one: opening a layer closes every other, so a focus
+    // established in a sibling layer dies on this click too.
+    const open = expandedIssueRef.current;
+    if (open && next.has(issueCategory(open))) {
+      expandedIssueRef.current = null;
+      onDeselectIssue?.(open);
+    }
+    setCollapsed(next);
   };
 
   return (
@@ -581,11 +731,11 @@ export function SubsystemIssueList({
                 gap: 8,
                 padding: '9px 12px',
                 background: isHovered
-                  ? (theme.colors.backgroundHover ??
+                  ? (theme.colors.backgroundTertiary ??
+                    theme.colors.backgroundHover ??
                     theme.colors.backgroundSecondary ??
                     theme.colors.background)
-                  : (theme.colors.backgroundTertiary ??
-                    theme.colors.backgroundSecondary ??
+                  : (theme.colors.backgroundSecondary ??
                     theme.colors.background),
                 border: 'none',
                 borderTop: `1px solid ${theme.colors.border}`,
@@ -613,7 +763,7 @@ export function SubsystemIssueList({
                 style={{
                   flex: 1,
                   minWidth: 0,
-                  fontSize: theme.fontSizes[1],
+                  fontSize: theme.fontSizes[2],
                   fontWeight: 700,
                   letterSpacing: 0.2,
                   color: clean ? muted : theme.colors.text,
@@ -630,7 +780,7 @@ export function SubsystemIssueList({
                 <span
                   style={{
                     fontFamily: theme.fonts.monospace,
-                    fontSize: theme.fontSizes[0],
+                    fontSize: theme.fontSizes[1],
                     fontWeight: 600,
                     color: muted,
                     flexShrink: 0,
@@ -643,17 +793,23 @@ export function SubsystemIssueList({
                 {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
               </span>
             </button>
-            {!clean &&
-              !isCollapsed &&
-              category.issues.map((issue) => (
-                <SubsystemIssueCard
-                  key={issue.id}
-                  issue={issue}
-                  onSelect={onSelectIssue}
-                  onApplyFix={onApplyFix}
-                  onHover={onHoverIssue}
-                />
-              ))}
+            {!clean && !isCollapsed && (
+              // Hang the cards off the header: an inset indent so the body
+              // reads as belonging to the layer above.
+              <div style={{ marginLeft: 11 }}>
+                {category.issues.map((issue) => (
+                  <SubsystemIssueCard
+                    key={issue.id}
+                    issue={issue}
+                    onSelect={onSelectIssue}
+                    onDeselect={onDeselectIssue}
+                    onExpandedChange={trackExpanded}
+                    onApplyFix={onApplyFix}
+                    onHover={onHoverIssue}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         );
       })}

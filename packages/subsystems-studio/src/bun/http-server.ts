@@ -24,6 +24,7 @@ import {
 import {
 	createSubsystemModel,
 	getSubsystemModel,
+	isRepoPurl,
 	listSubsystemModels,
 	normalizeDeclarationProvenance,
 	purlRepoKey,
@@ -116,7 +117,7 @@ function firstComponentPurlKey(body: Record<string, unknown>): string | undefine
 	for (const c of components) {
 		if (!c || typeof c !== "object") continue;
 		const key = purlRepoKey((c as { purl?: string }).purl);
-		if (key) return key;
+		if (key && isRepoPurl(key)) return key;
 	}
 	return undefined;
 }

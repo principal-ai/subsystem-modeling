@@ -197,6 +197,17 @@ describe("assessSubsystemGraphifyReadiness", () => {
 		expect(r.purls).toEqual([]);
 	});
 
+	test("internal / non-repo purls are not listed as repos", async () => {
+		const r = await assessSubsystemGraphifyReadiness({
+			components: [
+				{ purl: "external:file:~/.principal/subsystem-models" },
+				{ purl: "external:proposed" },
+			],
+		});
+		expect(r.purls).toEqual([]);
+		expect(r.status).toBe("unavailable");
+	});
+
 	test("building set marks running", async () => {
 		const purl = "pkg:github/acme/widget";
 		const r = await assessSubsystemGraphifyReadiness(
@@ -363,6 +374,21 @@ describe("ensureCurrentGraphifyCachesForModel", () => {
 		);
 		expect(r.ensured).toEqual([]);
 		expect(r.failed[0]?.purl).toBe(purl);
+	});
+
+	test("ignores internal / non-repo purls instead of failing", async () => {
+		const storeRoot = mkdtempSync(join(tmpdir(), "gf-ensure-"));
+		const r = await ensureCurrentGraphifyCachesForModel(
+			{
+				components: [
+					{ purl: "external:file:~/.principal/subsystem-models", construct: "store" },
+					{ purl: "external:proposed", construct: "store" },
+				],
+			},
+			{ storeRoot },
+		);
+		expect(r.ensured).toEqual([]);
+		expect(r.failed).toEqual([]);
 	});
 
 	test("hits existing current HEAD(+dirty) slot without re-extract", async () => {

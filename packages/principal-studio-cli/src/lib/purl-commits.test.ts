@@ -53,6 +53,14 @@ describe('purlRepoKey', () => {
 });
 
 describe('capturePurlCommits (injected)', () => {
+  test('ignores internal / non-repo purls by default', () => {
+    const out = capturePurlCommits([
+      { alias: 'store', purl: 'external:file:~/.principal/subsystem-models' },
+      { alias: 'proposed', purl: 'external:proposed' },
+    ]);
+    expect(out).toEqual({});
+  });
+
   test('skips unresolved purls rather than fabricating', () => {
     const out = capturePurlCommits(
       [

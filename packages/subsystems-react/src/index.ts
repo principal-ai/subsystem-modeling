@@ -62,6 +62,7 @@ export {
   symbolLabelVariants,
   inferConstructFromGraphify,
   constructsMatch,
+  resolveConstructMatch,
   extractNamedTypes,
   extractGraphifySignature,
   compareSignatures,

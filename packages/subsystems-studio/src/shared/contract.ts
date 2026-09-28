@@ -409,8 +409,9 @@ export interface SubsystemComponentVerificationResult {
 	};
 	/**
 	 * Construct check after an exact anchor (skipped for `external` / non-exact).
-	 * Hard-fail (`ok: false`) only on known inferred ≠ claimed.
-	 * `match: null` means inferred was `unknown` — unconfirmed, for agent follow-up.
+	 * Hard-fail (`ok: false`) only on inferred ≠ claimed with no accepted
+	 * augmentation confirming the claim. `match: null` means inferred was
+	 * `unknown` — unconfirmed, for agent follow-up.
 	 */
 	construct?: {
 		claimed: string;
@@ -418,6 +419,12 @@ export interface SubsystemComponentVerificationResult {
 		/** true = match, false = known mismatch, null = unconfirmed (inferred unknown). */
 		match: boolean | null;
 		evidence?: string[];
+		/**
+		 * Agent-confirmed construct that cleared a `construct_unconfirmed` gap or
+		 * a `construct_mismatch` when Graphify was silent or disagreed. Present
+		 * only on the augmented path — not a Graphify-verified match.
+		 */
+		augmented?: string;
 	};
 	/**
 	 * Signature / params check for function|method after kind ok.

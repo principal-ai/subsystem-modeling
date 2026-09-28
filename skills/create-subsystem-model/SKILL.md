@@ -251,9 +251,65 @@ hand-author `declaration` (`kind: "custom_entity"` + `attributes` as ordered
 group by `process` / `module` / `layer` and participate in relations and
 walkthrough steps exactly like code nodes.
 
-`store` is for retained state registries (e.g. a `Set`/`Map` module-scope
-subscriber bag), not conceptual "services". Pair with `writes` / `reads` /
-`watches` walkthrough hops.
+### `store` — a retained-state declaration
+
+Use `store` for **state that outlives a single call** — the thing a function
+reads or writes rather than the function doing the work:
+
+- a module-level or closure-level state block: `const feeds = new Map<...>()`,
+  `const listeners = new Set<...>()`, a singleton registry/cache
+- a class's retained fields when the state matters on its own
+- a DB table or on-disk file this process reads/writes (`storage: "external"`)
+
+It is **not** for:
+- a function that *manages* state — that is a `function` (a store is the state
+  it manages, not the accessor). If a class manages access, the class is a
+  separate `class` node joined to the store by `writes`/`reads`.
+- a service, singleton *object*, or module — those are `class`/`function`/module
+  frames, not stores.
+
+**Anchor a store at the state declaration**, not at a function that returns it.
+`name`/`symbol` are the state's own name (`feeds`, `cartStore`); a function that
+reads or writes it is its own node, linked by `writes` / `reads` / `watches`
+hops. When the state is closure-local (created inside a factory), anchor it at
+the state location anyway — it is a real declaration even if a symbol-only
+index cannot see it.
+
+A store **declares its type** like every other declaration, on
+`declaration.valueType`:
+
+- state block → the value type (`Map<string, OpencodeLiveFeedState>`,
+  `Set<FeedListener>`)
+- table → the row/record type; when only columns are known, list them in
+  `declaration.properties` instead
+
+Set `declaration.storage` to say how it persists — `memory` (process-lifetime
+RAM), `disk` (this process on the filesystem), `external` (another system —
+db/service). An in-memory store is still `storage: "memory"`, not a separate
+construct; `storage` is orthogonal to `construct`, exactly like `framework` to
+`function`.
+
+```jsonc
+{
+  "alias": "feeds",
+  "name": "feeds",
+  "construct": "store",
+  "symbol": "feeds",
+  "file": "src/bun/opencode-v2-live.ts",
+  "purl": "pkg:github/you/your-app",
+  "declaration": {
+    "kind": "store",
+    "storage": "memory",
+    "valueType": "Map<string, OpencodeLiveFeedState>",
+    "properties": []
+  },
+  "declarationProvenance": "authored"
+}
+```
+
+The node shows the state's name and its `storage` badge; `valueType` renders in
+the click panel. Give an in-memory store a `valueType` — an unnamed `Map`/`Set`
+is the common case, and the type is the interesting part of the declaration.
 
 `method` is for **standalone method components** selected from a class. Use it
 when a class method is important enough to be its own node. `symbol` should be
@@ -326,11 +382,14 @@ event-broadcast use the closest match (`calls` for request/response,
 **Declarations** (`component.declaration`) render params, return type, and
 members in the click panel — hand-author them when you want to highlight
 specific inputs/outputs. Discriminated by `declaration.kind` (`function`,
-`class`, `method`, `type`, `store`, `external`, `custom_entity`, …). Don't
-bother filling
-`callers`/`callees`: relationship comments are intentionally not rendered
-(the model's edges carry interactions). Every hand-written `declaration`
-must carry provenance:
+`class`, `method`, `type`, `store`, `external`, `custom_entity`, …). Every
+declaration carries the shape that makes sense for its kind — for a `store`
+that is `storage` + `valueType` + `properties` (see above). Don't bother
+filling `callers`/`callees`: relationship comments are intentionally not
+rendered (the model's edges carry interactions). Only use the fields the schema
+declares for that `kind`: a store has `storage` / `valueType` / `valueTypeRef` /
+`properties`, and nothing else. Every hand-written `declaration` must carry
+provenance:
 
 - `"declarationProvenance": "authored"` — written by you from reading the
   code; informative but not checked against source (defaulted when omitted)

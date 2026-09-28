@@ -2,6 +2,70 @@ import { describe, expect, test } from 'bun:test';
 import { generateDeclarationString, resolveComponentDeclaration } from './formatDeclaration';
 import type { SubsystemComponent } from './model';
 
+describe('generateDeclarationString — store', () => {
+  const base: Omit<SubsystemComponent, 'declaration'> = {
+    id: 'st',
+    name: 'feeds',
+    construct: 'store',
+    symbol: 'feeds',
+    file: 'src/live.ts',
+    purl: 'pkg:github/acme/app',
+  };
+
+  test('renders a declared valueType as the store signature', () => {
+    const component: SubsystemComponent = {
+      ...base,
+      declaration: {
+        kind: 'store',
+        storage: 'memory',
+        properties: [],
+        valueType: 'Map<string, OpencodeLiveFeedState>',
+      },
+    };
+    expect(generateDeclarationString(component)).toBe(
+      '// store: feeds — Map<string, OpencodeLiveFeedState>\n// backing: memory',
+    );
+  });
+
+  test('named members render as a body under the valueType', () => {
+    const component: SubsystemComponent = {
+      ...base,
+      declaration: {
+        kind: 'store',
+        storage: 'memory',
+        valueType: 'Map<string, { width: number }>',
+        properties: [{ name: 'current', type: 'Map<string, { width: number }>' }],
+      },
+    };
+    expect(generateDeclarationString(component)).toBe(
+      '// store: feeds — Map<string, { width: number }>\n// backing: memory\n  current: Map<string, { width: number }>;',
+    );
+  });
+
+  test('members without a valueType still render as declare const lines', () => {
+    const component: SubsystemComponent = {
+      ...base,
+      declaration: {
+        kind: 'store',
+        properties: [{ name: 'ROOT', type: 'string' }],
+      },
+    };
+    expect(generateDeclarationString(component)).toBe(
+      '// store: feeds\ndeclare const ROOT: string;',
+    );
+  });
+
+  test('a store with neither valueType nor members says so explicitly', () => {
+    const component: SubsystemComponent = {
+      ...base,
+      declaration: { kind: 'store', storage: 'memory', properties: [] },
+    };
+    expect(generateDeclarationString(component)).toBe(
+      '// store: feeds — no declared type (no valueType or state members)\n// backing: memory',
+    );
+  });
+});
+
 describe('generateDeclarationString — custom_entity', () => {
   test('renders entity identity + entityKind, no attributes when none authored', () => {
     const component: SubsystemComponent = {

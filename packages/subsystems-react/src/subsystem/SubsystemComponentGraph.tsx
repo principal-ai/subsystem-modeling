@@ -38,6 +38,7 @@ import {
   buildSubsystemGraph,
   deriveGraphEdges,
   isConstructsOnlyModel,
+  moduleGroupNodeId,
   isRelationMechanism,
   isWalkthroughMechanism,
   edgeColor,
@@ -49,6 +50,8 @@ import {
   type SubsystemEdgeProvenance,
   type SubsystemEdgeView,
   type SubsystemGraphifyRelation,
+  type SubsystemNodeIssue,
+  type SubsystemRegionIssue,
   type SubsystemRelation,
   type SubsystemWalkthrough,
 } from './model';
@@ -59,6 +62,11 @@ import { SubsystemComponentNode, SubsystemGroupNode, SubsystemEdge, SUBSYSTEM_CA
 import { SubsystemDiagnosticToggle, type SubsystemDiagnostic } from './DiagnosticToggle';
 import {
   SubsystemIssueList,
+  issueCategory,
+  issueKindOrder,
+  issueRung,
+  ISSUE_KIND_ICON,
+  ISSUE_RUNG_ORDER,
   type SubsystemIssue,
   type SubsystemIssueCategory,
 } from './IssueList';
@@ -315,7 +323,15 @@ export interface SubsystemComponentGraphProps {
    * plain issues view expands everything.
    */
   focusIssueCategory?: SubsystemIssueCategory;
-  /** Click an issue — focus its target on the graph / open detail. */
+  /**
+   * Click an issue. The graph first focuses the target on the canvas itself —
+   * a component target is selected and framed (any edge / walkthrough focus
+   * that would hide it is cleared), a relation target frames its edge, and a
+   * module target frames that boundary frame — then this fires so the host can
+   * open its own detail. Collapsing the card again reverses that (deselect +
+   * zoom out). Other target kinds (flow / repo) have no node to frame and just
+   * forward here.
+   */
   onSelectIssue?: (issue: SubsystemIssue) => void;
   /** Apply an issue's deterministic fix. */
   onApplyIssueFix?: (issue: SubsystemIssue) => void;
@@ -544,6 +560,13 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
   const [sidebarView, setSidebarView] = useState<'files' | 'walkthroughs'>(() =>
     walkthroughs?.length ? 'walkthroughs' : 'files',
   );
+  // Temporary edge-vocabulary override. Focusing a relation finding whose edge
+  // belongs to the *other* vocabulary flips the canvas so the edge is actually
+  // visible; it reverts when the focus is undone (see `unfocusIssueTarget`) or
+  // when the diagnostics list closes. Null = use the host-pinned / tab view.
+  const [edgeViewOverride, setEdgeViewOverride] = useState<SubsystemEdgeView | null>(
+    null,
+  );
   // One edge vocabulary at a time. When the caller doesn't pick, the sidebar's
   // Files / Walkthroughs tab picks: Files draws topology relation edges,
   // Walkthroughs draws runtime hop edges. Without visible tabs (no walkthroughs,
@@ -551,6 +574,7 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
   // to walkthrough edges rather than empty, everything else to relations.
   const sidebarTabsVisible = !hideSidebar && (walkthroughs?.length ?? 0) > 0;
   const resolvedEdgeView: SubsystemEdgeView =
+    edgeViewOverride ??
     edgeView ??
     (sidebarTabsVisible
       ? (sidebarView === 'walkthroughs' ? 'walkthroughs' : 'relations')
@@ -640,6 +664,11 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
   // closure over the effect deps) can toggle without a stale value.
   const selectedRef = useRef<SubsystemComponent | null>(null);
   selectedRef.current = selected;
+  // The module frame an issue card framed. A module target selects no node and
+  // no edge, so nothing else records that focus — without this the canvas has
+  // no way to tell a module focus it still owns from one a later click took
+  // over, and the camera would stay parked on the region forever.
+  const issueModuleFocusRef = useRef<string | null>(null);
   // Ref mirror of the open file drawer target for tree-click toggle.
   const openFileRef = useRef<{ file: string; startLine?: number } | null>(null);
   const openFile =
@@ -926,16 +955,273 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
   const xyflowNodesBase = nodes as Node[];
   const baseEdges = convertedEdges as Edge[];
 
+  // Resolve an issue's component target to the matching node. `id` is the
+  // stable alias; `label` may be an alias, name, or symbol. Non-component
+  // targets (relation / module / flow / repo) have no single node → null.
+  const issueComponent = useCallback(
+    (issue: SubsystemIssue): SubsystemComponent | null => {
+      const target = issue.target;
+      if (target?.kind !== 'component') return null;
+      return (
+        components.find(
+          (c) =>
+            (target.id != null && c.alias === target.id) ||
+            c.alias === target.label ||
+            c.name === target.label ||
+            c.symbol === target.label,
+        ) ?? null
+      );
+    },
+    [components],
+  );
+
+  // Resolve a `relation` issue target to the display edge it flags. The target
+  // names the two endpoints (`from → to`); match an edge joining both, in
+  // either direction, preferring the target's `detail` mechanism when it names
+  // one. Null when no display edge matches.
+  const issueEdge = useCallback(
+    (issue: SubsystemIssue): Edge | null => {
+      const target = issue.target;
+      if (target?.kind !== 'relation') return null;
+      const parts = `${target.id ?? ''} → ${target.label}`
+        .split('→')
+        .map((p) => p.replace(/\(\)$/, '').trim())
+        .filter(Boolean);
+      const joins = (e: Edge): boolean =>
+        parts.includes(e.source) && parts.includes(e.target);
+      const matches = baseEdges.filter(joins);
+      const byMechanism = target.detail
+        ? matches.filter(
+            (e) =>
+              (e.data as { mechanism?: string } | undefined)?.mechanism ===
+              target.detail,
+          )
+        : matches;
+      return byMechanism[0] ?? matches[0] ?? null;
+    },
+    [baseEdges],
+  );
+
+  // A `module` issue target names a boundary frame, so focusing the card frames
+  // that region on the canvas. Null when the target names no frame (a singleton
+  // dropped from the layout, or a region key nothing declares).
+  const issueModuleNodeId = useCallback(
+    (issue: SubsystemIssue): string | null => {
+      const target = issue.target;
+      if (target?.kind !== 'module') return null;
+      const key = target.id ?? target.label;
+      if (!components.some((c) => c.module?.trim() === key)) return null;
+      return moduleGroupNodeId(key);
+    },
+    [components],
+  );
+
+  // A `step` issue target names ONE step of a walkthrough — the walkthrough id in
+  // `id`, the 0-based step position in `stepIndex`. Validated against the loaded
+  // walkthroughs so a finding left over from an edited flow resolves to null
+  // rather than framing whatever now happens to sit at that index.
+  const issueStep = useCallback(
+    (
+      issue: SubsystemIssue,
+    ): { walkthrough: SubsystemWalkthrough; stepIndex: number } | null => {
+      const target = issue.target;
+      if (target?.kind !== 'step') return null;
+      if (target.id == null || target.stepIndex == null) return null;
+      const walkthrough = walkthroughs?.find((t) => t.id === target.id);
+      if (!walkthrough?.steps[target.stepIndex]) return null;
+      return { walkthrough, stepIndex: target.stepIndex };
+    },
+    [walkthroughs],
+  );
+
+  // Per-node diagnostics badge: fold each component-targeted finding that maps
+  // to a verification rung into one badge per node — worst severity wins, the
+  // chip shows the earliest failing rung, and the count tallies the findings.
+  const issueBadgeByAlias = useMemo(() => {
+    const map = new Map<string, SubsystemNodeIssue>();
+    if (!issues?.length) return map;
+    for (const issue of issues) {
+      const rung = issueRung(issue.kind);
+      if (!rung) continue;
+      const comp = issueComponent(issue);
+      if (!comp) continue;
+      const prev = map.get(comp.alias);
+      map.set(comp.alias, {
+        severity:
+          prev?.severity === 'error' || issue.severity === 'error'
+            ? 'error'
+            : 'info',
+        rung:
+          prev != null && ISSUE_RUNG_ORDER[prev.rung] <= ISSUE_RUNG_ORDER[rung]
+            ? prev.rung
+            : rung,
+        count: (prev?.count ?? 0) + 1,
+      });
+    }
+    return map;
+  }, [issues, issueComponent]);
+
+  // Per-frame diagnostics badge: the same fold, but for findings about a
+  // BOUNDARY rather than a construct. Keyed by the region's React Flow node id.
+  // Only kinds with a dedicated frame icon qualify (`ISSUE_KIND_ICON`) — a
+  // finding with no icon of its own has nothing to badge the frame with, and
+  // borrowing its layer's icon would imply the frame is at fault for it.
+  const regionIssueByNodeId = useMemo(() => {
+    const map = new Map<string, SubsystemRegionIssue>();
+    if (!issues?.length) return map;
+    for (const issue of issues) {
+      const target = issue.target;
+      if (target?.kind !== 'module' || !ISSUE_KIND_ICON[issue.kind]) continue;
+      const id = moduleGroupNodeId(target.id ?? target.label);
+      const prev = map.get(id);
+      map.set(id, {
+        severity:
+          prev?.severity === 'error' || issue.severity === 'error' ? 'error' : 'info',
+        kind:
+          prev != null && issueKindOrder(prev.kind) <= issueKindOrder(issue.kind)
+            ? prev.kind
+            : issue.kind,
+        count: (prev?.count ?? 0) + 1,
+      });
+    }
+    return map;
+  }, [issues]);
+
+  // Expanded verification layers in the diagnostics list. When any layer with
+  // findings is expanded, the canvas dims everything that layer does not
+  // implicate (see `issueFocus`). The list publishes this through
+  // `onExpandedCategoriesChange`; empty while every layer is collapsed.
+  const [expandedIssueCategories, setExpandedIssueCategories] = useState<
+    SubsystemIssueCategory[]
+  >([]);
+  // Stable setter — the list re-emits on mount and on every toggle, so compare
+  // before storing to avoid churn (and to keep the list effect's dep stable).
+  const handleExpandedCategoriesChange = useCallback(
+    (cats: SubsystemIssueCategory[]) => {
+      setExpandedIssueCategories((prev) =>
+        prev.length === cats.length && prev.every((c, i) => c === cats[i])
+          ? prev
+          : cats,
+      );
+    },
+    [],
+  );
+
+  // Resolve a component name / symbol / alias reference to a component alias.
+  const resolveAlias = useCallback(
+    (ref: string): string | null => {
+      const clean = ref.replace(/\(\)$/, '').trim();
+      const c = components.find(
+        (x) =>
+          x.alias === clean ||
+          x.name === clean ||
+          (x.symbol != null && x.symbol.replace(/\(\)$/, '') === clean),
+      );
+      return c?.alias ?? null;
+    },
+    [components],
+  );
+
+  // Graph elements implicated by the expanded layers' findings — the bright set
+  // the canvas keeps while everything else dims. Derived from each finding's
+  // target:
+  //   component   → that node
+  //   relation    → the edge it flags (+ its two endpoint nodes)
+  //   module      → every component in that module
+  //   walkthrough → the flow's nodes + its hop edges
+  //   repo        → every component of that repo
+  //   graph       → whole-graph finding; implicates nothing specific
+  // Returns null when nothing is expanded, no expanded layer has findings, or
+  // the findings implicate nothing — so no dimming is applied.
+  const issueFocus = useMemo(() => {
+    if (!issues?.length || expandedIssueCategories.length === 0) return null;
+    const active = new Set(expandedIssueCategories);
+    const activeIssues = issues.filter((i) => active.has(issueCategory(i)));
+    if (activeIssues.length === 0) return null;
+    const nodeIds = new Set<string>();
+    const edgeIds = new Set<string>();
+    for (const issue of activeIssues) {
+      const t = issue.target;
+      if (!t) continue; // whole-graph finding — no specific element
+      if (t.kind === 'component') {
+        const a = resolveAlias(t.id ?? t.label);
+        if (a) nodeIds.add(a);
+      } else if (t.kind === 'relation') {
+        // The target names the two endpoints (`from → to`); light the edge and
+        // its endpoints. Falls back to endpoints alone if no edge matches.
+        const edge = issueEdge(issue);
+        if (edge) {
+          edgeIds.add(edge.id);
+          nodeIds.add(edge.source);
+          nodeIds.add(edge.target);
+        } else {
+          for (const part of `${t.id ?? ''} → ${t.label}`.split('→')) {
+            const a = resolveAlias(part);
+            if (a) nodeIds.add(a);
+          }
+        }
+      } else if (t.kind === 'module') {
+        const key = t.id ?? t.label;
+        const prefix = `${key.replace(/\/$/, '')}/`;
+        for (const c of components) {
+          if (
+            c.module === key ||
+            c.file === key ||
+            (c.file !== '' && c.file.endsWith(key)) ||
+            c.file.startsWith(prefix)
+          ) {
+            nodeIds.add(c.alias);
+          }
+        }
+      } else if (t.kind === 'walkthrough') {
+        const wt = (walkthroughs ?? []).find(
+          (w) => w.id === t.id || w.title === t.label,
+        );
+        if (wt) {
+          for (const s of wt.steps) {
+            nodeIds.add(s.from);
+            nodeIds.add(s.to);
+            edgeIds.add(walkthroughStepGraphEdgeId(s));
+          }
+        }
+      } else if (t.kind === 'repo') {
+        const key = t.id ?? t.label;
+        for (const c of components) {
+          if (c.purl === key) nodeIds.add(c.alias);
+        }
+      }
+    }
+    if (nodeIds.size === 0 && edgeIds.size === 0) return null;
+    // An edge whose endpoints both sit in the bright set stays lit too, so a
+    // focused cluster doesn't read as isolated nodes.
+    for (const e of baseEdges) {
+      if (nodeIds.has(e.source) && nodeIds.has(e.target)) edgeIds.add(e.id);
+    }
+    return { nodeIds, edgeIds };
+  }, [issues, expandedIssueCategories, components, walkthroughs, baseEdges, resolveAlias, issueEdge]);
+  const issueFocusNodeIds = issueFocus?.nodeIds ?? null;
+  const issueFocusEdgeIds = issueFocus?.edgeIds ?? null;
+
   // When an edge is selected, dim every other edge + its label to focus it.
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   // Ref mirror so `selectEdge` (a useCallback over early deps) can toggle
   // without a stale closure value.
   const selectedEdgeIdRef = useRef<string | null>(null);
   selectedEdgeIdRef.current = selectedEdgeId;
+  // Ref mirrors of the focused step, so `unfocusIssueTarget` (a useCallback
+  // over early deps) can tell a step focus it still owns from one the user has
+  // since moved elsewhere in the walkthrough panel.
+  const focusedStepRef = useRef<{ walkthroughId: string; stepIndex: number } | null>(
+    null,
+  );
+  focusedStepRef.current =
+    focusedWalkthroughId != null && focusedStepIndex != null
+      ? { walkthroughId: focusedWalkthroughId, stepIndex: focusedStepIndex }
+      : null;
+
   // Edge ids in walkthrough focus (an active flow's edge set, or a single
   // step's edge). Used to frame the camera. `null` = no walkthrough focus.
-  const focusEdgeIds = useMemo(() => {
-    if (autoPlayFocus) {
+  const focusEdgeIds = useMemo(() => {    if (autoPlayFocus) {
       const tl = walkthroughs?.find((t) => t.id === autoPlayFocus.walkthroughId);
       const step = tl?.steps[autoPlayFocus.stepIndex];
       return step ? new Set([walkthroughStepGraphEdgeId(step)]) : null;
@@ -1070,12 +1356,22 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
           anyOpened: openedNodeIds != null,
           anySelected: brightNodeIds != null || previewNodeIds != null,
         });
-        const dimmed = previewNodeIds
-          ? vis.hidden || !memberAliases.some((alias) => previewNodeIds.has(alias))
+        // `brightNodeIds` is the focused step's endpoints. It has to be a dim
+        // source, not just a bright set: without an expanded flow,
+        // `flowElementVisibility` reports non-participants as *hidden*, and the
+        // noOpenedFlow escape below discards that — leaving them neither hidden
+        // nor dimmed. Naming the participants as the dim source dims everything
+        // outside the focused step however the flow got focused.
+        const dimSource = previewNodeIds ?? brightNodeIds ?? issueFocusNodeIds;
+        const dimmed = dimSource
+          ? vis.hidden || !memberAliases.some((alias) => dimSource.has(alias))
           : vis.dimmed;
         const hidden = noOpenedFlow ? false : vis.hidden;
         // Host override wins over the library's derived frame color.
         const color = region?.key != null ? boundaryColors?.[region.key] : undefined;
+        // Boundary findings badge the FRAME, not a member — a region's shape is
+        // the fault, so no leaf construct carries it.
+        const regionIssue = regionIssueByNodeId.get(n.id);
         return {
           ...n,
           hidden,
@@ -1084,6 +1380,7 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
             ...(n.data as object),
             ...(color != null && { color }),
             ...(dimmed && { dimmed: true }),
+            ...(regionIssue && { issue: regionIssue }),
           },
         };
       }
@@ -1100,9 +1397,17 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
         anyOpened: openedNodeIds != null,
         anySelected: brightNodeIds != null || previewNodeIds != null,
       });
-      const dimmed = previewNodeIds ? (vis.hidden || !previewNodeIds.has(n.id)) : vis.dimmed;
+      // `brightNodeIds` (the focused step's endpoints) is a dim source as well
+      // as a bright set — see the group branch above.
+      const dimSource = previewNodeIds ?? brightNodeIds ?? issueFocusNodeIds;
+      const dimmed = dimSource ? (vis.hidden || !dimSource.has(n.id)) : vis.dimmed;
       const hidden = noOpenedFlow ? false : vis.hidden;
-      if (fileMatch === undefined && !isSelected && !dimmed) {
+      // Component findings key by alias, boundary findings by region node id.
+      // The two id spaces are disjoint (`module:` / `process:` are prefixed), so
+      // one lookup covers both node kinds.
+      const issueBadge =
+        issueBadgeByAlias.get(n.id) ?? regionIssueByNodeId.get(n.id);
+      if (fileMatch === undefined && !isSelected && !dimmed && !issueBadge) {
         const { fileMatch: _f, isSelected: _s, dimmed: _d, ...rest } = n.data as Record<string, unknown>;
         return { ...n, hidden, data: rest };
       }
@@ -1114,10 +1419,11 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
           ...(fileMatch !== undefined && { fileMatch }),
           ...(isSelected && { isSelected }),
           ...(dimmed && { dimmed: true }),
+          ...(issueBadge && { issue: issueBadge }),
         },
       };
     });
-  }, [xyflowNodesBase, openFile, selected, focusNodeIds, openedNodeIds, brightNodeIds, previewNodeIds, boundaryColors]);
+  }, [xyflowNodesBase, openFile, selected, focusNodeIds, openedNodeIds, brightNodeIds, previewNodeIds, issueFocusNodeIds, issueBadgeByAlias, regionIssueByNodeId, boundaryColors]);
 
   const baseNodesKey = useMemo(() => nodes.map((n) => n.id).sort().join(','), [nodes]);
   const baseEdgesKey = useMemo(
@@ -1151,7 +1457,7 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
       }
       return isWalkthroughMechanism(mechanism);
     };
-    if (openedEdgeIds || focusEdgeIds || previewEdgeIds) {
+    if (openedEdgeIds || focusEdgeIds || previewEdgeIds || issueFocusEdgeIds) {
       return baseEdges.map((e) => {
         const vis = flowElementVisibility({
           inOpened: openedEdgeIds?.has(e.id) === true,
@@ -1159,7 +1465,8 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
           anyOpened: openedEdgeIds != null,
           anySelected: focusEdgeIds != null,
         });
-        const dimmed = previewEdgeIds ? vis.hidden || !previewEdgeIds.has(e.id) : vis.dimmed;
+        const dimSource = previewEdgeIds ?? issueFocusEdgeIds;
+        const dimmed = dimSource ? vis.hidden || !dimSource.has(e.id) : vis.dimmed;
         const hidden = vis.hidden || !edgeInView(e);
         return { ...paint(e, dimmed), hidden };
       });
@@ -1171,7 +1478,7 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
       }));
     }
     return baseEdges.map((e) => ({ ...e, hidden: !edgeInView(e) }));
-  }, [baseEdges, selectedEdgeId, openedEdgeIds, focusEdgeIds, previewEdgeIds, resolvedEdgeView]);
+  }, [baseEdges, selectedEdgeId, openedEdgeIds, focusEdgeIds, previewEdgeIds, issueFocusEdgeIds, resolvedEdgeView]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -1225,6 +1532,7 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
           return;
         }
         setSelected(comp);
+        issueModuleFocusRef.current = null;
         if (comp.alias) onSelect?.(comp.alias);
       }
     },
@@ -1244,6 +1552,8 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
     setSelectedEdgeId(null);
     setFocusedWalkthroughId(null);
     setFocusedStepIndex(null);
+    setEdgeViewOverride(null);
+    issueModuleFocusRef.current = null;
   }, []);
 
   // Sidebar file trees — one per repo on multi-repo graphs, each under its
@@ -1263,6 +1573,14 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
   );
   const controlledIssues = showIssues !== undefined;
   const issuesActive = controlledIssues ? showIssues : diagnosticsOpen;
+  // Layer focus only applies while the diagnostics list is on screen — closing
+  // it clears any dimming the expanded layers were driving.
+  useEffect(() => {
+    if (!issuesActive) {
+      setExpandedIssueCategories([]);
+      setEdgeViewOverride(null);
+    }
+  }, [issuesActive]);
   const toggleIssues = () => {
     if (!controlledIssues) setDiagnosticsOpen((v) => !v);
     diagnostic?.onToggle?.();
@@ -1461,6 +1779,66 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
       zoomOnWalkthroughFocus,
       walkthroughFocusDurationMs,
     ],
+  );
+
+  // A node's laid-out rect in absolute flow coords. `absoluteRects` is the
+  // authority; the fallback covers an unparented group node, whose `position` is
+  // already absolute. Nested groups are parent-relative, so they are skipped
+  // rather than mis-boxed.
+  const rectForNode = useCallback(
+    (id: string): { x: number; y: number; width: number; height: number } | undefined => {
+      const r = built.absoluteRects.get(id);
+      if (r) return r;
+      const n = built.nodes.find((x) => x.id === id) as
+        | {
+            position?: { x: number; y: number };
+            width?: number;
+            height?: number;
+            parentId?: string;
+          }
+        | undefined;
+      if (!n?.position || n.parentId) return undefined;
+      return {
+        x: n.position.x,
+        y: n.position.y,
+        width: n.width ?? 0,
+        height: n.height ?? 0,
+      };
+    },
+    [built.absoluteRects, built.nodes],
+  );
+
+  // Frame a set of nodes by their laid-out rects. Unlike `fitFocusBounds` this
+  // takes node ids, so it works for boundary frames too — React Flow's own
+  // `fitView({ nodes })` can't be relied on for group nodes here, and the rects
+  // are already in absolute flow coords (grouped child `position`s are
+  // parent-relative and would skew the box).
+  const fitNodeRects = useCallback(
+    (ids: ReadonlySet<string>, padding: number) => {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const id of ids) {
+        const r = rectForNode(id);
+        if (!r) continue;
+        minX = Math.min(minX, r.x);
+        minY = Math.min(minY, r.y);
+        maxX = Math.max(maxX, r.x + r.width);
+        maxY = Math.max(maxY, r.y + r.height);
+      }
+      if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
+      fitBounds(
+        {
+          x: minX,
+          y: minY,
+          width: Math.max(1, maxX - minX),
+          height: Math.max(1, maxY - minY),
+        },
+        { padding, duration: walkthroughFocusDurationMs },
+      );
+    },
+    [rectForNode, fitBounds, walkthroughFocusDurationMs],
   );
 
   // Zoom back out to the full diagram after the last expanded walkthrough
@@ -1841,6 +2219,144 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
     [components, onSelect],
   );
 
+  // Issue click → select + frame the target on the canvas. Component targets
+  // frame their node; relation targets frame their edge (endpoints + the routed
+  // line); other kinds (module / flow / repo) have no single element and just
+  // forward. Selections / focus that would hide the target are cleared first,
+  // then the camera flies to it on the next frame. The host's `onSelectIssue`
+  // still fires afterwards for its own detail.
+  const focusIssueTarget = useCallback(
+    (issue: SubsystemIssue) => {
+      const comp = issueComponent(issue);
+      const edge = comp ? null : issueEdge(issue);
+      const step = comp || edge ? null : issueStep(issue);
+      if (comp) {
+        setSelected(comp);
+        setSelectedEdgeId(null);
+        setFocusedWalkthroughId(null);
+        setFocusedStepIndex(null);
+        setHoveredWalkthroughStep(null);
+        issueModuleFocusRef.current = null;
+        onSelect?.(comp.alias);
+        requestAnimationFrame(() => {
+          fitView({
+            nodes: [{ id: comp.alias }],
+            padding: 0.4,
+            duration: 300,
+            minZoom: 0.05,
+            maxZoom: 1.5,
+          });
+        });
+      } else if (edge) {
+        setSelected(null);
+        setFocusedWalkthroughId(null);
+        setFocusedStepIndex(null);
+        setHoveredWalkthroughStep(null);
+        setSelectedEdgeId(edge.id);
+        issueModuleFocusRef.current = null;
+        // Flip to the vocabulary this edge belongs to, so a hop flagged in the
+        // relations view (or vice versa) is actually drawn while focused.
+        const d = edge.data as
+          | { mechanism?: string; provenance?: SubsystemEdgeProvenance }
+          | undefined;
+        const mechanism = d?.mechanism ?? 'uses';
+        setEdgeViewOverride(
+          d?.provenance === 'graphify' || isRelationMechanism(mechanism)
+            ? 'relations'
+            : 'walkthroughs',
+        );
+        requestAnimationFrame(() => {
+          fitFocusBounds(new Set([edge.id]));
+        });
+      } else if (step) {
+        // A step finding focuses the step itself, through the same entry point
+        // the walkthrough panel uses — so the drawer, the step numbering, the
+        // dim-mode hover preview, and the camera all behave identically whether
+        // the step was reached from the panel or from a diagnostics card.
+        issueModuleFocusRef.current = null;
+        focusWalkthroughStep(step.walkthrough, step.stepIndex);
+      } else {
+        // Nothing selectable — but a module target names a boundary frame, so
+        // frame that region.
+        const moduleNodeId = issueModuleNodeId(issue);
+        if (moduleNodeId) {
+          setSelected(null);
+          setSelectedEdgeId(null);
+          setFocusedWalkthroughId(null);
+          setFocusedStepIndex(null);
+          setHoveredWalkthroughStep(null);
+          issueModuleFocusRef.current = moduleNodeId;
+          requestAnimationFrame(() => {
+            fitNodeRects(new Set([moduleNodeId]), 0.4);
+          });
+        }
+      }
+      onSelectIssue?.(issue);
+    },
+    [
+      issueComponent,
+      issueEdge,
+      issueStep,
+      issueModuleNodeId,
+      focusWalkthroughStep,
+      onSelect,
+      onSelectIssue,
+      fitView,
+      fitFocusBounds,
+      fitNodeRects,
+    ],
+  );
+
+  // Collapsing the issue card again undoes the focus: drop the node / edge
+  // selection (only when it is still this issue's target — another card may
+  // have taken it over) and zoom back out to the whole graph. A module target
+  // frames a region rather than selecting anything, so its ownership lives in
+  // `issueModuleFocusRef`; without this branch a module focus never unwinds and
+  // the camera never zooms back out.
+  const unfocusIssueTarget = useCallback(
+    (issue: SubsystemIssue) => {
+      const comp = issueComponent(issue);
+      if (comp) {
+        if (selectedRef.current?.alias !== comp.alias) return;
+        setSelected(null);
+        setSelectedEdgeId(null);
+      } else {
+        const edge = issueEdge(issue);
+        const step = edge ? null : issueStep(issue);
+        const moduleNodeId = edge || step ? null : issueModuleNodeId(issue);
+        if (edge) {
+          if (selectedEdgeIdRef.current !== edge.id) return;
+          setSelectedEdgeId(null);
+          setEdgeViewOverride(null);
+        } else if (step) {
+          // Only unwind a step focus this card still owns. A dim-mode graph
+          // keeps its step focus in hover state instead (owned by the pointer,
+          // not the card), and correctly leaves that alone here.
+          const owned = focusedStepRef.current;
+          if (
+            owned?.walkthroughId !== step.walkthrough.id ||
+            owned?.stepIndex !== step.stepIndex
+          ) {
+            return;
+          }
+          setFocusedWalkthroughId(null);
+          setFocusedStepIndex(null);
+          setDrawerTarget((prev) => (prev?.kind === 'walkthrough' ? null : prev));
+        } else if (moduleNodeId) {
+          // Only unwind framing this card still owns.
+          if (issueModuleFocusRef.current !== moduleNodeId) return;
+          issueModuleFocusRef.current = null;
+        } else {
+          return;
+        }
+      }
+      requestAnimationFrame(() => {
+        fitView({ padding: 0.1, duration: 300, minZoom: 0.05, maxZoom: 2 });
+      });
+    },
+    [issueComponent, issueEdge, issueStep, issueModuleNodeId, fitView],
+  );
+
   // Construct tokens inside a walkthrough snippet. A step's line is an edge
   // between its `from`/`to` components, so a token naming either of those
   // constructs should navigate to that construct's declaration. Index the
@@ -2096,9 +2612,11 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
                 <SubsystemIssueList
                   issues={issues ?? []}
                   focusCategory={focusIssueCategory}
-                  onSelectIssue={onSelectIssue}
+                  onSelectIssue={focusIssueTarget}
+                  onDeselectIssue={unfocusIssueTarget}
                   onApplyFix={onApplyIssueFix}
                   onHoverIssue={onHoverIssue}
+                  onExpandedCategoriesChange={handleExpandedCategoriesChange}
                 />
               ) : (
                 <>

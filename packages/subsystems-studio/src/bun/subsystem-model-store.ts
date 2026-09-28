@@ -424,6 +424,21 @@ export function purlRepoKey(purl: string | undefined): string | undefined {
 }
 
 /**
+ * True when a purl identifies a code repo checkout we can resolve locally.
+ *
+ * Only `pkg:github/…` qualifies. Pseudo-purls describing internal surfaces
+ * (`external:file:~/.principal/subsystem-models`, `external:proposed`,
+ * `external:…`) are stable identities, not repos — resolving or graphifying
+ * them would invent a checkout (see the stale
+ * `graphify-graphs/external-file-*` cache).
+ */
+export function isRepoPurl(purl: string | undefined): boolean {
+	const key = purlRepoKey(purl);
+	if (!key) return false;
+	return /^pkg:github\//i.test(key);
+}
+
+/**
  * Resolve a component's local root from Alexandria by its purl.
  *
  * The model does not store local paths — repo identity travels on each
@@ -435,7 +450,7 @@ export function resolveRepoRootForComponent(
 	purl: string | undefined,
 ): string | undefined {
 	const key = purlRepoKey(purl);
-	if (!key) return undefined;
+	if (!key || !isRepoPurl(key)) return undefined;
 	const parts = key.split("/"); // ["pkg:github", owner, name]
 	const name = parts.pop();
 	const owner = parts.pop();
