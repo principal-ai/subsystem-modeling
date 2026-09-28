@@ -10,9 +10,8 @@ export default {
 		version: "0.1.0",
 	},
 	build: {
-		// Pinned to bun for lowest-risk v1→v2 bridge (v2 defaults to cottontail).
-		// Migrating the main process to Cottontail can be a separate change.
-		mainProcess: "bun",
+		// Electrobun 1.x always runs the main process on Bun (no Cottontail /
+		// Hutch build-time runtime), so there is no `mainProcess` field.
 		bun: {
 			entrypoint: "src/bun/index.ts",
 		},
@@ -25,8 +24,8 @@ export default {
 			"src/mainview/index.html": "views/mainview/index.html",
 			"src/mainview/index.css": "views/mainview/index.css",
 			"src/mainview/agent-logos": "views/mainview/agent-logos",
-			// esbuild-vendored Prettier, loaded outside the Cottontail bundle
-			// (see scripts/build-prettier-vendor.ts).
+			// esbuild-vendored Prettier, loaded as a plain script (see
+			// scripts/build-prettier-vendor.ts).
 			"src/mainview/vendor/prettier.js": "views/mainview/vendor/prettier.js",
 		},
 		mac: {
