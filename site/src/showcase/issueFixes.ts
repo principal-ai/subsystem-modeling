@@ -169,7 +169,7 @@ const relationIssue: IssueFixModel = {
       id: 'e-stale',
       from: 'session-reader-read',
       to: 'old-parser',
-      relationType: 'references',
+      relationType: 'method',
     },
   ],
 }
@@ -219,7 +219,7 @@ const relationFix: IssueFixModel = {
       id: 'e-retarget',
       from: 'session-reader-read',
       to: 'parse-transcript',
-      relationType: 'references',
+      relationType: 'method',
     },
   ],
 }
@@ -403,12 +403,12 @@ export const ISSUE_FIX_EXAMPLES: IssueFixExample[] = [
       autoPlayWalkthroughs: false,
     },
     issue: {
-      caption: 'references still points at deleted oldParser.',
+      caption: 'the relation still points at deleted oldParser.',
       snippet: `{
   "id": "e-stale",
   "from": "session-reader-read",
   "to": "old-parser",   // ← gone from components[]
-  "relationType": "references"
+  "relationType": "method"
 }`,
       model: relationIssue,
     },
@@ -418,7 +418,7 @@ export const ISSUE_FIX_EXAMPLES: IssueFixExample[] = [
   "id": "e-retarget",
   "from": "session-reader-read",
   "to": "parse-transcript",
-  "relationType": "references"
+  "relationType": "method"
 }`,
       model: relationFix,
     },

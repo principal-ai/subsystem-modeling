@@ -431,7 +431,7 @@ export const TOPOLOGY_MECHANICAL_CASES: AuditCase[] = [
   "id": "e-ref-xyflow",
   "from": "component-node",
   "to": "xyflow",
-  "relationType": "references"
+  "relationType": "method"
 }
 // both component-node and xyflow exist in components[]`,
   },
@@ -445,13 +445,13 @@ export const TOPOLOGY_MECHANICAL_CASES: AuditCase[] = [
   "id": "e-stale",
   "from": "session-reader",
   "to": "old-parser",   // ← id removed from components[]
-  "relationType": "references"
+  "relationType": "method"
 }`,
   },
   {
     example: 'relation corroborated',
     meaning:
-      'Graphify has a matching edge for this relationType between exact anchors. Soft pass — method, extends/inherits, implements, mixes_in, references. Externals have no anchor and are never soft-confirmed; they are a gap for the agent to review. Also pass when an accepted relation augmentation confirmed the claim.',
+      'Graphify has a matching edge for this relationType between exact anchors. Soft pass — method, extends/inherits, implements, mixes_in. Externals have no anchor and are never soft-confirmed; they are a gap for the agent to review. Also pass when an accepted relation augmentation confirmed the claim.',
     outcome: 'pass',
     remediation: 'none',
     snippet: `// model
@@ -688,14 +688,6 @@ export const RELATION_TYPE_CATALOG: CatalogEntry[] = [
     meaning: 'from mixes in behavior from to.',
     example: `class Panel {
   … // mixes in Disposable
-}`,
-  },
-  {
-    label: 'references',
-    meaning:
-      'Type or symbol reference that is not a call — annotation, cast, or name mention.',
-    example: `function open(id: SessionId) {
-  …
 }`,
   },
 ]

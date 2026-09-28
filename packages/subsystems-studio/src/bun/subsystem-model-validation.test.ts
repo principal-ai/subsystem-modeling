@@ -19,7 +19,7 @@ describe("findSubsystemModelProblems", () => {
             { alias: "a", name: "A", construct: "function", file: "src/a.ts", purl: "pkg:github/a/b" },
             { alias: "b", name: "B", construct: "class", file: "src/b.ts", purl: "pkg:github/a/b" },
           ],
-          relations: [{ id: "r1", from: "a", to: "b", relationType: "references" }],
+          relations: [{ id: "r1", from: "a", to: "b", relationType: "method" }],
         }),
       ),
     ).toEqual([]);
@@ -50,7 +50,7 @@ describe("findSubsystemModelProblems", () => {
     const problems = findSubsystemModelProblems(
       payload({
         components: [{ alias: "a", name: "A", construct: "function", file: "src/a.ts", purl: "pkg:github/a/b" }],
-        relations: [{ id: "r1", from: "a", to: "ghost", relationType: "references" }],
+        relations: [{ id: "r1", from: "a", to: "ghost", relationType: "method" }],
       }),
     );
     expect(problems).toHaveLength(1);

@@ -90,20 +90,7 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const relations = [
-  {
-    "id": "e4",
-    "from": "schema-tests",
-    "to": "stg-orders",
-    "relationType": "references"
-  },
-  {
-    "id": "e5",
-    "from": "schema-tests",
-    "to": "fct-daily-orders",
-    "relationType": "references"
-  }
-] as SubsystemRelation[];
+export const relations = [] as SubsystemRelation[];
 
 export const walkthroughs = [
   {

@@ -117,8 +117,7 @@ export type SubsystemRelationType =
   | 'inherits'
   | 'implements'
   | 'mixes_in'
-  | 'method'
-  | 'references';
+  | 'method';
 
 /**
  * Walkthrough hop mechanism — runtime seams with a `file:line` site.
@@ -145,6 +144,50 @@ export type SubsystemEdgeMechanism =
  * - `walkthroughs`: only walkthrough hop edges (`calls`, `feeds`, …)
  */
 export type SubsystemEdgeView = 'relations' | 'walkthroughs';
+
+/**
+ * Where a display edge came from.
+ *
+ * - `subsystem` (default): a verb from the authored vocabularies
+ *   (`SubsystemRelationType` / `SubsystemWalkthroughMechanism`), colored from
+ *   `MECHANISM_COLOR`.
+ * - `graphify`: a raw relation read off graphify's static symbol graph
+ *   (`imports`, `contains`, `re_exports`, …). These are DERIVED, never authored,
+ *   and are colored from `GRAPHIFY_RELATION_COLOR` so a reader can tell a
+ *   graphify fact apart from a subsystem claim at a glance.
+ */
+export type SubsystemEdgeProvenance = 'subsystem' | 'graphify';
+
+/**
+ * A graphify-native topology edge — a raw graphify relation that has no
+ * subsystem mechanism equivalent.
+ *
+ * Kept structurally separate from `SubsystemRelation`: those are authored into
+ * a portable model and validated against a closed vocabulary, whereas these are
+ * derived from a graphify run and carry graphify's own (open) verb set. They are
+ * a display input only — never written back into a `SubsystemModelDocument`.
+ */
+export interface SubsystemGraphifyRelation {
+  id: string;
+  /** Source component alias. */
+  from: string;
+  /** Target component alias. */
+  to: string;
+  /** Raw graphify relation verb (e.g. `imports`, `contains`, `re_exports`). */
+  relation: string;
+  /** Concrete file/symbol refs backing the relation. */
+  refs?: string[];
+  /**
+   * 1-based source line of the relation site. Optional — available on
+   * `calls`/`references`-style edges; used to order an ego graph's callees by
+   * call site when a host opts into line-ordered layering.
+   */
+  line?: number;
+  /** graphify's provenance tag (`EXTRACTED` / `INFERRED` / `AMBIGUOUS`). */
+  confidence?: string;
+  /** Reference context on `references` edges (e.g. `return_type`, `field`). */
+  context?: string;
+}
 
 /** A component node — the named unit, construct-tagged; `file` is its location. */
 export interface SubsystemComponent {
@@ -305,9 +348,28 @@ export interface SubsystemComponentEdge {
   id: string;
   from: string; // component alias
   to: string; // component alias or external target label
-  mechanism: SubsystemEdgeMechanism;
+  /**
+   * The edge verb. For `provenance: 'subsystem'` (the default) this is a
+   * `SubsystemEdgeMechanism`; for `provenance: 'graphify'` it is the raw
+   * graphify relation. Typed as `string` because the display edge is a derived
+   * structure and graphify's verb set is open — the authored vocabularies
+   * (`SubsystemRelationType` / `SubsystemWalkthroughMechanism`) stay closed.
+   */
+  mechanism: string;
+  /** Origin of the edge; absent means `'subsystem'`. */
+  provenance?: SubsystemEdgeProvenance;
   /** Concrete file/symbol refs backing the edge (the seam). */
   refs?: string[];
+  /**
+   * 1-based source line of the RELATION SITE — where the edge's verb was
+   * observed (e.g. a `calls` edge's call-site line inside the caller), NOT
+   * where the target is declared.
+   */
+  line?: number;
+  /** graphify's provenance tag (`EXTRACTED` / `INFERRED` / `AMBIGUOUS`). */
+  confidence?: string;
+  /** Reference context on `references` edges (e.g. `return_type`, `field`). */
+  context?: string;
 }
 
 /**
@@ -362,7 +424,7 @@ export interface SubsystemModelDocument {
 export function derivedGraphEdgeId(
   from: string,
   to: string,
-  mechanism: SubsystemEdgeMechanism,
+  mechanism: string,
 ): string {
   return `${from}--${mechanism}-->${to}`;
 }
@@ -412,6 +474,7 @@ export function reorderTargetIndex(boundary: number, from: number): number {
 export function deriveGraphEdges(doc: {
   relations?: readonly SubsystemRelation[];
   walkthroughs?: readonly SubsystemWalkthrough[];
+  graphifyRelations?: readonly SubsystemGraphifyRelation[];
 }): SubsystemComponentEdge[] {
   const byId = new Map<string, SubsystemComponentEdge>();
   for (const r of doc.relations ?? []) {
@@ -439,6 +502,22 @@ export function deriveGraphEdges(doc: {
       }
     }
   }
+  for (const g of doc.graphifyRelations ?? []) {
+    const id = g.id || derivedGraphEdgeId(g.from, g.to, g.relation);
+    if (!byId.has(id)) {
+      byId.set(id, {
+        id,
+        from: g.from,
+        to: g.to,
+        mechanism: g.relation,
+        provenance: 'graphify',
+        refs: g.refs,
+        line: g.line,
+        confidence: g.confidence,
+        context: g.context,
+      });
+    }
+  }
   return [...byId.values()];
 }
 
@@ -450,11 +529,13 @@ export function isConstructsOnlyModel(doc: {
   components: readonly { alias: string }[];
   relations?: readonly SubsystemRelation[];
   walkthroughs?: readonly SubsystemWalkthrough[];
+  graphifyRelations?: readonly SubsystemGraphifyRelation[];
 }): boolean {
   if (doc.components.length === 0) return false;
   return deriveGraphEdges({
     relations: doc.relations,
     walkthroughs: doc.walkthroughs,
+    graphifyRelations: doc.graphifyRelations,
   }).length === 0;
 }
 
@@ -972,8 +1053,17 @@ export type SubsystemGraphNode =
   | Node<SubsystemGroupNodeData, 'subsystem-group'>;
 
 export interface SubsystemGraphEdgeData extends Record<string, unknown> {
-  mechanism: SubsystemEdgeMechanism;
+  /** The edge verb (subsystem mechanism, or raw graphify relation). */
+  mechanism: string;
+  /** Origin of the edge; absent means `'subsystem'`. */
+  provenance?: SubsystemEdgeProvenance;
   refs?: string[];
+  /** 1-based source line of the relation site (graphify edges when known). */
+  line?: number;
+  /** graphify's provenance tag (`EXTRACTED` / `INFERRED` / `AMBIGUOUS`). */
+  confidence?: string;
+  /** Reference context on `references` edges (e.g. `return_type`, `field`). */
+  context?: string;
   /** True while another edge is selected — render this edge (and its label)
    *  dimmed to focus the selected relationship. */
   dimmed?: boolean;
@@ -1006,7 +1096,6 @@ export const SUBSYSTEM_RELATION_TYPES = [
   'implements',
   'mixes_in',
   'method',
-  'references',
 ] as const satisfies readonly SubsystemRelationType[];
 
 /** Runtime vocabulary of walkthrough hop mechanisms — mirrors `SubsystemWalkthroughMechanism`. */
@@ -1048,7 +1137,6 @@ export const MECHANISM_COLOR: Record<SubsystemEdgeMechanism, string> = {
   mixes_in: '#d474a8', // pink-magenta
   uses: '#e3b341', // gold
   method: '#c586c0', // magenta
-  references: '#3b82f6', // blue
   feeds: '#4ec9b0', // teal — data-flow into a processor
   produces: '#a78bfa', // violet — emits an output type
   writes: '#e8853a', // orange — mutates retained state
@@ -1065,7 +1153,6 @@ export const MECHANISM_STYLE: Record<SubsystemEdgeMechanism, 'solid' | 'dashed' 
   mixes_in: 'dashed',
   uses: 'solid',
   method: 'solid',
-  references: 'dotted',
   feeds: 'solid',
   produces: 'solid',
   writes: 'solid',
@@ -1073,6 +1160,77 @@ export const MECHANISM_STYLE: Record<SubsystemEdgeMechanism, 'solid' | 'dashed' 
   watches: 'dashed',
   'registers-into': 'dashed',
 };
+
+/** Fallback hue for a mechanism outside the closed palette (defensive — the
+ *  vocabulary is closed, so this only guards an unexpected verb from rendering
+ *  an undefined stroke). */
+export const MECHANISM_FALLBACK_COLOR = '#888888';
+
+/**
+ * graphify-native relation hues — a palette deliberately SEPARATE from
+ * `MECHANISM_COLOR`.
+ *
+ * graphify edges are derived from a static symbol graph, not authored subsystem
+ * semantics, so they get their own (cooler, desaturated) family and their own
+ * stroke treatment. Keeping the hue variables separate means a graphify fact
+ * can never be mistaken for a subsystem claim, and a new graphify verb can
+ * never accidentally inherit a mechanism hue.
+ *
+ * Keyed by graphify's relation verbs. Open-ended: graphify adds verbs, so an
+ * unlisted verb falls back to `GRAPHIFY_RELATION_FALLBACK_COLOR`.
+ */
+export const GRAPHIFY_RELATION_COLOR: Record<string, string> = {
+  contains: '#5c6b7a', // slate — structural containment
+  defines: '#6e7d8c', // steel — defines a member
+  imports: '#4c7fb5', // steel blue — module import
+  imports_from: '#6699cc', // lighter steel blue
+  re_exports: '#7b7fd4', // indigo — barrel re-export
+  dynamic_import: '#4f9aa8', // steel cyan — lazy import
+  indirect_call: '#8494a4', // grey — non-direct call
+  calls: '#3f9e78', // muted green — call-graph edge
+  uses: '#b0924e', // muted gold
+  references: '#5f7fa6', // dusty blue
+  extends: '#8c74b0', // muted violet
+  inherits: '#7a68a6', // muted violet (darker)
+  implements: '#a4739e', // muted mauve
+  method: '#a4739e', // muted mauve
+  decorator: '#b57fa0', // muted rose
+  rationale_for: '#bda15e', // muted ochre
+  semantically_similar_to: '#9a80bf', // muted lavender
+};
+
+/** Fallback hue for a graphify verb absent from `GRAPHIFY_RELATION_COLOR`. */
+export const GRAPHIFY_RELATION_FALLBACK_COLOR = '#7d8794';
+
+/**
+ * graphify-native edges share one stroke treatment so provenance still reads
+ * even where a hue happens to sit near a mechanism hue. Mirrors the
+ * `MECHANISM_STYLE` value space.
+ */
+export const GRAPHIFY_RELATION_STYLE: 'solid' | 'dashed' | 'dotted' = 'dashed';
+
+/** Resolve an edge's stroke color from its provenance + verb. */
+export function edgeColor(
+  edge: Pick<SubsystemComponentEdge, 'mechanism' | 'provenance'>,
+): string {
+  if (edge.provenance === 'graphify') {
+    return (
+      GRAPHIFY_RELATION_COLOR[edge.mechanism] ?? GRAPHIFY_RELATION_FALLBACK_COLOR
+    );
+  }
+  return (
+    MECHANISM_COLOR[edge.mechanism as SubsystemEdgeMechanism] ??
+    MECHANISM_FALLBACK_COLOR
+  );
+}
+
+/** Resolve an edge's dash treatment from its provenance + verb. */
+export function edgeStrokeStyle(
+  edge: Pick<SubsystemComponentEdge, 'mechanism' | 'provenance'>,
+): 'solid' | 'dashed' | 'dotted' {
+  if (edge.provenance === 'graphify') return GRAPHIFY_RELATION_STYLE;
+  return MECHANISM_STYLE[edge.mechanism as SubsystemEdgeMechanism] ?? 'solid';
+}
 
 /**
  * Region colors for process boundaries in the aggregate graph. Kept separate
@@ -1165,7 +1323,6 @@ export const MECHANISM_DESCRIPTIONS: [SubsystemEdgeMechanism, string, boolean][]
   ['mixes_in', 'applies mixin', true],
   ['uses', 'general dependency (import, call, or reference)', false],
   ['method', 'structural: has method / member', true],
-  ['references', 'type / symbol reference (not a call)', true],
   ['feeds', 'data flow: output feeds into input', false],
   ['produces', 'data flow: produces / outputs', false],
   ['writes', 'state access: mutates retained state', true],
@@ -1489,13 +1646,16 @@ export function convertSubsystemToGroups(
  * is an external label (not a component alias) point at a synthetic stub so the
  * relationship is visible without a member node.
  */
-export function convertSubsystemToEdges(doc: SubsystemModelDocument): SubsystemGraphEdge[] {
+export function convertSubsystemToEdges(
+  doc: SubsystemModelDocument,
+  graphifyRelations: readonly SubsystemGraphifyRelation[] = [],
+): SubsystemGraphEdge[] {
   const compAliases = new Set(doc.components.map((c) => c.alias));
   const edges: SubsystemGraphEdge[] = [];
 
-  for (const e of deriveGraphEdges(doc)) {
-    const color = MECHANISM_COLOR[e.mechanism];
-    const style = MECHANISM_STYLE[e.mechanism];
+  for (const e of deriveGraphEdges({ ...doc, graphifyRelations })) {
+    const color = edgeColor(e);
+    const style = edgeStrokeStyle(e);
     // If `to` is a real component, connect directly; otherwise point at a stub node.
     const isExternal = !compAliases.has(e.to);
     const targetId = isExternal ? `external:${e.to}` : e.to;
@@ -1504,7 +1664,14 @@ export function convertSubsystemToEdges(doc: SubsystemModelDocument): SubsystemG
       id: e.id,
       source: e.from,
       target: targetId,
-      data: { mechanism: e.mechanism, refs: e.refs },
+      data: {
+        mechanism: e.mechanism,
+        provenance: e.provenance,
+        refs: e.refs,
+        line: e.line,
+        confidence: e.confidence,
+        context: e.context,
+      },
       type: 'subsystem-edge',
       markerEnd: { type: MarkerType.ArrowClosed, color, width: 32, height: 32 },
       style: { color, stroke: color, strokeDasharray: style === 'dashed' ? '6 4' : undefined },
@@ -1520,7 +1687,9 @@ export function convertSubsystemToEdges(doc: SubsystemModelDocument): SubsystemG
 
 /** Stable key for layout-affecting graph fields (ignores declarationRef, etc.). */
 export function subsystemGraphLayoutKey(
-  doc: Pick<SubsystemModelDocument, 'components' | 'relations' | 'walkthroughs'>,
+  doc: Pick<SubsystemModelDocument, 'components' | 'relations' | 'walkthroughs'> & {
+    graphifyRelations?: readonly SubsystemGraphifyRelation[];
+  },
 ): string {
   const components = doc.components
     .map(({ alias, purl, name, symbol, construct, file, purpose, process, module }) =>
@@ -1546,6 +1715,18 @@ export async function buildSubsystemGraph(
     showEdgeLabels?: boolean;
     measuredWidths?: Map<string, number>;
     measuredHeights?: Map<string, number>;
+    /** graphify-native relations to merge into the display graph, drawn with
+     *  the separate graphify palette. Display-only; never authored. */
+    graphifyRelations?: readonly SubsystemGraphifyRelation[];
+    /**
+     * Order same-layer nodes by `component.line` (ascending) instead of ELK's
+     * crossing-minimizer. Only meaningful when components carry a `line` — and
+     * callers are expected to stamp `line` with the RELEVANT site for their
+     * graph (e.g. an ego graph stamps each callee with the center's call-site
+     * line, not the callee's declaration line).
+     * @default false
+     */
+    orderByLine?: boolean;
   } & BoundaryFrameOptions = {},
 ): Promise<{
   nodes: SubsystemGraphNode[];
@@ -1565,10 +1746,12 @@ export async function buildSubsystemGraph(
     measuredHeights,
     showSingletonFrames,
     packageFrames,
+    graphifyRelations,
+    orderByLine = false,
   } = opts;
   const frameOpts: BoundaryFrameOptions = { showSingletonFrames, packageFrames };
   const nodes = convertSubsystemToNodes(doc, { maxNodeWidth });
-  const edges = convertSubsystemToEdges(doc);
+  const edges = convertSubsystemToEdges(doc, graphifyRelations);
   // Nested boundary tree: package → process → module → leaves.
   const layoutGroups = buildBoundaryLayoutGroups(doc, frameOpts);
   const regions = layoutGroups.map((g) => g.region);
@@ -1602,7 +1785,7 @@ export async function buildSubsystemGraph(
   // cross-package edges have something to land on.
   const realAliases = new Set(doc.components.map((c) => c.alias));
   const externalIds: string[] = [];
-  for (const e of deriveGraphEdges(doc)) {
+  for (const e of deriveGraphEdges({ ...doc, graphifyRelations })) {
     if (!realAliases.has(e.to)) {
       const extId = `external:${e.to}`;
       if (!externalIds.includes(extId)) externalIds.push(extId);
@@ -1669,6 +1852,7 @@ export async function buildSubsystemGraph(
         interLayerSpacing: showEdgeLabels === false ? 120 : EDGE_LABEL_SIDE_PADDING,
         endpointInset: EDGE_ARROW_INSET,
         preserveNodePositions: false,
+        orderByLine,
         edgeLabels: showEdgeLabels === false ? { enabled: false } : { enabled: true, placement: 'CENTER' },
         groups: layoutGroups.map((g) => ({
           id: g.id,

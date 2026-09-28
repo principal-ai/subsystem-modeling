@@ -38,14 +38,14 @@ const v2ReaderComponents = components([
 ]);
 
 const v2ReaderEdges = graphSpecFromEdges([
-  ['transcript', 'reader', 'references'],
-  ['paths', 'reader', 'references'],
+  ['transcript', 'reader', 'method'],
+  ['paths', 'reader', 'method'],
   ['capture', 'reader', 'calls'],
   ['reader', 'registry', 'registers-into', ['supported-agents.ts']],
   // Consumer packages - cross-package edges leave the subgraph
-  ['reader', 'principal-studio-host', 'references'],
-  ['reader', 'core-sessions', 'references'],
-  ['reader', 'cli-session', 'references'],
+  ['reader', 'principal-studio-host', 'method'],
+  ['reader', 'core-sessions', 'method'],
+  ['reader', 'cli-session', 'method'],
 ]);
 
 function V2ReaderDemo() {
@@ -99,9 +99,9 @@ const minimalComponents = components([
 ]);
 
 const sharedEdges = graphSpecFromEdges([
-  ['transcript', 'record', 'references'],
+  ['transcript', 'record', 'method'],
   ['reader', 'normalize', 'method'],
-  ['normalize', 'record', 'references'],
+  ['normalize', 'record', 'method'],
 ]);
 
 /** The same subsystem after `resolveSubsystemToGraphify` populates `detail`. */
@@ -192,9 +192,9 @@ const investigationComponents: SubsystemComponent[] = [
 ];
 
 const investigationEdges = graphSpecFromEdges([
-  ['adapter', 'contracts', 'references'],
+  ['adapter', 'contracts', 'method'],
   ['ingestion', 'adapter', 'uses'],
-  ['ingestion', 'contracts', 'references'],
+  ['ingestion', 'contracts', 'method'],
 ]);
 
 function InvestigationDemo() {

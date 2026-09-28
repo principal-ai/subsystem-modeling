@@ -86,7 +86,7 @@ confirmed. Do **not** leave intentional claims as permanent unconfirmed claims.
 - **Drop** — the typed claim is clearly obsolete or never true in source.
 - **Retarget** — wrong endpoint id but the intended claim is clear.
 - **Change `relationType`** — rare; only when the label is clearly wrong and
-  another closed vocabulary label fits (e.g. `references` vs `method`).
+  another closed vocabulary label fits (e.g. `extends` vs `inherits`).
 
 ### Drop example
 

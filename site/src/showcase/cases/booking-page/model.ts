@@ -267,74 +267,7 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const relations = [
-  {
-    id: 'page-list-action',
-    from: 'booking-page',
-    to: 'list-open-slots',
-    relationType: 'references',
-  },
-  {
-    id: 'page-book-action',
-    from: 'booking-page',
-    to: 'book-slot',
-    relationType: 'references',
-  },
-  {
-    id: 'page-cancel-action',
-    from: 'booking-page',
-    to: 'cancel-slot',
-    relationType: 'references',
-  },
-  {
-    id: 'page-capture',
-    from: 'booking-page',
-    to: 'capture-event',
-    relationType: 'references',
-  },
-  {
-    id: 'list-action-lib',
-    from: 'list-open-slots',
-    to: 'list-slots',
-    relationType: 'references',
-  },
-  {
-    id: 'book-action-lib',
-    from: 'book-slot',
-    to: 'create-booking',
-    relationType: 'references',
-  },
-  {
-    id: 'cancel-action-lib',
-    from: 'cancel-slot',
-    to: 'cancel-booking',
-    relationType: 'references',
-  },
-  {
-    id: 'capture-posthog',
-    from: 'capture-event',
-    to: 'PostHog',
-    relationType: 'references',
-  },
-  {
-    id: 'list-db',
-    from: 'list-slots',
-    to: 'Database',
-    relationType: 'references',
-  },
-  {
-    id: 'create-db',
-    from: 'create-booking',
-    to: 'Database',
-    relationType: 'references',
-  },
-  {
-    id: 'cancel-db',
-    from: 'cancel-booking',
-    to: 'Database',
-    relationType: 'references',
-  },
-] as SubsystemRelation[];
+export const relations = [] as SubsystemRelation[];
 
 export const walkthroughs = [
   {

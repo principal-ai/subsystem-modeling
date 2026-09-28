@@ -37,7 +37,6 @@ export const SUBSYSTEM_EDGE_MECHANISMS = [
   'mixes_in',
   'uses',
   'method',
-  'references',
   'feeds',
   'produces',
   'writes',

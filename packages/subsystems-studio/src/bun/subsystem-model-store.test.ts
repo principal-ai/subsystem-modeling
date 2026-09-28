@@ -303,7 +303,6 @@ describe("relation and walkthrough mechanism sets", () => {
 			"implements",
 			"mixes_in",
 			"method",
-			"references",
 			"calls",
 			"uses",
 			"feeds",

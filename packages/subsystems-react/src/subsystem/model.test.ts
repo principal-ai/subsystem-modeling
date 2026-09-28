@@ -2,6 +2,13 @@ import { describe, expect, test } from 'bun:test';
 import {
   convertSubsystemToNodes,
   convertSubsystemToEdges,
+  deriveGraphEdges,
+  edgeColor,
+  edgeStrokeStyle,
+  MECHANISM_COLOR,
+  GRAPHIFY_RELATION_COLOR,
+  GRAPHIFY_RELATION_FALLBACK_COLOR,
+  GRAPHIFY_RELATION_STYLE,
   convertSubsystemToGroups,
   getSubsystemRegions,
   getSubsystemModuleRegions,
@@ -42,9 +49,9 @@ const comps: SubsystemComponent[] = [
 ];
 
 const relations = [
-  { id: 'e1', from: 'transcript', to: 'reader', relationType: 'references' as const },
+  { id: 'e1', from: 'transcript', to: 'reader', relationType: 'method' as const },
   // 'host' is NOT a component — this is the cross-package external case.
-  { id: 'e2', from: 'reader', to: 'host', relationType: 'references' as const, refs: ['bun/index.ts'] },
+  { id: 'e2', from: 'reader', to: 'host', relationType: 'method' as const, refs: ['bun/index.ts'] },
 ];
 
 const doc = { components: comps, relations };
@@ -796,6 +803,15 @@ describe('isConstructsOnlyModel', () => {
     expect(isConstructsOnlyModel({ components: comps })).toBe(true);
   });
 
+  test('false when only graphify-native edges exist', () => {
+    expect(
+      isConstructsOnlyModel({
+        components: comps,
+        graphifyRelations: [{ id: 'g', from: 'reader', to: 'transcript', relation: 'imports' }],
+      }),
+    ).toBe(false);
+  });
+
   test('false when empty, or when relations or walkthrough hops exist', () => {
     expect(isConstructsOnlyModel({ components: [], relations: [] })).toBe(false);
     expect(isConstructsOnlyModel({ components: comps, relations })).toBe(false);
@@ -971,5 +987,62 @@ describe('reorderTargetIndex', () => {
     // Drag A onto the gap below B (boundary 2) → A lands between B and C.
     const target = reorderTargetIndex(2, 0);
     expect(reorderWalkthroughs(wts, 0, target).map((w) => w.id)).toEqual(['b', 'a', 'c']);
+  });
+});
+
+describe('graphify-native edges', () => {
+  const doc = {
+    components: comps,
+    relations: [],
+  };
+  const graphify = [
+    { id: 'g1', from: 'reader', to: 'dst', relation: 'imports' },
+    { id: 'g2', from: 'reader', to: 'dst', relation: 'contains' },
+  ];
+
+  test('deriveGraphEdges tags graphify relations with provenance + raw verb', () => {
+    const [e] = deriveGraphEdges({ ...doc, graphifyRelations: graphify });
+    expect(e.provenance).toBe('graphify');
+    expect(e.mechanism).toBe('imports');
+  });
+
+  test('subsystem relations keep no graphify provenance', () => {
+    const [e] = deriveGraphEdges({
+      relations: [{ id: 'r', from: 'reader', to: 'dst', relationType: 'method' }],
+    });
+    expect(e.provenance).toBeUndefined();
+    expect(e.mechanism).toBe('method');
+  });
+
+  test('graphify edges color from the separate palette', () => {
+    expect(edgeColor({ mechanism: 'imports', provenance: 'graphify' })).toBe(
+      GRAPHIFY_RELATION_COLOR.imports,
+    );
+    expect(edgeColor({ mechanism: 'imports', provenance: 'graphify' })).not.toBe(
+      MECHANISM_COLOR.method,
+    );
+  });
+
+  test('unknown graphify verb falls back, never undefined', () => {
+    expect(edgeColor({ mechanism: 'brand_new_verb', provenance: 'graphify' })).toBe(
+      GRAPHIFY_RELATION_FALLBACK_COLOR,
+    );
+  });
+
+  test('subsystem mechanism color is unaffected by the graphify palette', () => {
+    expect(edgeColor({ mechanism: 'method' })).toBe(MECHANISM_COLOR.method);
+  });
+
+  test('graphify edges all share the graphify stroke style', () => {
+    expect(edgeStrokeStyle({ mechanism: 'imports', provenance: 'graphify' })).toBe(
+      GRAPHIFY_RELATION_STYLE,
+    );
+  });
+
+  test('convertSubsystemToEdges carries provenance into edge data', () => {
+    const edges = convertSubsystemToEdges(doc, graphify);
+    const g = edges.find((e) => e.id === 'g1');
+    expect((g?.data as { provenance?: string })?.provenance).toBe('graphify');
+    expect((g?.data as { mechanism?: string })?.mechanism).toBe('imports');
   });
 });

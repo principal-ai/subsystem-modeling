@@ -67,8 +67,7 @@ export type SubsystemRelationType =
   | 'inherits'
   | 'implements'
   | 'mixes_in'
-  | 'method'
-  | 'references';
+  | 'method';
 
 /**
  * Walkthrough hop mechanism — runtime seams with a `file:line` site.

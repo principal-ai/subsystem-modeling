@@ -82,7 +82,7 @@ describe('findSubsystemModelProblems', () => {
       components: [
         { alias: 'a', name: 'a', construct: 'function', file: 'src/a.ts', purl: 'pkg:github/a/b' },
       ],
-      relations: [{ id: 'r1', from: 'a', to: 'ghost', relationType: 'references' }],
+      relations: [{ id: 'r1', from: 'a', to: 'ghost', relationType: 'method' }],
     });
     expect(problems.some((p) => p.includes('/relations/0/to'))).toBe(true);
   });

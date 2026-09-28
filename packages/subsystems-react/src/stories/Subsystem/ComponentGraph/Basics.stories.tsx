@@ -34,7 +34,7 @@ const twoNodeComponents = components([
 ]);
 
 const twoNodeEdges = graphSpecFromEdges([
-  ['src', 'dst', 'references'],
+  ['src', 'dst', 'method'],
 ]);
 
 function TwoNodeDemo({ showEdgeLabels = true }: { showEdgeLabels?: boolean }) {
@@ -99,7 +99,7 @@ function PlaygroundDemo({ leftCount, rightCount, showEdgeLabels }: { leftCount: 
 
   for (let i = 0; i < leftCount; i++) {
     for (let j = 0; j < rightCount; j++) {
-      edgeSpec.push([`l${i}`, `r${j}`, 'references']);
+      edgeSpec.push([`l${i}`, `r${j}`, 'method']);
     }
   }
   const graph = graphSpecFromEdges(edgeSpec);

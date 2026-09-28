@@ -138,9 +138,9 @@ const multiRepoComponents = components([
 ]);
 
 const multiRepoEdges = graphSpecFromEdges([
-  ['detail', 'reftypes', 'references'],
-  ['resolver', 'reftypes', 'references'],
-  ['resolver', 'engine', 'references'],
+  ['detail', 'reftypes', 'method'],
+  ['resolver', 'reftypes', 'method'],
+  ['resolver', 'engine', 'method'],
   ['rewire', 'resolver', 'calls'],
 ]);
 
@@ -1116,10 +1116,10 @@ const typeSpectrumComponents: SubsystemComponent[] = [
 
 const typeSpectrumEdges = graphSpecFromEdges([
   ['listener', 'subscriber', 'uses'],
-  ['subscriber', 'messages', 'references'],
+  ['subscriber', 'messages', 'method'],
   ['state', 'listener', 'feeds'],
-  ['deep', 'record', 'references'],
-  ['rows', 'record', 'references'],
+  ['deep', 'record', 'method'],
+  ['rows', 'record', 'method'],
 ]);
 
 function TypeFamilySpectrumDemo() {

@@ -61,7 +61,7 @@ Trust the audit for *which relations are broken*. You decide *drop vs retarget*.
 
 ```json
 {
-  "rationale": "old-parser was removed from the model; the references edge is stale.",
+  "rationale": "old-parser was removed from the model; the inherits edge is stale.",
   "author": "static-topology-fixer",
   "finding": {
     "kind": "topology_broken_endpoint",

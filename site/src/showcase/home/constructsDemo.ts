@@ -87,30 +87,6 @@ export const relations: SubsystemRelation[] = [
     to: 'note-service-persist',
     relationType: 'method',
   },
-  {
-    id: 'svc-iface',
-    from: 'note-service',
-    to: 'note-repository',
-    relationType: 'references',
-  },
-  {
-    id: 'submit-svc',
-    from: 'submit-note',
-    to: 'note-service',
-    relationType: 'references',
-  },
-  {
-    id: 'persist-types',
-    from: 'note-service-persist',
-    to: 'note-id',
-    relationType: 'references',
-  },
-  {
-    id: 'persist-kind',
-    from: 'note-service-persist',
-    to: 'note-kind',
-    relationType: 'references',
-  },
 ];
 
 export const walkthroughs = [] as SubsystemWalkthrough[];

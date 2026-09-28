@@ -114,8 +114,7 @@
         "inherits",
         "implements",
         "mixes_in",
-        "method",
-        "references"
+        "method"
       ]
     },
     "mechanism": {

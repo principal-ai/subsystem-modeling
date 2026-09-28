@@ -176,7 +176,7 @@ describe("selectMaintainRoute", () => {
 			topologyChecks: [
 				{
 					relationId: "r1",
-					relationType: "references",
+					relationType: "method",
 					from: "a",
 					to: "b",
 					graphify: "unconfirmed",

@@ -121,8 +121,8 @@ const moduleComponents: SubsystemComponent[] = [
 ];
 
 const moduleEdges = graphSpecFromEdges([
-  ['parse', 'record', 'references'],
-  ['is-rollout', 'record', 'references'],
+  ['parse', 'record', 'method'],
+  ['is-rollout', 'record', 'method'],
   ['reader', 'normalize', 'method'],
   ['normalize', 'parse', 'calls'],
   ['normalize', 'tool-name', 'calls'],
@@ -261,9 +261,9 @@ const nestedComponents: SubsystemComponent[] = [
 ];
 
 const nestedEdges = graphSpecFromEdges([
-  ['boot', 'write-session', 'references'],
-  ['trail-view', 'bridge', 'references'],
-  ['trail-view', 'use-trail', 'references'],
+  ['boot', 'write-session', 'method'],
+  ['trail-view', 'bridge', 'method'],
+  ['trail-view', 'use-trail', 'method'],
   ['boot', 'create-host', 'calls'],
   ['create-host', 'write-session', 'calls'],
   ['write-session', 'session-store', 'writes'],

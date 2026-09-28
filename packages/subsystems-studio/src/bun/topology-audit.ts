@@ -52,10 +52,6 @@ export const SOFT_CORROBORATION_BY_RELATION_TYPE: Record<
 		graphifyRelations: new Set(["mixes_in"]),
 		eitherDirection: false,
 	},
-	references: {
-		graphifyRelations: new Set(["references"]),
-		eitherDirection: true,
-	},
 };
 
 export type TopologyRelationGraphify =

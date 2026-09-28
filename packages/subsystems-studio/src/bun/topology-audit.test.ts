@@ -125,7 +125,7 @@ describe("auditTopologyRelations", () => {
 				id: "r-bad",
 				from: "app",
 				to: "missing",
-				relationType: "references",
+				relationType: "method",
 			},
 		];
 		const r = auditTopologyRelations(components, relations, new Map());
@@ -140,7 +140,7 @@ describe("auditTopologyRelations", () => {
 				id: "r-ext",
 				from: "app",
 				to: "xyflow",
-				relationType: "references",
+				relationType: "method",
 			},
 		];
 		// Even with a Graphify edge whose label matches the external, the audit
@@ -150,7 +150,7 @@ describe("auditTopologyRelations", () => {
 				node("src_App", "App", "src/App.tsx"),
 				node("pkg_xyflow", "@xyflow/react", ""),
 			],
-			edges: [edge("src_App", "pkg_xyflow", "references")],
+			edges: [edge("src_App", "pkg_xyflow", "method")],
 		};
 		const r = auditTopologyRelations(
 			components,
@@ -248,38 +248,13 @@ describe("auditTopologyRelations", () => {
 		expect(r.checks[0]?.note).toContain("extends");
 	});
 
-	test("soft-confirms references between anchors", () => {
+	test("missing Graphify cache yields a soft gap", () => {
 		const relations: SubsystemRelation[] = [
 			{
-				id: "r-ref",
-				from: "app",
-				to: "helper",
-				relationType: "references",
-			},
-		];
-		const bundle = {
-			nodes: [
-				node("src_App", "App", "src/App.tsx"),
-				node("src_helper", "helper", "src/helper.ts"),
-			],
-			edges: [edge("src_App", "src_helper", "references")],
-		};
-		const r = auditTopologyRelations(
-			components,
-			relations,
-			new Map([["pkg:github/acme/app", bundle]]),
-		);
-		expect(r.summary.softConfirmed).toBe(1);
-		expect(r.checks[0]?.graphify).toBe("confirmed");
-	});
-
-	test("missing Graphify cache yields soft gap for references", () => {
-		const relations: SubsystemRelation[] = [
-			{
-				id: "r-ref",
-				from: "app",
-				to: "helper",
-				relationType: "references",
+				id: "r-m",
+				from: "store",
+				to: "write",
+				relationType: "method",
 			},
 		];
 		const r = auditTopologyRelations(components, relations, new Map());

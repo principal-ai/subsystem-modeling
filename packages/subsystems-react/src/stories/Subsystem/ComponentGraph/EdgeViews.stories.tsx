@@ -43,10 +43,10 @@ const labelViewComponents = components([
 ]);
 
 const labelViewRelations = relations([
-  ['svc', 'reader', 'references'],
-  ['svc', 'event', 'references'],
-  ['store', 'db', 'references'],
-  ['reader', 'event', 'references'],
+  ['svc', 'reader', 'method'],
+  ['svc', 'event', 'method'],
+  ['store', 'db', 'method'],
+  ['reader', 'event', 'method'],
 ]);
 
 const labelViewWalkthroughs = [

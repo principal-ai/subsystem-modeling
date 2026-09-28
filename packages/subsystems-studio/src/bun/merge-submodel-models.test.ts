@@ -34,7 +34,7 @@ describe("mergeSubsystemModels", () => {
 						}),
 					],
 					relations: [
-						{ id: "r1", from: "reader", to: "outside", relationType: "references" },
+						{ id: "r1", from: "reader", to: "outside", relationType: "method" },
 					],
 					walkthroughs: [
 						{
@@ -253,7 +253,7 @@ describe("mergeSubsystemModels", () => {
 				id: "sg-1",
 				document: doc({
 					components: [code("a"), code("b")],
-					relations: [{ id: "r1", from: "a", to: "b", relationType: "references" }],
+					relations: [{ id: "r1", from: "a", to: "b", relationType: "method" }],
 					walkthroughs: [
 						{
 							id: "w1",
@@ -267,7 +267,7 @@ describe("mergeSubsystemModels", () => {
 				id: "sg-2",
 				document: doc({
 					components: [code("c")],
-					relations: [{ id: "r1", from: "c", to: "a", relationType: "references" }],
+					relations: [{ id: "r1", from: "c", to: "a", relationType: "method" }],
 					walkthroughs: [
 						{
 							id: "w1",

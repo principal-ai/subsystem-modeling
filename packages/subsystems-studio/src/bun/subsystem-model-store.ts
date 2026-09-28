@@ -310,7 +310,6 @@ export const SUBSYSTEM_RELATION_TYPES = [
 	"implements",
 	"mixes_in",
 	"method",
-	"references",
 ] as const satisfies readonly SubsystemRelationType[];
 
 export const SUBSYSTEM_WALKTHROUGH_MECHANISMS = [
@@ -414,18 +413,21 @@ export function normalizeDeclarationProvenance(components: unknown): void {
 }
 
 /**
- * Drop retired `imports` relations in place on read/write.
+ * Drop retired relation types in place on read/write.
  *
- * `imports` was removed from `SubsystemRelationType`: the static layer models
- * internal construct shape, not code-level dependencies, and externals live in
- * flows. Models authored before the change may still carry `imports` edges —
- * strip them so the record validates against the current vocabulary.
+ * `imports` and `references` were removed from `SubsystemRelationType`: the
+ * static layer models internal construct shape (inheritance, interface
+ * implementation, mixins, method membership), not code-level dependencies —
+ * those are externals, which live in flows. Models authored before the change
+ * may still carry `imports`/`references` edges — strip them so the record
+ * validates against the current vocabulary.
  */
 export function dropRetiredRelationTypes(relations: unknown): void {
 	if (!Array.isArray(relations)) return;
+	const retired = new Set(["imports", "references"]);
 	for (let i = relations.length - 1; i >= 0; i--) {
 		const rel = relations[i] as Record<string, unknown> | null;
-		if (rel && typeof rel === "object" && rel["relationType"] === "imports") {
+		if (rel && typeof rel === "object" && retired.has(String(rel["relationType"]))) {
 			relations.splice(i, 1);
 		}
 	}

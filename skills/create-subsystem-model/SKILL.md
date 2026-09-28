@@ -100,7 +100,7 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
       "id": "sessions-to-warmup",
       "from": "session-service",
       "to": "warmup-worker",                       // component aliases, not names
-      "relationType": "references",                // see relationType list below
+      "relationType": "method",                    // see relationType list below
       "refs": ["pkg:github/owner/repo#path/to/glue.ts"]  // optional purl evidence
     }
   ],
@@ -295,14 +295,14 @@ type claims; runtime seams do NOT belong here):
 
 | Style | Labels |
 |---|---|
-| solid | `imports`, `method` |
+| solid | `method` |
 | dashed | `extends`, `inherits`, `implements`, `mixes_in` |
-| dotted | `references` |
 
-Semantics: `imports` = module-level import (often an external package);
-`method` = target is a method of the source class;
+Semantics: `method` = target is a method of the source class;
 `extends`/`inherits`/`implements`/`mixes_in` = inheritance / interface /
-mixin claims; `references` = type/symbol reference that isn't a call.
+mixin claims. The static layer models internal construct shape only;
+code-level dependencies (imports, re-exports, symbol references) do not
+belong here — that runtime/external wiring lives in walkthroughs and flows.
 File membership frames use `module` (not a topology relation). Evidence
 goes in `refs`. Do not use Graphify's `contains` verb on model relations —
 that name is reserved for Graphify's file→symbol edges.
