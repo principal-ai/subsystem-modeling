@@ -9,8 +9,11 @@
  * rendered in isolation (see `ProposalCard.stories.tsx`).
  */
 
+import { useState } from "react";
 import {
 	Check,
+	ChevronDown,
+	ChevronRight,
 	Component,
 	Copy,
 	Loader2,
@@ -291,6 +294,108 @@ export function opinionBadge(
 	return { text: `Second opinion · ${label} ${pct}%`, color };
 }
 
+/**
+ * Collapsible record of the exact payload sent to Jev — the `state` string
+ * (rationale + finding + preview + source-context block) and the three
+ * questions. Collapsed by default; the state can be up to ~24KB of source.
+ */
+export function JevRequestDisclosure({
+	request,
+}: {
+	request: NonNullable<
+		NonNullable<SubsystemModelProposal["secondOpinion"]>["request"]
+	>;
+}) {
+	const { theme } = useTheme();
+	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
+	const [open, setOpen] = useState(false);
+	const monospace = theme.fonts.monospace ?? "ui-monospace, monospace";
+	return (
+		<div style={{ margin: "0 0 12px" }}>
+			<button
+				type="button"
+				onClick={() => setOpen((v) => !v)}
+				aria-expanded={open}
+				style={{
+					display: "inline-flex",
+					alignItems: "center",
+					gap: 4,
+					padding: 0,
+					background: "transparent",
+					border: "none",
+					color: muted,
+					fontSize: theme.fontSizes[1],
+					fontFamily: theme.fonts.body,
+					cursor: "pointer",
+				}}
+			>
+				{open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+				{open ? "Hide what was sent to Jev" : "What was sent to Jev"}
+			</button>
+			{open && (
+				<div style={{ marginTop: 8 }}>
+					<div
+						style={{
+							fontSize: theme.fontSizes[1],
+							color: muted,
+							marginBottom: 4,
+						}}
+					>
+						Model: <code style={{ fontFamily: monospace }}>{request.model}</code>
+					</div>
+					<pre
+						style={{
+							margin: "0 0 8px",
+							padding: 10,
+							borderRadius: 6,
+							border: `1px solid ${theme.colors.border}`,
+							background: theme.colors.background,
+							color: theme.colors.text,
+							fontSize: theme.fontSizes[0],
+							fontFamily: monospace,
+							lineHeight: 1.4,
+							whiteSpace: "pre-wrap",
+							wordBreak: "break-word",
+							maxHeight: 320,
+							overflow: "auto",
+						}}
+					>
+						{request.state}
+					</pre>
+					<div
+						style={{
+							fontSize: theme.fontSizes[1],
+							color: muted,
+							marginBottom: 4,
+						}}
+					>
+						Questions
+					</div>
+					<pre
+						style={{
+							margin: 0,
+							padding: 10,
+							borderRadius: 6,
+							border: `1px solid ${theme.colors.border}`,
+							background: theme.colors.background,
+							color: theme.colors.text,
+							fontSize: theme.fontSizes[0],
+							fontFamily: monospace,
+							lineHeight: 1.4,
+							whiteSpace: "pre-wrap",
+							wordBreak: "break-word",
+							maxHeight: 320,
+							overflow: "auto",
+						}}
+					>
+						{JSON.stringify(request.questions, null, 2)}
+					</pre>
+				</div>
+			)}
+		</div>
+	);
+}
+
 /** Per-card in-flight state. `scoring` is the only Jev action shown. */
 export type ProposalCardAction = "accept" | "reject" | "scoring";
 
@@ -313,7 +418,7 @@ export function ProposalCard({
 	copied?: boolean;
 	onAccept: (proposalId: string) => void;
 	onReject: (proposalId: string) => void;
-	onScore: (proposalId: string) => void;
+	onScore: (proposalId: string, force?: boolean) => void;
 	onCopyForAgent: (proposal: SubsystemModelProposal) => void;
 }) {
 	const { theme } = useTheme();
@@ -456,6 +561,10 @@ export function ProposalCard({
 				</p>
 			) : null}
 
+			{p.secondOpinion?.request ? (
+				<JevRequestDisclosure request={p.secondOpinion.request} />
+			) : null}
+
 			<div
 				style={{
 					display: "flex",
@@ -487,38 +596,42 @@ export function ProposalCard({
 					{copied ? <Check size={12} /> : <Copy size={12} />}
 					{copied ? "Copied" : "Copy for agent"}
 				</button>
-				{(!p.secondOpinion || p.secondOpinion.error) && (
-					<button
-						type="button"
-						disabled={cardBusy}
-						onClick={() => onScore(p.id)}
-						title="Ask Jev for a second opinion without accepting"
-						style={{
-							padding: "0 12px",
-							height: 32,
-							borderRadius: 6,
-							fontSize: theme.fontSizes[1],
-							fontFamily: theme.fonts.body,
-							background: "transparent",
-							color: theme.colors.primary,
-							border: `1px solid ${theme.colors.primary}`,
-							cursor: cardBusy ? "default" : "pointer",
-							opacity: cardBusy ? 0.6 : 1,
-							display: "inline-flex",
-							alignItems: "center",
-							gap: 6,
-						}}
-					>
-						{action === "scoring" && (
-							<Loader2 size={12} className="principal-studio-spin" />
-						)}
-						{action === "scoring"
-							? "Scoring…"
-							: p.secondOpinion?.error
+				<button
+					type="button"
+					disabled={cardBusy}
+					onClick={() => onScore(p.id, Boolean(p.secondOpinion))}
+					title={
+						p.secondOpinion
+							? "Ask Jev to score this proposal again, replacing the current opinion"
+							: "Ask Jev for a second opinion without accepting"
+					}
+					style={{
+						padding: "0 12px",
+						height: 32,
+						borderRadius: 6,
+						fontSize: theme.fontSizes[1],
+						fontFamily: theme.fonts.body,
+						background: "transparent",
+						color: theme.colors.primary,
+						border: `1px solid ${theme.colors.primary}`,
+						cursor: cardBusy ? "default" : "pointer",
+						opacity: cardBusy ? 0.6 : 1,
+						display: "inline-flex",
+						alignItems: "center",
+						gap: 6,
+					}}
+				>
+					{action === "scoring" && (
+						<Loader2 size={12} className="principal-studio-spin" />
+					)}
+					{action === "scoring"
+						? "Scoring…"
+						: !p.secondOpinion
+							? "Get second opinion"
+							: p.secondOpinion.error
 								? "Retry scoring"
-								: "Get second opinion"}
-					</button>
-				)}
+								: "Re-score"}
+				</button>
 				<button
 					type="button"
 					disabled={cardBusy}

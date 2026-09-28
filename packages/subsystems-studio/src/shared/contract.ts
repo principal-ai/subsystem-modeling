@@ -945,6 +945,24 @@ export interface SubsystemModelSecondOpinion {
 	changeKind?: string;
 	risk?: string;
 	error?: string;
+	/**
+	 * The exact payload sent to Jev for this opinion: the composed `state`
+	 * (rationale + finding + preview + source-context block) and the three
+	 * questions. Persisted so a score can be explained after the fact; absent
+	 * on opinions written before this field existed, and on transport errors
+	 * that never reached the endpoint.
+	 */
+	request?: SubsystemModelSecondOpinionRequest;
+}
+
+/** The Jev SystemOne request body an opinion was produced from. */
+export interface SubsystemModelSecondOpinionRequest {
+	/** Jev model id the request was addressed to (the body's `model`). */
+	model: string;
+	/** The composed `state` string — everything Jev was shown. */
+	state: string;
+	/** The `questions` map exactly as sent (accurate / change_kind / risk). */
+	questions: unknown;
 }
 
 /**

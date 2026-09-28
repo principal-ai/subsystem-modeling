@@ -17,8 +17,8 @@ import {
 } from '@xyflow/react';
 import { useTheme } from '@principal-ade/industry-theme';
 import {
-  MECHANISM_COLOR,
-  MECHANISM_STYLE,
+  edgeColor,
+  edgeStrokeStyle,
   PROPOSED_COLOR,
   constructBadgeColor,
   constructBadgeLabel,
@@ -560,10 +560,14 @@ export function SubsystemEdge({
 }: EdgeProps<SubsystemGraphEdge>) {
   const path = data?.elkPath ?? '';
   const mechanism = data?.mechanism ?? 'uses';
-  const color = MECHANISM_COLOR[mechanism] ?? '#888';
-  // Dash style comes from the mechanism table (dashed = inverted-control or
-  // observational relationships: hierarchy, registration, watches).
-  const isDashed = MECHANISM_STYLE[mechanism] === 'dashed';
+  // Color + dash resolve from provenance: subsystem mechanisms use the
+  // MECHANISM_* tables, graphify-native relations use the separate
+  // GRAPHIFY_RELATION_* palette (see edgeColor / edgeStrokeStyle).
+  const edgeRef = { mechanism, provenance: data?.provenance };
+  const color = edgeColor(edgeRef);
+  // Dash style encodes provenance (graphify) and relationship kind (dashed =
+  // inverted-control or observational: hierarchy, registration, watches).
+  const isDashed = edgeStrokeStyle(edgeRef) === 'dashed';
   const dimmed = data?.dimmed === true;
   // Dim the stroke by color, never via path `opacity`. SVG markers are shared
   // by id; opacity on the referencing path paints every arrowhead that uses

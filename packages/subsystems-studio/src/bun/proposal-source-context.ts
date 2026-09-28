@@ -4,9 +4,8 @@
  * The Jev `state` is otherwise just the agent's prose rationale + a before/after
  * preview — enough to describe a claim but not to verify it. This resolves each
  * proposal change to its component's local checkout (via purl → Alexandria),
- * reads the declaration site, and pulls in the declarations of any named types
- * the change claims. The resulting block is appended to the state so Jev can
- * check the claim against real code instead of trusting the author.
+ * reads the declaration site, and appends the resulting block to the state so
+ * Jev can check the claim against real code instead of trusting the author.
  */
 
 import { promises as fs } from "node:fs";
@@ -17,7 +16,6 @@ import type {
 } from "../shared/contract";
 import { resolveRepoRootForPurl } from "./graphify-store";
 import { purlRepoKey } from "./subsystem-model-store";
-import { extractNamedTypes } from "../../../subsystems-react/src/graphify/signature";
 
 /**
  * Window around an anchor line. Biased forward: a small lead-in catches the
@@ -102,21 +100,6 @@ function renderRanges(lines: string[], ranges: LineRange[]): string {
 	return parts.join("\n      …\n");
 }
 
-/** Named types a change claims (signature augmentations carry full type strings). */
-function claimedTypeNames(proposal: SubsystemModelProposal): string[] {
-	const names = new Set<string>();
-	for (const change of proposal.changes) {
-		if (change.target !== "augmentation" || change.field !== "signature") continue;
-		for (const p of change.value.parameters ?? []) {
-			for (const t of extractNamedTypes(p.type ?? "")) names.add(t);
-		}
-		if (change.value.returnType) {
-			for (const t of extractNamedTypes(change.value.returnType)) names.add(t);
-		}
-	}
-	return [...names];
-}
-
 /** Component aliases a proposal touches (component + augmentation changes). */
 function componentAliases(proposal: SubsystemModelProposal): string[] {
 	const aliases = new Set<string>();
@@ -153,7 +136,6 @@ function declaredSpan(
 function sliceComponent(
 	content: string,
 	declarationLine: number | null,
-	typeLines: number[],
 	span?: { start: number; end: number },
 ): string {
 	const lines = splitLines(content);
@@ -168,9 +150,6 @@ function sliceComponent(
 		ranges.push({ start, end });
 	} else if (declarationLine != null) {
 		ranges.push(windowAround(declarationLine, total));
-	}
-	for (const line of typeLines) {
-		ranges.push(windowAround(line, total));
 	}
 	if (ranges.length === 0) {
 		// No anchor found — show the head of the file rather than nothing.
@@ -192,7 +171,6 @@ export async function buildProposalSourceContext(
 ): Promise<string | undefined> {
 	const aliases = componentAliases(proposal);
 	if (aliases.length === 0) return undefined;
-	const typeNames = claimedTypeNames(proposal);
 	const blocks: string[] = [];
 	let total = 0;
 
@@ -213,12 +191,9 @@ export async function buildProposalSourceContext(
 		const symbol = component.symbol ?? component.name;
 		const declarationLine =
 			component.declarationRef?.startLine ?? findSymbolLine(content, symbol);
-		const typeLines = typeNames
-			.map((t) => findSymbolLine(content, t))
-			.filter((l): l is number => l != null);
 
 		const span = declaredSpan(proposal, alias);
-		const rendered = sliceComponent(content, declarationLine, typeLines, span);
+		const rendered = sliceComponent(content, declarationLine, span);
 		const block = [
 			`--- ${component.file}${
 				declarationLine != null ? `:${declarationLine}` : ""

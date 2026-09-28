@@ -85,6 +85,16 @@ export interface ElkLayoutOptions {
   direction?: 'RIGHT' | 'LEFT' | 'DOWN' | 'UP';
 
   /**
+   * Order same-layer nodes by their source line (ascending) instead of leaving
+   * it to the crossing-minimizer. Nodes must carry a `data.component.line`
+   * (used when set; nodes without one keep ELK's neutral ordering). Off by
+   * default — the generic layered layout is tuned for crossings, and line order
+   * only makes sense for graphs that model a source region top-to-bottom.
+   * @default false
+   */
+  orderByLine?: boolean;
+
+  /**
    * Compound groups — each becomes an ELK parent whose `memberIds` are laid
    * out inside it. `memberIds` may be leaf node ids or other group ids
    * (for nesting, e.g. process → module → leaves). Optional `parentId`
@@ -323,11 +333,15 @@ function getElkOptions(options: ElkLayoutOptions): LayoutOptions {
     interLayerSpacing = 0,
     edgeLabels,
     direction = 'RIGHT',
+    orderByLine = false,
   } = options;
 
   const baseOptions: LayoutOptions = {
     'elk.algorithm': 'layered',
     'elk.direction': direction,
+    // Keep same-layer ordering stable (not reversed / randomized) so a
+    // line-ordered rewrite or ELK's own ordering is predictable.
+    'elk.layered.crossingMinimization.semiInteractive': 'true',
     // Spacing
     'elk.spacing.nodeNode': String(nodeSpacing),
     'elk.spacing.edgeEdge': String(edgeSpacing),
@@ -345,6 +359,14 @@ function getElkOptions(options: ElkLayoutOptions): LayoutOptions {
     // Higher thoroughness = better edge routing (1-100)
     'elk.layered.thoroughness': '50',
   };
+
+  // Model order (position hints) so a per-node `data.line` can drive same-layer
+  // ordering. ELK honours the `y` of each node as a position hint against the
+  // model order.
+  if (orderByLine) {
+    baseOptions['elk.layered.fixedAlignment'] = 'NONE';
+    baseOptions['elk.layered.considerModelOrder.strategy'] = 'NODES_AND_EDGES';
+  }
 
   // Reserve space for inline edge labels so they don't overlap nodes/edges.
   if (edgeLabels?.enabled !== false) {
@@ -507,6 +529,7 @@ export async function computeElkLayout(
   const edgeLabels = options.edgeLabels;
   const endpointInset = options.endpointInset ?? 0;
   const direction = options.direction ?? 'RIGHT';
+  const orderByLine = options.orderByLine ?? false;
 
   // Build a map of original node positions BEFORE passing to ELK
   // (ELK mutates the input nodes in place, so we must save positions first)
@@ -527,12 +550,20 @@ export async function computeElkLayout(
     const nd = node.data as { component?: { layer?: number }; layer?: number } | undefined;
     layer = nd?.layer ?? nd?.component?.layer;
 
+    // Optional source-line ordering: seed each node's `y` hint from its line so
+    // ELK's model-order placement puts lower lines further down within a layer.
+    let y = node.position.y;
+    if (orderByLine) {
+      const line = (node.data as { component?: { line?: number } } | undefined)?.component?.line;
+      if (typeof line === 'number') y = line;
+    }
+
     return {
       id: node.id,
       width,
       height,
       x: node.position.x,
-      y: node.position.y,
+      y,
       // Add ports on each side for edge connections
       ports: [
         { id: `${node.id}_top`, properties: { 'port.side': 'NORTH' } },

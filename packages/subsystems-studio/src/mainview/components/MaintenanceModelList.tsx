@@ -895,6 +895,11 @@ export function MaintenanceModelCard({
 						display: "flex",
 						flexDirection: "column",
 						gap: 6,
+						background:
+							theme.colors.backgroundSecondary ??
+							theme.colors.background,
+						borderBottomLeftRadius: 6,
+						borderBottomRightRadius: 6,
 					}}
 				>
 					{historyRuns.length === 0 ? (

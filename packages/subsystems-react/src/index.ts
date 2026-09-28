@@ -157,7 +157,16 @@ export type {
   SubsystemIssueCardProps,
   SubsystemIssueListProps,
 } from './subsystem/IssueList';
-export { MECHANISM_COLOR, MECHANISM_STYLE } from './subsystem/model';
+export {
+  MECHANISM_COLOR,
+  MECHANISM_STYLE,
+  MECHANISM_FALLBACK_COLOR,
+  GRAPHIFY_RELATION_COLOR,
+  GRAPHIFY_RELATION_STYLE,
+  GRAPHIFY_RELATION_FALLBACK_COLOR,
+  edgeColor,
+  edgeStrokeStyle,
+} from './subsystem/model';
 export { BOUNDARY_COLOR, assignBoundaryColors, boundaryFill } from './subsystem/model';
 export { CONSTRUCT_COLOR, componentColor, constructColorsFromPierreTheme } from './pierre/constructColors';
 export {
@@ -204,6 +213,8 @@ export type {
   SubsystemStereotype,
   SubsystemEdgeMechanism,
   SubsystemEdgeView,
+  SubsystemEdgeProvenance,
+  SubsystemGraphifyRelation,
   SubsystemConstructDeclaration,
   SubsystemDeclarationProvenance,
   SubsystemSignatureClaim,

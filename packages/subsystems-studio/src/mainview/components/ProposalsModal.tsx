@@ -227,13 +227,14 @@ export function ProposalsModal({
 	);
 
 	const onScore = useCallback(
-		async (proposalId: string) => {
+		async (proposalId: string, force?: boolean) => {
 			setBusy((prev) => ({ ...prev, [proposalId]: "scoring" }));
 			setError(null);
 			try {
 				const res = await electrobun.rpc!.request.scoreSubsystemModelProposal({
 					graphId,
 					proposalId,
+					force,
 				});
 				if (!res.ok) {
 					setError(res.error ?? "Second-opinion scoring failed");

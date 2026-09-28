@@ -1,0 +1,545 @@
+{
+  "source": {
+    "graph": "/Users/griever/.principal/graphify-graphs/github-principal-ai-subsystem-modeling/56e32c18e1063f68d9ac2fcb9afabd58269270a6+34648fed47c70b3c/graph.json",
+    "built_at_commit": "56e32c18e1063f68d9ac2fcb9afabd58269270a6",
+    "nodes": 4653,
+    "edges": 9717
+  },
+  "categories": {
+    "class": {
+      "center": {
+        "id": "packages_subsystems_studio_src_mainview_app_errorboundary",
+        "label": "ErrorBoundary",
+        "file_type": "code",
+        "source_file": "packages/subsystems-studio/src/mainview/App.tsx",
+        "source_location": "L43"
+      },
+      "degree": 5,
+      "neighborCount": 5,
+      "neighborsTruncated": false,
+      "neighbors": [
+        {
+          "id": "packages_subsystems_studio_src_mainview_index",
+          "label": "index.tsx",
+          "file_type": "code",
+          "source_file": "packages/subsystems-studio/src/mainview/index.tsx",
+          "source_location": "L1"
+        },
+        {
+          "id": "packages_subsystems_studio_src_mainview_app",
+          "label": "mainview/App.tsx",
+          "file_type": "code",
+          "source_file": "packages/subsystems-studio/src/mainview/App.tsx",
+          "source_location": "L1"
+        },
+        {
+          "id": "packages_subsystems_studio_src_mainview_app_errorboundary_getderivedstatefromerror",
+          "label": ".getDerivedStateFromError()",
+          "file_type": "code",
+          "source_file": "packages/subsystems-studio/src/mainview/App.tsx",
+          "source_location": "L48"
+        },
+        {
+          "id": "packages_subsystems_studio_src_mainview_app_errorboundary_componentdidcatch",
+          "label": ".componentDidCatch()",
+          "file_type": "code",
+          "source_file": "packages/subsystems-studio/src/mainview/App.tsx",
+          "source_location": "L51"
+        },
+        {
+          "id": "packages_subsystems_studio_src_mainview_app_errorboundary_render",
+          "label": ".render()",
+          "file_type": "code",
+          "source_file": "packages/subsystems-studio/src/mainview/App.tsx",
+          "source_location": "L55"
+        }
+      ],
+      "edges": [
+        {
+          "source": "packages_subsystems_studio_src_mainview_index",
+          "target": "packages_subsystems_studio_src_mainview_app_errorboundary",
+          "relation": "imports",
+          "confidence": "EXTRACTED",
+          "context": "import",
+          "source_file": "packages/subsystems-studio/src/mainview/index.tsx",
+          "source_location": "L27"
+        },
+        {
+          "source": "packages_subsystems_studio_src_mainview_app",
+          "target": "packages_subsystems_studio_src_mainview_app_errorboundary",
+          "relation": "contains",
+          "confidence": "EXTRACTED",
+          "source_file": "packages/subsystems-studio/src/mainview/App.tsx",
+          "source_location": "L43"
+        },
+        {
+          "source": "packages_subsystems_studio_src_mainview_app_errorboundary",
+          "target": "packages_subsystems_studio_src_mainview_app_errorboundary_getderivedstatefromerror",
+          "relation": "method",
+          "confidence": "EXTRACTED",
+          "source_file": "packages/subsystems-studio/src/mainview/App.tsx",
+          "source_location": "L48"
+        },
+        {
+          "source": "packages_subsystems_studio_src_mainview_app_errorboundary",
+          "target": "packages_subsystems_studio_src_mainview_app_errorboundary_componentdidcatch",
+          "relation": "method",
+          "confidence": "EXTRACTED",
+          "source_file": "packages/subsystems-studio/src/mainview/App.tsx",
+          "source_location": "L51"
+        },
+        {
+          "source": "packages_subsystems_studio_src_mainview_app_errorboundary",
+          "target": "packages_subsystems_studio_src_mainview_app_errorboundary_render",
+          "relation": "method",
+          "confidence": "EXTRACTED",
+          "source_file": "packages/subsystems-studio/src/mainview/App.tsx",
+          "source_location": "L55"
+        }
+      ]
+    },
+    "function": {
+      "center": {
+        "id": "packages_subsystems_studio_src_bun_maintain_model_readmaintainagentsystemprompt",
+        "label": "readMaintainAgentSystemPrompt()",
+        "file_type": "code",
+        "source_file": "packages/subsystems-studio/src/bun/maintain-model.ts",
+        "source_location": "L1398"
+      },
+      "degree": 4,
+      "neighborCount": 4,
+      "neighborsTruncated": false,
+      "neighbors": [
+        {
+          "id": "packages_subsystems_studio_src_bun_maintain_model_readclaimadjudicatorsystemprompt",
+          "label": "readClaimAdjudicatorSystemPrompt()",
+          "file_type": "code",
+          "source_file": "packages/subsystems-studio/src/bun/maintain-model.ts",
+          "source_location": "L1409"
+        },
+        {
+          "id": "packages_subsystems_studio_src_bun_maintain_model",
+          "label": "maintain-model.ts",
+          "file_type": "code",
+          "source_file": "packages/subsystems-studio/src/bun/maintain-model.ts",
+          "source_location": "L1"
+        },
+        {
+          "id": "packages_subsystems_studio_src_bun_maintain_model_ensuremaintainagentsinstalled",
+          "label": "ensureMaintainAgentsInstalled()",
+          "file_type": "code",
+          "source_file": "packages/subsystems-studio/src/bun/maintain-model.ts",
+          "source_location": "L399"
+        },
+        {
+          "id": "packages_subsystems_studio_src_bun_maintain_model_agentinstallpath",
+          "label": "agentInstallPath()",
+          "file_type": "code",
+          "source_file": "packages/subsystems-studio/src/bun/maintain-model.ts",
+          "source_location": "L95"
+        }
+      ],
+      "edges": [
+        {
+          "source": "packages_subsystems_studio_src_bun_maintain_model_readclaimadjudicatorsystemprompt",
+          "target": "packages_subsystems_studio_src_bun_maintain_model_readmaintainagentsystemprompt",
+          "relation": "calls",
+          "confidence": "EXTRACTED",
+          "context": "call",
+          "source_file": "packages/subsystems-studio/src/bun/maintain-model.ts",
+          "source_location": "L1410"
+        },
+        {
+          "source": "packages_subsystems_studio_src_bun_maintain_model",
+          "target": "packages_subsystems_studio_src_bun_maintain_model_readmaintainagentsystemprompt",
+          "relation": "contains",
+          "confidence": "EXTRACTED",
+          "source_file": "packages/subsystems-studio/src/bun/maintain-model.ts",
+          "source_location": "L1398"
+        },
+        {
+          "source": "packages_subsystems_studio_src_bun_maintain_model_readmaintainagentsystemprompt",
+          "target": "packages_subsystems_studio_src_bun_maintain_model_ensuremaintainagentsinstalled",
+          "relation": "calls",
+          "confidence": "EXTRACTED",
+          "context": "call",
+          "source_file": "packages/subsystems-studio/src/bun/maintain-model.ts",
+          "source_location": "L1400"
+        },
+        {
+          "source": "packages_subsystems_studio_src_bun_maintain_model_readmaintainagentsystemprompt",
+          "target": "packages_subsystems_studio_src_bun_maintain_model_agentinstallpath",
+          "relation": "calls",
+          "confidence": "EXTRACTED",
+          "context": "call",
+          "source_file": "packages/subsystems-studio/src/bun/maintain-model.ts",
+          "source_location": "L1401"
+        }
+      ]
+    },
+    "method": {
+      "center": {
+        "id": "packages_subsystems_core_src_opencode_node_path_adapter_nodepathnormalizationadapter_getrawrepositoryinfo",
+        "label": ".getRawRepositoryInfo()",
+        "file_type": "code",
+        "source_file": "packages/subsystems-core/src/opencode/node-path-adapter.ts",
+        "source_location": "L89"
+      },
+      "degree": 5,
+      "neighborCount": 5,
+      "neighborsTruncated": false,
+      "neighbors": [
+        {
+          "id": "packages_subsystems_core_src_opencode_node_path_adapter_nodepathnormalizationadapter",
+          "label": "NodePathNormalizationAdapter",
+          "file_type": "code",
+          "source_file": "packages/subsystems-core/src/opencode/node-path-adapter.ts",
+          "source_location": "L48"
+        },
+        {
+          "id": "packages_subsystems_core_src_opencode_node_path_adapter_nodepathnormalizationadapter_canonicalizecase",
+          "label": ".canonicalizeCase()",
+          "file_type": "code",
+          "source_file": "packages/subsystems-core/src/opencode/node-path-adapter.ts",
+          "source_location": "L67"
+        },
+        {
+          "id": "packages_subsystems_core_src_opencode_node_path_adapter_nodepathnormalizationadapter_findgitroot",
+          "label": ".findGitRoot()",
+          "file_type": "code",
+          "source_file": "packages/subsystems-core/src/opencode/node-path-adapter.ts",
+          "source_location": "L159"
+        },
+        {
+          "id": "packages_subsystems_core_src_opencode_node_path_adapter_gitcommand",
+          "label": "gitCommand()",
+          "file_type": "code",
+          "source_file": "packages/subsystems-core/src/opencode/node-path-adapter.ts",
+          "source_location": "L22"
+        },
+        {
+          "id": "packages_subsystems_core_src_opencode_node_path_adapter_githubidentityfromremoteurl",
+          "label": "githubIdentityFromRemoteUrl()",
+          "file_type": "code",
+          "source_file": "packages/subsystems-core/src/opencode/node-path-adapter.ts",
+          "source_location": "L33"
+        }
+      ],
+      "edges": [
+        {
+          "source": "packages_subsystems_core_src_opencode_node_path_adapter_nodepathnormalizationadapter",
+          "target": "packages_subsystems_core_src_opencode_node_path_adapter_nodepathnormalizationadapter_getrawrepositoryinfo",
+          "relation": "method",
+          "confidence": "EXTRACTED",
+          "source_file": "packages/subsystems-core/src/opencode/node-path-adapter.ts",
+          "source_location": "L89"
+        },
+        {
+          "source": "packages_subsystems_core_src_opencode_node_path_adapter_nodepathnormalizationadapter_getrawrepositoryinfo",
+          "target": "packages_subsystems_core_src_opencode_node_path_adapter_nodepathnormalizationadapter_canonicalizecase",
+          "relation": "calls",
+          "confidence": "EXTRACTED",
+          "context": "call",
+          "source_file": "packages/subsystems-core/src/opencode/node-path-adapter.ts",
+          "source_location": "L115"
+        },
+        {
+          "source": "packages_subsystems_core_src_opencode_node_path_adapter_nodepathnormalizationadapter_getrawrepositoryinfo",
+          "target": "packages_subsystems_core_src_opencode_node_path_adapter_nodepathnormalizationadapter_findgitroot",
+          "relation": "calls",
+          "confidence": "EXTRACTED",
+          "context": "call",
+          "source_file": "packages/subsystems-core/src/opencode/node-path-adapter.ts",
+          "source_location": "L119"
+        },
+        {
+          "source": "packages_subsystems_core_src_opencode_node_path_adapter_nodepathnormalizationadapter_getrawrepositoryinfo",
+          "target": "packages_subsystems_core_src_opencode_node_path_adapter_gitcommand",
+          "relation": "calls",
+          "confidence": "EXTRACTED",
+          "context": "call",
+          "source_file": "packages/subsystems-core/src/opencode/node-path-adapter.ts",
+          "source_location": "L126"
+        },
+        {
+          "source": "packages_subsystems_core_src_opencode_node_path_adapter_nodepathnormalizationadapter_getrawrepositoryinfo",
+          "target": "packages_subsystems_core_src_opencode_node_path_adapter_githubidentityfromremoteurl",
+          "relation": "calls",
+          "confidence": "EXTRACTED",
+          "context": "call",
+          "source_file": "packages/subsystems-core/src/opencode/node-path-adapter.ts",
+          "source_location": "L133"
+        }
+      ]
+    },
+    "type": {
+      "center": {
+        "id": "packages_subsystems_studio_src_shared_contract_subsystemmodelauditfinding",
+        "label": "SubsystemModelAuditFinding",
+        "file_type": "code",
+        "source_file": "packages/subsystems-studio/src/shared/contract.ts",
+        "source_location": "L502"
+      },
+      "degree": 4,
+      "neighborCount": 4,
+      "neighborsTruncated": false,
+      "neighbors": [
+        {
+          "id": "packages_subsystems_studio_src_mainview_subsystemissues_mappedissues",
+          "label": "MappedIssues",
+          "file_type": "code",
+          "source_file": "packages/subsystems-studio/src/mainview/subsystemIssues.ts",
+          "source_location": "L108"
+        },
+        {
+          "id": "packages_subsystems_studio_src_bun_verify_subsystem_component",
+          "label": "verify-subsystem-component.ts",
+          "file_type": "code",
+          "source_file": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "source_location": "L1"
+        },
+        {
+          "id": "packages_subsystems_studio_src_mainview_subsystemissues",
+          "label": "subsystemIssues.ts",
+          "file_type": "code",
+          "source_file": "packages/subsystems-studio/src/mainview/subsystemIssues.ts",
+          "source_location": "L1"
+        },
+        {
+          "id": "packages_subsystems_studio_src_shared_contract",
+          "label": "contract.ts",
+          "file_type": "code",
+          "source_file": "packages/subsystems-studio/src/shared/contract.ts",
+          "source_location": "L1"
+        }
+      ],
+      "edges": [
+        {
+          "source": "packages_subsystems_studio_src_mainview_subsystemissues_mappedissues",
+          "target": "packages_subsystems_studio_src_shared_contract_subsystemmodelauditfinding",
+          "relation": "references",
+          "confidence": "EXTRACTED",
+          "context": "generic_arg",
+          "source_file": "packages/subsystems-studio/src/mainview/subsystemIssues.ts",
+          "source_location": "L111"
+        },
+        {
+          "source": "packages_subsystems_studio_src_bun_verify_subsystem_component",
+          "target": "packages_subsystems_studio_src_shared_contract_subsystemmodelauditfinding",
+          "relation": "imports",
+          "confidence": "EXTRACTED",
+          "context": "import",
+          "source_file": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "source_location": "L24"
+        },
+        {
+          "source": "packages_subsystems_studio_src_mainview_subsystemissues",
+          "target": "packages_subsystems_studio_src_shared_contract_subsystemmodelauditfinding",
+          "relation": "imports",
+          "confidence": "EXTRACTED",
+          "context": "import",
+          "source_file": "packages/subsystems-studio/src/mainview/subsystemIssues.ts",
+          "source_location": "L12"
+        },
+        {
+          "source": "packages_subsystems_studio_src_shared_contract",
+          "target": "packages_subsystems_studio_src_shared_contract_subsystemmodelauditfinding",
+          "relation": "contains",
+          "confidence": "EXTRACTED",
+          "source_file": "packages/subsystems-studio/src/shared/contract.ts",
+          "source_location": "L502"
+        }
+      ]
+    },
+    "module": {
+      "center": {
+        "id": "packages_subsystems_react_src_components_session_events_index",
+        "label": "session-events/index.ts",
+        "file_type": "code",
+        "source_file": "packages/subsystems-react/src/components/session-events/index.ts",
+        "source_location": "L1"
+      },
+      "degree": 7,
+      "neighborCount": 7,
+      "neighborsTruncated": false,
+      "neighbors": [
+        {
+          "id": "packages_subsystems_react_src_index",
+          "label": "subsystems-react/src/index.ts",
+          "file_type": "code",
+          "source_file": "packages/subsystems-react/src/index.ts",
+          "source_location": "L1"
+        },
+        {
+          "id": "packages_subsystems_react_src_components_session_events_sessioneventfeed",
+          "label": "SessionEventFeed.tsx",
+          "file_type": "code",
+          "source_file": "packages/subsystems-react/src/components/session-events/SessionEventFeed.tsx",
+          "source_location": "L1"
+        },
+        {
+          "id": "packages_subsystems_react_src_components_session_events_sessioneventfeed_sessioneventfeed",
+          "label": "SessionEventFeed()",
+          "file_type": "code",
+          "source_file": "packages/subsystems-react/src/components/session-events/SessionEventFeed.tsx",
+          "source_location": "L1341"
+        },
+        {
+          "id": "packages_subsystems_react_src_components_session_events_sessioneventfeed_sessioneventfeedgrouped",
+          "label": "SessionEventFeedGrouped()",
+          "file_type": "code",
+          "source_file": "packages/subsystems-react/src/components/session-events/SessionEventFeed.tsx",
+          "source_location": "L1448"
+        },
+        {
+          "id": "packages_subsystems_react_src_components_session_events_sessioneventfeed_sessioneventfeedgroupedprops",
+          "label": "SessionEventFeedGroupedProps",
+          "file_type": "code",
+          "source_file": "packages/subsystems-react/src/components/session-events/SessionEventFeed.tsx",
+          "source_location": "L40"
+        },
+        {
+          "id": "packages_subsystems_react_src_components_session_events_sessioneventfeed_sessioneventfeedprops",
+          "label": "SessionEventFeedProps",
+          "file_type": "code",
+          "source_file": "packages/subsystems-react/src/components/session-events/SessionEventFeed.tsx",
+          "source_location": "L35"
+        },
+        {
+          "id": "packages_subsystems_react_src_components_session_events_sessioneventfeed_sessioneventfeedrow",
+          "label": "SessionEventFeedRow",
+          "file_type": "code",
+          "source_file": "packages/subsystems-react/src/components/session-events/SessionEventFeed.tsx",
+          "source_location": "L27"
+        }
+      ],
+      "edges": [
+        {
+          "source": "packages_subsystems_react_src_index",
+          "target": "packages_subsystems_react_src_components_session_events_index",
+          "relation": "re_exports",
+          "confidence": "EXTRACTED",
+          "context": "export",
+          "source_file": "packages/subsystems-react/src/index.ts",
+          "source_location": "L9"
+        },
+        {
+          "source": "packages_subsystems_react_src_components_session_events_index",
+          "target": "packages_subsystems_react_src_components_session_events_sessioneventfeed",
+          "relation": "re_exports",
+          "confidence": "EXTRACTED",
+          "context": "export",
+          "source_file": "packages/subsystems-react/src/components/session-events/index.ts",
+          "source_location": "L5"
+        },
+        {
+          "source": "packages_subsystems_react_src_components_session_events_index",
+          "target": "packages_subsystems_react_src_components_session_events_sessioneventfeed_sessioneventfeed",
+          "relation": "re_exports",
+          "confidence": "EXTRACTED",
+          "context": "re-export",
+          "source_file": "packages/subsystems-react/src/components/session-events/index.ts",
+          "source_location": "L5"
+        },
+        {
+          "source": "packages_subsystems_react_src_components_session_events_index",
+          "target": "packages_subsystems_react_src_components_session_events_sessioneventfeed_sessioneventfeedgrouped",
+          "relation": "re_exports",
+          "confidence": "EXTRACTED",
+          "context": "re-export",
+          "source_file": "packages/subsystems-react/src/components/session-events/index.ts",
+          "source_location": "L5"
+        },
+        {
+          "source": "packages_subsystems_react_src_components_session_events_index",
+          "target": "packages_subsystems_react_src_components_session_events_sessioneventfeed_sessioneventfeedgroupedprops",
+          "relation": "re_exports",
+          "confidence": "EXTRACTED",
+          "context": "re-export",
+          "source_file": "packages/subsystems-react/src/components/session-events/index.ts",
+          "source_location": "L9"
+        },
+        {
+          "source": "packages_subsystems_react_src_components_session_events_index",
+          "target": "packages_subsystems_react_src_components_session_events_sessioneventfeed_sessioneventfeedprops",
+          "relation": "re_exports",
+          "confidence": "EXTRACTED",
+          "context": "re-export",
+          "source_file": "packages/subsystems-react/src/components/session-events/index.ts",
+          "source_location": "L9"
+        },
+        {
+          "source": "packages_subsystems_react_src_components_session_events_index",
+          "target": "packages_subsystems_react_src_components_session_events_sessioneventfeed_sessioneventfeedrow",
+          "relation": "re_exports",
+          "confidence": "EXTRACTED",
+          "context": "re-export",
+          "source_file": "packages/subsystems-react/src/components/session-events/index.ts",
+          "source_location": "L9"
+        }
+      ]
+    }
+  },
+  "authoredCategories": {
+    "store": {
+      "note": "authored, not graphify-anchored",
+      "model": "Open-tab update: stuck cover (fixed)",
+      "component": {
+        "name": "measuredDimsRef",
+        "construct": "store",
+        "file": "packages/subsystems-react/src/subsystem/SubsystemComponentGraph.tsx",
+        "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/SubsystemComponentGraph.tsx",
+        "symbol": "measuredDimsRef",
+        "purpose": "Leaf node width/height bag.\nLanded: prune stale ids on Pass 1; do not wipe the whole Map.",
+        "process": "subsystems-react",
+        "layer": 7,
+        "capture": "analyzed",
+        "declaration": {
+          "kind": "store",
+          "properties": [
+            {
+              "name": "current",
+              "type": "Map<string, { width: number; height: number }>"
+            }
+          ]
+        },
+        "declarationProvenance": "authored",
+        "alias": "measured-dims"
+      }
+    },
+    "external": {
+      "note": "authored, not graphify-anchored",
+      "model": "Workspace-package boundary framing — wiring plan",
+      "component": {
+        "alias": "match-path",
+        "name": "matchPathToPackage",
+        "construct": "external",
+        "file": "",
+        "purl": "pkg:npm/@principal-ai/codebase-composition",
+        "symbol": "matchPathToPackage",
+        "purpose": "Maps a file path to its owning workspace package in a monorepo.",
+        "declaration": {
+          "kind": "external",
+          "label": "matchPathToPackage(filePath, workspaceRoot, packages)"
+        },
+        "declarationProvenance": "authored"
+      }
+    },
+    "custom_entity": {
+      "note": "authored, not graphify-anchored",
+      "model": "Associating correction proposals with maintenance-session runs",
+      "component": {
+        "alias": "http-propose",
+        "name": "Propose HTTP route",
+        "construct": "custom_entity",
+        "file": "packages/subsystems-studio/src/bun/http-server.ts",
+        "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/http-server.ts",
+        "symbol": "POST /api/subsystem-model/:id/proposals",
+        "purpose": "HTTP endpoint (line ~399) that parses the propose curl body then calls proposeSubsystemModelCorrection. Seam B entry: parse an optional runId field off the body.",
+        "process": "packages/subsystems-studio/run",
+        "module": "packages/subsystems-studio/src/bun/http-server.ts",
+        "layer": 6
+      }
+    }
+  }
+}

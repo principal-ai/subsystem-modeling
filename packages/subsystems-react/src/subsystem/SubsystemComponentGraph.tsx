@@ -40,14 +40,15 @@ import {
   isConstructsOnlyModel,
   isRelationMechanism,
   isWalkthroughMechanism,
-  MECHANISM_COLOR,
+  edgeColor,
   MECHANISM_DESCRIPTIONS,
   subsystemGraphLayoutKey,
   walkthroughStepGraphEdgeId,
   type SubsystemComponentEdge,
   type SubsystemComponent,
+  type SubsystemEdgeProvenance,
   type SubsystemEdgeView,
-  type SubsystemEdgeMechanism,
+  type SubsystemGraphifyRelation,
   type SubsystemRelation,
   type SubsystemWalkthrough,
 } from './model';
@@ -174,6 +175,19 @@ export interface SubsystemComponentGraphProps {
    * (unselected ones dimmed); everything else is hidden.
    */
   walkthroughs?: SubsystemWalkthrough[];
+  /**
+   * graphify-native relations (raw static-graph edges: `imports`, `contains`,
+   * `re_exports`, …). Display-only, drawn with the separate
+   * `GRAPHIFY_RELATION_COLOR` palette so they read as derived facts, distinct
+   * from authored subsystem mechanisms. Visible in the `relations` edge view.
+   */
+  graphifyRelations?: readonly SubsystemGraphifyRelation[];
+  /**
+   * Order same-layer nodes by `component.line` (ascending) instead of ELK's
+   * crossing-minimizer — reads a source region top-to-bottom. Components need a
+   * `line` for this to have any effect. @default false
+   */
+  orderByLine?: boolean;
   /**
    * Deep-link target: when set, the matching walkthrough is selected on mount
    * — its steps expanded and its flow focused on the canvas. Hosts use this
@@ -470,7 +484,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, relations, walkthroughs, initialWalkthroughId, onReorderWalkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, walkthroughFocusDurationMs = 300, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, hideDrawer = false, persistKey }: InnerProps) {
+function Inner({ components, relations, walkthroughs, graphifyRelations, orderByLine, initialWalkthroughId, onReorderWalkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, walkthroughFocusDurationMs = 300, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, hideDrawer = false, persistKey }: InnerProps) {
   const { theme } = useTheme();
   const { fitView, fitBounds } = useReactFlow();
   const viewport = useViewport();
@@ -730,15 +744,17 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
   // The pane stays hidden until Pass 2 completes. Key off layout-affecting
   // fields only — declarationRef updates after verify must not re-run ELK.
   const layoutKey = useMemo(
-    () => subsystemGraphLayoutKey({ components, relations, walkthroughs }),
-    [components, relations, walkthroughs],
+    () => subsystemGraphLayoutKey({ components, relations, walkthroughs, graphifyRelations }),
+    [components, relations, walkthroughs, graphifyRelations],
   );
   const componentsRef = useRef(components);
   const relationsRef = useRef(relations);
   const walkthroughsRef = useRef(walkthroughs);
+  const graphifyRelationsRef = useRef(graphifyRelations);
   componentsRef.current = components;
   relationsRef.current = relations;
   walkthroughsRef.current = walkthroughs;
+  graphifyRelationsRef.current = graphifyRelations;
 
   // Track measured dimensions from React Flow's dimension changes.
   // These arrive as { type: 'dimensions', id, dimensions } in onNodesChange.
@@ -764,6 +780,8 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
       maxNodeWidth,
       showEdgeLabels,
       showSingletonFrames,
+      graphifyRelations: graphifyRelationsRef.current,
+      orderByLine,
     })
       .then(({ nodes, edges: e, absoluteRects }) => {
         if (!alive) return;
@@ -813,7 +831,7 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
     const gen = ++pass2GenRef.current;
     void buildSubsystemGraph(
       { components, relations, walkthroughs },
-      { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights, showSingletonFrames },
+      { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights, showSingletonFrames, graphifyRelations, orderByLine },
     )
       .then(({ nodes, edges: e, absoluteRects }) => {
         if (gen !== pass2GenRef.current) return;
@@ -826,7 +844,7 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
         // Reveal Pass 1 layout rather than leaving the cover up forever.
         setLayoutReady(true);
       });
-  }, [built.nodes, components, relations, walkthroughs, maxNodeWidth, showEdgeLabels]);
+  }, [built.nodes, components, relations, walkthroughs, graphifyRelations, orderByLine, maxNodeWidth, showEdgeLabels]);
 
   // After Pass 1 commits, try Pass 2 immediately with retained measurements.
   // Same-id live updates often get no new React Flow `dimensions` events, so
@@ -1121,11 +1139,17 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
       };
     };
     // Edges outside the selected view are hidden entirely (labels included).
+    // graphify-native edges belong to the relations view (they are static
+    // topology, not runtime hops) regardless of their verb.
     const edgeInView = (e: Edge): boolean => {
-      const mechanism = (e.data as { mechanism?: string } | undefined)?.mechanism ?? 'uses';
-      return resolvedEdgeView === 'relations'
-        ? isRelationMechanism(mechanism)
-        : isWalkthroughMechanism(mechanism);
+      const d = e.data as
+        | { mechanism?: string; provenance?: SubsystemEdgeProvenance }
+        | undefined;
+      const mechanism = d?.mechanism ?? 'uses';
+      if (resolvedEdgeView === 'relations') {
+        return d?.provenance === 'graphify' || isRelationMechanism(mechanism);
+      }
+      return isWalkthroughMechanism(mechanism);
     };
     if (openedEdgeIds || focusEdgeIds || previewEdgeIds) {
       return baseEdges.map((e) => {
@@ -1884,6 +1908,7 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
       .map((e) => {
         const d = e.data as {
           mechanism?: string;
+          provenance?: SubsystemEdgeProvenance;
           dimmed?: boolean;
           labelX?: number;
           labelY?: number;
@@ -1892,6 +1917,7 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
         return {
           id: e.id,
           mechanism: d?.mechanism ?? 'uses',
+          provenance: d?.provenance,
           dimmed: d?.dimmed === true,
           midX: d?.labelX ?? 0,
           midY: d?.labelY ?? 0,
@@ -2227,9 +2253,19 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
           }}
         >
           {edgeLabels.map((lbl) => {
-            const mechanism = lbl.mechanism as SubsystemEdgeMechanism;
-            const color = MECHANISM_COLOR[mechanism] ?? '#888';
-            const verifiable = MECHANISM_DESCRIPTIONS.find(([m]) => m === mechanism)?.[2] ?? true;
+            const mechanism = lbl.mechanism;
+            const isGraphify = lbl.provenance === 'graphify';
+            const color = edgeColor({ mechanism, provenance: lbl.provenance });
+            // Label chrome stays the crisp rounded box for every edge — graphify
+            // provenance is carried by hue (GRAPHIFY_RELATION_COLOR), the dashed
+            // stroke, and the tooltip, NOT by the "ambiguous" cloud silhouette
+            // (that idiom is reserved for soft authored mechanisms).
+            const verifiable = true;
+            const labelTitle = isGraphify
+              ? 'Derived from graphify (static symbol graph)'
+              : MECHANISM_DESCRIPTIONS.find(([m]) => m === mechanism)?.[2] === false
+                ? 'Not directly verifiable with graphify'
+                : undefined;
             const screenX = lbl.midX * viewport.zoom + viewport.x;
             const screenY = lbl.midY * viewport.zoom + viewport.y;
             const text = lbl.stepNos?.length
@@ -2239,7 +2275,7 @@ function Inner({ components, relations, walkthroughs, initialWalkthroughId, onRe
               <div
                 key={lbl.id}
               data-edge-label={lbl.id}
-              title={verifiable ? undefined : 'Not directly verifiable with graphify'}
+              title={labelTitle}
               onClick={(e) => {
                 e.stopPropagation();
                 selectEdge(lbl.id);
@@ -2720,6 +2756,7 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
     components: props.components,
     relations: props.relations,
     walkthroughs: props.walkthroughs,
+    graphifyRelations: props.graphifyRelations,
   });
 
   return (

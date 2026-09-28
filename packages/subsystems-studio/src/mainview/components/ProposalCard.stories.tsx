@@ -187,6 +187,51 @@ const unscored: SubsystemModelProposal = {
   secondOpinion: undefined,
 };
 
+/** Scored with the sent-request record present — the card can show what went to Jev. */
+const scoredWithRequest: SubsystemModelProposal = {
+  ...signatureAugment,
+  id: "sp-request-0001",
+  secondOpinion: {
+    source: "jev-latest",
+    checkedAt: "2026-09-27T05:04:24.099Z",
+    verdict: "uncertain",
+    confidence: 0.69,
+    changeKind: "signature_augment",
+    risk: "Needs human",
+    request: {
+      model: "jev-latest",
+      state: [
+        "Proposal rationale: Source declares `maintainSubsystemModel(graphId: string, opts?: {...})`",
+        "Finding (signature_unconfirmed): claim the declared signature from source.",
+        "Changes (1):",
+        'augment maintainSubsystemModel.signature (maintain-model.ts#maintainSubsystemModel): "not yet confirmed" -> "(graphId: string, opts?) → Promise<MaintainModelResult>"',
+        "",
+        "Source under review:",
+        "--- packages/subsystems-studio/src/bun/maintain-model.ts:1242 (symbol maintainSubsystemModel) ---",
+        " 1242| export async function maintainSubsystemModel(",
+        " 1243|   graphId: string,",
+      ].join("\n"),
+      questions: {
+        accurate: {
+          type: "noul",
+          instructions:
+            "The proposed signature is an accurate, complete extraction of the function/method declaration in the source under review.",
+        },
+        change_kind: {
+          type: "choice",
+          instructions: "What kind of construct correction is this?",
+          criteria: { signature_augment: "Confirming parameter or return types" },
+        },
+        risk: {
+          type: "score",
+          instructions: "Risk of auto-accepting this correction",
+          criteria: ["Safe", "Needs human", "Unsafe"],
+        },
+      },
+    },
+  },
+};
+
 /** Jev errored — the card surfaces the error and offers "Retry scoring". */
 const scoringError: SubsystemModelProposal = {
   ...constructAugment,
@@ -263,6 +308,10 @@ export const NotYetScored: Story = {
 
 export const ScoringError: Story = {
   args: { proposal: scoringError },
+};
+
+export const ScoredWithRequest: Story = {
+  args: { proposal: scoredWithRequest },
 };
 
 export const AcceptingInFlight: Story = {
