@@ -241,6 +241,60 @@ function declarationFreshness(
 	return "fresh";
 }
 
+/** A store's declared value type, normalized. Null when it declares none. */
+function storeValueTypeOf(
+	declaration: { valueType?: string } | undefined,
+): string | null {
+	const value = declaration?.valueType;
+	return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+/**
+ * Store completeness — an in-memory store declares the type it holds.
+ *
+ * A store is a state declaration, so it says what it declares: either a
+ * `valueType` (`Map<string, FeedState>`) or named state members. A memory store
+ * with neither has no declared type at all. Deliberately narrow: only
+ * `storage: "memory"` (where the type is the whole point) and only when the
+ * store has a declaration to inspect. Never a hard failure — a gap the
+ * construct-verifier fills by reading source.
+ *
+ * Exported for unit testing — the predicate is the whole of the new gap.
+ */
+export function storeTypeUndeclared(component: SubsystemComponent): boolean {
+	if (component.construct !== "store") return false;
+	const declaration = component.declaration;
+	if (!declaration || declaration.kind !== "store") return false;
+	if (declaration.storage !== "memory") return false;
+	return !storeValueTypeOf(declaration) && (declaration.properties ?? []).length === 0;
+}
+
+/**
+ * A store whose pinned declaration moved — its declared value type may be out
+ * of date.
+ *
+ * Reuses the drift trigger that already exists: a stale declaration means
+ * "look at this again" (it raises `stale_declaration` with a one-click re-pin).
+ * A declared value type can only be wrong because the source moved, so this is
+ * the moment to re-derive it — no new check lane, and Graphify can never
+ * provide the type itself.
+ *
+ * Scoped to stores that declare a value type: there is nothing specific to
+ * re-derive otherwise, and an undeclared one is already covered by
+ * `storeTypeUndeclared`. Mutually exclusive with it by construction.
+ *
+ * Exported for unit testing.
+ */
+export function storeTypeStale(
+	component: SubsystemComponent,
+	freshness: string | undefined,
+): boolean {
+	if (freshness !== "stale") return false;
+	const declaration = component.declaration;
+	if (!declaration || declaration.kind !== "store") return false;
+	return storeValueTypeOf(declaration) != null;
+}
+
 async function captureDeclaration(
 	graphId: string,
 	components: SubsystemComponent[],
@@ -635,6 +689,16 @@ export async function verifySubsystemComponent(
 
 	const withKind: SubsystemComponentVerificationResult = { ...base, construct };
 
+	// Store completeness — an in-memory store declares the type it holds, the
+	// way every other declaration declares its signature. A gap, never a hard
+	// failure: the agent reads the declaration and authors `declaration.valueType`.
+	// Keyed on the model's own `storage` claim; `storage` is itself authored and
+	// not yet verified, so this is a completeness signal rather than a verdict.
+	const withStoreType: SubsystemComponentVerificationResult = {
+		...withKind,
+		...(storeTypeUndeclared(component) ? { storeTypeUndeclared: true } : {}),
+	};
+
 	// Signature / params — function & method only, after kind ok.
 	if (claimed !== "function" && claimed !== "method") {
 		return finalizeResult(
@@ -644,7 +708,7 @@ export async function verifySubsystemComponent(
 			anchor,
 			fileContent,
 			repoRoot,
-			withKind,
+			withStoreType,
 			opts,
 		);
 	}
@@ -734,7 +798,7 @@ export async function verifySubsystemComponent(
 		anchor,
 		fileContent,
 		repoRoot,
-		{ ...withKind, signature },
+		{ ...withStoreType, signature },
 		opts,
 	);
 }
@@ -776,6 +840,9 @@ export function verifyVerdict(
 			category: "construct_augmented",
 			detail: `claimed ${r.construct.claimed}, graphify inferred ${r.construct.inferred}, agent-confirmed`,
 		};
+	}
+	if (r.storeTypeUndeclared) {
+		return { category: "store_type_undeclared" };
 	}
 	if (r.cache && r.cache.status !== "ready") {
 		return { category: `cache_${r.cache.status}`, detail: r.cache.purl };
@@ -1121,6 +1188,37 @@ export async function auditSubsystemModel(
 			});
 			constructMismatches++;
 			seenComponentIssue.add(c.alias);
+		}
+
+		// Store completeness — an in-memory store that declares no type, and a
+		// store whose declared type may have drifted. Both are gaps (info), never
+		// issues: the construct-verifier reads the declaration and (re-)authors
+		// `declaration.valueType`. Mutually exclusive by construction.
+		if (c.construct === "store") {
+			if (storeTypeStale(c, r.declaration?.freshness)) {
+				check.storeType = "stale";
+				findings.push({
+					kind: "store_type_stale",
+					severity: "info",
+					componentAlias: c.alias,
+					componentName: c.name,
+					message: `Store declaration moved — its declared value type may be out of date; re-read the declaration and re-propose \`declaration.valueType\` if the type changed.`,
+				});
+			} else {
+				check.storeType = r.storeTypeUndeclared ? "undeclared" : "declared";
+			}
+		} else {
+			check.storeType = "n/a";
+		}
+		if (r.storeTypeUndeclared) {
+			findings.push({
+				kind: "store_type_undeclared",
+				severity: "info",
+				componentAlias: c.alias,
+				componentName: c.name,
+				message:
+					"In-memory store declares no type — read the state declaration and claim `declaration.valueType` (e.g. `Map<string, FeedState>`) or name its state members.",
+			});
 		}
 
 		if (r.signature) {

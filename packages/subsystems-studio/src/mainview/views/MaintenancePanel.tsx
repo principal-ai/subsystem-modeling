@@ -208,12 +208,12 @@ export function MaintenancePanel() {
 		}
 	}, []);
 
-	/** Open the live events tab for a run's session (no auto-open on start). */
+	/** Open the live events panel over the model's graph (no auto-open on start). */
 	const openRunEvents = useCallback(
 		(sessionId: string | undefined, graphId: string, title?: string, agent?: string) => {
 			if (!sessionId) return;
 			void electrobun.rpc!.request
-				.openMaintainEvents({ sessionId, graphId, title, agent })
+				.openMaintainLive({ sessionId, graphId, title, agent })
 				.catch(() => {});
 		},
 		[],

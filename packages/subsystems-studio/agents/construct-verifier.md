@@ -22,9 +22,10 @@ corrections with a clear rationale. You do **not** accept proposals and you do
 **not** rewrite the model JSON on disk.
 
 You only address **unconfirmed claims**: construct unclassified, signature
-not in cache, unresolved repo/cache, and similar confirmation holes. **Do not** invent or
-chase hard failures — if the model has verification issues, stop and say so;
-construct-fixer handles those.
+not in cache, an in-memory store that declares no type, unresolved repo/cache,
+and similar confirmation holes. **Do not** invent or chase hard failures — if
+the model has verification issues, stop and say so; construct-fixer handles
+those.
 
 ## Important: which tools to use
 
@@ -111,6 +112,68 @@ Model-construct correction example (only when the claim itself is wrong):
   ]
 }
 ```
+
+### Store value type may be out of date (`store_type_stale`)
+
+The store's pinned declaration line moved (`stale_declaration` fired), so the
+declared `valueType` may no longer match the source. Re-read the declaration
+and decide:
+
+- **Type changed** → propose the corrected `declaration.valueType` (same shape
+  as below, with the *current* line span).
+- **Type unchanged** → nothing to propose. The claim is still correct; say so in
+  the summary and move on. Do **not** re-propose the same value — that is noise
+  in the review queue.
+
+This is the only re-examination a store's value type gets: Graphify has no type
+edge for a module-level state declaration, so drift is the only signal that the
+declared type could have gone stale.
+
+### In-memory store declares no type (`store_type_undeclared`)
+
+A store is a **state declaration**, so it declares the type it holds. Graphify
+neither checks nor requires this, so an in-memory store can reach the model with
+no declared type at all. Read the state declaration and author the type:
+
+- `const feeds = new Map<string, OpencodeLiveFeedState>()` → `valueType:
+  "Map<string, OpencodeLiveFeedState>"`
+- `const listeners = new Set<FeedListener>()` → `valueType: "Set<FeedListener>"`
+- `const modelUnusableUntil = new Map<string, number>()` → `valueType:
+  "Map<string, number>"`
+
+Record the type **exactly as written at the declaration site**. When the
+declaration has no explicit annotation, the initializer is the evidence — an
+unannotated `new Map()` declares `Map<unknown, unknown>`, so claim that rather
+than inventing a type. Do **not** claim the accessor's return type: that is the
+access surface, not the retained state (unless it genuinely is the retained
+type, e.g. a store holding a `Highlighter`).
+
+```json
+{
+  "rationale": "packages/subsystems-studio/src/bun/opencode-v2-live.ts:50 declares `const feeds = new Map<string, OpencodeLiveFeedState>()`; the store holds that map and declares no type.",
+  "author": "construct-verifier",
+  "finding": {
+    "kind": "store_type_undeclared",
+    "componentAlias": "…",
+    "message": "…"
+  },
+  "changes": [
+    {
+      "target": "declaration",
+      "componentAlias": "…",
+      "field": "valueType",
+      "value": "Map<string, OpencodeLiveFeedState>",
+      "lines": { "start": 50, "end": 50 }
+    }
+  ]
+}
+```
+
+If `storage` is itself wrong (the state is really on disk or behind a service),
+propose `field: "storage"` with `memory` / `disk` / `external` instead — and say
+why in the rationale. If the node is not a store at all, propose a `component`
+`construct` correction. If you cannot read the declaration, skip — do not guess
+a type.
 
 ### Signature not in cache (`signature_unconfirmed`)
 
@@ -234,6 +297,8 @@ Named props type (destructured params collapse to the one props param):
 
 Allowed change targets:
 
+- `declaration`: `valueType` | `storage` (accept edits the model JSON and marks
+  the declaration `authored`). Requires `lines` — the span you read.
 - `augmentation`: `construct` | `signature` (accept writes the augmentation
   store, not the model JSON). `file` / `symbol` / `purl` optional — default
   from the component.
@@ -247,6 +312,10 @@ Allowed change targets:
 
 - Prefer many small proposals over one giant patch.
 - If you cannot determine a safe fill, skip — do not guess constructs or paths.
+- A store's `valueType` is the type **as written in source**, not a paraphrase
+  and not a type you would have liked. When in doubt, skip.
+- If a store's declared value type still matches after its declaration moved,
+  propose nothing — an unchanged claim needs no new proposal.
 - Never edit `~/.principal/subsystem-models/*.json` directly.
 - Never enable or rely on auto-accept; humans confirm in Studio.
 - Do not propose “fixes” for error/warn findings; those belong to construct-fixer.

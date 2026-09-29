@@ -98,6 +98,9 @@ const LANE_SUBJECT: Record<SubsystemVerificationLane, string> = {
 function constructSubject(proposal: SubsystemModelProposal): string {
 	const c: SubsystemModelProposalChange | undefined = proposal.changes[0];
 	if (!c) return LANE_SUBJECT.construct;
+	if (c.target === "declaration") {
+		return "The proposed declaration field is an accurate, faithful extraction of the declaration in the source under review. A store's `valueType` must be the type of the retained state exactly as written at the declaration site (e.g. `Map<string, FeedState>`, `Set<Listener>`), not a paraphrase, not the store's own name, and not the accessor's return type unless that genuinely is the retained type. When the declaration states no explicit type annotation, the initializer is the evidence — `new Map<string, number>()` declares `Map<string, number>`; do not treat an unannotated `new Map()` as unverifiable, and do not invent a type it does not have.";
+	}
 	if (c.target === "augmentation") {
 		if (c.field === "signature") {
 			return "The proposed signature is an accurate, complete extraction of the function/method declaration in the source under review. For a React component function (in a .tsx file) that destructures a single props object and returns JSX without a declared return type, an inferred JSX.Element return type is the correct and expected claim — treat the absence of an explicit return annotation as confirming JSX.Element whenever the body contains a `return ( ... )` or other JSX expression, and do not penalize the claim for inferring it. When the declaration has an explicit return annotation, that declared type is authoritative and complete: a named or union return type (for example `Promise<MaintainModelResult>` or `MaintainRoute | null`) is the correct claim whenever it matches the source. Likewise a structural object parameter type (for example `opts?: { model?: string; onSession?: (sessionId: string) => void }`) is the correct claim when it matches the source verbatim; do not treat structural, optional, or function-typed members as unverifiable.";
@@ -194,6 +197,7 @@ export function changeKindQuestion(proposal: SubsystemModelProposal): {
 					construct_augment: "Confirming a component construct classification",
 					identity_fix: "Correcting file, symbol, name, or purl",
 					construct_fix: "Correcting the model's construct",
+					declaration_field: "Authoring a declaration field (e.g. a store's valueType)",
 					declaration_ref: "Re-pinning a declaration anchor",
 				},
 			};

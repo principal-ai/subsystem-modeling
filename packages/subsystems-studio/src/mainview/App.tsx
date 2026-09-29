@@ -30,7 +30,6 @@ import { MaintenanceView } from "./views/MaintenanceView";
 import { GraphifyReposView } from "./views/GraphifyReposView";
 import { PackageLayersReposView } from "./views/PackageLayersReposView";
 import { OpencodeV2DebugView } from "./views/OpencodeV2DebugView";
-import { MaintainEventsView } from "./views/MaintainEventsView";
 import { SessionEventsView } from "./views/SessionEventsView";
 import { SubsystemModelView } from "./views/SubsystemModelView";
 import { TourViewer } from "./views/TourViewer";
@@ -159,16 +158,6 @@ function ActiveTab({
 					});
 					return;
 				}
-				if (tab.kind === "maintain-events") {
-					setState({
-						kind: "maintain-events",
-						id: tab.id,
-						sessionId: tab.sessionId ?? "",
-						agent: tab.agent,
-						title: tab.title,
-					});
-					return;
-				}
 				if (tab.kind === "subsystem-model") {
 					setState({
 						kind: "subsystem-model",
@@ -177,6 +166,9 @@ function ActiveTab({
 						walkthroughId: tab.focusWalkthroughId,
 						showIssues: tab.showIssues,
 						focusIssueCategory: tab.focusIssueCategory,
+						liveSessionId: tab.liveSessionId,
+						liveTitle: tab.liveTitle,
+						liveAgent: tab.liveAgent,
 					});
 					return;
 				}
@@ -269,15 +261,6 @@ function ActiveTab({
 	if (state.kind === "session-events") {
 		return <SessionEventsView sessionId={state.sessionId} />;
 	}
-	if (state.kind === "maintain-events") {
-		return (
-			<MaintainEventsView
-				sessionId={state.sessionId}
-				agent={state.agent}
-				title={state.title}
-			/>
-		);
-	}
 	if (state.kind === "subsystem-model") {
 		return (
 			<SubsystemModelView
@@ -286,6 +269,9 @@ function ActiveTab({
 				focusWalkthroughId={state.walkthroughId}
 				showIssues={state.showIssues}
 				focusIssueCategory={state.focusIssueCategory}
+				liveSessionId={state.liveSessionId}
+				liveTitle={state.liveTitle}
+				liveAgent={state.liveAgent}
 			/>
 		);
 	}
@@ -299,6 +285,85 @@ function ActiveTab({
 	// Static tab resolved — the rendered view is registered with App's
 	// keep-mounted stack and rendered there, not here.
 	return null;
+}
+
+/**
+ * Keep-alive wrapper for a subsystem-model tab. Resolves the tab once and
+ * stays mounted (hidden while inactive) so its in-memory state survives tab
+ * switches. Re-resolves when it regains focus so host-side deep links (issues
+ * view, walkthrough focus) still apply on reopen.
+ */
+function KeptSubsystemModelTab({
+	tabId,
+	active,
+}: {
+	tabId: string;
+	active: boolean;
+}) {
+	const [state, setState] = useState<{
+		graphId: string;
+		walkthroughId?: string;
+		showIssues?: boolean;
+		focusIssueCategory?: string;
+		liveSessionId?: string;
+		liveTitle?: string;
+		liveAgent?: string;
+	} | null>(null);
+
+	const resolve = useCallback(() => {
+		void electrobun.rpc!.request
+			.getTab({ id: tabId })
+			.then((tab) => {
+				if (tab.kind !== "subsystem-model") return;
+				setState({
+					graphId: tab.graphId ?? "",
+					walkthroughId: tab.focusWalkthroughId,
+					showIssues: tab.showIssues,
+					focusIssueCategory: tab.focusIssueCategory,
+					liveSessionId: tab.liveSessionId,
+					liveTitle: tab.liveTitle,
+					liveAgent: tab.liveAgent,
+				});
+			})
+			.catch(() => {
+				/* host busy — the next focus/reload retries */
+			});
+	}, [tabId]);
+
+	useEffect(() => {
+		resolve();
+	}, [resolve]);
+
+	// Re-read the tab's focus fields each time it becomes active again.
+	useEffect(() => {
+		if (active) resolve();
+	}, [active, resolve]);
+
+	if (!state) {
+		return active ? <CenteredMessage title="Loading…" /> : null;
+	}
+	return (
+		<div
+			style={{
+				position: "absolute",
+				inset: 0,
+				display: active ? "flex" : "none",
+				flexDirection: "column",
+				overflow: "hidden",
+			}}
+		>
+			<SubsystemModelView
+				tabId={tabId}
+				graphId={state.graphId}
+				focusWalkthroughId={state.walkthroughId}
+				showIssues={state.showIssues}
+				focusIssueCategory={state.focusIssueCategory}
+				liveSessionId={state.liveSessionId}
+				liveTitle={state.liveTitle}
+				liveAgent={state.liveAgent}
+			/>
+		</div>
+	);
 }
 
 export function App() {
@@ -324,6 +389,11 @@ export function App() {
 	// stack hidden via display:none while inactive, so switching back doesn't
 	// remount (and reload) it — except views that opt into `active`-driven refresh.
 	const mountedStaticIds = useRef(new Set<string>());
+	// Subsystem-model payload tabs are kept mounted too (they're React Flow
+	// graphs, not 3D cities), so switching away and back preserves in-memory
+	// state — live panel, run busy, scroll, graph focus. Heavy 3D payloads
+	// (tours) still mount only while active.
+	const mountedModelIds = useRef(new Set<string>());
 	const [, bump] = useReducer((n: number) => n + 1, 0);
 
 	const registerView = useCallback((id: string) => {
@@ -331,6 +401,26 @@ export function App() {
 		mountedStaticIds.current.add(id);
 		bump();
 	}, []);
+
+	// Register a subsystem-model tab the moment it becomes active, and prune
+	// ids for closed tabs. Layout effect so the keep-alive stack mounts it
+	// before paint (no blank frame between the strip click and the graph).
+	useLayoutEffect(() => {
+		const live = new Set(tabs.map((t) => t.id));
+		let changed = false;
+		for (const id of Array.from(mountedModelIds.current)) {
+			if (!live.has(id)) {
+				mountedModelIds.current.delete(id);
+				changed = true;
+			}
+		}
+		const active = tabs.find((t) => t.id === activeTabId);
+		if (active?.kind === "subsystem-model" && !mountedModelIds.current.has(active.id)) {
+			mountedModelIds.current.add(active.id);
+			changed = true;
+		}
+		if (changed) bump();
+	}, [tabs, activeTabId]);
 
 	// Record each activation (newest last, deduped, capped) so closing the
 	// active tab can fall back to the last active tab rather than strip order.
@@ -407,6 +497,9 @@ export function App() {
 	const onClose = useCallback(
 		(id: string) => {
 			userChoseRef.current = true;
+			// Free any keep-mounted view for the closed tab.
+			mountedStaticIds.current.delete(id);
+			mountedModelIds.current.delete(id);
 			if (!tabs.some((t) => t.id === id)) {
 				void electrobun.rpc!.request.closeTab({ id });
 				return;
@@ -458,6 +551,8 @@ export function App() {
 	const libraryActive =
 		tabs.find((t) => t.id === activeTabId)?.kind === "library" ||
 		(tabs.length === 0 && activeTabId === "library");
+	// Subsystem-model tabs render from the keep-alive stack, not `ActiveTab`.
+	const activeTabKind = tabs.find((t) => t.id === activeTabId)?.kind;
 
 	return (
 		<div
@@ -502,12 +597,21 @@ export function App() {
 						{renderStaticView(id, id === activeTabId)}
 					</div>
 				))}
-				<ActiveTab
-					key={activeTabId}
-					tabId={activeTabId}
-					isStaticMounted={mountedStaticIds.current.has(activeTabId)}
-					onRegister={registerView}
-				/>
+				{Array.from(mountedModelIds.current).map((id) => (
+					<KeptSubsystemModelTab
+						key={id}
+						tabId={id}
+						active={id === activeTabId}
+					/>
+				))}
+				{activeTabKind === "subsystem-model" ? null : (
+					<ActiveTab
+						key={activeTabId}
+						tabId={activeTabId}
+						isStaticMounted={mountedStaticIds.current.has(activeTabId)}
+						onRegister={registerView}
+					/>
+				)}
 			</div>
 		</div>
 	);

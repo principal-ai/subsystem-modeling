@@ -17,6 +17,9 @@ export function laneForChange(
 ): SubsystemVerificationLane {
 	if (ch.target === "walkthrough-step") return "walkthrough";
 	if (ch.target === "relation") return "static-topology";
+	// Authoring a declaration field (e.g. a store's `valueType`) is construct
+	// work: it fills the declaration the construct panel renders.
+	if (ch.target === "declaration") return "construct";
 	if (ch.target === "augmentation") {
 		if (ch.field === "construct" || ch.field === "signature") return "construct";
 		if (ch.field === "relation") return "static-topology";
@@ -34,6 +37,8 @@ export function laneForFindingKind(
 	switch (kind) {
 		case "construct_unconfirmed":
 		case "construct_mismatch":
+		case "store_type_undeclared":
+		case "store_type_stale":
 		case "signature_unconfirmed":
 		case "signature_mismatch":
 		case "missing_file":

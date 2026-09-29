@@ -16,6 +16,14 @@ export type {
   SessionEventFeedRow,
 } from './components/session-events';
 
+// Maintain event log — presentational live OpenCode agent-run event feed
+export { MaintainEventLog, MaintainLivePanel } from './components/maintain-events';
+export type {
+  MaintainEventLogEvent,
+  MaintainEventLogProps,
+  MaintainLivePanelProps,
+} from './components/maintain-events';
+
 // Graphify integration types (graph.json data model)
 export type {
   JsonValue,
@@ -158,6 +166,13 @@ export type {
   SubsystemIssueCardProps,
   SubsystemIssueListProps,
 } from './subsystem/IssueList';
+
+// Maintain agent pipeline panel (graph sidebar diagnostics → Agents tab)
+export { SubsystemAgentsPanel } from './subsystem/AgentsPanel';
+export type {
+  SubsystemAgent,
+  SubsystemAgentsPanelProps,
+} from './subsystem/AgentsPanel';
 export {
   MECHANISM_COLOR,
   MECHANISM_STYLE,

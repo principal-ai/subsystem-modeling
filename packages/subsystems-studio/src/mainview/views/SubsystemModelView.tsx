@@ -8,7 +8,7 @@
  * "Edit in Excalidraw" fades an editable drawing over the same pane.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PenTool, X } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
@@ -22,10 +22,11 @@ import {
 	type SubsystemIssue,
 	type SubsystemIssueCategory,
 	type SubsystemOpenFileOptions,
+	type SubsystemAgent,
 	type SymbolInspection,
 	type WalkthroughViewerContext,
 } from "@principal-ai/subsystems-react";
-import { electrobun, reloadSubscribers, subsystemModelChangeSubscribers } from "../rpc";
+import { electrobun, maintainLivePanelSubscribers, opencodeLiveFeedSubscribers, reloadSubscribers, subsystemModelChangeSubscribers, subsystemModelMaintainChangeSubscribers } from "../rpc";
 import { CenteredMessage } from "../ui";
 import {
 	auditReportToIssues,
@@ -33,6 +34,7 @@ import {
 	diagnosticStatus,
 } from "../subsystemIssues";
 import { SubsystemExcalidrawOverlay } from "../components/SubsystemExcalidrawOverlay";
+import { useMaintainLiveFeed } from "../useMaintainLiveFeed";
 import type { ExcalidrawSelectionInfo } from "../excalidraw/excalidrawToSubsystem";
 import type {
 	StoredSubsystemModel,
@@ -52,12 +54,31 @@ const EMPTY_MODEL = {
 	relations: [],
 } as unknown as StoredSubsystemModel;
 
+/**
+ * The Maintain pipeline, in routing-priority order (hard failures before
+ * unconfirmed claims; construct → static topology → package/module → runtime
+ * topology within each tier). The sidebar's Agents tab lists these and lets the
+ * router's next stage run.
+ */
+const MAINTAIN_AGENTS: SubsystemAgent[] = [
+	{ id: "construct-fixer", label: "construct-fixer", lane: "construct", mode: "issues" },
+	{ id: "static-topology-fixer", label: "static-topology-fixer", lane: "static-topology", mode: "issues" },
+	{ id: "package-module-fixer", label: "package-module-fixer", lane: "dynamic-topology", mode: "issues" },
+	{ id: "construct-verifier", label: "construct-verifier", lane: "construct", mode: "verify" },
+	{ id: "static-topology-verifier", label: "static-topology-verifier", lane: "static-topology", mode: "verify" },
+	{ id: "package-module-verifier", label: "package-module-verifier", lane: "dynamic-topology", mode: "verify" },
+	{ id: "runtime-topology-verifier", label: "runtime-topology-verifier", lane: "dynamic-topology", mode: "verify" },
+];
+
 export function SubsystemModelView({
 	tabId,
 	graphId,
 	focusWalkthroughId,
 	showIssues: showIssuesOnOpen,
 	focusIssueCategory,
+	liveSessionId,
+	liveTitle,
+	liveAgent,
 }: {
 	tabId: string;
 	graphId: string;
@@ -67,6 +88,10 @@ export function SubsystemModelView({
 	showIssues?: boolean;
 	/** With `showIssues`, land focused on this verification layer. */
 	focusIssueCategory?: string;
+	/** Live Maintain session whose collapsible event panel overlays the graph. */
+	liveSessionId?: string;
+	liveTitle?: string;
+	liveAgent?: string;
 }) {
 	const { theme } = useTheme();
 	const [graph, setGraph] = useState<StoredSubsystemModel | null | undefined>(undefined);
@@ -75,8 +100,32 @@ export function SubsystemModelView({
 	const [auditReport, setAuditReport] = useState<SubsystemModelAuditReport | null>(null);
 	const [auditStale, setAuditStale] = useState(false);
 	/** Diagnostics list shown in the sidebar (toggled by the header chip).
-	 *  Seeded open when the tab was opened with the issues view requested. */
-	const [showIssues, setShowIssues] = useState(showIssuesOnOpen === true);
+	 *  Seeded open when the tab was opened with the issues view requested, else
+	 *  restored from the last state for this model (survives tab away/back). */
+	const issuesViewKey = `principal.studio.modelIssuesView.${graphId}`;
+	const [showIssues, setShowIssues] = useState(() => {
+		if (showIssuesOnOpen) return true;
+		try {
+			return window.localStorage.getItem(issuesViewKey) === "1";
+		} catch {
+			return false;
+		}
+	});
+	/** Live Maintain events panel over the graph (opened from the live strip). */
+	const [livePanel, setLivePanel] = useState<{
+		sessionId: string;
+		title?: string;
+		agent?: string;
+	} | null>(null);
+	const liveFeed = useMaintainLiveFeed(livePanel?.sessionId);
+	/** Latest panel target, readable from the feed broadcasts without restaling. */
+	const livePanelRef = useRef(livePanel);
+	livePanelRef.current = livePanel;
+	/** Router's next Maintain stage (Agents tab) + whether a run is in flight. */
+	const [nextAgentId, setNextAgentId] = useState<string | null>(null);
+	const [runBusy, setRunBusy] = useState(false);
+	/** A run was started from the sidebar; open the panel on its first feed. */
+	const awaitingRunRef = useRef(false);
 
 	const loadGraph = useCallback(() => {
 		void electrobun.rpc!.request
@@ -116,27 +165,126 @@ export function SubsystemModelView({
 			});
 	}, [graphId]);
 
+	const loadNextAgent = useCallback(() => {
+		void electrobun.rpc!.request
+			.getSubsystemModelNextRoute({ graphId })
+			.then((res) => setNextAgentId(res.ok && res.next ? res.next.agent : null))
+			.catch(() => setNextAgentId(null));
+	}, [graphId]);
+
+	/** Run the router's next Maintain stage for this model. */
+	const runNextAgent = useCallback(() => {
+		setRunBusy(true);
+		awaitingRunRef.current = true;
+		void electrobun.rpc!.request
+			.maintainSubsystemModel({ graphId })
+			.then((res) => {
+				if (!res.ok || res.started === false) {
+					awaitingRunRef.current = false;
+					if (!res.alreadyRunning) setRunBusy(false);
+				}
+			})
+			.catch(() => {
+				awaitingRunRef.current = false;
+				setRunBusy(false);
+			});
+	}, [graphId]);
+
 	useEffect(() => {
 		loadGraph();
 		loadAudit();
+		loadNextAgent();
 		reloadSubscribers.add(loadGraph);
 		return () => {
 			reloadSubscribers.delete(loadGraph);
 		};
-	}, [loadGraph, loadAudit]);
+	}, [loadGraph, loadAudit, loadNextAgent]);
 
 	useEffect(() => {
 		const onPush = (payload: StudioMessages["subsystemModelChanged"]) => {
 			if (payload.graphId === graphId) {
 				loadGraph();
 				loadAudit();
+				loadNextAgent();
 			}
 		};
 		subsystemModelChangeSubscribers.add(onPush);
 		return () => {
 			subsystemModelChangeSubscribers.delete(onPush);
 		};
-	}, [graphId, loadGraph, loadAudit]);
+	}, [graphId, loadGraph, loadAudit, loadNextAgent]);
+
+	// Maintain run lifecycle: reflect busy state; when it finishes, the audit and
+	// the router's next stage change — refresh both.
+	useEffect(() => {
+		const onPush = (payload: StudioMessages["subsystemModelMaintainChanged"]) => {
+			if (payload.graphId !== graphId) return;
+			if (payload.status === "running") {
+				setRunBusy(true);
+				return;
+			}
+			setRunBusy(false);
+			loadAudit();
+			loadNextAgent();
+		};
+		subsystemModelMaintainChangeSubscribers.add(onPush);
+		return () => {
+			subsystemModelMaintainChangeSubscribers.delete(onPush);
+		};
+	}, [graphId, loadAudit, loadNextAgent]);
+
+	// Open / retarget the live panel from the graph's feed. A run starts on a
+	// placeholder session id (`pending-…`) and only gets the real id once the
+	// server session exists, so a panel latched onto the placeholder must follow
+	// it to the real session (otherwise no events ever arrive until remount).
+	useEffect(() => {
+		const onPush = (payload: StudioMessages["opencodeLiveFeedChanged"]) => {
+			if (payload.graphId !== graphId) return;
+			const isActive = payload.status === "running" || payload.status === "starting";
+			const current = livePanelRef.current;
+			const followingPlaceholder =
+				current?.sessionId.startsWith("pending-") === true;
+			if (!awaitingRunRef.current && !followingPlaceholder) return;
+			if (!isActive) return;
+			const isPlaceholder = payload.sessionId.startsWith("pending-");
+			if (!isPlaceholder) awaitingRunRef.current = false;
+			setLivePanel({
+				sessionId: payload.sessionId,
+				title: payload.title,
+				agent: payload.agent,
+			});
+		};
+		opencodeLiveFeedSubscribers.add(onPush);
+		return () => {
+			opencodeLiveFeedSubscribers.delete(onPush);
+		};
+	}, [graphId]);
+
+	// Restore run state when the tab remounts (payload tabs unmount when you
+	// switch away): if a Maintain run is still in flight, re-mark busy and
+	// reopen the live panel for its session.
+	useEffect(() => {
+		let cancelled = false;
+		void electrobun.rpc!.request
+			.getMaintainRunState({ graphId })
+			.then((res) => {
+				if (cancelled || !res.ok) return;
+				setRunBusy(res.running);
+				if (res.running && res.sessionId) {
+					setLivePanel({
+						sessionId: res.sessionId,
+						title: res.title,
+						agent: res.agent,
+					});
+				}
+			})
+			.catch(() => {
+				/* best-effort — the live push will correct it */
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [graphId]);
 
 	// A reopen of an already-mounted tab (fast path in the host) updates the
 	// tab's focus fields and re-broadcasts, but the mount-time seeds above
@@ -145,6 +293,44 @@ export function SubsystemModelView({
 	useEffect(() => {
 		if (showIssuesOnOpen) setShowIssues(true);
 	}, [showIssuesOnOpen, focusIssueCategory]);
+
+	// Persist the diagnostics open state per model so returning to the tab
+	// lands back on the Issues/Agents view instead of the files tree.
+	useEffect(() => {
+		try {
+			window.localStorage.setItem(issuesViewKey, showIssues ? "1" : "0");
+		} catch {
+			/* best-effort */
+		}
+	}, [issuesViewKey, showIssues]);
+
+	// Live Maintain panel: seed from the tab fields (covers a fresh mount) …
+	useEffect(() => {
+		if (!liveSessionId) return;
+		setLivePanel({
+			sessionId: liveSessionId,
+			title: liveTitle,
+			agent: liveAgent,
+		});
+	}, [liveSessionId, liveTitle, liveAgent]);
+
+	// … and update in place when the live strip retargets an already-mounted tab
+	// (the host pushes `maintainLivePanelChanged`, which the tab field can't
+	// deliver without a getTab round-trip).
+	useEffect(() => {
+		const onPush = (payload: StudioMessages["maintainLivePanelChanged"]) => {
+			if (payload.graphId !== graphId) return;
+			setLivePanel({
+				sessionId: payload.sessionId,
+				title: payload.title,
+				agent: payload.agent,
+			});
+		};
+		maintainLivePanelSubscribers.add(onPush);
+		return () => {
+			maintainLivePanelSubscribers.delete(onPush);
+		};
+	}, [graphId]);
 
 	const readFile = useCallback(
 		(path: string, purl?: string) =>
@@ -300,6 +486,25 @@ export function SubsystemModelView({
 				showIssues={showIssues}
 				focusIssueCategory={focusIssueCategory as SubsystemIssueCategory | undefined}
 				onApplyIssueFix={onApplyIssueFix}
+				liveEvents={
+					livePanel
+						? {
+								title: livePanel.title,
+								agent: livePanel.agent,
+								sessionId: livePanel.sessionId,
+								status: liveFeed.status,
+								events: liveFeed.events,
+								total: liveFeed.total,
+								error: liveFeed.error,
+							}
+						: null
+				}
+				agentsPanel={{
+					agents: MAINTAIN_AGENTS,
+					nextAgentId,
+					running: runBusy,
+					onRun: runNextAgent,
+				}}
 				sidebarAfterDescription={
 					excalidrawOpen ? <SelectionInspector selection={selection} /> : undefined
 				}

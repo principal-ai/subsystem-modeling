@@ -18,7 +18,6 @@ export type TabState =
 	| { kind: "graphify" }
 	| { kind: "package-layers" }
 	| { kind: "opencode-v2" }
-	| { kind: "maintain-events"; id: string; sessionId: string; agent?: string; title?: string }
 	| { kind: "session-events"; id: string; sessionId: string }
 	| {
 			kind: "subsystem-model";
@@ -29,6 +28,11 @@ export type TabState =
 			showIssues?: boolean;
 			/** With `showIssues`, land focused on this verification layer. */
 			focusIssueCategory?: string;
+			/** Live Maintain session whose collapsible event panel overlays the
+			 *  graph (opened from the Maintenance tab's live strip). */
+			liveSessionId?: string;
+			liveTitle?: string;
+			liveAgent?: string;
 	  }
 	| { kind: "subsystem-showcase"; id: string; title: string; ids: string[] }
 	| { kind: "error"; message: string }

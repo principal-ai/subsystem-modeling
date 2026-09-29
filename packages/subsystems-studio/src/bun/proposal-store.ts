@@ -28,6 +28,9 @@ import {
 
 const ROOT = join(homedir(), ".principal", "subsystem-model-proposals");
 
+/** `declaration.storage` values, mirroring the store declaration's union. */
+const STORE_STORAGE_VALUES: readonly string[] = ["memory", "disk", "external"];
+
 interface ProposalFile {
 	version: 1;
 	graphId: string;
@@ -179,6 +182,19 @@ function buildPreview(
 				before: componentFieldBefore(graph, ch.componentAlias, ch.field),
 				after: ch.value,
 			});
+		} else if (ch.target === "declaration") {
+			const c = graph.components.find((x) => x.alias === ch.componentAlias);
+			const name = c?.name ?? ch.componentAlias;
+			const current =
+				c?.declaration && typeof c.declaration === "object"
+					? (c.declaration as unknown as Record<string, unknown>)[ch.field]
+					: undefined;
+
+			rows.push({
+				label: `${name}.declaration.${ch.field}`,
+				before: current,
+				after: ch.value,
+			});
 		} else if (ch.target === "walkthrough-step") {
 			rows.push({
 				label: `walkthrough ${ch.walkthroughId} step ${ch.stepIndex}.${ch.field}`,
@@ -291,6 +307,25 @@ function validateChanges(
 				}
 			} else if (ch.value !== null && typeof ch.value !== "string") {
 				return `${ch.field} value must be a string or null`;
+			}
+		} else if (ch.target === "declaration") {
+			const component = graph.components.find((c) => c.alias === ch.componentAlias);
+			if (!component) return `unknown component: ${ch.componentAlias}`;
+			if (ch.value !== null) {
+				if (typeof ch.value !== "string" || ch.value.trim().length === 0) {
+					return `declaration.${ch.field} value must be a non-empty string or null`;
+				}
+				if (ch.field === "storage" && !STORE_STORAGE_VALUES.includes(ch.value)) {
+					return `unknown storage ${JSON.stringify(ch.value)}`;
+				}
+			}
+			if (
+				!Number.isInteger(ch.lines?.start) ||
+				!Number.isInteger(ch.lines?.end) ||
+				ch.lines.start < 1 ||
+				ch.lines.end < ch.lines.start
+			) {
+				return "declaration change requires lines { start >= 1, end >= start }";
 			}
 		} else if (ch.target === "walkthrough-step") {
 			const tl = graph.walkthroughs?.find((t) => t.id === ch.walkthroughId);
@@ -439,6 +474,25 @@ function applyChangesToGraph(
 			if (ch.value === null) delete next[ch.field];
 			else next[ch.field] = ch.value;
 			components[idx] = next as (typeof components)[number];
+		} else if (ch.target === "declaration") {
+			const idx = components.findIndex((c) => c.alias === ch.componentAlias);
+			if (idx < 0) continue;
+			const component = components[idx]!;
+			// Author a field of the structured declaration, creating the
+			// declaration when the model has none. Provenance becomes `authored`:
+			// the agent read source, so this is a hand-written claim, never a
+			// verified one.
+			const existing: Record<string, unknown> =
+				component.declaration && typeof component.declaration === "object"
+					? { ...(component.declaration as unknown as Record<string, unknown>) }
+					: { kind: component.construct, properties: [] };
+			if (ch.value === null) delete existing[ch.field];
+			else existing[ch.field] = ch.value;
+			components[idx] = {
+				...component,
+				declaration: existing as unknown as (typeof component)["declaration"],
+				declarationProvenance: "authored",
+			};
 		} else if (ch.target === "walkthrough-step") {
 			const tl = walkthroughs.find((t) => t.id === ch.walkthroughId);
 			if (!tl) continue;

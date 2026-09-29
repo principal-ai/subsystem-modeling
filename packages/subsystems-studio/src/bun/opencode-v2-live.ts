@@ -52,8 +52,22 @@ const feedListeners = new Set<FeedListener>();
 const feedPublishTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 export function getOpencodeLiveFeed(sessionId: string): OpencodeLiveFeedState | null {
-	const feed = feeds.get(sessionId);
-	return feed ? { ...feed, events: feed.events.slice() } : null;
+  const feed = feeds.get(sessionId);
+  return feed ? { ...feed, events: feed.events.slice() } : null;
+}
+
+/** Newest live feed for a model, if any. Used to restore run state on remount. */
+export function getOpencodeLiveFeedByGraphId(
+  graphId: string,
+): OpencodeLiveFeedState | null {
+  let match: OpencodeLiveFeedState | null = null;
+  for (const feed of feeds.values()) {
+    if (feed.graphId !== graphId) continue;
+    if (!match || (feed.events.at(-1)?.at ?? 0) >= (match.events.at(-1)?.at ?? 0)) {
+      match = feed;
+    }
+  }
+  return match ? { ...match, events: match.events.slice() } : null;
 }
 
 export function subscribeOpencodeLiveFeeds(listener: FeedListener): () => void {

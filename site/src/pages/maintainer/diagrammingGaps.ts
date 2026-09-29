@@ -49,15 +49,15 @@ export function getMaintainerProbeRegistry() {  // ← what Graphify sees
     symptom:
       'A store holds values of a declared type (`OpencodeLiveFeedState`), but the model can only type its `properties[]`, not the store itself.',
     why:
-      '`SubsystemStoreDeclaration` carries `storage` + `properties`; there is no store-level value type. When the state is one anonymous Map, there is no named property to hang the type on.',
+      '`SubsystemStoreDeclaration` carried `storage` + `properties` with no store-level value type. When the state is one anonymous Map, there was no named property to hang the type on.',
     today:
-      'Modeled indirectly as a typed `properties[]` entry, or not at all.',
+      '`declaration.valueType` (+ `valueTypeRef`) ships, and the declaration panel renders it. An audit gap (`store_type_undeclared`) flags an in-memory store that declares no type, and the construct-verifier authors it. Still open: whether the type is *true* — property types are compared nowhere.',
     pointsTo:
-      'An optional store-level value / state type (`valueType` + `typeRef`) that renders in the store declaration and links to the type node.',
-    status: 'open',
+      'A properties/value-type check lane — Graphify’s `field` reference first, an accepted augmentation as the fallback — so a declared type is verified, not just recorded.',
+    status: 'partial',
     example: `const feeds = new Map<string, OpencodeLiveFeedState>()
 //          └──────── the store's value type ───────┘
-// has no store-level field today`,
+// → declaration.valueType, rendered in the click panel`,
   },
   {
     id: 'graphify-vocabulary',

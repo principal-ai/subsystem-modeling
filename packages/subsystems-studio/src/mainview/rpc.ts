@@ -82,6 +82,12 @@ export const opencodeLiveFeedSubscribers = new Set<
 	(payload: StudioMessages["opencodeLiveFeedChanged"]) => void
 >();
 
+/** Open / retarget the graph's collapsible live Maintain panel
+ *  (`maintainLivePanelChanged`). */
+export const maintainLivePanelSubscribers = new Set<
+	(payload: StudioMessages["maintainLivePanelChanged"]) => void
+>();
+
 /** Subsystem graph store writes + disk watch push `subsystemModelChanged`. */
 export const subsystemModelChangeSubscribers = new Set<
 	(payload: StudioMessages["subsystemModelChanged"]) => void
@@ -142,6 +148,9 @@ const rpc = Electroview.defineRPC<StudioRPC>({
 			},
 			opencodeLiveFeedChanged: (payload) => {
 				for (const fn of opencodeLiveFeedSubscribers) fn(payload);
+			},
+			maintainLivePanelChanged: (payload) => {
+				for (const fn of maintainLivePanelSubscribers) fn(payload);
 			},
 			subsystemModelChanged: (payload) => {
 				for (const fn of subsystemModelChangeSubscribers) fn(payload);

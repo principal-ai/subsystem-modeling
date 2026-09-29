@@ -57,6 +57,14 @@ import {
 } from './model';
 import { ConstructsCatalog } from './ConstructsCatalog';
 import type { SubsystemOpenFileOptions } from './declarationRef';
+import {
+  SubsystemAgentsPanel,
+  type SubsystemAgentsPanelProps,
+} from './AgentsPanel';
+import {
+  MaintainLivePanel,
+  type MaintainLivePanelProps,
+} from '../components/maintain-events/MaintainLivePanel';
 import type { WalkthroughSymbolQuery } from '../pierre/PierreWalkthroughCodeView';
 import { SubsystemComponentNode, SubsystemGroupNode, SubsystemEdge, SUBSYSTEM_CALLBACKS, hexWithAlpha, EDGE_DIM_ALPHA, fileMatchForNode, flowElementVisibility } from './nodes';
 import { SubsystemDiagnosticToggle, type SubsystemDiagnostic } from './DiagnosticToggle';
@@ -129,15 +137,18 @@ type DrawerTarget =
 
 /**
  * Per-model UI state persisted to `localStorage`, keyed by `persistKey`.
- * Only the walkthrough working set is stored — which flows are expanded and
- * which flow/step is selected — so tabbing away from a model and back lands
- * you where you left off. Transient things (hover, drag, camera) are not saved.
+ * Stores the walkthrough working set (which flows are expanded and which
+ * flow/step is selected) and which sidebar/diagnostics tab is showing, so
+ * tabbing away from a model and back lands you where you left off. Transient
+ * things (hover, drag, camera) are not saved.
  */
 interface PersistedViewState {
   expandedWalkthroughs?: string[];
   focusedWalkthroughId?: string | null;
   focusedStepIndex?: number | null;
   sidebarWidth?: number;
+  sidebarView?: 'files' | 'walkthroughs';
+  diagnosticsTab?: 'issues' | 'agents';
 }
 
 const VIEW_STATE_PREFIX = 'principal.subsystems.viewState.';
@@ -295,6 +306,17 @@ export interface SubsystemComponentGraphProps {
   onDescriptionOpenChange?: (open: boolean) => void;
   /** Rendered over the graph canvas only (not the title/legend sidebar). */
   canvasOverlay?: ReactNode;
+  /**
+   * Live agent-run events to show in a collapsible half-height panel over the
+   * graph canvas. Omit (or pass null) to hide it.
+   */
+  liveEvents?: MaintainLivePanelProps | null;
+  /**
+   * Maintain agent pipeline for the sidebar's diagnostics area. When set, the
+   * issues view grows an Issues / Agents tab bar; the Agents tab lists the
+   * agents with the router's next stage runnable.
+   */
+  agentsPanel?: SubsystemAgentsPanelProps | null;
   /** Extra controls at the top of the title/legend sidebar. */
   sidebarExtra?: ReactNode;
   /** Rendered in the sidebar under the description (e.g. selection inspector). */
@@ -500,7 +522,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, relations, walkthroughs, graphifyRelations, orderByLine, initialWalkthroughId, onReorderWalkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, walkthroughFocusDurationMs = 300, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, hideDrawer = false, persistKey }: InnerProps) {
+function Inner({ components, relations, walkthroughs, graphifyRelations, orderByLine, initialWalkthroughId, onReorderWalkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, walkthroughFocusDurationMs = 300, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
   const { theme } = useTheme();
   const { fitView, fitBounds } = useReactFlow();
   const viewport = useViewport();
@@ -558,7 +580,11 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
   } | null>(null);
   // Sidebar bottom half: which panel is shown when walkthroughs exist.
   const [sidebarView, setSidebarView] = useState<'files' | 'walkthroughs'>(() =>
-    walkthroughs?.length ? 'walkthroughs' : 'files',
+    persisted.sidebarView ?? (walkthroughs?.length ? 'walkthroughs' : 'files'),
+  );
+  // Diagnostics area tab: issues list vs the Maintain agent pipeline.
+  const [diagnosticsTab, setDiagnosticsTab] = useState<'issues' | 'agents'>(
+    () => persisted.diagnosticsTab ?? 'issues',
   );
   // Temporary edge-vocabulary override. Focusing a relation finding whose edge
   // belongs to the *other* vocabulary flips the canvas so the edge is actually
@@ -660,6 +686,14 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
     if (!persistKey) return;
     writeViewState(persistKey, { focusedStepIndex });
   }, [persistKey, focusedStepIndex]);
+  useEffect(() => {
+    if (!persistKey) return;
+    writeViewState(persistKey, { sidebarView });
+  }, [persistKey, sidebarView]);
+  useEffect(() => {
+    if (!persistKey) return;
+    writeViewState(persistKey, { diagnosticsTab });
+  }, [persistKey, diagnosticsTab]);
   // Ref mirror of `selected` so the SUBSYSTEM_CALLBACKS click handler (a
   // closure over the effect deps) can toggle without a stale value.
   const selectedRef = useRef<SubsystemComponent | null>(null);
@@ -2609,15 +2643,70 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
               }}
             >
               {issuesActive ? (
-                <SubsystemIssueList
-                  issues={issues ?? []}
-                  focusCategory={focusIssueCategory}
-                  onSelectIssue={focusIssueTarget}
-                  onDeselectIssue={unfocusIssueTarget}
-                  onApplyFix={onApplyIssueFix}
-                  onHoverIssue={onHoverIssue}
-                  onExpandedCategoriesChange={handleExpandedCategoriesChange}
-                />
+                agentsPanel ? (
+                  <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                    <div
+                      role="tablist"
+                      aria-label="Diagnostics view"
+                      style={{
+                        display: 'flex',
+                        width: '100%',
+                        flexShrink: 0,
+                        borderBottom: `1px solid ${theme.colors.border}`,
+                        background: theme.colors.backgroundSecondary ?? theme.colors.background,
+                      }}
+                    >
+                      {(['issues', 'agents'] as const).map((tab) => (
+                        <button
+                          key={tab}
+                          type="button"
+                          role="tab"
+                          aria-selected={diagnosticsTab === tab}
+                          onClick={() => setDiagnosticsTab(tab)}
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            padding: '8px 8px',
+                            border: 'none',
+                            borderRadius: 0,
+                            background: diagnosticsTab === tab ? theme.colors.background : 'transparent',
+                            color:
+                              diagnosticsTab === tab ? theme.colors.text : theme.colors.textSecondary,
+                            fontSize: theme.fontSizes[1],
+                            fontFamily: theme.fonts.monospace,
+                            textTransform: 'capitalize',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {tab === 'issues' ? 'Issues' : 'Agents'}
+                        </button>
+                      ))}
+                    </div>
+                    {diagnosticsTab === 'agents' ? (
+                      <SubsystemAgentsPanel {...agentsPanel} />
+                    ) : (
+                      <SubsystemIssueList
+                        issues={issues ?? []}
+                        focusCategory={focusIssueCategory}
+                        onSelectIssue={focusIssueTarget}
+                        onDeselectIssue={unfocusIssueTarget}
+                        onApplyFix={onApplyIssueFix}
+                        onHoverIssue={onHoverIssue}
+                        onExpandedCategoriesChange={handleExpandedCategoriesChange}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <SubsystemIssueList
+                    issues={issues ?? []}
+                    focusCategory={focusIssueCategory}
+                    onSelectIssue={focusIssueTarget}
+                    onDeselectIssue={unfocusIssueTarget}
+                    onApplyFix={onApplyIssueFix}
+                    onHoverIssue={onHoverIssue}
+                    onExpandedCategoriesChange={handleExpandedCategoriesChange}
+                  />
+                )
               ) : (
                 <>
               {hasWalkthroughs && (
@@ -3167,6 +3256,7 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
       {/* Startup cover — hides measurement, layout swap, and camera settle. */}
       <GraphLayoutCover revealed={layoutReady} />
       {canvasOverlay}
+      {liveEvents ? <MaintainLivePanel {...liveEvents} /> : null}
       </div>
     </div>
   );

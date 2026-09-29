@@ -39,7 +39,6 @@ const KIND_ICONS: Partial<Record<TabSummary["kind"], LucideIcon>> = {
 	graphify: Share2,
 	"package-layers": Container,
 	"opencode-v2": Terminal,
-	"maintain-events": Activity,
 };
 
 export function TabStrip({

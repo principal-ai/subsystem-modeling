@@ -376,10 +376,45 @@ export const SUBSYSTEM_DECLARATION_PROVENANCES = ["verified", "authored"] as con
 export type DeclarationProvenance = (typeof SUBSYSTEM_DECLARATION_PROVENANCES)[number];
 
 /**
+ * Fold the undeclared store-declaration fields that early models authored onto
+ * the fields the schema declares.
+ *
+ * A 23-store audit of the local models found four store declarations that the
+ * published schema rejects (`additionalProperties: false`): three DB-table
+ * stores wrote `members` for their columns, one directory store wrote
+ * free-form `attributes`. `members` is the same shape as `properties`
+ * (`{ name, type? }`) — a table column is a named member — so it folds across
+ * losslessly. `attributes` is `{ key, value }` prose with no schema home, and
+ * the same facts are already in the component's `purpose`; it is dropped with a
+ * warning rather than silently reshaped into a property whose "type" would be a
+ * value.
+ */
+function foldLegacyStoreDeclarationFields(
+	componentAlias: string,
+	declaration: Record<string, unknown>,
+): void {
+	if (declaration["kind"] !== "store") return;
+	if (Array.isArray(declaration["members"]) && !Array.isArray(declaration["properties"])) {
+		declaration["properties"] = declaration["members"];
+		console.warn(
+			`[principal-studio] ${componentAlias}: store declaration "members" → "properties" (undeclared field)`,
+		);
+	}
+	delete declaration["members"];
+	if (declaration["attributes"] !== undefined) {
+		delete declaration["attributes"];
+		console.warn(
+			`[principal-studio] ${componentAlias}: dropped store declaration "attributes" (undeclared field; the same facts belong in the component's purpose)`,
+		);
+	}
+}
+
+/**
  * Fill safe defaults so stored declarations always satisfy the published
  * renderer's expectations:
  * - `declaration` without provenance becomes `authored`; orphan claims are dropped.
  * - Per-kind arrays are backfilled as empty so the panel can read `.length`.
+ * - Undeclared store fields from early models are folded onto declared ones.
  *
  * Mutates the passed array — callers own the payload (fresh-parsed request
  * bodies or records about to be persisted).
@@ -395,6 +430,10 @@ export function normalizeDeclarationProvenance(components: unknown): void {
 			delete c["declarationProvenance"];
 			continue;
 		}
+		foldLegacyStoreDeclarationFields(
+			typeof c["alias"] === "string" ? c["alias"] : "(unnamed)",
+			declaration,
+		);
 		const p = c["declarationProvenance"];
 		if (p !== "verified" && p !== "authored") c["declarationProvenance"] = "authored";
 		const kind = declaration["kind"];

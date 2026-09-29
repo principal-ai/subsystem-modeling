@@ -20,6 +20,14 @@ const step = (): SubsystemModelProposalChange =>
 		field: "line",
 		value: 1,
 	}) as never;
+const declaration = (field: string): SubsystemModelProposalChange =>
+	({
+		target: "declaration",
+		componentAlias: "a",
+		field,
+		value: "x",
+		lines: { start: 1, end: 1 },
+	}) as never;
 
 describe("laneForChange", () => {
 	test("component construct/identity -> construct", () => {
@@ -31,6 +39,12 @@ describe("laneForChange", () => {
 	test("construct/signature augmentation -> construct", () => {
 		expect(laneForChange(augmentation("construct"))).toBe("construct");
 		expect(laneForChange(augmentation("signature"))).toBe("construct");
+	});
+	test("authoring a declaration field -> construct", () => {
+		// A store's `valueType` fills the declaration the construct panel
+		// renders — construct lane, not topology.
+		expect(laneForChange(declaration("valueType"))).toBe("construct");
+		expect(laneForChange(declaration("storage"))).toBe("construct");
 	});
 	test("module is dynamic topology", () => {
 		expect(laneForChange(component("module"))).toBe("dynamic-topology");
@@ -53,6 +67,7 @@ describe("laneForFindingKind", () => {
 		expect(laneForFindingKind("signature_unconfirmed")).toBe("construct");
 		expect(laneForFindingKind("construct_mismatch")).toBe("construct");
 		expect(laneForFindingKind("missing_file")).toBe("construct");
+		expect(laneForFindingKind("store_type_undeclared")).toBe("construct");
 	});
 	test("maps topology findings", () => {
 		expect(laneForFindingKind("topology_broken_endpoint")).toBe(

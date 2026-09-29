@@ -104,6 +104,7 @@ import {
 } from "./opencode-v2-probe";
 import {
 	getOpencodeLiveFeed,
+	getOpencodeLiveFeedByGraphId,
 	subscribeOpencodeLiveFeeds,
 } from "./opencode-v2-live";
 import { ensureGraphifyGraph, listGraphifyGraphs, listGraphifyRepos, assessSubsystemGraphifyReadiness } from "./graphify-store";
@@ -504,15 +505,6 @@ interface SessionEventsTabState {
 	agent?: string;
 }
 
-interface MaintainEventsTabState {
-	id: string;
-	kind: "maintain-events";
-	title: string;
-	sessionId: string;
-	graphId: string;
-	agent?: string;
-}
-
 interface SubsystemModelTabState {
 	id: string;
 	kind: "subsystem-model";
@@ -524,6 +516,11 @@ interface SubsystemModelTabState {
 	showIssues?: boolean;
 	/** With `showIssues`, land focused on this verification layer. */
 	focusIssueCategory?: string;
+	/** Live Maintain session whose collapsible event panel is mounted over the
+	 *  graph (opened from the Maintenance tab's live strip). */
+	liveSessionId?: string;
+	liveTitle?: string;
+	liveAgent?: string;
 }
 
 /**
@@ -548,7 +545,6 @@ type TabState =
 	| PackageLayersTabState
 	| OpencodeV2TabState
 	| SessionEventsTabState
-	| MaintainEventsTabState
 	| SubsystemModelTabState
 	| SubsystemShowcaseTabState
 	| TrailTabState;
@@ -956,46 +952,44 @@ function openSessionEventsTab(
 }
 
 /**
- * Focus or create the live SSE tab for a Maintain OpenCode V2 session.
+ * Focus a model's graph tab and open (or retarget) its collapsible live
+ * Maintain events panel for an OpenCode session. Replaces the old per-session
+ * maintain-events tab.
  */
-function openMaintainEventsTab(opts: {
+async function openMaintainLive(opts: {
 	sessionId: string;
 	graphId: string;
 	title?: string;
 	agent?: string;
-}): string {
-	for (const existing of tabs.values()) {
-		if (
-			existing.kind === "maintain-events" &&
-			existing.sessionId === opts.sessionId
-		) {
-			suggestedTabId = existing.id;
-			broadcastTabsChanged(existing.id);
-			return existing.id;
-		}
-	}
-	const id = String(nextTabId++);
-	const agentLabel = opts.agent ?? "maintain";
-	tabs.set(id, {
-		id,
-		kind: "maintain-events",
-		title: opts.title ?? `Maintain — ${agentLabel}`,
-		sessionId: opts.sessionId,
+}): Promise<{ ok: boolean; tabId?: string; error?: string }> {
+	const tabId = await openSubsystemModelTab(opts.graphId, undefined, {
+		live: {
+			sessionId: opts.sessionId,
+			title: opts.title,
+			agent: opts.agent,
+		},
+	});
+	if (!tabId) return { ok: false, error: `unknown graph ${opts.graphId}` };
+	broadcastMaintainLivePanelChanged({
 		graphId: opts.graphId,
+		sessionId: opts.sessionId,
+		title: opts.title,
 		agent: opts.agent,
 	});
-	suggestedTabId = id;
 	console.log(
-		`[principal-studio] maintain-events tab ${id} added: ${opts.sessionId}`,
+		`[principal-studio] maintain live panel opened on graph ${opts.graphId}: ${opts.sessionId}`,
 	);
-	broadcastTabsChanged(id);
-	return id;
+	return { ok: true, tabId };
 }
 
 async function openSubsystemModelTab(
 	graphId: string,
 	walkthroughId?: string,
-	focus?: { showIssues?: boolean; focusIssueCategory?: string },
+	focus?: {
+		showIssues?: boolean;
+		focusIssueCategory?: string;
+		live?: { sessionId: string; title?: string; agent?: string };
+	},
 ): Promise<string | null> {
 	// Fast path: already open — no I/O. Broadcast first so the tab switches
 	// immediately; stamp last-opened in the background. The detail view owns
@@ -1011,6 +1005,11 @@ async function openSubsystemModelTab(
 			// view re-reads these when the tab is (re)broadcast.
 			existing.showIssues = focus?.showIssues;
 			existing.focusIssueCategory = focus?.focusIssueCategory;
+			if (focus?.live) {
+				existing.liveSessionId = focus.live.sessionId;
+				existing.liveTitle = focus.live.title;
+				existing.liveAgent = focus.live.agent;
+			}
 			suggestedTabId = existing.id;
 			console.log(`[principal-studio] subsystem-model tab ${existing.id} focused (already open): ${graphId}`);
 			broadcastTabsChanged(existing.id);
@@ -1055,6 +1054,13 @@ async function openSubsystemModelTab(
 		...(focus?.showIssues ? { showIssues: true } : {}),
 		...(focus?.focusIssueCategory
 			? { focusIssueCategory: focus.focusIssueCategory }
+			: {}),
+		...(focus?.live
+			? {
+					liveSessionId: focus.live.sessionId,
+					liveTitle: focus.live.title,
+					liveAgent: focus.live.agent,
+				}
 			: {}),
 	});
 	suggestedTabId = id;
@@ -1364,9 +1370,6 @@ function summarize(tab: TabState): TabSummary {
 	if (tab.kind === "session-events") {
 		return { id: tab.id, kind: "session-events", title: tab.title };
 	}
-	if (tab.kind === "maintain-events") {
-		return { id: tab.id, kind: "maintain-events", title: tab.title };
-	}
 	if (tab.kind === "subsystem-model") {
 		return {
 			id: tab.id,
@@ -1400,17 +1403,6 @@ function fullState(tab: TabState): TabFullState {
 			sessionId: tab.sessionId,
 		};
 	}
-	if (tab.kind === "maintain-events") {
-		return {
-			ok: true,
-			id: tab.id,
-			kind: "maintain-events",
-			title: tab.title,
-			sessionId: tab.sessionId,
-			graphId: tab.graphId,
-			agent: tab.agent,
-		};
-	}
 	if (tab.kind === "subsystem-model") {
 		return {
 			ok: true,
@@ -1421,6 +1413,9 @@ function fullState(tab: TabState): TabFullState {
 			focusWalkthroughId: tab.focusWalkthroughId,
 			showIssues: tab.showIssues,
 			focusIssueCategory: tab.focusIssueCategory,
+			liveSessionId: tab.liveSessionId,
+			liveTitle: tab.liveTitle,
+			liveAgent: tab.liveAgent,
 		};
 	}
 	if (tab.kind === "subsystem-showcase") {
@@ -2127,6 +2122,15 @@ const requests: RequestHandlers = {
 					stale: saved.fingerprint !== live,
 				};
 			},
+			getSubsystemModelNextRoute: async ({ graphId }) => {
+				const route = await nextMaintainRouteForModel(graphId);
+				return {
+					ok: true,
+					next: route
+						? { agent: route.agent, layer: route.layer, mode: route.mode }
+						: null,
+				};
+			},
 			getSubsystemModelBrief: async ({ graphId }) => {
 				const full = await getSubsystemModel(graphId);
 				if (!full) return { ok: false, error: `unknown graph: ${graphId}` };
@@ -2270,15 +2274,9 @@ const requests: RequestHandlers = {
 				});
 				return { ok: true, started: true };
 			},
-			openMaintainEvents: async ({ sessionId, graphId, title, agent }) => {
+			openMaintainLive: async ({ sessionId, graphId, title, agent }) => {
 				if (!sessionId) return { ok: false, error: "sessionId is required" };
-				const tabId = openMaintainEventsTab({
-					sessionId,
-					graphId,
-					title,
-					agent,
-				});
-				return { ok: true, tabId };
+				return await openMaintainLive({ sessionId, graphId, title, agent });
 			},
 			getSubsystemMaintainerModels: async ({ refresh }) => {
 				try {
@@ -2381,6 +2379,19 @@ const requests: RequestHandlers = {
 					title: feed.title,
 					agent: feed.agent,
 					graphId: feed.graphId,
+				};
+			},
+			getMaintainRunState: async ({ graphId }) => {
+				const feed = getOpencodeLiveFeedByGraphId(graphId);
+				const feedRunning =
+					feed?.status === "running" || feed?.status === "starting";
+				return {
+					ok: true,
+					running: maintainingGraphIds.has(graphId) || feedRunning,
+					sessionId: feed?.sessionId,
+					title: feed?.title,
+					agent: feed?.agent,
+					status: feed?.status,
 				};
 			},
 			getStudioVersionStatus: async ({ detailed }) => {
@@ -3029,6 +3040,20 @@ function broadcastOpencodeLiveFeedChanged(
 	} catch (err) {
 		console.warn(
 			`[principal-studio] could not notify renderer (opencodeLiveFeedChanged): ${(err as Error).message}`,
+		);
+	}
+}
+
+function broadcastMaintainLivePanelChanged(
+	payload: StudioMessages["maintainLivePanelChanged"],
+): void {
+	try {
+		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
+			"maintainLivePanelChanged"
+		](payload);
+	} catch (err) {
+		console.warn(
+			`[principal-studio] could not notify renderer (maintainLivePanelChanged): ${(err as Error).message}`,
 		);
 	}
 }

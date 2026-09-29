@@ -458,6 +458,12 @@ export interface SubsystemComponentVerificationResult {
 		ref?: SubsystemDeclarationRef;
 		liveLineHash?: string;
 	};
+	/**
+	 * An in-memory store that declares no type — no `valueType` and no named
+	 * state members. A completeness gap (never a hard failure): the agent reads
+	 * the declaration and authors `declaration.valueType`.
+	 */
+	storeTypeUndeclared?: boolean;
 }
 
 /** One finding from a dry-run deterministic subsystem-model audit. */
@@ -469,6 +475,8 @@ export type SubsystemModelAuditFindingKind =
 	| "stale_declaration"
 	| "construct_mismatch"
 	| "construct_unconfirmed"
+	| "store_type_undeclared"
+	| "store_type_stale"
 	| "signature_mismatch"
 	| "signature_unconfirmed"
 	| "repo_unresolved"
@@ -550,6 +558,14 @@ export interface SubsystemModelAuditCheck {
 	/** Evidence strings from construct inference (when available). */
 	constructEvidence?: string[];
 	signature?: "match" | "mismatch" | "skipped" | "augmented" | "n/a";
+	/**
+	 * Store completeness: does an in-memory store declare the type it holds, and
+	 * is that declared type still current?
+	 * `declared` = `valueType` or named state members; `undeclared` = neither
+	 * (a gap for the agent to fill); `stale` = the pinned declaration moved, so
+	 * a declared `valueType` may be out of date; `n/a` = not a store.
+	 */
+	storeType?: "declared" | "undeclared" | "stale" | "n/a";
 	anchor?: "exact" | "file-only" | "ambiguous" | "missing" | "n/a";
 	/**
 	 * Whether graphify confirmed this component:
@@ -900,6 +916,22 @@ export type SubsystemModelProposalChange =
 	  }
 	| {
 			/**
+			 * Author a field of a component's structured `declaration` after
+			 * reading the declaration in source — e.g. a store's `valueType` or
+			 * `storage`. Accept edits the model JSON (provenance becomes
+			 * `authored`); it is not an augmentation, because it fills a gap
+			 * rather than confirming a graph-derived fact.
+			 */
+			target: "declaration";
+			componentAlias: string;
+			field: "valueType" | "storage";
+			/** `null` clears the optional field. */
+			value: string | null;
+			/** 1-based inclusive span of the declaration read from source. */
+			lines: SubsystemDeclarationSpan;
+	  }
+	| {
+			/**
 			 * Confirm a topology relation claim when Graphify left the edge thin.
 			 * Accept writes the augmentation store — does not change model JSON.
 			 * Defaults (from/to file#symbol, relationType) come from the relation.
@@ -1145,7 +1177,7 @@ export interface PackageLayerRepoEntry {
 
 export interface TabSummary {
 	id: string;
-	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "maintenance" | "graphify" | "package-layers" | "opencode-v2" | "maintain-events";
+	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "maintenance" | "graphify" | "package-layers" | "opencode-v2";
 	title: string;
 	mode?: ViewerMode;
 	payloadKind?: PayloadKind;
@@ -1157,14 +1189,14 @@ export interface TabFullState {
 	ok: boolean;
 	error?: string;
 	id: string;
-	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "maintenance" | "graphify" | "package-layers" | "opencode-v2" | "maintain-events";
+	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "maintenance" | "graphify" | "package-layers" | "opencode-v2";
 	title: string;
 	mode?: ViewerMode;
 	payloadKind?: PayloadKind;
 	repoRoot?: string;
 	trailFilePath?: string;
 	sessionId?: string;
-	/** For `session-events` / `maintain-events` — agent label when known. */
+	/** For `session-events` tabs — agent label when known. */
 	agent?: string;
 	/** For `subsystem-model` tabs — the graph id the tab renders. */
 	graphId?: string;
@@ -1175,6 +1207,11 @@ export interface TabFullState {
 	 *  sidebar starts on the issues list, and which layer it focuses. */
 	showIssues?: boolean;
 	focusIssueCategory?: string;
+	/** For `subsystem-model` tabs — the live Maintain session whose collapsible
+	 *  event panel is mounted over the graph (opened from the live strip). */
+	liveSessionId?: string;
+	liveTitle?: string;
+	liveAgent?: string;
 	/** For `subsystem-showcase` tabs — the ordered model ids to display. */
 	showcaseIds?: string[];
 	payload?: unknown;
@@ -1584,6 +1621,23 @@ export type StudioRequests = {
 		};
 	};
 	/**
+	 * The next Maintain stage the router would run for a model, from its
+	 * persisted audit — or null when nothing is queued. Drives the graph
+	 * sidebar's Agents tab.
+	 */
+	getSubsystemModelNextRoute: {
+		params: { graphId: string };
+		response: {
+			ok: boolean;
+			error?: string;
+			next?: {
+				agent: string;
+				layer: "construct" | "static-topology" | "dynamic-topology";
+				mode: "issues" | "verify";
+			} | null;
+		};
+	};
+	/**
 	 * Build a route-agnostic markdown brief of a model's verification state,
 	 * for copying to an agent as context (ask questions about what is / isn't
 	 * verified). Not filtered to a Maintain agent/lane/mode.
@@ -1711,10 +1765,11 @@ export type StudioRequests = {
 		};
 	};
 	/**
-	 * Open (or focus) the live Maintain-events tab for a run's OpenCode session.
-	 * Used to open the tab on demand instead of when a run starts.
+	 * Open (or focus) the live Maintain events panel over a model's graph tab
+	 * for a run's OpenCode session. Used to open the panel on demand instead of
+	 * when a run starts.
 	 */
-	openMaintainEvents: {
+	openMaintainLive: {
 		params: {
 			sessionId: string;
 			graphId: string;
@@ -1833,6 +1888,22 @@ export type StudioRequests = {
 			title?: string;
 			agent?: string;
 			graphId?: string;
+		};
+	};
+	/**
+	 * Whether a Maintain agent run is in flight for a model (and its live
+	 * session). Used by the graph view's Agents tab to restore run state when
+	 * the tab remounts.
+	 */
+	getMaintainRunState: {
+		params: { graphId: string };
+		response: {
+			ok: boolean;
+			running: boolean;
+			sessionId?: string;
+			title?: string;
+			agent?: string;
+			status?: "starting" | "running" | "done" | "error";
 		};
 	};
 	/**
@@ -2161,8 +2232,8 @@ export type StudioMessages = {
 		state: OpencodeV2ProbeState;
 	};
 	/**
-	 * Live OpenCode V2 SSE feed for a Maintain (or other agent) session tab.
-	 * Keyed by sessionId; renderer merges into the open maintain-events tab.
+	 * Live OpenCode V2 SSE feed for a Maintain (or other agent) session.
+	 * Keyed by sessionId; renderer merges into the graph's live events panel.
 	 */
 	opencodeLiveFeedChanged: {
 		sessionId: string;
@@ -2174,6 +2245,17 @@ export type StudioMessages = {
 		title?: string;
 		agent?: string;
 		graphId?: string;
+	};
+	/**
+	 * Open / retarget the collapsible live Maintain events panel over a model's
+	 * graph tab. Sent when the Maintenance tab's live strip is clicked; an
+	 * already-mounted graph view updates in place.
+	 */
+	maintainLivePanelChanged: {
+		graphId: string;
+		sessionId: string;
+		title?: string;
+		agent?: string;
 	};
 }
 
