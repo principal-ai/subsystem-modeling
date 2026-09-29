@@ -282,11 +282,9 @@ export type AgentSessionsScope = "agents" | "maintain";
 
 const MAINTAIN_LOADER_AGENTS = [
 	"construct-verifier",
-	"static-topology-verifier",
 	"package-module-verifier",
 	"runtime-topology-verifier",
 	"construct-fixer",
-	"static-topology-fixer",
 	"package-module-fixer",
 	// Legacy (pre-rename).
 	"issue-fixer",

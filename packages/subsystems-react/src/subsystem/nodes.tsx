@@ -33,6 +33,8 @@ import {
   moduleBadgeHoverLabel,
   moduleBadgeWidth,
   packageColor,
+  FOLDER_FRAME_COLOR,
+  isFolderFrame,
   type SubsystemGraphNodeData,
   type SubsystemGroupNodeData,
   type SubsystemGraphEdge,
@@ -445,8 +447,14 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
     selected?: boolean;
   };
   const region = data.region;
-  // Explicit host override wins over the derived (hash-based) frame color.
-  const color = data.color ?? packageColor(region?.key ?? 'process');
+  // Explicit host override wins over the derived frame color. Folder frames
+  // (directory, or a module whose key names a folder) share one neutral hue;
+  // everything else hashes per key.
+  const color =
+    data.color ??
+    (isFolderFrame(region ?? undefined)
+      ? FOLDER_FRAME_COLOR
+      : packageColor(region?.key ?? 'process'));
   const dimmed = data.dimmed === true;
   const hidden = (data as { hidden?: boolean }).hidden === true;
   // Label is the region identity alone (path / process key / owner/name).
@@ -454,7 +462,9 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
   // — don't prefix `module ·` / `package ·` or the path reads twice.
   const label = region?.label ?? '';
   const [expandedLabel, setExpandedLabel] = useState<string | null>(null);
-  const isModule = region?.kind === 'module';
+  // Directory frames (path-derived nesting) render like modules — dashed,
+  // collapsible path badge.
+  const isModule = region?.kind === 'module' || region?.kind === 'directory';
   const isProcess = region?.kind === 'process';
   const expanded = isModule && expandedLabel === label;
   const availableBadgeWidth = Math.max(0, (width ?? 400) - MODULE_BADGE_INSET * 2 - 4);

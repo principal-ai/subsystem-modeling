@@ -32,7 +32,6 @@ export function diagnosticStatus(
 	if (hasIssue) return "issues";
 	const hasGap =
 		report.findings.some((f) => f.severity === "info") ||
-		report.topologyChecks?.some((c) => c.verdict === "gap") ||
 		report.boundaryChecks?.some((c) => c.verdict === "gap") ||
 		report.checks.some(
 			(c) =>
@@ -75,18 +74,6 @@ function targetFor(
 			label: componentLabel(graph, finding.componentAlias, finding.componentName),
 		};
 	}
-	if (finding.relationId) {
-		const rel = graph.relations.find((r) => r.id === finding.relationId);
-		const label = rel
-			? `${componentLabel(graph, rel.from)} → ${componentLabel(graph, rel.to)}`
-			: finding.relationId;
-		return {
-			kind: "relation",
-			id: finding.relationId,
-			label,
-			detail: rel?.relationType,
-		};
-	}
 	if (finding.moduleKey) {
 		return { kind: "module", id: finding.moduleKey, label: finding.moduleKey };
 	}
@@ -119,7 +106,7 @@ export function auditReportToIssues(
 	const byId = new Map<string, SubsystemModelAuditFinding>();
 	if (!report) return { issues, byId };
 	report.findings.forEach((finding, i) => {
-		const id = `${finding.kind}:${finding.componentAlias ?? finding.relationId ?? finding.moduleKey ?? finding.walkthroughId ?? finding.purl ?? "graph"}:${i}`;
+		const id = `${finding.kind}:${finding.componentAlias ?? finding.moduleKey ?? finding.walkthroughId ?? finding.purl ?? "graph"}:${i}`;
 		byId.set(id, finding);
 		issues.push({
 			id,

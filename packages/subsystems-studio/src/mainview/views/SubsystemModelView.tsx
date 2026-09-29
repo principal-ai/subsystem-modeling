@@ -51,22 +51,21 @@ const SHOW_EXCALIDRAW_EDIT = false;
 /** Placeholder graph for mapping before the model loads (never rendered). */
 const EMPTY_MODEL = {
 	components: [],
-	relations: [],
 } as unknown as StoredSubsystemModel;
 
 /**
  * The Maintain pipeline, in routing-priority order (hard failures before
- * unconfirmed claims; construct → static topology → package/module → runtime
- * topology within each tier). The sidebar's Agents tab lists these and lets the
- * router's next stage run.
+ * unconfirmed claims; construct → static topology → dynamic topology within
+ * each tier). Static topology is package/module containment (the
+ * `package-module-*` agents); dynamic topology is process runtime (the
+ * `runtime-topology-verifier`). The sidebar's Agents tab lists these and lets
+ * the router's next stage run.
  */
 const MAINTAIN_AGENTS: SubsystemAgent[] = [
 	{ id: "construct-fixer", label: "construct-fixer", lane: "construct", mode: "issues" },
-	{ id: "static-topology-fixer", label: "static-topology-fixer", lane: "static-topology", mode: "issues" },
-	{ id: "package-module-fixer", label: "package-module-fixer", lane: "dynamic-topology", mode: "issues" },
+	{ id: "package-module-fixer", label: "package-module-fixer", lane: "static-topology", mode: "issues" },
 	{ id: "construct-verifier", label: "construct-verifier", lane: "construct", mode: "verify" },
-	{ id: "static-topology-verifier", label: "static-topology-verifier", lane: "static-topology", mode: "verify" },
-	{ id: "package-module-verifier", label: "package-module-verifier", lane: "dynamic-topology", mode: "verify" },
+	{ id: "package-module-verifier", label: "package-module-verifier", lane: "static-topology", mode: "verify" },
 	{ id: "runtime-topology-verifier", label: "runtime-topology-verifier", lane: "dynamic-topology", mode: "verify" },
 ];
 
@@ -471,7 +470,6 @@ export function SubsystemModelView({
 		>
 			<SubsystemComponentGraph
 				components={graph.components}
-				relations={graph.relations}
 				walkthroughs={graph.walkthroughs}
 				persistKey={graphId}
 				onReorderWalkthroughs={onReorderWalkthroughs}
@@ -567,7 +565,6 @@ export function SubsystemModelView({
 							title={graph.title}
 							components={graph.components}
 							edges={deriveGraphEdges({
-								relations: graph.relations,
 								walkthroughs: graph.walkthroughs,
 							})}
 							onSelectionChange={setSelection}

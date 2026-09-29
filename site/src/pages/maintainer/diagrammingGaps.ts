@@ -81,7 +81,7 @@ export function getMaintainerProbeRegistry() {  // ← what Graphify sees
       'The taxonomy says a store is state-only; a class that manages access is a SEPARATE node joined by `reads` / `writes`. Nothing draws or verifies that pair yet.',
     today: 'Usually authored as a single node; the mediator stays implicit.',
     pointsTo:
-      'Explicit store ↔ accessor / manager relations, drawn and verifiable as a pair.',
+      'Explicit store ↔ accessor / manager pairing, drawn and verifiable as a pair.',
     status: 'open',
   },
   {

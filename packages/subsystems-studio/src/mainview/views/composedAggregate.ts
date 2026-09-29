@@ -2,10 +2,9 @@
  * Frame-level rollup of a composed subsystem graph for the aggregate view.
  *
  * One node per process / module frame (+ a single ungrouped bucket), with
- * relations and walkthrough steps rebased to frame ids and intra-frame hops
- * dropped. The output document renders as-is in the shared
- * `SubsystemComponentGraph` (with edge labels off) — same implementation as
- * the model views, coarser data.
+ * walkthrough steps rebased to frame ids and intra-frame hops dropped. The
+ * output document renders as-is in the shared `SubsystemComponentGraph` (with
+ * edge labels off) — same implementation as the model views, coarser data.
  *
  * Pure over the merged document (+ optional merge sidecar for member →
  * model attribution), so it is unit-testable beside the view.
@@ -14,7 +13,6 @@
 import type {
 	MergeSidecar,
 	SubsystemModelDocument,
-	SubsystemRelation,
 	SubsystemWalkthrough,
 } from "../../shared/contract";
 
@@ -82,13 +80,11 @@ export interface AggregateGraph {
 	/** Intake/outtake hubs for boundaries with more than one frame. */
 	hubs: AggregateHub[];
 	/**
-	 * Renderable document: one `external` node per frame, relations and
-	 * walkthrough steps rebased to frame ids, intra-frame and unresolvable
-	 * hops dropped. Validates as a portable document.
+	 * Renderable document: one `external` node per frame, walkthrough steps
+	 * rebased to frame ids, intra-frame and unresolvable hops dropped.
 	 */
 	document: {
 		components: SubsystemModelDocument["components"];
-		relations: SubsystemRelation[];
 		walkthroughs: SubsystemWalkthrough[];
 	};
 }
@@ -106,7 +102,7 @@ function shortLabel(kind: AggregateFrame["kind"], key: string): string {
  * steps collapse into one edge with a step count.
  */
 export function aggregateToFrames(
-	doc: Pick<SubsystemModelDocument, "components" | "relations" | "walkthroughs">,
+	doc: Pick<SubsystemModelDocument, "components" | "walkthroughs">,
 	sidecar?: MergeSidecar | null,
 ): AggregateGraph {
 	const modelsByAlias = new Map<string, string[]>();
@@ -336,14 +332,6 @@ export function aggregateToFrames(
 		});
 	}
 
-	const relations: SubsystemRelation[] = [];
-	for (const r of doc.relations ?? []) {
-		const from = frameOf.get(r.from);
-		const to = frameOf.get(r.to);
-		if (!from || !to || from === to) continue;
-		relations.push({ ...r, from, to });
-	}
-
 	const walkthroughs: SubsystemWalkthrough[] = [];
 	for (const w of doc.walkthroughs ?? []) {
 		const steps = (w.steps ?? []).flatMap((s) => {
@@ -361,6 +349,6 @@ export function aggregateToFrames(
 		frames: orderedFrames,
 		edges,
 		hubs,
-		document: { components, relations, walkthroughs },
+		document: { components, walkthroughs },
 	};
 }

@@ -93,7 +93,6 @@ export function Gist() {
               <SubsystemComponentGraph
                 key={`${state.gistId}:${state.fileName}:${refParam ?? 'main'}`}
                 components={state.document.components}
-                relations={state.document.relations}
                 walkthroughs={state.document.walkthroughs}
                 title={state.document.title}
                 description={state.document.description}

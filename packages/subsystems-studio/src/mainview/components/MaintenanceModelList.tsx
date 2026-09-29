@@ -53,9 +53,10 @@ export type FeedEntry = {
 
 /**
  * The Maintain agents, in routing priority order (construct → static topology →
- * package/module → runtime topology), each with a badge icon. Mirrors the
- * host's `MaintainAgentId` set; drives the per-row "which agent is running"
- * badge strip.
+ * dynamic topology), each with a badge icon. Mirrors the host's
+ * `MaintainAgentId` set; drives the per-row "which agent is running" badge
+ * strip. Static topology is package/module containment; dynamic topology is
+ * process runtime.
  */
 export const AGENT_META: Array<{ agent: string; label: string; Icon: LucideIcon }> = [
 	// Icon = the agent's lane (construct / static-topology / dynamic-topology),
@@ -64,21 +65,15 @@ export const AGENT_META: Array<{ agent: string; label: string; Icon: LucideIcon 
 	// static-topology→Network, dynamic-topology→Server.
 	{ agent: "construct-fixer", label: "Construct Fixer", Icon: Component },
 	{
-		agent: "static-topology-fixer",
-		label: "Static Topology Fixer",
+		agent: "package-module-fixer",
+		label: "Package/Module Fixer",
 		Icon: Network,
 	},
-	{ agent: "package-module-fixer", label: "Package/Module Fixer", Icon: Server },
 	{ agent: "construct-verifier", label: "Construct Verifier", Icon: Component },
-	{
-		agent: "static-topology-verifier",
-		label: "Static Topology Verifier",
-		Icon: Network,
-	},
 	{
 		agent: "package-module-verifier",
 		label: "Package/Module Verifier",
-		Icon: Server,
+		Icon: Network,
 	},
 	{
 		agent: "runtime-topology-verifier",

@@ -7,9 +7,9 @@ import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGr
 import { SubsystemComponentNode } from '../../../subsystem/nodes';
 import type {
   SubsystemComponent,
-  SubsystemComponentEdge,
   SubsystemGraphNode,
 } from '../../../subsystem/model';
+import { walkthroughFromHops } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Proposed',
@@ -225,10 +225,12 @@ const migrationComponents: SubsystemComponent[] = [
   },
 ];
 
-const migrationEdges: SubsystemComponentEdge[] = [
-  { id: 'e0', from: 'audit', to: 'maintain', mechanism: 'calls' },
-  { id: 'e1', from: 'maintain', to: 'lifecycle', mechanism: 'uses' },
-  { id: 'e2', from: 'lifecycle', to: 'cli', mechanism: 'calls' },
+const migrationWalkthroughs = [
+  walkthroughFromHops('migration-hops', 'Migration hops', [
+    ['audit', 'maintain', 'calls', 'src/bun/verify-subsystem-component.ts', 1],
+    ['maintain', 'lifecycle', 'uses', 'src/bun/maintain-model.ts', 1],
+    ['lifecycle', 'cli', 'calls', 'src/bun/opencode-v2.ts', 1],
+  ]),
 ];
 
 function MigrationDemo() {
@@ -237,7 +239,7 @@ function MigrationDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={migrationComponents}
-        relations={migrationEdges.relations} walkthroughs={migrationEdges.walkthroughs}
+        walkthroughs={migrationWalkthroughs}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, padding: '0 12px', fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>

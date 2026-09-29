@@ -2,7 +2,8 @@ import '@xyflow/react/dist/style.css';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
-import type { SubsystemComponent, SubsystemComponentEdge } from '../../../subsystem/model';
+import type { SubsystemComponent } from '../../../subsystem/model';
+import { walkthroughFromHops } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/FrameworkStereotype',
@@ -79,6 +80,19 @@ const reactUiComponents: SubsystemComponent[] = [
     layer: 2,
   },
   {
+    alias: 'analysis-view',
+    name: 'AnalysisView',
+    construct: 'function',
+    file: 'packages/subsystems-studio/src/mainview/views/AnalysisView.tsx',
+    purl,
+    symbol: 'AnalysisView',
+    purpose: 'React component that consumes the graph document type',
+    framework: 'react',
+    stereotype: 'component',
+    process: 'principal-studio/renderer',
+    layer: 2,
+  },
+  {
     alias: 'drawings-host',
     name: 'useDrawingsHost',
     construct: 'function',
@@ -103,31 +117,13 @@ const reactUiComponents: SubsystemComponent[] = [
   },
 ];
 
-const reactUiEdges: SubsystemComponentEdge[] = [
-  {
-    id: 'http-to-create',
-    from: 'http-entry',
-    to: 'create-graph',
-    mechanism: 'calls',
-  },
-  {
-    id: 'sessions-uses-hook',
-    from: 'sessions-view',
-    to: 'drawings-host',
-    mechanism: 'uses',
-  },
-  {
-    id: 'analysis-uses-type',
-    from: 'analysis-view',
-    to: 'graph-doc-type',
-    mechanism: 'references',
-  },
-  {
-    id: 'sessions-to-analysis',
-    from: 'sessions-view',
-    to: 'analysis-view',
-    mechanism: 'feeds',
-  },
+const reactUiWalkthroughs = [
+  walkthroughFromHops('react-ui-hops', 'React UI hops', [
+    ['http-entry', 'create-graph', 'calls', 'packages/subsystems-studio/src/bun/http-server.ts', 1],
+    ['sessions-view', 'drawings-host', 'uses', 'packages/subsystems-studio/src/mainview/views/AgentSessions.tsx', 1],
+    ['analysis-view', 'graph-doc-type', 'uses', 'packages/subsystems-studio/src/mainview/views/AnalysisView.tsx', 1],
+    ['sessions-view', 'analysis-view', 'feeds', 'packages/subsystems-studio/src/mainview/views/AgentSessions.tsx', 2],
+  ]),
 ];
 
 export const ReactComponentsAndHooks: Story = {
@@ -137,7 +133,7 @@ export const ReactComponentsAndHooks: Story = {
         title="Framework + stereotype"
         description="construct stays language-shaped (function / type_alias). framework + stereotype label React units as component / hook without inventing a react_component construct. Empty fields mean language-only."
         components={reactUiComponents}
-        relations={reactUiEdges.relations} walkthroughs={reactUiEdges.walkthroughs}
+        walkthroughs={reactUiWalkthroughs}
       />
     </div>
   ),
@@ -196,10 +192,12 @@ const nestComponents: SubsystemComponent[] = [
   },
 ];
 
-const nestEdges: SubsystemComponentEdge[] = [
-  { id: 'mw-to-guard', from: 'logging-mw', to: 'auth-guard', mechanism: 'uses' },
-  { id: 'guard-to-ctrl', from: 'auth-guard', to: 'graphs-controller', mechanism: 'uses' },
-  { id: 'ctrl-to-svc', from: 'graphs-controller', to: 'graphs-service', mechanism: 'calls' },
+const nestWalkthroughs = [
+  walkthroughFromHops('nest-stack-hops', 'Nest controller stack hops', [
+    ['logging-mw', 'auth-guard', 'uses', 'src/logging/logging.middleware.ts', 1],
+    ['auth-guard', 'graphs-controller', 'uses', 'src/auth/auth.guard.ts', 1],
+    ['graphs-controller', 'graphs-service', 'calls', 'src/graphs/graphs.controller.ts', 1],
+  ]),
 ];
 
 export const NestControllerStack: Story = {
@@ -209,7 +207,7 @@ export const NestControllerStack: Story = {
         title="Nest framework stereotypes"
         description="Same optional fields work outside React: class/function constructs plus nestjs controller / guard / middleware / injectable stereotypes."
         components={nestComponents}
-        relations={nestEdges.relations} walkthroughs={nestEdges.walkthroughs}
+        walkthroughs={nestWalkthroughs}
       />
     </div>
   ),

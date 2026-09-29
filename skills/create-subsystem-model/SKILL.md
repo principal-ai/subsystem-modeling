@@ -1,6 +1,6 @@
 ---
 name: create-subsystem-model
-description: Author a subsystem model (named components + typed topology relations + runtime walkthroughs describing one subsystem of a codebase) and create it with `npx -y @principal-ai/principal-studio-cli subsystem-model create`, which persists to disk and opens it in Subsystems Studio (launching Studio if it is not already running). Use when the user says "make a subsystem model", "make a subsystem graph", "diagram this subsystem", "post a component graph to the viewer", "visualize this architecture", "show the flows", or invokes /create-subsystem-model or /create-subsystem-graph. NOT for File City trails (use author-{investigation,informative}-trail), Excalidraw drawings (use excalidraw-drawings), or topics (use create-topic).
+description: Author a subsystem model (named components + package/module containment + runtime walkthroughs describing one subsystem of a codebase) and create it with `npx -y @principal-ai/principal-studio-cli subsystem-model create`, which persists to disk and opens it in Subsystems Studio (launching Studio if it is not already running). Use when the user says "make a subsystem model", "make a subsystem graph", "diagram this subsystem", "post a component graph to the viewer", "visualize this architecture", "show the flows", or invokes /create-subsystem-model or /create-subsystem-graph. NOT for File City trails (use author-{investigation,informative}-trail), Excalidraw drawings (use excalidraw-drawings), or topics (use create-topic).
 ---
 
 # Create Subsystem Model
@@ -43,10 +43,10 @@ Analyze the target subsystem in the repo and produce:
   a file is not a node. Anchor each export as its real construct and set
   optional `module` (source path) so the file draws as a frame. If you catch
   yourself posting a file as a component, stop and find the symbol.
-- **Relations** — structural / module / type claims between components.
-  `relationType` is a **closed set** (see below); pick the closest label and
-  put specifics in `refs` evidence. Runtime seams (calls, feeds, writes, …)
-  belong on **walkthrough steps**, not relations.
+- **Boundaries** — package / `module` / `process` membership frames (see
+  below). These are the model's topology: `module` is source-file containment,
+  `process` is runtime deployment. There are no authored edge relations —
+  runtime seams (calls, feeds, writes, …) live on **walkthrough steps**.
 - **Walkthroughs** (required when the model explains *how something works*) —
   ordered execution stories over components. The UI calls these Walkthroughs;
   the wire field is `walkthroughs`. Graph edges for hops are **derived** —
@@ -95,15 +95,6 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
       "declarationProvenance": "authored"          // required when declaration is set by hand
     }
   ],
-  "relations": [                                   // required — may be empty []
-    {
-      "id": "sessions-to-warmup",
-      "from": "session-service",
-      "to": "warmup-worker",                       // component aliases, not names
-      "relationType": "method",                    // see relationType list below
-      "refs": ["pkg:github/owner/repo#path/to/glue.ts"]  // optional purl evidence
-    }
-  ],
   "walkthroughs": [                                // flows — see section below
     {
       "id": "wt-list-sessions",
@@ -130,7 +121,7 @@ Rules:
 - `file` paths MUST be repo-root-relative (each file is resolved against its
   own repo's checkout); `purl` subpaths carry the same path after `#`.
 - Portable documents carry only `$schema` / `title` / `description` /
-  `components` / `relations` / `walkthroughs`. Repo identity lives on each
+  `components` / `walkthroughs`. Repo identity lives on each
   component's `purl` and each walkthrough step's `purl` — there is no stored
   `repo` field. Local checkouts are
   resolved from the **Alexandria registry** (`~/.alexandria/projects.json`), so
@@ -159,11 +150,11 @@ Rules:
   (process → module → export). Singleton modules (one export) stay unframed —
   same 2+ member rule as process.
 - Scope by story, not by node count: one subsystem / one coherent flow. Include
-  a component only when a walkthrough actually reaches it or it carries a
-  topology claim — a node no walkthrough reaches is a smell. Split only when
+  a component only when a walkthrough actually reaches it or it anchors a
+  boundary frame — a node no walkthrough reaches is a smell. Split only when
   the model spans genuinely unrelated stories or stops reading at a glance.
-- Component `alias`es are referenced by relation / walkthrough `from`/`to`; they are model-local and stable across file moves (edges point at the alias, not the location), so never rename on update. Code identity for composed multi-model views lives on `purl` + `file` + `symbol`, not the alias.
-- Relation `id`s are stable topology keys; walkthrough steps carry their own `from`/`to`/`mechanism`.
+- Component `alias`es are referenced by walkthrough `from`/`to`; they are model-local and stable across file moves (edges point at the alias, not the location), so never rename on update. Code identity for composed multi-model views lives on `purl` + `file` + `symbol`, not the alias.
+- Walkthrough steps carry their own `from`/`to`/`mechanism`; there is no separate relation id.
 
 Stdout is `{ ok: true, graph }` — capture `graph.id` (`sg-<ts>-<rand>`).
 Also read `verification.walkthroughsChecked` / `walkthroughsFailed` when walks
@@ -174,9 +165,10 @@ Do **not** curl the HTTP bridge unless the user explicitly asks for the raw API.
 
 ## Walkthroughs (`walkthroughs`)
 
-Walkthroughs are the point of a "how this works" model. Components + relations
-are the topology map; walkthroughs are the runtime stories. Display edges for
-hops are **derived** from steps — you never author an `edges` array.
+Walkthroughs are the point of a "how this works" model. Components (with their
+package / `module` / `process` frames) are the topology map; walkthroughs are
+the runtime stories. Display edges for hops are **derived** from steps — you
+never author an `edges` array.
 
 **When to author them**
 
@@ -210,7 +202,7 @@ verification and misleads readers. Get the line right anyway.
 
 **Authoring workflow**
 
-1. Lay components (+ optional topology `relations`).
+1. Lay components (+ optional `module` / `process` boundary frames).
 2. Name the walkthroughs the user cares about (titles humans will click).
 3. For each hop, open the real glue file, pick the call/emit/register line,
    and record `{ from, to, mechanism, file, line, purl, symbol?, annotation? }`
@@ -228,8 +220,8 @@ Reference shape: `packages/subsystems-react/src/stories/Subsystem/ComponentGraph
 
 Validated against the published model (`subsystem/model.ts`), the JSON schema
 (`packages/subsystems-core/schemas/subsystem-model.schema.json`), and the
-store validators. Off-list `relationType`s and step `mechanism`s are rejected;
-off-list `construct` values are rejected naming the allowed set.
+store validators. Off-list step `mechanism`s are rejected; off-list `construct`
+values are rejected naming the allowed set.
 
 **Component `construct`** (code shape — one of):
 
@@ -248,8 +240,8 @@ repo purl). Tag the actor kind with `entityKind` (badge text, e.g. `Person`,
 `agent`, `queue`); optionally override the node color with `color` (hex) and
 hand-author `declaration` (`kind: "custom_entity"` + `attributes` as ordered
 `{ key, value }` pairs — e.g. `level: L1`, `approvalLimit: $500`). Entities
-group by `process` / `module` / `layer` and participate in relations and
-walkthrough steps exactly like code nodes.
+group by `process` / `module` / `layer` and participate in walkthrough steps
+exactly like code nodes.
 
 ### `store` — a retained-state declaration
 
@@ -346,23 +338,6 @@ systems.
   the module frame nests inside that process (process → module → export).
   Never use `construct: "module"` for this.
 
-**Relation `relationType`** (how `from` relates to `to` — structural / module /
-type claims; runtime seams do NOT belong here):
-
-| Style | Labels |
-|---|---|
-| solid | `method` |
-| dashed | `extends`, `inherits`, `implements`, `mixes_in` |
-
-Semantics: `method` = target is a method of the source class;
-`extends`/`inherits`/`implements`/`mixes_in` = inheritance / interface /
-mixin claims. The static layer models internal construct shape only;
-code-level dependencies (imports, re-exports, symbol references) do not
-belong here — that runtime/external wiring lives in walkthroughs and flows.
-File membership frames use `module` (not a topology relation). Evidence
-goes in `refs`. Do not use Graphify's `contains` verb on model relations —
-that name is reserved for Graphify's file→symbol edges.
-
 **Walkthrough hop `mechanism`** (how `from` relates to `to` at a runtime
 site — request/response and pushed data both live here):
 
@@ -377,7 +352,8 @@ output; `writes`/`reads` = store access; `watches` = observes/subscribes;
 `registers-into` = subscriber registration into a fan-out bag. For RPC /
 event-broadcast use the closest match (`calls` for request/response,
 `feeds` / `produces` for pushed data). Structural labels (`imports`, `extends`,
-…) are **not** valid step mechanisms; put those in `relations`.
+…) are **not** valid step mechanisms — the model has no authored edge
+relations; keep wiring on walkthrough hops.
 
 **Declarations** (`component.declaration`) render params, return type, and
 members in the click panel — hand-author them when you want to highlight
@@ -443,4 +419,4 @@ curl -s -X DELETE http://127.0.0.1:3045/api/subsystem-model/<id>
 
 Prefer PUT over delete-and-recreate so ids and timestamps stay stable. DELETE
 also closes any tabs rendering the model. To add walkthroughs to an existing model,
-PUT `{ "walkthroughs": [ ... ] }` (and any new topology `relations` if needed).
+PUT `{ "walkthroughs": [ ... ] }` (or updated `module` / `process` frames).

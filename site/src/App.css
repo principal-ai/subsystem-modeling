@@ -2356,14 +2356,6 @@ code {
   color: #79c0ff;
 }
 
-.maintainer-remediation--static-topology-fixer {
-  color: #ffa198;
-}
-
-.maintainer-remediation--static-topology-verifier {
-  color: #79c0ff;
-}
-
 .maintainer-remediation--package-module-fixer {
   color: #e3b341;
 }

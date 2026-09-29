@@ -59,18 +59,16 @@ export const LANE_ICON: Record<SubsystemVerificationLane, LucideIcon> = {
  *  Legacy ids (pre-rename) are aliased so persisted proposals still read. */
 export const AGENT_LABEL: Record<string, string> = {
 	"construct-verifier": "Construct Verifier",
-	"static-topology-verifier": "Static Topology Verifier",
 	"package-module-verifier": "Package/Module Verifier",
 	"runtime-topology-verifier": "Runtime Topology Verifier",
 	"construct-fixer": "Construct Fixer",
-	"static-topology-fixer": "Static Topology Fixer",
 	"package-module-fixer": "Package/Module Fixer",
 	// Legacy (pre-rename) ids.
 	"gap-filler": "Construct Verifier",
-	"topology-gap-filler": "Static Topology Verifier",
-	"boundary-gap-filler": "Dynamic Topology Verifier",
+	"topology-gap-filler": "Package/Module Verifier",
+	"boundary-gap-filler": "Runtime Topology Verifier",
 	"issue-fixer": "Construct Fixer",
-	"topology-fixer": "Static Topology Fixer",
+	"topology-fixer": "Package/Module Fixer",
 };
 
 export function agentLabel(author?: string): string | null {
@@ -142,8 +140,6 @@ export function isConfirmation(
 const UNCONFIRMED_LABEL: Record<string, string> = {
 	construct_unconfirmed: "Construct unconfirmed",
 	signature_unconfirmed: "Signature unconfirmed",
-	topology_relation_unconfirmed: "Relation unconfirmed",
-	topology_import_unconfirmed: "Import unconfirmed",
 	boundary_module_file_mismatch: "Module unconfirmed",
 };
 
@@ -156,8 +152,6 @@ function unconfirmedLabel(field: string): string {
 			return "Signature unconfirmed";
 		case "module":
 			return "Module unconfirmed";
-		case "relation":
-			return "Relation unconfirmed";
 		default:
 			return "Unconfirmed";
 	}
@@ -221,7 +215,6 @@ export function buildAgentPrompt(
 				`Component: ${p.finding.componentName ?? p.finding.componentAlias}`,
 			);
 		}
-		if (p.finding.relationId) lines.push(`Relation: ${p.finding.relationId}`);
 		if (p.finding.walkthroughId) {
 			lines.push(
 				`Walkthrough: ${p.finding.walkthroughId}${

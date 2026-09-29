@@ -759,6 +759,16 @@ export async function computeElkLayout(
     if (parentId && builtGroups.has(parentId)) continue; // nested inside parent
     elkParents.push(node);
   }
+  // Order root-level compounds by model order (the caller's `groups` array), so
+  // disconnected sibling frames lay out deterministically — e.g. `app/book`
+  // before `lib`. Without this, planCompoundGroups' bottom-up build order
+  // decides placement.
+  const groupOrder = new Map(groupDefs.map((g, i) => [g.id, i]));
+  elkParents.sort(
+    (a, b) =>
+      (groupOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+      (groupOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+  );
 
   // Create ELK graph
   const rootOptions = getElkOptions(options);

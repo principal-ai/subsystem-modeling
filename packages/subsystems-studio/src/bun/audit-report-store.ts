@@ -18,7 +18,6 @@ import type {
 	SubsystemModelAuditBoundaryCheck,
 	SubsystemModelAuditCheck,
 	SubsystemModelAuditReport,
-	SubsystemModelAuditTopologyCheck,
 	SubsystemModelVerification,
 	SubsystemModelVerificationLayer,
 	SubsystemVerificationLane,
@@ -97,7 +96,6 @@ export function auditHasPartialGaps(report: SubsystemModelAuditReport): boolean 
 		if (c.constructInferred === "unknown" && c.constructMatch !== true) return true;
 		if (c.signature === "skipped") return true;
 	}
-	if (report.topologyChecks?.some((c) => c.verdict === "gap")) return true;
 	if (report.boundaryChecks?.some((c) => c.verdict === "gap")) return true;
 	return false;
 }
@@ -198,30 +196,6 @@ function classifyConstructCheck(
 	tally.open++;
 }
 
-function classifyTopologyCheck(
-	c: SubsystemModelAuditTopologyCheck,
-	tally: VerificationTally,
-): void {
-	if (c.verdict === "skipped" || c.graphify === "skipped") {
-		tally.na++;
-		return;
-	}
-	if (c.graphify === "unavailable") {
-		tally.blocked++;
-		return;
-	}
-	if (c.verdict === "issue") {
-		tally.open++;
-		tally.blocking++;
-		return;
-	}
-	if (c.verdict === "ok") {
-		tally.verified++;
-		return;
-	}
-	tally.open++;
-}
-
 function classifyBoundaryCheck(
 	c: SubsystemModelAuditBoundaryCheck,
 	tally: VerificationTally,
@@ -257,8 +231,6 @@ export function summarizeVerification(
 	for (const c of report.checks) classifyConstructCheck(c, construct);
 	for (const c of report.boundaryChecks ?? [])
 		classifyBoundaryCheck(c, boundary);
-	for (const c of report.topologyChecks ?? [])
-		classifyTopologyCheck(c, topology);
 
 	const total = finalizeLayer(mergeTallies(construct, boundary, topology));
 	return {
@@ -281,8 +253,8 @@ function laneStatus(t: VerificationTally): VerificationLaneStatus {
 
 /**
  * Coarse per-lane status mapped onto the four model layers: construct (L1),
- * static topology (L2 = relations), dynamic topology (L3 = process runtime +
- * package/module containment), walkthrough (L4).
+ * static topology (L2 = package/module containment), dynamic topology
+ * (L3 = process runtime), walkthrough (L4).
  */
 export function summarizeLanes(
 	report: SubsystemModelAuditReport,
@@ -292,12 +264,9 @@ export function summarizeLanes(
 	for (const c of report.checks) classifyConstructCheck(c, construct);
 
 	const staticTopology = emptyTally();
-	for (const c of report.topologyChecks ?? [])
-		classifyTopologyCheck(c, staticTopology);
-
 	const dynamicTopology = emptyTally();
 	for (const c of report.boundaryChecks ?? []) {
-		if (c.kind === "module_file") classifyBoundaryCheck(c, dynamicTopology);
+		if (c.kind === "module_file") classifyBoundaryCheck(c, staticTopology);
 		if (c.kind === "process_nest") classifyBoundaryCheck(c, dynamicTopology);
 	}
 

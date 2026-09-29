@@ -6,7 +6,6 @@
 import type {
   SubsystemComponent,
   SubsystemEdgeView,
-  SubsystemRelation,
   SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react'
 import type { RemediationLane } from '../pages/maintainer/shared'
@@ -14,7 +13,6 @@ import type { RemediationLane } from '../pages/maintainer/shared'
 export type IssueFixModel = {
   title: string
   components: SubsystemComponent[]
-  relations: SubsystemRelation[]
   walkthroughs?: SubsystemWalkthrough[]
 }
 
@@ -26,7 +24,7 @@ export type IssueFixExample = {
   blurb: string
   remediation: Extract<
     RemediationLane,
-    'deterministic' | 'construct-fixer' | 'static-topology-fixer' | 'none'
+    'deterministic' | 'construct-fixer' | 'package-module-fixer' | 'none'
   >
   graph: {
     edgeView: SubsystemEdgeView
@@ -94,20 +92,6 @@ const constructIssue: IssueFixModel = {
       layer: 3,
     },
   ],
-  relations: [
-    {
-      id: 'e-method-persist',
-      from: 'note-service',
-      to: 'note-service-persist',
-      relationType: 'method',
-    },
-    {
-      id: 'e-impl-repo',
-      from: 'note-service',
-      to: 'note-repository',
-      relationType: 'implements',
-    },
-  ],
 }
 
 const constructFix: IssueFixModel = {
@@ -123,7 +107,7 @@ const constructFix: IssueFixModel = {
   ),
 }
 
-const relationIssue: IssueFixModel = {
+const moduleIssue: IssueFixModel = {
   title: 'Session parse',
   components: [
     {
@@ -132,8 +116,9 @@ const relationIssue: IssueFixModel = {
       construct: 'class',
       symbol: 'SessionReader',
       purl: SESSION,
-      file: 'src/session/SessionReader.ts',
-      purpose: 'Reads a session transcript.',
+      module: 'src/session/SessionReader.ts',
+      file: '',
+      purpose: 'Reads a session transcript — module claimed with no file anchor.',
       layer: 1,
     },
     {
@@ -142,39 +127,15 @@ const relationIssue: IssueFixModel = {
       construct: 'method',
       symbol: 'read',
       purl: SESSION,
+      module: 'src/session/SessionReader.ts',
       file: 'src/session/SessionReader.ts',
       purpose: 'Loads bytes, then hands off to a parser.',
       layer: 1,
-    },
-    {
-      alias: 'old-parser',
-      name: 'oldParser',
-      construct: 'function',
-      symbol: 'oldParser',
-      purl: SESSION,
-      file: 'src/session/oldParser.ts',
-      purpose: 'Deleted target.',
-      proposed: true,
-      layer: 2,
-    },
-  ],
-  relations: [
-    {
-      id: 'e-method-read',
-      from: 'session-reader',
-      to: 'session-reader-read',
-      relationType: 'method',
-    },
-    {
-      id: 'e-stale',
-      from: 'session-reader-read',
-      to: 'old-parser',
-      relationType: 'method',
     },
   ],
 }
 
-const relationFix: IssueFixModel = {
+const moduleFix: IssueFixModel = {
   title: 'Session parse',
   components: [
     {
@@ -183,6 +144,7 @@ const relationFix: IssueFixModel = {
       construct: 'class',
       symbol: 'SessionReader',
       purl: SESSION,
+      module: 'src/session/SessionReader.ts',
       file: 'src/session/SessionReader.ts',
       purpose: 'Reads a session transcript.',
       layer: 1,
@@ -193,33 +155,10 @@ const relationFix: IssueFixModel = {
       construct: 'method',
       symbol: 'read',
       purl: SESSION,
+      module: 'src/session/SessionReader.ts',
       file: 'src/session/SessionReader.ts',
       purpose: 'Loads bytes, then hands off to a parser.',
       layer: 1,
-    },
-    {
-      alias: 'parse-transcript',
-      name: 'parseTranscript',
-      construct: 'function',
-      symbol: 'parseTranscript',
-      purl: SESSION,
-      file: 'src/session/transcript.ts',
-      purpose: 'Replacement parser.',
-      layer: 2,
-    },
-  ],
-  relations: [
-    {
-      id: 'e-method-read',
-      from: 'session-reader',
-      to: 'session-reader-read',
-      relationType: 'method',
-    },
-    {
-      id: 'e-retarget',
-      from: 'session-reader-read',
-      to: 'parse-transcript',
-      relationType: 'method',
     },
   ],
 }
@@ -277,7 +216,6 @@ const hopIssue: IssueFixModel = {
       layer: 4,
     },
   ],
-  relations: [],
   walkthroughs: [
     {
       id: 'wt-checkout',
@@ -318,7 +256,6 @@ const hopIssue: IssueFixModel = {
 const hopFix: IssueFixModel = {
   title: 'Checkout',
   components: hopIssue.components.filter((c) => c.alias !== 'old-cart'),
-  relations: [],
   walkthroughs: [
     {
       id: 'wt-checkout',
@@ -365,7 +302,7 @@ export const ISSUE_FIX_EXAMPLES: IssueFixExample[] = [
       'Graphify’s structure says class; the model still claims function. construct-fixer reads source and proposes the construct — never one-click adopt.',
     remediation: 'construct-fixer',
     graph: {
-      edgeView: 'relations',
+      edgeView: 'graphify',
       showEdgeLabels: true,
       autoPlayWalkthroughs: false,
     },
@@ -391,36 +328,38 @@ export const ISSUE_FIX_EXAMPLES: IssueFixExample[] = [
     },
   },
   {
-    id: 'broken-endpoint',
-    check: 'broken relation endpoints',
+    id: 'module-without-file',
+    check: 'module without file',
     layer: 'Static topology',
     blurb:
-      'From or to names a component that was deleted. static-topology-fixer proposes drop or retarget; you confirm.',
-    remediation: 'static-topology-fixer',
+      'A module membership claim with no file to anchor it. package-module-fixer proposes the file; you confirm.',
+    remediation: 'package-module-fixer',
     graph: {
-      edgeView: 'relations',
+      edgeView: 'graphify',
       showEdgeLabels: true,
       autoPlayWalkthroughs: false,
     },
     issue: {
-      caption: 'the relation still points at deleted oldParser.',
+      caption: 'SessionReader claims a module but has no file.',
       snippet: `{
-  "id": "e-stale",
-  "from": "session-reader-read",
-  "to": "old-parser",   // ← gone from components[]
-  "relationType": "method"
+  "id": "session-reader",
+  "construct": "class",
+  "symbol": "SessionReader",
+  "module": "src/session/SessionReader.ts",
+  "file": ""   // ← module with no file anchor
 }`,
-      model: relationIssue,
+      model: moduleIssue,
     },
     fix: {
-      caption: 'Endpoint retargeted to parseTranscript.',
+      caption: 'File filled from the module path — the frame can draw.',
       snippet: `{
-  "id": "e-retarget",
-  "from": "session-reader-read",
-  "to": "parse-transcript",
-  "relationType": "method"
+  "id": "session-reader",
+  "construct": "class",
+  "symbol": "SessionReader",
+  "module": "src/session/SessionReader.ts",
+  "file": "src/session/SessionReader.ts"
 }`,
-      model: relationFix,
+      model: moduleFix,
     },
   },
   {
@@ -428,7 +367,7 @@ export const ISSUE_FIX_EXAMPLES: IssueFixExample[] = [
     check: 'broken hop endpoints',
     layer: 'Walkthrough',
     blurb:
-      'A hop still names a store that was replaced. Same family as a broken relation, but the edge is a walkthrough step. Walkthrough audit is next — this is the shape of the fix once hops can be retargeted.',
+      'A hop still names a store that was replaced. Same family as a broken containment claim, but the edge is a walkthrough step. Walkthrough audit is next — this is the shape of the fix once hops can be retargeted.',
     remediation: 'none',
     graph: {
       edgeView: 'walkthroughs',

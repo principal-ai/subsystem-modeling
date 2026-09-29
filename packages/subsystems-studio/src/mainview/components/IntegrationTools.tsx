@@ -168,8 +168,8 @@ const GRAPHIFY_TOOL: IntegrationSpec = {
 			Graphify turns a checkout into a queryable knowledge graph of files,
 			symbols, and their edges. Studio uses it as the ground truth it audits
 			subsystem models against — anchoring each component to a real definition,
-			corroborating construct/signature claims, and checking that typed
-			relations exist in the code. The Graphify tab builds and caches a graph
+			corroborating construct/signature claims, and drawing its native static
+			edges alongside the model. The Graphify tab builds and caches a graph
 			per repo at its current HEAD.
 		</>
 	),
@@ -200,7 +200,7 @@ const OPENCODE_TOOL: IntegrationSpec = {
 	usage: (
 		<>
 			OpenCode is the agent runtime Studio drives. Maintain runs (the construct,
-			static-topology, package/module, and runtime verifiers/fixers) and concept
+			package/module, and runtime verifiers/fixers) and concept
 			extraction execute through it,
 			with each run's events streamed back into the Maintain and session tabs.
 			Studio installs the v2 binary as <code>opencode2</code> so an existing v1

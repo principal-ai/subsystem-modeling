@@ -2,7 +2,7 @@
  * SubsystemIssueList — the diagnostics sidebar list.
  *
  * A catalogue of verification issues (audit findings), grouped by *target* so
- * every broken component / relation / module / flow clusters together. Each
+ * every broken component / module / flow clusters together. Each
  * card is severity-colored, names its kind, states the message, and offers the
  * deterministic fix inline when one exists.
  *
@@ -38,7 +38,6 @@ export type SubsystemIssueSeverity = 'error' | 'info';
 
 export type SubsystemIssueTargetKind =
   | 'component'
-  | 'relation'
   | 'module'
   | 'walkthrough'
   | 'step'
@@ -48,8 +47,8 @@ export type SubsystemIssueTargetKind =
 /**
  * The four verification layers, in order. Mirrors the docs' progression:
  * constructs → static topology → dynamic topology → walkthrough.
- * Static topology = relations; dynamic topology = process (runtime) +
- * package/module (containment).
+ * Static topology = package/module (containment); dynamic topology = process
+ * (runtime).
  */
 export type SubsystemIssueCategory =
   | 'repo'
@@ -90,7 +89,7 @@ export const SUBSYSTEM_ISSUE_CATEGORY_LABEL: Record<
   walkthrough: 'Walkthrough',
 };
 
-/** Default `kind` → layer. `boundary_*` (module containment + process) is dynamic. */
+/** Default `kind` → layer. Module containment is static; process nest is dynamic. */
 const KIND_CATEGORY: Record<string, SubsystemIssueCategory> = {
   missing_file: 'construct',
   symbol_ambiguous: 'construct',
@@ -102,10 +101,7 @@ const KIND_CATEGORY: Record<string, SubsystemIssueCategory> = {
   signature_unconfirmed: 'construct',
   repo_unresolved: 'repo',
   graphify_unavailable: 'repo',
-  topology_broken_endpoint: 'static-topology',
-  topology_import_unconfirmed: 'static-topology',
-  topology_relation_unconfirmed: 'static-topology',
-  boundary_module_file_mismatch: 'dynamic-topology',
+  boundary_module_file_mismatch: 'static-topology',
   boundary_process_nest_disagree: 'dynamic-topology',
   walkthrough: 'walkthrough',
 };
@@ -189,7 +185,7 @@ export interface SubsystemIssueTarget {
   id?: string;
   /** Display label (component name, `from → to`, module path, flow title). */
   label: string;
-  /** Optional sub-label (relation type, step number, …). */
+  /** Optional sub-label (step number, …). */
   detail?: string;
   /**
    * For a `step` target: the walkthrough id, plus a 0-based index into that
@@ -231,8 +227,8 @@ export function humanizeIssueKind(kind: string): string {
  * Curated labels. Construct-layer findings stay fully qualified ("Construct
  * declaration file missing", "Construct type mismatch") rather than relying on
  * the category header — this UI is new and the extra words read clearer.
- * Topology findings drop the `topology_`/`boundary_` prefix since the layer
- * already scopes them. Explicit `issue.kindLabel` wins.
+ * Boundary findings drop the `boundary_` prefix since the layer already
+ * scopes them. Explicit `issue.kindLabel` wins.
  */
 const KIND_LABEL: Record<string, string> = {
   missing_file: 'Construct declaration file missing',
@@ -245,9 +241,6 @@ const KIND_LABEL: Record<string, string> = {
   signature_unconfirmed: 'Construct signature unconfirmed',
   repo_unresolved: 'No repository clone',
   graphify_unavailable: 'Graphify cache unavailable',
-  topology_broken_endpoint: 'Construct relationship broken',
-  topology_import_unconfirmed: 'Import unconfirmed',
-  topology_relation_unconfirmed: 'Relationship unconfirmed',
   boundary_module_file_mismatch: 'Declaration file outside module',
   boundary_process_nest_disagree: 'Module spans multiple process contexts',
   walkthrough: 'Step issue',
@@ -261,8 +254,8 @@ export function issueKindLabel(issue: SubsystemIssue): string {
 /**
  * Display order within the list, by verification pipeline — not severity.
  * Mirrors the per-component check order (file → symbol → declaration → type →
- * signature), then topology (integrity → corroboration → membership) and the
- * remaining layers. Within a stage, "unconfirmed" precedes "mismatch": you
+ * signature), then the boundary layers (module membership → process nest) and
+ * the remaining layers. Within a stage, "unconfirmed" precedes "mismatch": you
  * reach a verdict before you can find it wrong.
  */
 const KIND_ORDER: Record<string, number> = {
@@ -278,12 +271,9 @@ const KIND_ORDER: Record<string, number> = {
   construct_mismatch: 15,
   signature_unconfirmed: 16,
   signature_mismatch: 17,
-  // Static topology — edge integrity → corroboration → membership
-  topology_broken_endpoint: 20,
-  topology_relation_unconfirmed: 21,
-  topology_import_unconfirmed: 22,
+  // Static topology — package/module membership
   boundary_module_file_mismatch: 23,
-  // Runtime topology
+  // Runtime topology — process containment
   boundary_process_nest_disagree: 30,
   // Walkthrough
   walkthrough: 40,

@@ -8,8 +8,6 @@ import {
 	PACKAGE_MODULE_VERIFIER_AGENT,
 	RUNTIME_TOPOLOGY_VERIFIER_AGENT,
 	selectMaintainRoute,
-	STATIC_TOPOLOGY_FIXER_AGENT,
-	STATIC_TOPOLOGY_VERIFIER_AGENT,
 } from "./maintain-model";
 import type { StoredSubsystemModel } from "./subsystem-model-store";
 
@@ -25,7 +23,6 @@ function graphFixture(partial?: Partial<StoredSubsystemModel>): StoredSubsystemM
 				purl: "external:no-root",
 			},
 		],
-		relations: [],
 		createdAt: new Date().toISOString(),
 		updatedAt: new Date().toISOString(),
 		...partial,
@@ -61,11 +58,6 @@ function emptyReport(
 			weakAnchors: 0,
 			unresolved: 0,
 			ok: 0,
-			relations: 0,
-			softChecked: 0,
-			softConfirmed: 0,
-			softUnconfirmed: 0,
-			brokenRelationEndpoints: 0,
 			modulesClaimed: 0,
 			moduleFileOk: 0,
 			moduleFileMismatch: 0,
@@ -74,14 +66,13 @@ function emptyReport(
 			processNestDisagree: 0,
 		},
 		checks: [],
-		topologyChecks: [],
 		boundaryChecks: [],
 		...partial,
 	};
 }
 
 describe("selectMaintainRoute", () => {
-	test("prefers construct issues over topology issues", () => {
+	test("prefers construct issues over module issues", () => {
 		const report = emptyReport({
 			needsUpdate: true,
 			findings: [
@@ -92,36 +83,57 @@ describe("selectMaintainRoute", () => {
 					message: "gone",
 				},
 				{
-					kind: "topology_broken_endpoint",
+					kind: "boundary_module_file_mismatch",
 					severity: "error",
-					relationId: "r1",
-					message: "broken",
+					componentAlias: "a",
+					message: "no anchor",
 				},
 			],
 		});
 		expect(selectMaintainRoute(report)?.agent).toBe(CONSTRUCT_FIXER_AGENT);
 	});
 
-	test("routes topology broken endpoints to static-topology-fixer", () => {
+	test("prefers construct issues over module gaps", () => {
 		const report = emptyReport({
 			needsUpdate: true,
 			findings: [
 				{
-					kind: "topology_broken_endpoint",
+					kind: "construct_mismatch",
 					severity: "error",
-					relationId: "r1",
-					message: "broken",
+					componentAlias: "a",
+					message: "wrong",
+				},
+				{
+					kind: "boundary_module_file_mismatch",
+					severity: "info",
+					componentAlias: "a",
+					message: "mismatch",
+				},
+			],
+		});
+		expect(selectMaintainRoute(report)?.agent).toBe(CONSTRUCT_FIXER_AGENT);
+	});
+
+	test("routes module containment hard failures to package-module-fixer (static topology)", () => {
+		const report = emptyReport({
+			needsUpdate: true,
+			findings: [
+				{
+					kind: "boundary_module_file_mismatch",
+					severity: "error",
+					componentAlias: "a",
+					message: "no anchor",
 				},
 			],
 		});
 		expect(selectMaintainRoute(report)).toEqual({
-			agent: STATIC_TOPOLOGY_FIXER_AGENT,
+			agent: PACKAGE_MODULE_FIXER_AGENT,
 			layer: "static-topology",
 			mode: "issues",
 		});
 	});
 
-	test("prefers construct gaps over topology soft gaps", () => {
+	test("prefers module containment gaps over construct gaps", () => {
 		const report = emptyReport({
 			findings: [
 				{
@@ -131,30 +143,10 @@ describe("selectMaintainRoute", () => {
 					message: "unknown",
 				},
 				{
-					kind: "topology_relation_unconfirmed",
-					severity: "info",
-					relationId: "r1",
-					message: "soft",
-				},
-			],
-		});
-		expect(selectMaintainRoute(report)?.agent).toBe(CONSTRUCT_VERIFIER_AGENT);
-	});
-
-	test("prefers package/module unconfirmed over relation unconfirmed", () => {
-		const report = emptyReport({
-			findings: [
-				{
 					kind: "boundary_module_file_mismatch",
 					severity: "info",
 					componentAlias: "a",
 					message: "mismatch",
-				},
-				{
-					kind: "topology_relation_unconfirmed",
-					severity: "info",
-					relationId: "r1",
-					message: "soft",
 				},
 			],
 		});
@@ -163,29 +155,28 @@ describe("selectMaintainRoute", () => {
 		);
 	});
 
-	test("routes relation unconfirmed to static-topology-verifier", () => {
+	test("routes module unconfirmed to package-module-verifier (static topology)", () => {
 		const report = emptyReport({
 			findings: [
 				{
-					kind: "topology_relation_unconfirmed",
+					kind: "boundary_module_file_mismatch",
 					severity: "info",
-					relationId: "r1",
-					message: "soft",
+					componentAlias: "a",
+					message: "mismatch",
 				},
 			],
-			topologyChecks: [
+			boundaryChecks: [
 				{
-					relationId: "r1",
-					relationType: "method",
-					from: "a",
-					to: "b",
-					graphify: "unconfirmed",
+					componentAlias: "a",
+					kind: "module_file",
+					module: "src/other",
+					file: "src/a.ts",
 					verdict: "gap",
 				},
 			],
 		});
 		expect(selectMaintainRoute(report)).toEqual({
-			agent: STATIC_TOPOLOGY_VERIFIER_AGENT,
+			agent: PACKAGE_MODULE_VERIFIER_AGENT,
 			layer: "static-topology",
 			mode: "verify",
 		});
@@ -209,22 +200,43 @@ describe("selectMaintainRoute", () => {
 		});
 	});
 
-	test("routes package/module hard failures to package-module-fixer", () => {
+	test("prefers process gaps over construct gaps", () => {
 		const report = emptyReport({
-			needsUpdate: true,
 			findings: [
 				{
-					kind: "boundary_module_file_mismatch",
-					severity: "error",
+					kind: "construct_unconfirmed",
+					severity: "info",
 					componentAlias: "a",
-					message: "no anchor",
+					message: "unknown",
+				},
+				{
+					kind: "boundary_process_nest_disagree",
+					severity: "info",
+					componentAlias: "a",
+					message: "disagree",
+				},
+			],
+		});
+		expect(selectMaintainRoute(report)?.agent).toBe(
+			RUNTIME_TOPOLOGY_VERIFIER_AGENT,
+		);
+	});
+
+	test("routes construct gaps to construct-verifier when nothing else remains", () => {
+		const report = emptyReport({
+			findings: [
+				{
+					kind: "construct_unconfirmed",
+					severity: "info",
+					componentAlias: "a",
+					message: "unknown",
 				},
 			],
 		});
 		expect(selectMaintainRoute(report)).toEqual({
-			agent: PACKAGE_MODULE_FIXER_AGENT,
-			layer: "dynamic-topology",
-			mode: "issues",
+			agent: CONSTRUCT_VERIFIER_AGENT,
+			layer: "construct",
+			mode: "verify",
 		});
 	});
 

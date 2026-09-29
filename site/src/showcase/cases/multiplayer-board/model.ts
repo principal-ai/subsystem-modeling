@@ -1,6 +1,5 @@
 import type {
   SubsystemComponent,
-  SubsystemRelation,
   SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
 
@@ -125,8 +124,6 @@ export const components: SubsystemComponent[] = [
     layer: 3,
   },
 ];
-
-export const relations = [] as SubsystemRelation[];
 
 export const walkthroughs = [
   {

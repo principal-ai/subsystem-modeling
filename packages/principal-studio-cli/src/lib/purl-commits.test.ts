@@ -85,7 +85,6 @@ describe('createSubsystemModel', () => {
     const created = await createSubsystemModel({
       title: 'cli prov',
       components: [{ alias: 'a', name: 'a', construct: 'function', file: 'x.ts', purl: `${KEY}#x.ts` }],
-      relations: [],
     });
     expect(created.createdAtCommits?.[KEY]).toMatch(/^[0-9a-f]{40}$/);
 

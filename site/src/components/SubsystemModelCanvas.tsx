@@ -5,7 +5,6 @@ import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme
 import { SubsystemComponentGraph } from '@principal-ai/subsystems-react/dist/subsystem/SubsystemComponentGraph.js';
 import type {
   SubsystemComponent,
-  SubsystemRelation,
   SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
 
@@ -43,8 +42,6 @@ const components: SubsystemComponent[] = [
     purl: 'external',
   },
 ]
-
-const relations: SubsystemRelation[] = []
 
 const walkthroughs: SubsystemWalkthrough[] = [
   {
@@ -87,7 +84,6 @@ export function SubsystemModelCanvas() {
     <ThemeProvider theme={defaultEditorTheme}>
       <SubsystemComponentGraph
         components={components}
-        relations={relations}
         walkthroughs={walkthroughs}
         graphTitle="Checkout"
         hideSidebar

@@ -3,7 +3,7 @@
  *
  * These are the rules the JSON Schema (`schemas/subsystem-model.schema.json`)
  * cannot express — anything that spans fields or arrays: alias uniqueness,
- * referential integrity between relations/walkthroughs and components, and the
+ * referential integrity between walkthroughs and components, and the
  * `module` implies `file` invariant. Structural checks (types, `required`,
  * enums, ranges, closed objects) belong to the schema and are enforced per
  * surface; this module owns only what the schema can't.
@@ -18,7 +18,7 @@ import type {
 } from './types/subsystem-model';
 
 export interface SubsystemValidationProblem {
-  /** JSON-pointer-ish location, e.g. `/components/2` or `/relations/0/from`. */
+  /** JSON-pointer-ish location, e.g. `/components/2` or `/walkthroughs/0/steps/0/from`. */
   path: string;
   message: string;
 }
@@ -36,11 +36,10 @@ export function validateSubsystemModelCrossField(
 ): SubsystemValidationProblem[] {
   const problems: SubsystemValidationProblem[] = [];
   const components = doc.components ?? [];
-  const relations = doc.relations ?? [];
   const walkthroughs = doc.walkthroughs ?? [];
 
   // Component aliases must be unique, and the set is the referential target
-  // for relations and walkthrough steps.
+  // for walkthrough steps.
   const ids = new Set<string>();
   components.forEach((c, i) => {
     if (ids.has(c.alias)) {
@@ -59,21 +58,6 @@ export function validateSubsystemModelCrossField(
       problems.push({
         path: `/components/${i}/module`,
         message: `component ${JSON.stringify(c.alias)}: module ${JSON.stringify(module)} is set but file is empty — a module frame needs a file to ground it (mark the component proposed if it is not placed yet).`,
-      });
-    }
-  });
-
-  relations.forEach((r, i) => {
-    if (!ids.has(r.from)) {
-      problems.push({
-        path: `/relations/${i}/from`,
-        message: `relation ${JSON.stringify(r.id)}: from ${JSON.stringify(r.from)} does not match any component alias`,
-      });
-    }
-    if (!ids.has(r.to)) {
-      problems.push({
-        path: `/relations/${i}/to`,
-        message: `relation ${JSON.stringify(r.id)}: to ${JSON.stringify(r.to)} does not match any component alias`,
       });
     }
   });

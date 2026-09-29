@@ -28,10 +28,8 @@ const AUTO = "__auto__";
 /** Maintain agent id → display name (mirrors MaintenancePanel's AGENT_META). */
 const AGENT_DISPLAY: Record<string, string> = {
 	"construct-fixer": "Construct Fixer",
-	"static-topology-fixer": "Static Topology Fixer",
 	"package-module-fixer": "Package/Module Fixer",
 	"construct-verifier": "Construct Verifier",
-	"static-topology-verifier": "Static Topology Verifier",
 	"package-module-verifier": "Package/Module Verifier",
 	"runtime-topology-verifier": "Runtime Topology Verifier",
 };
@@ -80,8 +78,8 @@ export function MaintainModelPickerModal({
 		(agent && AGENT_DISPLAY[agent]) ||
 		agent ||
 		(mode === "issues"
-			? "construct-fixer / static-topology-fixer / package-module-fixer"
-			: "construct-verifier / static-topology-verifier / package-module-verifier / runtime-topology-verifier");
+			? "construct-fixer / package-module-fixer"
+			: "construct-verifier / package-module-verifier / runtime-topology-verifier");
 	// With a known agent the action is "Run <Agent>"; otherwise the generic label.
 	const actionLabel = hasAgent ? `Run ${agentLabel}` : "Run maintenance";
 

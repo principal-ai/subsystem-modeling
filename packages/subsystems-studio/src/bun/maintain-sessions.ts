@@ -25,11 +25,9 @@ export function isMaintainSessionTitle(title: string): boolean {
 /** Maintain agents (new ids) plus legacy pre-rename ids, so stored sessions read. */
 const MAINTAIN_AGENT_NAMES = new Set([
 	"construct-verifier",
-	"static-topology-verifier",
 	"package-module-verifier",
 	"runtime-topology-verifier",
 	"construct-fixer",
-	"static-topology-fixer",
 	"package-module-fixer",
 	// Legacy (pre-rename).
 	"issue-fixer",

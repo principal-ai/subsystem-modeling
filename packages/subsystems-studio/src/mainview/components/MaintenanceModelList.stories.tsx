@@ -101,7 +101,7 @@ const NOTIFICATIONS = model({
 		walkthrough: "none",
 	},
 	nextRoute: {
-		agent: "static-topology-fixer",
+		agent: "package-module-fixer",
 		layer: "static-topology",
 		mode: "issues",
 	},
@@ -119,8 +119,8 @@ const PAYMENTS_RUNS: SubsystemModelRun[] = [
 	run({
 		id: "run-1",
 		graphId: "g-payments",
-		agent: "static-topology-verifier",
-		summary: "Confirmed 6 relations, drafted one correction.",
+		agent: "package-module-verifier",
+		summary: "Confirmed 6 module boundaries, drafted one correction.",
 		pendingCount: 1,
 	}),
 ];
@@ -130,7 +130,7 @@ const PAYMENTS_PROPOSALS: SubsystemModelProposal[] = [
 		id: "p-accepted",
 		runId: "run-1",
 		status: "accepted",
-		author: "static-topology-verifier",
+		author: "package-module-verifier",
 		lane: "static-topology",
 	}),
 	proposal({ id: "p-pending", runId: "run-2", lane: "construct" }),
@@ -159,8 +159,8 @@ const meta = {
 			"g-notify": {
 				status: "running",
 				events: 14,
-				agent: "static-topology-fixer",
-				last: "Auditing relations for NotificationDispatcher…",
+				agent: "package-module-fixer",
+				last: "Auditing package/module boundaries for NotificationDispatcher…",
 				lastAt: Date.now(),
 				sessionId: "ses_mock",
 			},

@@ -230,7 +230,6 @@ function ExplorerInner() {
           <SubsystemComponentGraph
             key={selected.id}
             components={selected.model.components}
-            relations={selected.model.relations}
             walkthroughs={selected.model.walkthroughs}
             title={selected.model.title}
             hideSidebar
@@ -239,6 +238,7 @@ function ExplorerInner() {
             onDescriptionOpenChange={setDescriptionOpen}
             showEdgeLabels={selected.graph.showEdgeLabels}
             edgeView={selected.graph.edgeView}
+            moduleNesting={selected.graph.moduleNesting}
             autoPlayWalkthroughs={selected.graph.autoPlayWalkthroughs}
             walkthroughAutoPlayIntervalMs={WALKTHROUGH_STEP_MS}
             walkthroughStepMode="focus"

@@ -166,7 +166,7 @@ function sliceComponent(
  * could be resolved locally (no repo checkout, missing file, no aliases).
  */
 export async function buildProposalSourceContext(
-	graph: SubsystemModelDocument,
+	graph: Pick<SubsystemModelDocument, "components">,
 	proposal: SubsystemModelProposal,
 ): Promise<string | undefined> {
 	const aliases = componentAliases(proposal);

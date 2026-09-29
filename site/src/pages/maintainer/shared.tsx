@@ -11,8 +11,7 @@ export type CaseOutcome = 'pass' | 'issue' | 'gap' | 'neutral'
  * How this check is remediable today:
  * - deterministic — Studio Apply (finding.fix) with no agent
  * - construct-fixer / construct-verifier — construct lane
- * - static-topology-fixer / static-topology-verifier — static topology (relations)
- * - package-module-fixer / package-module-verifier — dynamic topology (containment)
+ * - package-module-fixer / package-module-verifier — static topology (containment)
  * - dynamic-topology-verifier — dynamic topology (process)
  * - none — report only; human edit or not yet wired (e.g. package-layer checks)
  */
@@ -20,8 +19,6 @@ export type RemediationLane =
   | 'deterministic'
   | 'construct-fixer'
   | 'construct-verifier'
-  | 'static-topology-fixer'
-  | 'static-topology-verifier'
   | 'package-module-fixer'
   | 'package-module-verifier'
   | 'dynamic-topology-verifier'
@@ -258,8 +255,6 @@ export type MaintenanceAgent = {
   id:
     | 'construct-fixer'
     | 'construct-verifier'
-    | 'static-topology-fixer'
-    | 'static-topology-verifier'
     | 'package-module-fixer'
     | 'package-module-verifier'
     | 'dynamic-topology-verifier'
@@ -361,120 +356,6 @@ export const MAINTENANCE_AGENTS: MaintenanceAgent[] = [
   },
 ]
 
-export const TOPOLOGY_MAINTENANCE_AGENTS: MaintenanceAgent[] = [
-  {
-    id: 'static-topology-fixer',
-    name: 'static-topology-fixer',
-    runsOn: 'Broken relation endpoints (after construct issues are clear)',
-    summary:
-      'Topology hard failures only. Proposes drop or retarget for topology_broken_endpoint; you confirm. Ignores unconfirmed claims and construct findings.',
-    reviews: [
-      {
-        tag: 'broken relation endpoints',
-        meaning:
-          'from or to no longer resolves to a component — deleted, renamed, or replaced without updating relations[].',
-        outcome: 'issue',
-      },
-    ],
-    remediations: [
-      {
-        tag: 'relation deleted',
-        meaning: 'Drop the stale relations[] item when the claim is obsolete.',
-      },
-      {
-        tag: 'endpoint retargeted',
-        meaning:
-          'Propose from/to to a surviving component id after rename or replacement.',
-      },
-    ],
-  },
-  {
-    id: 'static-topology-verifier',
-    name: 'static-topology-verifier',
-    runsOn: 'Relation unconfirmed (after construct unconfirmed are clear)',
-    summary:
-      'Relation unconfirmed only. Prefer relation augmentation when the claim is intentional but Graphify is thin; propose drop/retarget only when source shows the typed claim is wrong.',
-    reviews: [
-      {
-        tag: 'relation unconfirmed',
-        meaning:
-          'Endpoints exist but Graphify did not corroborate the relationType (or cache/anchor unavailable).',
-        outcome: 'gap',
-      },
-    ],
-    remediations: [
-      {
-        tag: 'relation confirmed (augmented)',
-        meaning:
-          'Propose an augmentation that corroborates the relation. Accept writes the augmentation store — next audit treats it as confirmed (does not change model JSON).',
-      },
-      {
-        tag: 'stale claim dropped',
-        meaning: 'Delete the relation when source clearly no longer supports it.',
-      },
-      {
-        tag: 'claim corrected',
-        meaning: 'Retarget endpoints or change relationType when the label is wrong.',
-      },
-    ],
-  },
-]
-
-export const TOPOLOGY_MECHANICAL_CASES: AuditCase[] = [
-  {
-    example: 'endpoints present',
-    meaning:
-      'Relation from/to both resolve to components in the model. Required before soft Graphify corroboration.',
-    outcome: 'pass',
-    remediation: 'none',
-    snippet: `{
-  "id": "e-ref-xyflow",
-  "from": "component-node",
-  "to": "xyflow",
-  "relationType": "method"
-}
-// both component-node and xyflow exist in components[]`,
-  },
-  {
-    example: 'broken relation endpoints',
-    meaning:
-      'from or to names a component that was deleted or renamed. Audit issue (topology_broken_endpoint). static-topology-fixer proposes drop or retarget.',
-    outcome: 'issue',
-    remediation: 'static-topology-fixer',
-    snippet: `{
-  "id": "e-stale",
-  "from": "session-reader",
-  "to": "old-parser",   // ← id removed from components[]
-  "relationType": "method"
-}`,
-  },
-  {
-    example: 'relation corroborated',
-    meaning:
-      'Graphify has a matching edge for this relationType between exact anchors. Soft pass — method, extends/inherits, implements, mixes_in. Externals have no anchor and are never soft-confirmed; they are a gap for the agent to review. Also pass when an accepted relation augmentation confirmed the claim.',
-    outcome: 'pass',
-    remediation: 'none',
-    snippet: `// model
-{ "from": "SessionStore", "to": "write", "relationType": "method" }
-
-// Graphify:
-//   SessionStore  --method-->  write()
-// — or accepted relation augmentation`,
-  },
-  {
-    example: 'relation unconfirmed',
-    meaning:
-      'No Graphify edge (or cache/anchor unavailable). Unconfirmed (topology_relation_unconfirmed) — never a hard fail. static-topology-verifier proposes a relation augmentation when source supports the claim; drop/retarget when the claim is wrong.',
-    outcome: 'gap',
-    remediation: 'static-topology-verifier',
-    snippet: `// model claims:
-{ "from": "Child", "to": "Parent", "relationType": "extends" }
-
-// Graphify has no inherits edge between anchors
-// → gap, not issue — augment if intentional`,
-  },
-]
-
 /**
  * Package (purl / discovery) + module (source-file) membership — finer grains
  * of the same idea. Package frames from multi-repo purls; module frames from
@@ -556,7 +437,7 @@ export const MODULE_MEMBERSHIP_AGENTS: MaintenanceAgent[] = [
     name: 'package-module-fixer',
     runsOn: 'Module membership issues (after construct issues are clear)',
     summary:
-      'Hard containment failures only — module without file. Dynamic topology (package/module), not process. Proposes file/module corrections; you confirm.',
+      'Hard containment failures only — module without file. Static topology (package/module), not process. Proposes file/module corrections; you confirm.',
     reviews: [
       {
         tag: 'module without file',
@@ -581,7 +462,7 @@ export const MODULE_MEMBERSHIP_AGENTS: MaintenanceAgent[] = [
     name: 'package-module-verifier',
     runsOn: 'Module membership unconfirmed',
     summary:
-      'Module containment unconfirmed (module≠file): prefer module augmentation when intentional; set module to file when it was a slip. Dynamic topology (containment), not process.',
+      'Module containment unconfirmed (module≠file): prefer module augmentation when intentional; set module to file when it was a slip. Static topology (containment), not process.',
     reviews: [
       {
         tag: 'module ≠ file',
@@ -637,7 +518,7 @@ export const WALKTHROUGH_MECHANICAL_CASES: AuditCase[] = [
   {
     example: 'broken hop endpoints',
     meaning:
-      'Step from/to names a component that was deleted or renamed. Can appear after nodes change without updating walkthroughs. Display edges for hops are derived — they do not depend on topology relations.',
+      'Step from/to names a component that was deleted or renamed. Can appear after nodes change without updating walkthroughs. Display edges for hops are derived — they stand on their own.',
     outcome: 'issue',
     remediation: 'none',
   },
@@ -658,43 +539,8 @@ export type CatalogEntry = {
 }
 
 /**
- * Topology `relationType` catalogue — structural / module / type claims on
- * relations[]. No file:line site required.
- */
-export const RELATION_TYPE_CATALOG: CatalogEntry[] = [
-  {
-    label: 'method',
-    meaning: 'from is a class (or owner) and to is one of its methods as a separate node.',
-    example: `class SessionStore {
-  write(id: string) { … }
-}`,
-  },
-  {
-    label: 'extends / inherits',
-    meaning: 'Inheritance: from extends or inherits from to.',
-    example: `class FileSessionStore extends SessionStore {
-  …
-}`,
-  },
-  {
-    label: 'implements',
-    meaning: 'from implements interface to.',
-    example: `class FileSessionStore implements SessionStore {
-  …
-}`,
-  },
-  {
-    label: 'mixes_in',
-    meaning: 'from mixes in behavior from to.',
-    example: `class Panel {
-  … // mixes in Disposable
-}`,
-  },
-]
-
-/**
  * Walkthrough hop `mechanism` catalogue — runtime seams with a file:line
- * site. Topology relationType labels do not belong on hops.
+ * site. Topology labels do not belong on hops.
  */
 export const WALKTHROUGH_MECHANISM_CATALOG: CatalogEntry[] = [
   {
@@ -771,8 +617,6 @@ const REMEDIATION_LABEL: Record<RemediationLane, string> = {
   deterministic: 'Apply',
   'construct-fixer': 'construct-fixer',
   'construct-verifier': 'construct-verifier',
-  'static-topology-fixer': 'static-topology-fixer',
-  'static-topology-verifier': 'static-topology-verifier',
   'package-module-fixer': 'package-module-fixer',
   'package-module-verifier': 'package-module-verifier',
   'dynamic-topology-verifier': 'dynamic-topology-verifier',

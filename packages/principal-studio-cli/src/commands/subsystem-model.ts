@@ -186,7 +186,6 @@ async function createAction(options: {
       title: body['title'] as string,
       description: typeof body['description'] === 'string' ? body['description'] : undefined,
       components: body['components'] as unknown[],
-      relations: body['relations'] as unknown[],
       walkthroughs: Array.isArray(body['walkthroughs']) ? body['walkthroughs'] : undefined,
     });
   }

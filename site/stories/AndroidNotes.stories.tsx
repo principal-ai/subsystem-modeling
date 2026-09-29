@@ -13,7 +13,6 @@ function AndroidNotesDemo() {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={model.components}
-        relations={model.relations}
         walkthroughs={model.walkthroughs}
         title={model.title}
         description={model.description}

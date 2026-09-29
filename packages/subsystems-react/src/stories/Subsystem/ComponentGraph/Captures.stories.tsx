@@ -5,7 +5,7 @@ import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import type { SubsystemComponent, SubsystemComponentEdge } from '../../../subsystem/model';
 import type { GraphifyComponentDetail } from '../../../graphify';
-import { components, graphSpecFromEdges, readerDetail, investigateOnlyComponents, investigateOnlyRelations, investigateOnlyWalkthroughs } from './fixtures';
+import { components, graphSpecFromHops, readerDetail, investigateOnlyComponents, investigateOnlyWalkthroughs } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Captures',
@@ -37,15 +37,15 @@ const v2ReaderComponents = components([
   ['registry', 'supported-agents', 'function', 'supported-agents.ts', 'pkg:github/principal-ai/agent-monitoring', 'registry of supported agents (the shared seam)', 'registerAgent'],
 ]);
 
-const v2ReaderEdges = graphSpecFromEdges([
-  ['transcript', 'reader', 'method'],
-  ['paths', 'reader', 'method'],
+const v2ReaderEdges = graphSpecFromHops([
+  ['transcript', 'reader', 'calls'],
+  ['paths', 'reader', 'uses'],
   ['capture', 'reader', 'calls'],
-  ['reader', 'registry', 'registers-into', ['supported-agents.ts']],
+  ['reader', 'registry', 'registers-into'],
   // Consumer packages - cross-package edges leave the subgraph
-  ['reader', 'principal-studio-host', 'method'],
-  ['reader', 'core-sessions', 'method'],
-  ['reader', 'cli-session', 'method'],
+  ['reader', 'principal-studio-host', 'calls'],
+  ['reader', 'core-sessions', 'uses'],
+  ['reader', 'cli-session', 'uses'],
 ]);
 
 function V2ReaderDemo() {
@@ -55,7 +55,7 @@ function V2ReaderDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={v2ReaderComponents}
-        relations={v2ReaderEdges.relations} walkthroughs={v2ReaderEdges.walkthroughs}
+        walkthroughs={v2ReaderEdges.walkthroughs}
         onSelect={(id) => setSelected(id)}
         onEdgeSelect={(e) => setSelectedEdge(e)}
       />
@@ -80,7 +80,7 @@ export const V2ReaderSubsystem: Story = {
 export const InvestigateOnly: Story = {
   render: () => (
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <SubsystemComponentGraph components={investigateOnlyComponents} relations={investigateOnlyRelations} walkthroughs={investigateOnlyWalkthroughs} />
+      <SubsystemComponentGraph components={investigateOnlyComponents} walkthroughs={investigateOnlyWalkthroughs} />
     </div>
   ),
 };
@@ -98,10 +98,10 @@ const minimalComponents = components([
   ['transcript', 'transcript', 'function', 'transcript.ts', 'pkg:github/principal-ai/agent-monitoring', 'parses session records + type guards', 'transcript'],
 ]);
 
-const sharedEdges = graphSpecFromEdges([
-  ['transcript', 'record', 'method'],
-  ['reader', 'normalize', 'method'],
-  ['normalize', 'record', 'method'],
+const sharedEdges = graphSpecFromHops([
+  ['transcript', 'record', 'uses'],
+  ['reader', 'normalize', 'calls'],
+  ['normalize', 'record', 'uses'],
 ]);
 
 /** The same subsystem after `resolveSubsystemToGraphify` populates `detail`. */
@@ -137,7 +137,7 @@ function MinimalVsResolvedDemo({ resolved }: { resolved: boolean }) {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={resolved ? resolvedComponents : minimalComponents}
-        relations={sharedEdges.relations} walkthroughs={sharedEdges.walkthroughs}
+        walkthroughs={sharedEdges.walkthroughs}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -191,10 +191,10 @@ const investigationComponents: SubsystemComponent[] = [
   },
 ];
 
-const investigationEdges = graphSpecFromEdges([
-  ['adapter', 'contracts', 'method'],
+const investigationEdges = graphSpecFromHops([
+  ['adapter', 'contracts', 'uses'],
   ['ingestion', 'adapter', 'uses'],
-  ['ingestion', 'contracts', 'method'],
+  ['ingestion', 'contracts', 'uses'],
 ]);
 
 function InvestigationDemo() {
@@ -203,7 +203,7 @@ function InvestigationDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={investigationComponents}
-        relations={investigationEdges.relations} walkthroughs={investigationEdges.walkthroughs}
+        walkthroughs={investigationEdges.walkthroughs}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>

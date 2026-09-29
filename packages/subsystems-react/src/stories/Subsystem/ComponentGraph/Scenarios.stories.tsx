@@ -9,7 +9,7 @@ import type {
   SubsystemModelDocument,
 } from '../../../subsystem/model';
 import type { GraphifyComponentDetail } from '../../../graphify';
-import { components, graphSpecFromEdges, relations } from './fixtures';
+import { components, graphSpecFromHops } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Scenarios',
@@ -92,11 +92,11 @@ const mermaidComponents: SubsystemComponent[] = [
   },
 ];
 
-const mermaidEdges = graphSpecFromEdges([
+const mermaidEdges = graphSpecFromHops([
   ['input', 'slide', 'feeds'],
   ['slide', 'chunk', 'produces'],
   ['chunk', 'lazy', 'feeds'],
-  ['lazy', 'diagram', 'wraps'],
+  ['lazy', 'diagram', 'uses'],
   ['diagram', 'helpers', 'uses'],
 ]);
 
@@ -106,7 +106,7 @@ function MermaidDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={mermaidComponents}
-        relations={mermaidEdges.relations} walkthroughs={mermaidEdges.walkthroughs}
+        walkthroughs={mermaidEdges.walkthroughs}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -137,10 +137,10 @@ const multiRepoComponents = components([
   ['rewire', 'extract.py', 'function', 'graphify/extract.py', graphifyPurl, 'corpus pass folding unique-label stubs onto definitions', '_rewire_unique_stub_nodes'],
 ]);
 
-const multiRepoEdges = graphSpecFromEdges([
-  ['detail', 'reftypes', 'method'],
-  ['resolver', 'reftypes', 'method'],
-  ['resolver', 'engine', 'method'],
+const multiRepoEdges = graphSpecFromHops([
+  ['detail', 'reftypes', 'uses'],
+  ['resolver', 'reftypes', 'uses'],
+  ['resolver', 'engine', 'calls'],
   ['rewire', 'resolver', 'calls'],
 ]);
 
@@ -151,7 +151,7 @@ function MultiRepoDemo() {
         title="Type-ref resolution across repos"
         description="Two repos → two file trees. Each tree is scoped to its repo's files and headed by the owner avatar + repo name. Cross-repo edges land on external stubs."
         components={multiRepoComponents}
-        relations={multiRepoEdges.relations} walkthroughs={multiRepoEdges.walkthroughs}
+        walkthroughs={multiRepoEdges.walkthroughs}
       />
     </div>
   );
@@ -354,7 +354,7 @@ const accessSurfaceComponents: SubsystemComponent[] = [
   },
 ];
 
-const accessSurfaceEdges = graphSpecFromEdges([
+const accessSurfaceEdges = graphSpecFromHops([
   ['agents', 'http-entry', 'calls'],
   ['http-entry', 'create', 'calls'],
   ['http-entry', 'update', 'calls'],
@@ -384,7 +384,7 @@ function AccessSurfacesDemo() {
         title="Access surfaces, roles, and process boundaries"
         description="Two process regions (host, renderer) + boundary entries; agents and the external service float outside every boundary. Hover for the role badge; click the store to drill into its state-only detail."
         components={accessSurfaceComponents}
-        relations={accessSurfaceEdges.relations} walkthroughs={accessSurfaceEdges.walkthroughs}
+        walkthroughs={accessSurfaceEdges.walkthroughs}
         onSelect={(id) => setSelected(id)}
         onEdgeSelect={(e) => setSelectedEdge(e)}
       />
@@ -534,7 +534,7 @@ const storeFlavorComponents: SubsystemComponent[] = [
   },
 ];
 
-const storeFlavorEdges = graphSpecFromEdges([
+const storeFlavorEdges = graphSpecFromHops([
   ['f1-create', 'f1-store', 'writes'],
   ['f1-get', 'f1-store', 'reads'],
   ['f2-cache', 'f2-store', 'writes'],
@@ -549,7 +549,7 @@ function StoreFlavorsDemo() {
         title="Store flavors"
         description="construct:= the node's verifiable anchor. Class-managed stores are TWO nodes: the manager class (declaration, methods) + the state (store block). Click any node to see its anchor-honest drill-down."
         components={storeFlavorComponents}
-        relations={storeFlavorEdges.relations} walkthroughs={storeFlavorEdges.walkthroughs}
+        walkthroughs={storeFlavorEdges.walkthroughs}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -637,7 +637,7 @@ const sharedStoreComponents: SubsystemComponent[] = [
   },
 ];
 
-const sharedStoreEdges = graphSpecFromEdges([
+const sharedStoreEdges = graphSpecFromHops([
   ['ss-load', 'ss-store', 'reads'],
   ['ss-save', 'ss-store', 'writes'],
   ['ss-watch', 'ss-store', 'watches'],
@@ -652,7 +652,7 @@ function SharedStoreDemo() {
         title="Shared store across processes"
         description="A store with no process sits outside every boundary; accessors from both processes reach across to it."
         components={sharedStoreComponents}
-        relations={sharedStoreEdges.relations} walkthroughs={sharedStoreEdges.walkthroughs}
+        walkthroughs={sharedStoreEdges.walkthroughs}
         onEdgeSelect={(e) => setSelectedEdge(e)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -919,7 +919,7 @@ const storeSpectrumComponents: SubsystemComponent[] = [
   },
 ];
 
-const storeSpectrumEdges = graphSpecFromEdges([
+const storeSpectrumEdges = graphSpecFromHops([
   ['load', 'db', 'reads'],
   ['create', 'graph-store', 'writes'],
   ['cache', 'cache-state', 'writes'],
@@ -938,7 +938,7 @@ function StoreStateSpectrumDemo() {
         title="State → Store spectrum, all modeled as store"
         description="Every holder here claims construct: 'store' (state-block anatomy). They differ only in what they hold and how long it lives. Which ones do you call a store? Where is the cut?"
         components={storeSpectrumComponents}
-        relations={storeSpectrumEdges.relations} walkthroughs={storeSpectrumEdges.walkthroughs}
+        walkthroughs={storeSpectrumEdges.walkthroughs}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -1114,12 +1114,12 @@ const typeSpectrumComponents: SubsystemComponent[] = [
   },
 ];
 
-const typeSpectrumEdges = graphSpecFromEdges([
+const typeSpectrumEdges = graphSpecFromHops([
   ['listener', 'subscriber', 'uses'],
-  ['subscriber', 'messages', 'method'],
+  ['subscriber', 'messages', 'uses'],
   ['state', 'listener', 'feeds'],
-  ['deep', 'record', 'method'],
-  ['rows', 'record', 'method'],
+  ['deep', 'record', 'uses'],
+  ['rows', 'record', 'uses'],
 ]);
 
 function TypeFamilySpectrumDemo() {
@@ -1130,7 +1130,7 @@ function TypeFamilySpectrumDemo() {
         title="Type-family — what a type can hold"
         description="Structured buckets: callable signature (generics + params), interface properties, enum members, union, plain alias reference. `rhs` = verbatim escape hatch for shapes that don't fit (mapped/conditional/template-literal). Click each to see the declaration."
         components={typeSpectrumComponents}
-        relations={typeSpectrumEdges.relations} walkthroughs={typeSpectrumEdges.walkthroughs}
+        walkthroughs={typeSpectrumEdges.walkthroughs}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -1209,7 +1209,7 @@ const queueComponents: SubsystemComponent[] = [
   },
 ];
 
-const queueEdges = graphSpecFromEdges([
+const queueEdges = graphSpecFromHops([
   ['q-producer', 'q-queue', 'writes'],
   ['q-worker', 'q-queue', 'reads'],
   ['q-worker', 'q-results', 'writes'],
@@ -1223,7 +1223,7 @@ function QueueAsStoreDemo() {
         title="Queue as store"
         description="Ordered retained state. Stores as pipeline stages: producer writes the queue, the worker reads it and writes results."
         components={queueComponents}
-        relations={queueEdges.relations} walkthroughs={queueEdges.walkthroughs}
+        walkthroughs={queueEdges.walkthroughs}
         onEdgeSelect={(e) => setSelectedEdge(e)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -1343,7 +1343,6 @@ const dataVizDoc: SubsystemModelDocument = {
       },
     },
   ],
-  relations: [],
   walkthroughs: [
     {
       id: 'data-viz-hops',
@@ -1369,8 +1368,8 @@ function DataVsVisualizationDemo() {
     setText(next);
     try {
       const parsed = JSON.parse(next) as SubsystemModelDocument;
-      if (!Array.isArray(parsed.components) || !Array.isArray(parsed.relations)) {
-        throw new Error('document needs `components` and `relations` arrays');
+      if (!Array.isArray(parsed.components)) {
+        throw new Error('document needs a `components` array');
       }
       setDoc(parsed);
       setError(null);
@@ -1431,7 +1430,6 @@ function DataVsVisualizationDemo() {
           title="the visualization"
           description="Same document, rendered: construct:→ node anatomy, role → topology glyph, process → boundary region, mechanism → edge color/style."
           components={doc.components}
-          relations={doc.relations}
           walkthroughs={doc.walkthroughs}
         />
       </div>

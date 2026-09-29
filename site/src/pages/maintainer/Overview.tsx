@@ -18,12 +18,11 @@ export function MaintainerOverview() {
         </p>
         <p>
           <strong>Static topology</strong> is how constructs are arranged in
-          source: how they relate to other constructs (<em>relations[]</em>).
+          source: package and <em>module</em> containment.
         </p>
         <p>
           <strong>Dynamic topology</strong> is how constructs are arranged at
-          runtime: deployment-unit membership (<em>process</em>) and containment
-          (package / <em>module</em>).
+          runtime: deployment-unit membership (<em>process</em>).
         </p>
         <p>
           <strong>Walkthrough</strong> is the content necessary to help

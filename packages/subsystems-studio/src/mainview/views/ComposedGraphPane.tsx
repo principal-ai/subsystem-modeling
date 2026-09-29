@@ -16,7 +16,6 @@ import type {
 	MergeSidecar,
 	SubsystemComponent,
 	SubsystemModelSummary,
-	SubsystemRelation,
 	SubsystemWalkthrough,
 } from "../../shared/contract";
 import { electrobun } from "../rpc";
@@ -26,7 +25,6 @@ interface ComposedDocument {
 	title: string;
 	description?: string;
 	components: SubsystemComponent[];
-	relations: SubsystemRelation[];
 	walkthroughs?: SubsystemWalkthrough[];
 }
 

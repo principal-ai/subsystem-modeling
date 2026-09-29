@@ -11,7 +11,6 @@ import { useTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '@principal-ai/subsystems-react/dist/subsystem/SubsystemComponentGraph.js';
 import type {
   SubsystemComponent,
-  SubsystemRelation,
   SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
 
@@ -21,7 +20,6 @@ export interface SubsystemCarouselItem {
   stack?: string;
   complexity?: 'low' | 'medium' | 'high';
   components: SubsystemComponent[];
-  relations: SubsystemRelation[];
   walkthroughs?: SubsystemWalkthrough[];
 }
 
@@ -152,7 +150,6 @@ export function SubsystemCarousel({
           <SubsystemComponentGraph
             key={selected.id}
             components={selected.components}
-            relations={selected.relations}
             walkthroughs={selected.walkthroughs}
             title={selected.title}
             hideSidebar

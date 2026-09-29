@@ -18,7 +18,6 @@ describe("toPortableDocument", () => {
 		const portable = toPortableDocument({
 			title: "t",
 			components: [],
-			relations: [],
 			createdAtCommits: { "pkg:github/a/b": "abc" },
 			verifiedAtCommits: { "pkg:github/a/b": "def" },
 		} as unknown as Parameters<typeof toPortableDocument>[0]);
@@ -30,7 +29,6 @@ describe("toPortableDocument", () => {
 		const portable = toPortableDocument({
 			title: "t",
 			components: [],
-			relations: [],
 			id: "sg-1",
 			createdAt: "now",
 			verification: {},

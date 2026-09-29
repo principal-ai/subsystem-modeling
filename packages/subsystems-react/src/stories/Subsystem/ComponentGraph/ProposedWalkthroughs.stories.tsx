@@ -151,7 +151,6 @@ function ProposedWalkthroughsDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={components}
-        relations={[]}
         walkthroughs={walkthroughs}
         title="proposed-work marker"
         description="Walkthroughs that touch a **proposed** component get their title tinted darkgoldenrod in the flows panel; expand a row and each hop onto a proposed component is tinted too (index and title). Nodes for proposed components already draw dashed darkgoldenrod on the canvas."

@@ -137,7 +137,6 @@ function ReorderGraphDemo() {
       <div style={{ flex: 1, minHeight: 0 }}>
         <SubsystemComponentGraph
           components={components}
-          relations={[]}
           walkthroughs={walkthroughs}
           onReorderWalkthroughs={onReorder}
           title="drawing-files flows"

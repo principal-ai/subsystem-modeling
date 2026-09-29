@@ -7,7 +7,7 @@ import {
   SubsystemDiagnosticToggle,
   type SubsystemDiagnosticStatus,
 } from '../../../subsystem/DiagnosticToggle';
-import { components, graphSpecFromEdges } from './fixtures';
+import { components, graphSpecFromHops } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Diagnostics',
@@ -34,7 +34,7 @@ const graphComponents = components([
   ['caller', 'Web client', 'external', '', 'external', undefined, undefined],
 ]);
 
-const graphEdges = graphSpecFromEdges([
+const graphEdges = graphSpecFromHops([
   ['caller', 'entry', 'calls'],
   ['entry', 'store', 'writes'],
   ['entry', 'stripe', 'calls'],
@@ -81,7 +81,6 @@ export const GraphClean: Story = {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={graphComponents}
-        relations={graphEdges.relations}
         walkthroughs={graphEdges.walkthroughs}
         title="Checkout"
         description={GRAPH_DESCRIPTION}
@@ -96,7 +95,6 @@ export const GraphWithIssues: Story = {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={graphComponents}
-        relations={graphEdges.relations}
         walkthroughs={graphEdges.walkthroughs}
         title="Checkout"
         description={GRAPH_DESCRIPTION}
@@ -112,7 +110,6 @@ export const GraphStale: Story = {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={graphComponents}
-        relations={graphEdges.relations}
         walkthroughs={graphEdges.walkthroughs}
         title="Checkout"
         description={GRAPH_DESCRIPTION}
@@ -128,7 +125,6 @@ export const GraphChipOnly: Story = {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={graphComponents}
-        relations={graphEdges.relations}
         walkthroughs={graphEdges.walkthroughs}
         title="Checkout"
         diagnostic={{ status: 'gaps', issueCount: 2, onToggle: () => {} }}

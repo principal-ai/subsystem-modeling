@@ -23,8 +23,6 @@ import type {
 	SubsystemDeclarationRef,
 	SubsystemEdgeMechanism,
 	SubsystemModelDocument,
-	SubsystemRelation,
-	SubsystemRelationType,
 	SubsystemWalkthrough,
 	SubsystemWalkthroughMechanism,
 	SubsystemWalkthroughStep,
@@ -38,8 +36,6 @@ export type {
 	SubsystemComponentEdge,
 	SubsystemModelDocument,
 	SubsystemEdgeMechanism,
-	SubsystemRelation,
-	SubsystemRelationType,
 	SubsystemWalkthrough,
 	SubsystemWalkthroughMechanism,
 	SubsystemWalkthroughStep,
@@ -211,7 +207,6 @@ export interface StoredSubsystemModel {
 	title: string;
 	description?: string;
 	components: SubsystemComponent[];
-	relations: SubsystemRelation[];
 	/** Ordered runtime walkthroughs (one per flow). */
 	walkthroughs?: SubsystemWalkthrough[];
 	createdAt: string;
@@ -481,9 +476,6 @@ export type SubsystemModelAuditFindingKind =
 	| "signature_unconfirmed"
 	| "repo_unresolved"
 	| "graphify_unavailable"
-	| "topology_broken_endpoint"
-	| "topology_import_unconfirmed"
-	| "topology_relation_unconfirmed"
 	| "boundary_module_file_mismatch"
 	| "boundary_process_nest_disagree";
 
@@ -519,8 +511,6 @@ export interface SubsystemModelAuditFinding {
 	severity: SubsystemModelAuditSeverity;
 	componentAlias?: string;
 	componentName?: string;
-	/** Topology relation id when the finding is about relations[]. */
-	relationId?: string;
 	/** Module frame key when the finding is about boundary membership. */
 	moduleKey?: string;
 	/** Repo purl when the finding is graph-level, about a repo rather than a node. */
@@ -577,17 +567,6 @@ export interface SubsystemModelAuditCheck {
 	note?: string;
 }
 
-/** Per-relation checklist from the topology audit pass. */
-export interface SubsystemModelAuditTopologyCheck {
-	relationId: string;
-	relationType: string;
-	from: string;
-	to: string;
-	graphify: "confirmed" | "unconfirmed" | "unavailable" | "skipped" | "n/a";
-	verdict: "ok" | "issue" | "gap" | "skipped";
-	note?: string;
-}
-
 /** Per-component / per-module boundary membership check (process / module). */
 export interface SubsystemModelAuditBoundaryCheck {
 	componentAlias: string;
@@ -626,13 +605,6 @@ export interface SubsystemModelAuditReport {
 		weakAnchors: number;
 		unresolved: number;
 		ok: number;
-		/** Topology relations inspected. */
-		relations: number;
-		/** Soft Graphify corroboration attempts (method/inherits/references/…). */
-		softChecked: number;
-		softConfirmed: number;
-		softUnconfirmed: number;
-		brokenRelationEndpoints: number;
 		/** Boundary (process/module) membership. */
 		modulesClaimed: number;
 		moduleFileOk: number;
@@ -643,8 +615,6 @@ export interface SubsystemModelAuditReport {
 	};
 	/** What was inspected, one row per component — shown even when clean. */
 	checks: SubsystemModelAuditCheck[];
-	/** Topology relation checks (Layer 2). */
-	topologyChecks?: SubsystemModelAuditTopologyCheck[];
 	/** Boundary membership checks (process / module). */
 	boundaryChecks?: SubsystemModelAuditBoundaryCheck[];
 	findings: SubsystemModelAuditFinding[];
@@ -733,11 +703,9 @@ export interface MaintenanceOverviewModel {
 	nextRoute?: {
 		agent:
 			| "construct-verifier"
-			| "static-topology-verifier"
 			| "package-module-verifier"
 			| "runtime-topology-verifier"
 			| "construct-fixer"
-			| "static-topology-fixer"
 			| "package-module-fixer";
 		layer: "construct" | "static-topology" | "dynamic-topology";
 		mode: "issues" | "verify";
@@ -929,31 +897,6 @@ export type SubsystemModelProposalChange =
 			value: string | null;
 			/** 1-based inclusive span of the declaration read from source. */
 			lines: SubsystemDeclarationSpan;
-	  }
-	| {
-			/**
-			 * Confirm a topology relation claim when Graphify left the edge thin.
-			 * Accept writes the augmentation store — does not change model JSON.
-			 * Defaults (from/to file#symbol, relationType) come from the relation.
-			 */
-			target: "augmentation";
-			field: "relation";
-			relationId: string;
-			value: true;
-	  }
-	| {
-			/** Retarget a topology relation endpoint or type. */
-			target: "relation";
-			relationId: string;
-			field: "from" | "to" | "relationType";
-			value: string;
-	  }
-	| {
-			/** Drop a topology relation (e.g. broken endpoints). */
-			target: "relation";
-			relationId: string;
-			field: "delete";
-			value: true;
 	  };
 
 export type SubsystemModelProposalStatus = "pending" | "accepted" | "rejected";
@@ -1011,8 +954,8 @@ export interface SubsystemModelSecondOpinionRequest {
 /**
  * Verification lane a proposal belongs to — the four layers of the model:
  * construct (L1), static topology (L2), dynamic topology (L3), walkthrough (L4).
- * Static topology = relations[]; dynamic topology = process (runtime) +
- * package/module (containment). Derived from the proposal's changes
+ * Static topology = package/module (containment); dynamic topology = process
+ * (runtime). Derived from the proposal's changes
  * (+ finding kind) at creation.
  */
 export type SubsystemVerificationLane =
@@ -1039,7 +982,6 @@ export interface SubsystemModelProposal {
 		severity?: string;
 		componentAlias?: string;
 		componentName?: string;
-		relationId?: string;
 		walkthroughId?: string;
 		step?: number;
 		message?: string;
@@ -1495,7 +1437,6 @@ export type StudioRequests = {
 				title: string;
 				description?: string;
 				components: SubsystemComponent[];
-				relations: SubsystemRelation[];
 				walkthroughs?: SubsystemWalkthrough[];
 			};
 			sidecar?: MergeSidecar;
@@ -1740,10 +1681,9 @@ export type StudioRequests = {
 	};
 	/**
 	 * Start a background Maintain OpenCode run for this model.
-	 * Host re-audits and routes: construct issues → construct-fixer, broken
-	 * relation endpoints → static-topology-fixer, package/module issues →
-	 * package-module-fixer; unconfirmed claims → construct-verifier,
-	 * static-topology-verifier, package-module-verifier, or
+	 * Host re-audits and routes: construct issues → construct-fixer,
+	 * package/module containment issues → package-module-fixer; unconfirmed
+	 * claims → construct-verifier, package-module-verifier, or
 	 * runtime-topology-verifier; fully_verified → no-op.
 	 * Progress via `subsystemModelMaintainChanged`. Does not auto-accept
 	 * proposals.
@@ -2186,11 +2126,9 @@ export type StudioMessages = {
 		/** Which Maintain agent ran (or was selected). */
 		agent?:
 			| "construct-verifier"
-			| "static-topology-verifier"
 			| "package-module-verifier"
 			| "runtime-topology-verifier"
 			| "construct-fixer"
-			| "static-topology-fixer"
 			| "package-module-fixer";
 		/** True when audit was fully verified and no agent ran. */
 		skipped?: boolean;
@@ -2202,11 +2140,9 @@ export type StudioMessages = {
 		blockedAt?: {
 			agent?:
 				| "construct-verifier"
-				| "static-topology-verifier"
 				| "package-module-verifier"
 				| "runtime-topology-verifier"
 				| "construct-fixer"
-				| "static-topology-fixer"
 				| "package-module-fixer";
 			layer: "construct" | "static-topology" | "dynamic-topology";
 			mode: "issues" | "verify";

@@ -2,15 +2,13 @@
  * Subsystem model Maintain — OpenCode agents that review a deterministic
  * audit and submit correction proposals via Studio HTTP (human confirms).
  *
- * Routes by severity then lane (construct → static topology → package/module →
- * runtime topology):
+ * Routes by severity then lane (hard failures first, then gaps;
+ * construct → static topology → dynamic topology within each tier):
  * - construct issues → construct-fixer
- * - broken relation endpoints → static-topology-fixer
- * - package/module issues → package-module-fixer
+ * - package/module containment issues → package-module-fixer
+ * - package/module containment gaps → package-module-verifier
+ * - process (runtime deployment-unit) gaps → runtime-topology-verifier
  * - construct unconfirmed → construct-verifier
- * - package/module unconfirmed → package-module-verifier
- * - process unconfirmed → runtime-topology-verifier
- * - relation unconfirmed → static-topology-verifier
  * - fully verified → no-op
  *
  * RPC returns immediately; the
@@ -61,20 +59,16 @@ import {
 } from "./subsystem-model-runs";
 
 export const CONSTRUCT_VERIFIER_AGENT = "construct-verifier";
-export const STATIC_TOPOLOGY_VERIFIER_AGENT = "static-topology-verifier";
 export const PACKAGE_MODULE_VERIFIER_AGENT = "package-module-verifier";
 export const RUNTIME_TOPOLOGY_VERIFIER_AGENT = "runtime-topology-verifier";
 export const CONSTRUCT_FIXER_AGENT = "construct-fixer";
-export const STATIC_TOPOLOGY_FIXER_AGENT = "static-topology-fixer";
 export const PACKAGE_MODULE_FIXER_AGENT = "package-module-fixer";
 
 export type MaintainAgentId =
 	| typeof CONSTRUCT_VERIFIER_AGENT
-	| typeof STATIC_TOPOLOGY_VERIFIER_AGENT
 	| typeof PACKAGE_MODULE_VERIFIER_AGENT
 	| typeof RUNTIME_TOPOLOGY_VERIFIER_AGENT
 	| typeof CONSTRUCT_FIXER_AGENT
-	| typeof STATIC_TOPOLOGY_FIXER_AGENT
 	| typeof PACKAGE_MODULE_FIXER_AGENT;
 
 export type MaintainLayer = "construct" | "static-topology" | "dynamic-topology";
@@ -100,12 +94,6 @@ export const CONSTRUCT_FIXER_AGENT_PATH = agentInstallPath(CONSTRUCT_FIXER_AGENT
 export const CONSTRUCT_VERIFIER_AGENT_PATH = agentInstallPath(
 	CONSTRUCT_VERIFIER_AGENT,
 );
-export const STATIC_TOPOLOGY_FIXER_AGENT_PATH = agentInstallPath(
-	STATIC_TOPOLOGY_FIXER_AGENT,
-);
-export const STATIC_TOPOLOGY_VERIFIER_AGENT_PATH = agentInstallPath(
-	STATIC_TOPOLOGY_VERIFIER_AGENT,
-);
 export const PACKAGE_MODULE_FIXER_AGENT_PATH = agentInstallPath(
 	PACKAGE_MODULE_FIXER_AGENT,
 );
@@ -118,12 +106,6 @@ export const RUNTIME_TOPOLOGY_VERIFIER_AGENT_PATH = agentInstallPath(
 
 const CONSTRUCT_FIXER_PACKAGE_PATH = agentPackagePath(CONSTRUCT_FIXER_AGENT);
 const CONSTRUCT_VERIFIER_PACKAGE_PATH = agentPackagePath(CONSTRUCT_VERIFIER_AGENT);
-const STATIC_TOPOLOGY_FIXER_PACKAGE_PATH = agentPackagePath(
-	STATIC_TOPOLOGY_FIXER_AGENT,
-);
-const STATIC_TOPOLOGY_VERIFIER_PACKAGE_PATH = agentPackagePath(
-	STATIC_TOPOLOGY_VERIFIER_AGENT,
-);
 const PACKAGE_MODULE_FIXER_PACKAGE_PATH = agentPackagePath(
 	PACKAGE_MODULE_FIXER_AGENT,
 );
@@ -161,14 +143,6 @@ export interface MaintainModelResult {
 	sessionId?: string;
 }
 
-function isTopologyFindingKind(kind: string | undefined): boolean {
-	return (
-		kind === "topology_broken_endpoint" ||
-		kind === "topology_relation_unconfirmed" ||
-		kind === "topology_import_unconfirmed"
-	);
-}
-
 function isBoundaryFindingKind(kind: string | undefined): boolean {
 	return (
 		kind === "boundary_module_file_mismatch" ||
@@ -182,21 +156,6 @@ function isBoundaryFindingKind(kind: string | undefined): boolean {
  */
 function isAvailabilityFindingKind(kind: string | undefined): boolean {
 	return kind === "repo_unresolved" || kind === "graphify_unavailable";
-}
-
-function isTopologyIssueFinding(
-	f: SubsystemModelAuditReport["findings"][number],
-): boolean {
-	return f.kind === "topology_broken_endpoint";
-}
-
-function isTopologyGapFinding(
-	f: SubsystemModelAuditReport["findings"][number],
-): boolean {
-	return (
-		f.kind === "topology_relation_unconfirmed" ||
-		f.kind === "topology_import_unconfirmed"
-	);
 }
 
 /** Package/module (containment) hard failure — module without a file anchor. */
@@ -223,11 +182,7 @@ function isRuntimeTopologyGapFinding(
 function isConstructIssueFinding(
 	f: SubsystemModelAuditReport["findings"][number],
 ): boolean {
-	if (
-		isTopologyFindingKind(f.kind) ||
-		isBoundaryFindingKind(f.kind) ||
-		isAvailabilityFindingKind(f.kind)
-	)
+	if (isBoundaryFindingKind(f.kind) || isAvailabilityFindingKind(f.kind))
 		return false;
 	return f.severity === "error";
 }
@@ -235,11 +190,7 @@ function isConstructIssueFinding(
 function isConstructGapFinding(
 	f: SubsystemModelAuditReport["findings"][number],
 ): boolean {
-	if (
-		isTopologyFindingKind(f.kind) ||
-		isBoundaryFindingKind(f.kind) ||
-		isAvailabilityFindingKind(f.kind)
-	)
+	if (isBoundaryFindingKind(f.kind) || isAvailabilityFindingKind(f.kind))
 		return false;
 	if (f.severity === "error") return false;
 	return (
@@ -266,14 +217,13 @@ function hasConstructCheckGaps(report: SubsystemModelAuditReport): boolean {
 
 /**
  * Pick the next Maintain agent. Hard failures first, then unconfirmed claims;
- * within each tier: construct → static topology → package/module → runtime
- * topology. Membership (package/module, process) is settled before relations
- * so relation retargets run against a stable component set.
+ * within each tier: construct → static topology (package/module containment) →
+ * dynamic topology (process runtime).
  */
 export function selectMaintainRoute(
 	report: SubsystemModelAuditReport,
 ): MaintainRoute | null {
-	// Hard failures.
+	// Hard failures: construct, then module containment.
 	if (
 		report.findings.some(isConstructIssueFinding) ||
 		hasConstructCheckIssues(report)
@@ -284,31 +234,14 @@ export function selectMaintainRoute(
 			mode: "issues",
 		};
 	}
-	if (report.findings.some(isTopologyIssueFinding)) {
+	if (report.findings.some(isPackageModuleIssueFinding)) {
 		return {
-			agent: STATIC_TOPOLOGY_FIXER_AGENT,
+			agent: PACKAGE_MODULE_FIXER_AGENT,
 			layer: "static-topology",
 			mode: "issues",
 		};
 	}
-	if (report.findings.some(isPackageModuleIssueFinding)) {
-		return {
-			agent: PACKAGE_MODULE_FIXER_AGENT,
-			layer: "dynamic-topology",
-			mode: "issues",
-		};
-	}
-	// Unconfirmed claims.
-	if (
-		report.findings.some(isConstructGapFinding) ||
-		hasConstructCheckGaps(report)
-	) {
-		return {
-			agent: CONSTRUCT_VERIFIER_AGENT,
-			layer: "construct",
-			mode: "verify",
-		};
-	}
+	// Unconfirmed claims: module containment, then process, then construct.
 	if (
 		report.findings.some(isPackageModuleGapFinding) ||
 		report.boundaryChecks?.some(
@@ -317,7 +250,7 @@ export function selectMaintainRoute(
 	) {
 		return {
 			agent: PACKAGE_MODULE_VERIFIER_AGENT,
-			layer: "dynamic-topology",
+			layer: "static-topology",
 			mode: "verify",
 		};
 	}
@@ -334,12 +267,12 @@ export function selectMaintainRoute(
 		};
 	}
 	if (
-		report.findings.some(isTopologyGapFinding) ||
-		report.topologyChecks?.some((c) => c.verdict === "gap")
+		report.findings.some(isConstructGapFinding) ||
+		hasConstructCheckGaps(report)
 	) {
 		return {
-			agent: STATIC_TOPOLOGY_VERIFIER_AGENT,
-			layer: "static-topology",
+			agent: CONSTRUCT_VERIFIER_AGENT,
+			layer: "construct",
 			mode: "verify",
 		};
 	}
@@ -418,16 +351,6 @@ export function ensureMaintainAgentsInstalled(): {
 			"utf8",
 		);
 		writeFileSync(
-			STATIC_TOPOLOGY_FIXER_AGENT_PATH,
-			loadTopologyAgentSource(STATIC_TOPOLOGY_FIXER_PACKAGE_PATH),
-			"utf8",
-		);
-		writeFileSync(
-			STATIC_TOPOLOGY_VERIFIER_AGENT_PATH,
-			loadTopologyAgentSource(STATIC_TOPOLOGY_VERIFIER_PACKAGE_PATH),
-			"utf8",
-		);
-		writeFileSync(
 			PACKAGE_MODULE_FIXER_AGENT_PATH,
 			loadTopologyAgentSource(PACKAGE_MODULE_FIXER_PACKAGE_PATH),
 			"utf8",
@@ -447,8 +370,6 @@ export function ensureMaintainAgentsInstalled(): {
 			paths: [
 				CONSTRUCT_FIXER_AGENT_PATH,
 				CONSTRUCT_VERIFIER_AGENT_PATH,
-				STATIC_TOPOLOGY_FIXER_AGENT_PATH,
-				STATIC_TOPOLOGY_VERIFIER_AGENT_PATH,
 				PACKAGE_MODULE_FIXER_AGENT_PATH,
 				PACKAGE_MODULE_VERIFIER_AGENT_PATH,
 				RUNTIME_TOPOLOGY_VERIFIER_AGENT_PATH,
@@ -485,7 +406,6 @@ function formatFinding(f: SubsystemModelAuditReport["findings"][number]): string
 	const where = [
 		f.componentAlias ? `component=${f.componentAlias}` : null,
 		f.componentName ? `name=${f.componentName}` : null,
-		f.relationId ? `relation=${f.relationId}` : null,
 		f.moduleKey ? `module=${f.moduleKey}` : null,
 		f.walkthroughId ? `walkthrough=${f.walkthroughId}` : null,
 		f.step != null ? `step=${f.step}` : null,
@@ -531,16 +451,6 @@ function formatGapCheck(
 	].filter(Boolean);
 	if (bits.length === 0) return null;
 	return `- ${c.componentName ?? c.componentAlias} (${c.componentAlias}): ${bits.join("; ")}`;
-}
-
-function formatTopologyCheck(
-	c: NonNullable<SubsystemModelAuditReport["topologyChecks"]>[number],
-	mode: MaintainMode | "all",
-): string | null {
-	if (mode === "issues" && c.verdict !== "issue") return null;
-	if (mode === "verify" && c.verdict !== "gap") return null;
-	if (mode === "all" && c.verdict !== "issue" && c.verdict !== "gap") return null;
-	return `- ${c.relationId} (${c.relationType} ${c.from}→${c.to}): ${c.verdict}${c.note ? ` — ${c.note}` : ""}`;
 }
 
 function formatBoundaryCheck(
@@ -596,10 +506,6 @@ function briefTitle(route: MaintainRoute): string {
 			return "# Subsystem model construct-fixer brief";
 		case CONSTRUCT_VERIFIER_AGENT:
 			return "# Subsystem model construct-verifier brief";
-		case STATIC_TOPOLOGY_FIXER_AGENT:
-			return "# Subsystem model static-topology-fixer brief";
-		case STATIC_TOPOLOGY_VERIFIER_AGENT:
-			return "# Subsystem model static-topology-verifier brief";
 		case PACKAGE_MODULE_FIXER_AGENT:
 			return "# Subsystem model package-module-fixer brief";
 		case PACKAGE_MODULE_VERIFIER_AGENT:
@@ -610,12 +516,6 @@ function briefTitle(route: MaintainRoute): string {
 }
 
 function proposeShapeHint(agent: MaintainAgentId): string {
-	if (agent === STATIC_TOPOLOGY_VERIFIER_AGENT) {
-		return `Propose body shape: \`{ "rationale": "…", "author": "${agent}", "finding": { "kind", "relationId", "message" }, "changes": […] }\`. When the claim is intentional but Graphify is thin, use \`{ "target": "augmentation", "field": "relation", "relationId", "value": true }\`. When the claim is wrong, use \`{ "target": "relation", "relationId", "field": "delete"|"from"|"to"|"relationType", "value": … }\`. Do **not** call accept/reject.`;
-	}
-	if (agent === STATIC_TOPOLOGY_FIXER_AGENT) {
-		return `Propose body shape: \`{ "rationale": "…", "author": "${agent}", "finding": { "kind", "relationId", "message" }, "changes": [{ "target": "relation", "relationId", "field": "delete"|"from"|"to"|"relationType", "value": … }] }\`. Do **not** call accept/reject.`;
-	}
 	if (
 		agent === PACKAGE_MODULE_VERIFIER_AGENT ||
 		agent === PACKAGE_MODULE_FIXER_AGENT
@@ -631,19 +531,15 @@ function proposeShapeHint(agent: MaintainAgentId): string {
 function taskBlurb(route: MaintainRoute): string {
 	switch (route.agent) {
 		case CONSTRUCT_FIXER_AGENT:
-			return "Review each **construct issue** finding, investigate the code, and submit proposals via the Access curl commands (Studio HTTP). For construct ≠ inferred / signature mismatch: Graphify is a weak hint — read source; do not auto-adopt inferred; when the model claim is intentional (e.g. `store`), confirm it with a construct augmentation instead of skipping. Ignore unconfirmed, package/module, and static-topology findings. Prefer small proposals. Finish with a short plain-text summary of proposals created and skips.";
+			return "Review each **construct issue** finding, investigate the code, and submit proposals via the Access curl commands (Studio HTTP). For construct ≠ inferred / signature mismatch: Graphify is a weak hint — read source; do not auto-adopt inferred; when the model claim is intentional (e.g. `store`), confirm it with a construct augmentation instead of skipping. Ignore unconfirmed, package/module, and process findings. Prefer small proposals. Finish with a short plain-text summary of proposals created and skips.";
 		case CONSTRUCT_VERIFIER_AGENT:
-			return "Review each **construct unconfirmed** claim, investigate the code, propose safe fills (e.g. construct classification, a store's declared value type, signature) via the Access curl commands (Studio HTTP). Do not chase hard failures, package/module, or static-topology findings. Prefer small proposals. Skip anything you cannot safely fill. Finish with a short plain-text summary of proposals created and skips.";
-		case STATIC_TOPOLOGY_FIXER_AGENT:
-			return "Review each **topology_broken_endpoint**, decide drop vs retarget against surviving component ids, and submit relation proposals via Access curl. Ignore construct/package-module findings and relation soft gaps. Prefer delete when retarget is unclear. Finish with a short plain-text summary.";
-		case STATIC_TOPOLOGY_VERIFIER_AGENT:
-			return "Review each **relation unconfirmed** claim. When source supports the claim (or it is a deliberate external Graphify rarely emits), propose a **relation augmentation**. Propose drop/retarget only when source shows the claim is wrong. Skip only when unsure. Ignore construct/package-module findings and hard topology issues. Finish with a short plain-text summary.";
+			return "Review each **construct unconfirmed** claim, investigate the code, propose safe fills (e.g. construct classification, a store's declared value type, signature) via the Access curl commands (Studio HTTP). Do not chase hard failures, package/module, or process findings. Prefer small proposals. Skip anything you cannot safely fill. Finish with a short plain-text summary of proposals created and skips.";
 		case PACKAGE_MODULE_FIXER_AGENT:
-			return "Review each **package/module hard failure** (a module claim without a file anchor). Propose the corrected `module` (or clear it) via Access curl. Ignore construct/static-topology/runtime findings and soft containment gaps. Finish with a short plain-text summary.";
+			return "Review each **package/module hard failure** (a module claim without a file anchor). Propose the corrected `module` (or clear it) via Access curl. Ignore construct/process findings and soft containment gaps. Finish with a short plain-text summary.";
 		case PACKAGE_MODULE_VERIFIER_AGENT:
-			return "Review each **package/module containment gap**. For an intentional module≠file grouping, propose a **module augmentation**. For an authoring slip, propose a `module` field fix. Skip only when unsure. Ignore construct/static-topology/runtime findings. Finish with a short plain-text summary.";
+			return "Review each **package/module containment gap**. For an intentional module≠file grouping, propose a **module augmentation**. For an authoring slip, propose a `module` field fix. Skip only when unsure. Ignore construct/process findings. Finish with a short plain-text summary.";
 		case RUNTIME_TOPOLOGY_VERIFIER_AGENT:
-			return "Review each **process membership gap** (process nest disagreement). Propose the corrected `process` deployment unit via Access curl. Skip only when unsure. Ignore construct/static-topology/package-module findings. Finish with a short plain-text summary.";
+			return "Review each **process membership gap** (process nest disagreement). Propose the corrected `process` deployment unit via Access curl. Skip only when unsure. Ignore construct/package-module findings. Finish with a short plain-text summary.";
 	}
 }
 
@@ -740,24 +636,12 @@ export function buildMaintainBrief(opts: {
 		for (const r of roots) lines.push(`- ${r}`);
 	}
 
-	if (layer === "static-topology") {
-		lines.push("");
-		lines.push("**Surviving component ids** (retarget targets):");
-		for (const c of graph.components) {
-			lines.push(`- ${c.alias} (${c.name}${c.symbol ? ` · ${c.symbol}` : ""})`);
-		}
-	}
-
 	const findings = report.findings.filter((f) => {
 		switch (agent) {
 			case CONSTRUCT_FIXER_AGENT:
 				return isConstructIssueFinding(f);
 			case CONSTRUCT_VERIFIER_AGENT:
 				return isConstructGapFinding(f);
-			case STATIC_TOPOLOGY_FIXER_AGENT:
-				return isTopologyIssueFinding(f);
-			case STATIC_TOPOLOGY_VERIFIER_AGENT:
-				return isTopologyGapFinding(f);
 			case PACKAGE_MODULE_FIXER_AGENT:
 				return isPackageModuleIssueFinding(f);
 			case PACKAGE_MODULE_VERIFIER_AGENT:
@@ -800,27 +684,29 @@ export function buildMaintainBrief(opts: {
 		}
 	} else if (layer === "static-topology") {
 		lines.push("");
-		lines.push("## Current audit — relation checks");
+		lines.push("## Current audit — package/module checks");
 		lines.push("");
-		const topoLines = (report.topologyChecks ?? [])
-			.map((c) => formatTopologyCheck(c, mode))
+		const moduleLines = (report.boundaryChecks ?? [])
+			.filter((c) => c.kind === "module_file")
+			.map((c) => formatBoundaryCheck(c, mode))
 			.filter(Boolean) as string[];
-		if (topoLines.length === 0) {
+		if (moduleLines.length === 0) {
 			lines.push("(nothing flagged in this mode)");
 		} else {
-			for (const row of topoLines) lines.push(row);
+			for (const row of moduleLines) lines.push(row);
 		}
 	} else {
 		lines.push("");
-		lines.push("## Current audit — package/module & process checks");
+		lines.push("## Current audit — process checks");
 		lines.push("");
-		const boundaryLines = (report.boundaryChecks ?? [])
+		const processLines = (report.boundaryChecks ?? [])
+			.filter((c) => c.kind === "process_nest")
 			.map((c) => formatBoundaryCheck(c, mode))
 			.filter(Boolean) as string[];
-		if (boundaryLines.length === 0) {
+		if (processLines.length === 0) {
 			lines.push("(nothing flagged in this mode)");
 		} else {
-			for (const row of boundaryLines) lines.push(row);
+			for (const row of processLines) lines.push(row);
 		}
 	}
 
@@ -871,9 +757,7 @@ export function buildVerificationBrief(opts: {
 	lines.push(`- **Title**: ${graph.title}`);
 	lines.push(`- **Model id**: ${id}`);
 	if (graph.description) lines.push(`- **Description**: ${graph.description}`);
-	lines.push(
-		`- **Components**: ${graph.components.length} · **Relations**: ${graph.relations.length}`,
-	);
+	lines.push(`- **Components**: ${graph.components.length}`);
 	if (report) {
 		const ledger = summarizeVerification(report);
 		lines.push(`- **Verdict**: ${classifyAuditReport(report)}`);
@@ -885,7 +769,7 @@ export function buildVerificationBrief(opts: {
 			`- **Ledger**: ${ledger.verified} verified · ${ledger.open} open (${ledger.blocking} blocking) · ${ledger.blocked} blocked · ${ledger.na} n/a · coverage ${Math.round(ledger.coverage * 100)}%`,
 		);
 		lines.push(
-			`- **By layer**: construct ${formatLayerCoverage(ledger.byLayer.construct)} · boundary ${formatLayerCoverage(ledger.byLayer.boundary)} · topology ${formatLayerCoverage(ledger.byLayer.topology)}`,
+			`- **By layer**: construct ${formatLayerCoverage(ledger.byLayer.construct)} · boundary ${formatLayerCoverage(ledger.byLayer.boundary)}`,
 		);
 		if (stale) {
 			lines.push(
@@ -939,9 +823,6 @@ export function buildVerificationBrief(opts: {
 	lines.push(
 		`- graphify confirmed: ${report.summary.graphifyConfirmed} · weak anchors: ${report.summary.weakAnchors} · externals skipped: ${report.summary.externalsSkipped} · unresolved: ${report.summary.unresolved}`,
 	);
-	lines.push(
-		`- relations: ${report.summary.relations} · soft checked: ${report.summary.softChecked} · soft confirmed: ${report.summary.softConfirmed} · soft unconfirmed: ${report.summary.softUnconfirmed} · broken endpoints: ${report.summary.brokenRelationEndpoints}`,
-	);
 
 	lines.push("");
 	lines.push("## Findings");
@@ -963,18 +844,6 @@ export function buildVerificationBrief(opts: {
 		lines.push("(nothing flagged)");
 	} else {
 		for (const row of componentChecks) lines.push(row);
-	}
-
-	lines.push("");
-	lines.push("## Relation checks");
-	lines.push("");
-	const topologyLines = (report.topologyChecks ?? [])
-		.map((c) => formatTopologyCheck(c, "all"))
-		.filter(Boolean) as string[];
-	if (topologyLines.length === 0) {
-		lines.push("(nothing flagged)");
-	} else {
-		for (const row of topologyLines) lines.push(row);
 	}
 
 	lines.push("");

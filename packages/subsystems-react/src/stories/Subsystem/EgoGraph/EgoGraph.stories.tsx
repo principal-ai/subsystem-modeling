@@ -275,7 +275,6 @@ function EgoDemo({ category, orderByLine }: { category: Category; orderByLine: b
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={graph.components}
-        relations={[]}
         graphifyRelations={graph.graphifyRelations}
         orderByLine={orderByLine}
         showSingletonFrames
@@ -345,7 +344,6 @@ export const AuthoredConstructs: Story = {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={authoredComponents}
-        relations={[]}
         title="Authored-only constructs"
         description="store / external / custom_entity — reused cast from stored subsystem models (no graphify node, no edges)."
       />

@@ -14,8 +14,13 @@ function comp(alias: string, extra: Partial<SubsystemComponent> = {}): Subsystem
 	};
 }
 
-function doc(partial: Partial<SubsystemModelDocument>): SubsystemModelDocument {
-	return { components: [], relations: [], ...partial };
+type ComposedInput = Pick<
+	SubsystemModelDocument,
+	"components" | "walkthroughs"
+>;
+
+function doc(partial: Partial<ComposedInput>): ComposedInput {
+	return { components: [], ...partial };
 }
 
 describe("aggregateToFrames", () => {
@@ -236,21 +241,16 @@ describe("aggregateToFrames", () => {
 		expect(g.processes).toEqual([]);
 		expect(g.frames).toEqual([]);
 		expect(g.edges).toEqual([]);
-		expect(g.document).toEqual({ components: [], relations: [], walkthroughs: [] });
+		expect(g.document).toEqual({ components: [], walkthroughs: [] });
 	});
 
-	test("document carries frame nodes with rebased relations and walkthroughs", () => {
+	test("document carries frame nodes with rebased walkthroughs", () => {
 		const g = aggregateToFrames(
 			doc({
 				components: [
 					comp("a", { module: "src/a.ts", process: "p1" }),
 					comp("b", { module: "src/b.ts", process: "p1" }),
 					comp("c", { module: "src/a.ts", process: "p1" }),
-				],
-				relations: [
-					{ id: "r1", from: "a", to: "b", relationType: "method" },
-					{ id: "r2", from: "a", to: "c", relationType: "method" },
-					{ id: "r3", from: "a", to: "ghost", relationType: "method" },
 				],
 				walkthroughs: [
 					{
@@ -290,10 +290,6 @@ describe("aggregateToFrames", () => {
 				purl: "external",
 				purpose: "1 member",
 			},
-		]);
-		// Cross-frame relation rebased; intra-frame + dangling dropped.
-		expect(g.document.relations).toEqual([
-			{ id: "r1", from: "module:src/a.ts", to: "module:src/b.ts", relationType: "method" },
 		]);
 		// Steps rebased with sites intact; emptied walkthrough dropped.
 		expect(g.document.walkthroughs).toEqual([

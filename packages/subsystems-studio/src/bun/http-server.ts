@@ -334,7 +334,6 @@ export async function handleSubsystemModelRequest(
 		if (!body) return error("Invalid JSON body");
 		if (!body["title"] || typeof body["title"] !== "string") return error("title is required");
 		if (!Array.isArray(body["components"])) return error("components array is required");
-		if (!Array.isArray(body["relations"])) return error("relations array is required");
 		const problems = findSubsystemModelProblems(body);
 		if (problems.length > 0) return error(`invalid graph: ${problems.join("; ")}`);
 		normalizeDeclarationProvenance(body["components"]);
@@ -345,7 +344,6 @@ export async function handleSubsystemModelRequest(
 			title: body["title"] as string,
 			description: typeof body["description"] === "string" ? body["description"] : undefined,
 			components: body["components"] as SubsystemModelDocument["components"],
-			relations: body["relations"] as SubsystemModelDocument["relations"],
 			walkthroughs: body["walkthroughs"] as StoredSubsystemModel["walkthroughs"],
 		});
 		return json({ ok: true, graph: record }, 201);

@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { mergeSubsystemModels } from "./merge-submodel-models";
-import type { SubsystemComponent, SubsystemModelDocument } from "../shared/contract";
+import type { SubsystemComponent } from "../shared/contract";
+import type { SubsystemDocumentBody } from "./subsystem-model-store";
 
 function doc(
-	partial: Partial<SubsystemModelDocument>,
-): SubsystemModelDocument {
-	return { components: [], relations: [], ...partial };
+	partial: Partial<SubsystemDocumentBody>,
+): SubsystemDocumentBody {
+	return { components: [], ...partial };
 }
 
 function code(alias: string, extra: Partial<SubsystemComponent> = {}): SubsystemComponent {
@@ -33,9 +34,6 @@ describe("mergeSubsystemModels", () => {
 							symbol: "readGraph",
 						}),
 					],
-					relations: [
-						{ id: "r1", from: "reader", to: "outside", relationType: "method" },
-					],
 					walkthroughs: [
 						{
 							id: "w1",
@@ -56,7 +54,6 @@ describe("mergeSubsystemModels", () => {
 							symbol: "readGraph",
 						}),
 					],
-					relations: [],
 				}),
 			},
 		]);
@@ -65,9 +62,8 @@ describe("mergeSubsystemModels", () => {
 		const node = r.document.components[0]!;
 		expect(node.purpose).toBe("Reads one stored graph from disk.");
 		expect(node.role).toBe("entry");
-		// Relation + walkthrough step rebased to the canonical alias;
-		// the external label passes through untouched.
-		expect(r.document.relations[0]).toMatchObject({ from: "reader", to: "outside" });
+		// Walkthrough step rebased to the canonical alias; the external label
+		// passes through untouched.
 		expect(r.document.walkthroughs?.[0]?.steps[0]).toMatchObject({
 			from: "reader",
 			to: "outside",
@@ -247,13 +243,12 @@ describe("mergeSubsystemModels", () => {
 		expect(r.sidecar.conflicts.some((c) => c.field === "purpose")).toBe(false);
 	});
 
-	test("relation and walkthrough id collisions disambiguate deterministically", () => {
+	test("walkthrough id collisions disambiguate deterministically", () => {
 		const r = mergeSubsystemModels([
 			{
 				id: "sg-1",
 				document: doc({
 					components: [code("a"), code("b")],
-					relations: [{ id: "r1", from: "a", to: "b", relationType: "method" }],
 					walkthroughs: [
 						{
 							id: "w1",
@@ -267,7 +262,6 @@ describe("mergeSubsystemModels", () => {
 				id: "sg-2",
 				document: doc({
 					components: [code("c")],
-					relations: [{ id: "r1", from: "c", to: "a", relationType: "method" }],
 					walkthroughs: [
 						{
 							id: "w1",
@@ -278,10 +272,9 @@ describe("mergeSubsystemModels", () => {
 				}),
 			},
 		]);
-		expect(r.document.relations.map((x) => x.id)).toEqual(["r1", "r1__dup1"]);
 		expect((r.document.walkthroughs ?? []).map((w) => w.id)).toEqual(["w1", "w1__dup1"]);
-		// Cross-model edge rebased through sg-2's alias space.
-		expect(r.document.relations[1]).toMatchObject({ from: "c", to: "a" });
+		// Cross-model step rebased through sg-2's alias space.
+		expect(r.document.walkthroughs?.[1]?.steps[0]).toMatchObject({ from: "c", to: "a" });
 	});
 
 	test("single-repo title and traceable description", () => {
@@ -299,7 +292,7 @@ describe("mergeSubsystemModels", () => {
 	test("empty input yields an empty document", () => {
 		const r = mergeSubsystemModels([]);
 		expect(r.document.components).toEqual([]);
-		expect(r.document.relations).toEqual([]);
+		expect(r.document.walkthroughs).toEqual([]);
 		expect(r.sidecar.conflicts).toEqual([]);
 	});
 });

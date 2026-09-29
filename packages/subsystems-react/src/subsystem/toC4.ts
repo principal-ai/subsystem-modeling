@@ -2,8 +2,8 @@
  * toC4 — project a subsystem-model (or a composition of them) onto C4 levels.
  *
  * The stored document is flat: `components[]` carry `process` (runtime unit),
- * `purl` (repo/package), `construct`, `role`, `module`, plus `relations[]`
- * (static) and `walkthroughs[]` (dynamic). C4 wants a hierarchy above the
+ * `purl` (repo/package), `construct`, `role`, `module`, plus `walkthroughs[]`
+ * (dynamic). C4 wants a hierarchy above the
  * component — system → container → component — with externals and actors
  * outside it. This module derives that hierarchy without inventing data:
  *
@@ -59,12 +59,12 @@ export interface C4Group {
   memberIds: string[];
 }
 
-/** A rolled-up collaboration. `relationship` = static, `flow` = walkthrough. */
+/** A rolled-up collaboration — a walkthrough flow between owners. */
 export interface C4Edge {
   id: string;
   source: string;
   target: string;
-  kind: 'relationship' | 'flow';
+  kind: 'flow';
   label: string;
   mechanisms: string[];
   count: number;
@@ -234,7 +234,6 @@ export function toC4(doc: SubsystemModelDocument, options: ToC4Options = {}): C4
   }
 
   // --- Edges: roll each endpoint up to its owner at this view -------------
-  const relEdges = new Map<string, C4Edge>();
   const flowEdges = new Map<string, C4Edge>();
 
   const addEdge = (
@@ -255,16 +254,13 @@ export function toC4(doc: SubsystemModelDocument, options: ToC4Options = {}): C4
     if (!edge.mechanisms.includes(mechanism)) edge.mechanisms.push(mechanism);
   };
 
-  for (const r of doc.relations ?? []) {
-    addEdge(relEdges, ownerOf.get(r.from), ownerOf.get(r.to), 'relationship', r.relationType);
-  }
   for (const w of doc.walkthroughs ?? []) {
     for (const s of w.steps ?? []) {
       addEdge(flowEdges, ownerOf.get(s.from), ownerOf.get(s.to), 'flow', s.mechanism);
     }
   }
 
-  const edges = [...relEdges.values(), ...flowEdges.values()];
+  const edges = [...flowEdges.values()];
   for (const e of edges) e.label = [...e.mechanisms].sort().join(' + ');
 
   return {

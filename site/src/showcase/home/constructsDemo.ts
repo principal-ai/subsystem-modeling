@@ -4,7 +4,6 @@
  */
 import type {
   SubsystemComponent,
-  SubsystemRelation,
   SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
 
@@ -76,16 +75,6 @@ export const components: SubsystemComponent[] = [
     file: 'src/types.ts',
     purpose: 'Closed set of note kinds (idea, task, …).',
     layer: 3,
-  },
-];
-
-/** Light structural glue so the graph coheres — not the teaching focus here. */
-export const relations: SubsystemRelation[] = [
-  {
-    id: 'svc-method',
-    from: 'note-service',
-    to: 'note-service-persist',
-    relationType: 'method',
   },
 ];
 

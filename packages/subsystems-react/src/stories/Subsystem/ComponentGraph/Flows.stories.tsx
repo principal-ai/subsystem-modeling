@@ -192,7 +192,6 @@ function FlowsDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={drawingComponents}
-        relations={[]}
         walkthroughs={drawingWalkthroughs}
         title="drawing-files flow"
         description="Three walkthroughs over one graph — opening, saving, and deleting a drawing. The sidebar's **Walkthroughs** panel lists each step by **symbol**; clicking a step focuses that hop and scrolls the bottom CodeView to that snippet."
@@ -301,7 +300,6 @@ function ProposedMissingStepDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={proposedComponents}
-        relations={[]}
         walkthroughs={proposedWalkthroughs}
         title="proposed seam with a missing file"
         description="Expand **Associate a finished run with its model** and click either step. The proposed hop has no file in the checkout, so its snippet shows an inline *Proposed — … isn't in the local checkout yet.* placeholder instead of failing the whole flow."
@@ -518,7 +516,6 @@ function ClickableConstructsDemo() {
       <div style={{ flex: 1, minHeight: 0 }}>
         <SubsystemComponentGraph
           components={clickableComponents}
-          relations={[]}
           walkthroughs={clickableWalkthroughs}
           initialWalkthroughId="tl-load"
           title="clickable constructs"

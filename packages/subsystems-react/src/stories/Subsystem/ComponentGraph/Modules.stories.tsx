@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import type { SubsystemComponent } from '../../../subsystem/model';
-import { graphSpecFromEdges } from './fixtures';
+import { graphSpecFromHops } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Modules',
@@ -120,10 +120,10 @@ const moduleComponents: SubsystemComponent[] = [
   },
 ];
 
-const moduleEdges = graphSpecFromEdges([
-  ['parse', 'record', 'method'],
-  ['is-rollout', 'record', 'method'],
-  ['reader', 'normalize', 'method'],
+const moduleEdges = graphSpecFromHops([
+  ['parse', 'record', 'uses'],
+  ['is-rollout', 'record', 'uses'],
+  ['reader', 'normalize', 'calls'],
   ['normalize', 'parse', 'calls'],
   ['normalize', 'tool-name', 'calls'],
   ['normalize', 'file-path', 'calls'],
@@ -137,7 +137,6 @@ export const ModuleBoundaries: Story = {
         title="Module boundaries"
         description="Concrete exports keep their real construct. Shared `module` (the source path) draws the file as a dashed frame — not `construct: module`. Singleton modules (registerAgent) stay unframed."
         components={moduleComponents}
-        relations={moduleEdges.relations}
         walkthroughs={moduleEdges.walkthroughs}
       />
     </div>
@@ -260,10 +259,10 @@ const nestedComponents: SubsystemComponent[] = [
   },
 ];
 
-const nestedEdges = graphSpecFromEdges([
-  ['boot', 'write-session', 'method'],
-  ['trail-view', 'bridge', 'method'],
-  ['trail-view', 'use-trail', 'method'],
+const nestedEdges = graphSpecFromHops([
+  ['boot', 'write-session', 'calls'],
+  ['trail-view', 'bridge', 'calls'],
+  ['trail-view', 'use-trail', 'uses'],
   ['boot', 'create-host', 'calls'],
   ['create-host', 'write-session', 'calls'],
   ['write-session', 'session-store', 'writes'],
@@ -279,7 +278,6 @@ export const ProcessAndModuleNesting: Story = {
         title="Process × module nesting"
         description="process frames wrap module frames wrap exports. Leaves parent to module:; module groups parent to process: when every member shares that process."
         components={nestedComponents}
-        relations={nestedEdges.relations}
         walkthroughs={nestedEdges.walkthroughs}
       />
     </div>

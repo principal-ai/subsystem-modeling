@@ -42,7 +42,6 @@ function C4Demo() {
     components: model.nodes.filter((n) => n.kind === 'component').length,
     externals: model.nodes.filter((n) => n.kind === 'external').length,
     actors: model.nodes.filter((n) => n.kind === 'actor').length,
-    relationships: model.edges.filter((e) => e.kind === 'relationship').length,
     flows: model.edges.filter((e) => e.kind === 'flow').length,
   };
 
@@ -89,9 +88,7 @@ function C4Demo() {
           {counts.containers} containers · {counts.components} components · {counts.externals} externals ·{' '}
           {counts.actors} actors
         </span>
-        <span>
-          {counts.relationships} relationship edges · {counts.flows} flow edges
-        </span>
+        <span>{counts.flows} flow edges</span>
         <span>selected: {selected ?? '(none)'}</span>
       </div>
     </div>

@@ -22,7 +22,9 @@ import {
   boundaryMinWidthForBadge,
   MODULE_BADGE_INSET,
   packageGroupNodeId,
+  directoryGroupNodeId,
   buildBoundaryLayoutGroups,
+  buildBoundaryLayoutGroupsByPath,
   buildSubsystemGraph,
   componentPackageKey,
   deriveNameFromSymbol,
@@ -48,13 +50,35 @@ const comps: SubsystemComponent[] = [
   { alias: 'transcript', name: 'transcript', construct: 'function', file: 'transcript.ts', purl: 'pkg:github/principal-ai/agent-monitoring' },
 ];
 
-const relations = [
-  { id: 'e1', from: 'transcript', to: 'reader', relationType: 'method' as const },
-  // 'host' is NOT a component — this is the cross-package external case.
-  { id: 'e2', from: 'reader', to: 'host', relationType: 'method' as const, refs: ['bun/index.ts'] },
+// 'host' is NOT a component — this is the cross-package external case.
+const walkthroughs: SubsystemWalkthrough[] = [
+  {
+    id: 'wt',
+    title: 'flow',
+    steps: [
+      {
+        from: 'transcript',
+        to: 'reader',
+        mechanism: 'calls',
+        file: 'transcript.ts',
+        line: 1,
+        purl: 'pkg:github/principal-ai/agent-monitoring#transcript.ts',
+        symbol: 'transcript',
+      },
+      {
+        from: 'reader',
+        to: 'host',
+        mechanism: 'calls',
+        file: 'SessionReader.ts',
+        line: 1,
+        purl: 'pkg:github/principal-ai/agent-monitoring#SessionReader.ts',
+        symbol: 'SessionReader',
+      },
+    ],
+  },
 ];
 
-const doc = { components: comps, relations };
+const doc = { components: comps, walkthroughs };
 
 describe('subsystem graph model', () => {
   test('converts all components to flat component nodes', () => {
@@ -85,7 +109,6 @@ describe('subsystem graph model', () => {
     ];
     const { nodes } = await buildSubsystemGraph({
       components: withExternal,
-      relations: [],
       walkthroughs: [{
         id: 'w1',
         title: 'feed',
@@ -294,7 +317,6 @@ describe('subsystem graph model', () => {
         },
         { alias: 'd', name: 'd', construct: 'function', file: 'd.ts', purl: 'pkg:github/acme/app' },
       ],
-      relations: [],
     });
     expect((nodes.find((n) => n.id === 'a') as { parentId?: string }).parentId).toBe(
       moduleGroupNodeId('src/a.ts'),
@@ -308,7 +330,6 @@ describe('subsystem graph model', () => {
         { alias: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
         { alias: 'd', name: 'd', construct: 'function', file: 'd.ts', purl: 'pkg:github/acme/app' },
       ],
-      relations: [],
     });
     expect((nodes.find((n) => n.id === 'a') as { parentId?: string }).parentId).toBe(
       processGroupNodeId('app/host'),
@@ -404,7 +425,6 @@ describe('subsystem graph model', () => {
           symbol: 'SessionStore',
         },
       ],
-      relations: [],
     });
     expect(regions.map((r) => r.key).sort()).toEqual(
       ['app/host', 'src/main.ts', 'src/store.ts'].sort(),
@@ -432,7 +452,6 @@ describe('subsystem graph model', () => {
         { alias: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
         { alias: 'solo', name: 'solo', construct: 'function', file: 's.ts', purl: 'pkg:github/acme/app', process: 'app/lonely' },
       ],
-      relations: [],
       walkthroughs: [{
         id: 'w1',
         title: 'call',
@@ -566,7 +585,6 @@ describe('subsystem graph model', () => {
           symbol: 'lonely',
         },
       ],
-      relations: [],
     });
     expect(regions.map((r) => r.key)).toEqual(['src/session/transcript.ts']);
     expect(regions[0]!.kind).toBe('module');
@@ -701,7 +719,6 @@ describe('subsystem graph model', () => {
           module: 'src/b.ts',
         },
       ],
-      relations: [],
     });
     const pkgA = nodes.find((n) => n.id === packageGroupNodeId('pkg:github/acme/app'));
     const proc = nodes.find((n) => n.id === processGroupNodeId('app/host'));
@@ -791,7 +808,7 @@ describe('subsystem graph model', () => {
             }
           : c,
       ),
-      relations,
+      walkthroughs,
     };
     expect(subsystemGraphLayoutKey(base)).toBe(subsystemGraphLayoutKey(withRef));
   });
@@ -799,7 +816,7 @@ describe('subsystem graph model', () => {
 
 describe('isConstructsOnlyModel', () => {
   test('true when components exist and there are no edges', () => {
-    expect(isConstructsOnlyModel({ components: comps, relations: [], walkthroughs: [] })).toBe(true);
+    expect(isConstructsOnlyModel({ components: comps, walkthroughs: [] })).toBe(true);
     expect(isConstructsOnlyModel({ components: comps })).toBe(true);
   });
 
@@ -812,13 +829,12 @@ describe('isConstructsOnlyModel', () => {
     ).toBe(false);
   });
 
-  test('false when empty, or when relations or walkthrough hops exist', () => {
-    expect(isConstructsOnlyModel({ components: [], relations: [] })).toBe(false);
-    expect(isConstructsOnlyModel({ components: comps, relations })).toBe(false);
+  test('false when empty, or when walkthrough hops exist', () => {
+    expect(isConstructsOnlyModel({ components: [] })).toBe(false);
+    expect(isConstructsOnlyModel({ components: comps, walkthroughs })).toBe(false);
     expect(
       isConstructsOnlyModel({
         components: comps,
-        relations: [],
         walkthroughs: [
           {
             id: 'wt',
@@ -836,6 +852,152 @@ describe('isConstructsOnlyModel', () => {
         ],
       }),
     ).toBe(false);
+  });
+
+  test('false when module/process containment frames exist, even with no edges', () => {
+    expect(
+      isConstructsOnlyModel({
+        components: [
+          { alias: 'a', module: 'src/a.ts' },
+          { alias: 'b', module: 'src/b.ts' },
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      isConstructsOnlyModel({
+        components: [{ alias: 'a', process: 'app/server' }],
+      }),
+    ).toBe(false);
+    // Blank/whitespace membership is not a frame.
+    expect(
+      isConstructsOnlyModel({ components: [{ alias: 'a', module: '  ' }] }),
+    ).toBe(true);
+  });
+});
+
+describe('buildBoundaryLayoutGroupsByPath', () => {
+  const pathComps: SubsystemComponent[] = [
+    { alias: 'record', name: 'record', construct: 'type_alias', file: 'src/session/transcript.ts', module: 'src/session/transcript.ts', purl: 'pkg:github/p/app' },
+    { alias: 'parse', name: 'parse', construct: 'function', file: 'src/session/transcript.ts', module: 'src/session/transcript.ts', purl: 'pkg:github/p/app' },
+    { alias: 'tool-name', name: 'toolName', construct: 'function', file: 'src/session/paths.ts', module: 'src/session/paths.ts', purl: 'pkg:github/p/app' },
+    { alias: 'boot', name: 'boot', construct: 'function', file: 'src/host/main.ts', module: 'src/host/main.ts', purl: 'pkg:github/p/app' },
+    { alias: 'store', name: 'store', construct: 'store', file: 'src/host/store.ts', module: 'src/host/store.ts', purl: 'pkg:github/p/app' },
+  ];
+
+  test('derives directory frames and nests modules under them', () => {
+    const groups = buildBoundaryLayoutGroupsByPath(
+      { components: pathComps },
+      { showSingletonFrames: true },
+    );
+    const byId = new Map(groups.map((g) => [g.id, g]));
+
+    expect(byId.has(directoryGroupNodeId('src'))).toBe(true);
+    expect(byId.has(directoryGroupNodeId('src/session'))).toBe(true);
+    expect(byId.has(directoryGroupNodeId('src/host'))).toBe(true);
+
+    // directory → directory nesting
+    expect(byId.get(directoryGroupNodeId('src/session'))?.parentId).toBe(
+      directoryGroupNodeId('src'),
+    );
+    // module → directory nesting
+    expect(byId.get(moduleGroupNodeId('src/session/transcript.ts'))?.parentId).toBe(
+      directoryGroupNodeId('src/session'),
+    );
+    // top directory has no frame above it
+    expect(byId.get(directoryGroupNodeId('src'))?.parentId).toBeUndefined();
+
+    // Labels are relative to the parent frame, not the full path.
+    expect(byId.get(directoryGroupNodeId('src'))?.region.label).toBe('src');
+    expect(byId.get(directoryGroupNodeId('src/session'))?.region.label).toBe('session');
+    expect(byId.get(moduleGroupNodeId('src/session/transcript.ts'))?.region.label).toBe(
+      'transcript.ts',
+    );
+  });
+
+  test('each leaf is claimed by exactly one group (no compound duplicates)', () => {
+    const groups = buildBoundaryLayoutGroupsByPath(
+      { components: pathComps },
+      { showSingletonFrames: true },
+    );
+    const groupIds = new Set(groups.map((g) => g.id));
+    const leafCount = new Map<string, number>();
+    for (const g of groups) {
+      for (const m of g.memberAliases) {
+        // group ids are allowed to repeat (as child references); leaves must not
+        if (groupIds.has(m)) continue;
+        leafCount.set(m, (leafCount.get(m) ?? 0) + 1);
+      }
+    }
+    for (const [alias, n] of leafCount) {
+      expect(n, `${alias} claimed ${n} times`).toBe(1);
+    }
+  });
+
+  test('compacts single-child directory chains (app → app/book)', () => {
+    const comps: SubsystemComponent[] = [
+      { alias: 'page', name: 'page', construct: 'function', file: 'app/book/page.tsx', module: 'app/book/page.tsx', purl: 'pkg:github/p/app' },
+      { alias: 'actions', name: 'actions', construct: 'function', file: 'app/book/actions.ts', module: 'app/book/actions.ts', purl: 'pkg:github/p/app' },
+      { alias: 'lib-a', name: 'a', construct: 'function', file: 'lib/a.ts', module: 'lib/a.ts', purl: 'pkg:github/p/app' },
+      { alias: 'lib-b', name: 'b', construct: 'function', file: 'lib/b.ts', module: 'lib/b.ts', purl: 'pkg:github/p/app' },
+    ];
+    const groups = buildBoundaryLayoutGroupsByPath(
+      { components: comps },
+      { showSingletonFrames: true },
+    );
+    const ids = new Set(groups.map((g) => g.id));
+    // `app` has a single child dir and no direct files → merged into `app/book`.
+    expect(ids.has(directoryGroupNodeId('app'))).toBe(false);
+    expect(ids.has(directoryGroupNodeId('app/book'))).toBe(true);
+    const appBook = groups.find((g) => g.id === directoryGroupNodeId('app/book'))!;
+    expect(appBook.parentId).toBeUndefined();
+    expect(appBook.region.label).toBe('app/book');
+    expect(ids.has(directoryGroupNodeId('lib'))).toBe(true);
+  });
+
+  test('module directories are scoped to their process (process stays primary)', () => {
+    const comps: SubsystemComponent[] = [
+      { alias: 'page', name: 'page', construct: 'function', file: 'app/book/page.tsx', module: 'app/book/page.tsx', process: 'web/client', purl: 'pkg:github/p/app' },
+      { alias: 'a1', name: 'a1', construct: 'function', file: 'app/book/actions.ts', module: 'app/book/actions.ts', process: 'web/server', purl: 'pkg:github/p/app' },
+      { alias: 'a2', name: 'a2', construct: 'function', file: 'app/book/actions.ts', module: 'app/book/actions.ts', process: 'web/server', purl: 'pkg:github/p/app' },
+    ];
+    const groups = buildBoundaryLayoutGroupsByPath(
+      { components: comps },
+      { showSingletonFrames: true },
+    );
+    const client = groups.find((g) => g.id === processGroupNodeId('web/client'))!;
+    const server = groups.find((g) => g.id === processGroupNodeId('web/server'))!;
+    expect(client).toBeDefined();
+    expect(server).toBeDefined();
+
+    const clientDirs = groups.filter(
+      (g) => g.region.kind === 'directory' && g.parentId === processGroupNodeId('web/client'),
+    );
+    const serverDirs = groups.filter(
+      (g) => g.region.kind === 'directory' && g.parentId === processGroupNodeId('web/server'),
+    );
+    // Same folder path is split per process — separate, scoped frames.
+    expect(clientDirs.map((g) => g.region.key)).toEqual(['app/book']);
+    expect(serverDirs.map((g) => g.region.key)).toEqual(['app/book']);
+    expect(clientDirs[0]!.id).not.toBe(serverDirs[0]!.id);
+    // Process frames own those directories as children (not dropped/empty).
+    expect(client.memberAliases).toContain(clientDirs[0]!.id);
+    expect(server.memberAliases).toContain(serverDirs[0]!.id);
+  });
+
+  test('exact mode adds no directory frames', () => {
+    const groups = buildBoundaryLayoutGroups(
+      { components: pathComps },
+      { showSingletonFrames: true, moduleNesting: 'exact' },
+    );
+    expect(groups.some((g) => g.region.kind === 'directory')).toBe(false);
+  });
+
+  test('path mode is selected by the moduleNesting option', () => {
+    const groups = buildBoundaryLayoutGroups(
+      { components: pathComps },
+      { showSingletonFrames: true, moduleNesting: 'path' },
+    );
+    expect(groups.some((g) => g.region.kind === 'directory')).toBe(true);
   });
 });
 
@@ -993,7 +1155,6 @@ describe('reorderTargetIndex', () => {
 describe('graphify-native edges', () => {
   const doc = {
     components: comps,
-    relations: [],
   };
   const graphify = [
     { id: 'g1', from: 'reader', to: 'dst', relation: 'imports' },
@@ -1006,12 +1167,12 @@ describe('graphify-native edges', () => {
     expect(e.mechanism).toBe('imports');
   });
 
-  test('subsystem relations keep no graphify provenance', () => {
+  test('walkthrough edges keep no graphify provenance', () => {
     const [e] = deriveGraphEdges({
-      relations: [{ id: 'r', from: 'reader', to: 'dst', relationType: 'method' }],
+      walkthroughs: [walkthroughs[0]!],
     });
     expect(e.provenance).toBeUndefined();
-    expect(e.mechanism).toBe('method');
+    expect(e.mechanism).toBe('calls');
   });
 
   test('graphify edges color from the separate palette', () => {
@@ -1019,7 +1180,7 @@ describe('graphify-native edges', () => {
       GRAPHIFY_RELATION_COLOR.imports,
     );
     expect(edgeColor({ mechanism: 'imports', provenance: 'graphify' })).not.toBe(
-      MECHANISM_COLOR.method,
+      MECHANISM_COLOR.calls,
     );
   });
 
@@ -1030,7 +1191,7 @@ describe('graphify-native edges', () => {
   });
 
   test('subsystem mechanism color is unaffected by the graphify palette', () => {
-    expect(edgeColor({ mechanism: 'method' })).toBe(MECHANISM_COLOR.method);
+    expect(edgeColor({ mechanism: 'calls' })).toBe(MECHANISM_COLOR.calls);
   });
 
   test('graphify edges all share the graphify stroke style', () => {

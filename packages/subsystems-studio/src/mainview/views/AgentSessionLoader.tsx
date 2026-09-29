@@ -53,11 +53,9 @@ export function AgentLogo({ agent, size = 14 }: { agent: string; size?: number }
 	// Maintain OpenCode sub-agents / V2 pipeline tag share the opencode mark.
 	const maintainAgents = [
 		"construct-verifier",
-		"static-topology-verifier",
 		"package-module-verifier",
 		"runtime-topology-verifier",
 		"construct-fixer",
-		"static-topology-fixer",
 		"package-module-fixer",
 		// Legacy (pre-rename).
 		"issue-fixer",

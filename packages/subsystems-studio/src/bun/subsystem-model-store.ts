@@ -22,7 +22,6 @@ import type {
 	SubsystemComponentEdge,
 	SubsystemEdgeMechanism,
 	SubsystemModelDocument,
-	SubsystemRelationType,
 	SubsystemWalkthrough,
 	SubsystemWalkthroughMechanism,
 	SubsystemWalkthroughStep,
@@ -170,8 +169,16 @@ export function stopSubsystemModelDirWatcher(): void {
 	}
 }
 
+/**
+ * The portable model body this host stores. Mirrors the published
+ * `SubsystemModelDocument` minus authored `relations`, which are no longer part
+ * of a subsystem model. Declared locally so the host stays internally
+ * consistent until the published react/core types catch up.
+ */
+export type SubsystemDocumentBody = Omit<SubsystemModelDocument, "relations">;
+
 /** On-disk record for a subsystem graph. */
-export interface StoredSubsystemModel extends SubsystemModelDocument {
+export interface StoredSubsystemModel extends SubsystemDocumentBody {
 	id: string;
 	title: string;
 	description?: string;
@@ -304,14 +311,6 @@ interface IndexFile {
  * a published member goes missing here. The store test additionally pins the
  * exact list as a runtime check.
  */
-export const SUBSYSTEM_RELATION_TYPES = [
-	"extends",
-	"inherits",
-	"implements",
-	"mixes_in",
-	"method",
-] as const satisfies readonly SubsystemRelationType[];
-
 export const SUBSYSTEM_WALKTHROUGH_MECHANISMS = [
 	"calls",
 	"uses",
@@ -324,7 +323,6 @@ export const SUBSYSTEM_WALKTHROUGH_MECHANISMS = [
 ] as const satisfies readonly SubsystemWalkthroughMechanism[];
 
 export const SUBSYSTEM_EDGE_MECHANISMS = [
-	...SUBSYSTEM_RELATION_TYPES,
 	...SUBSYSTEM_WALKTHROUGH_MECHANISMS,
 ] as const satisfies readonly SubsystemEdgeMechanism[];
 
@@ -549,7 +547,7 @@ export function fileDeclaresSymbol(content: string, symbol: string): boolean {
  * informational — never blocks create/update.
  */
 export async function verifyModelFiles(
-	doc: SubsystemModelDocument & {
+	doc: SubsystemDocumentBody & {
 		walkthroughs?: SubsystemWalkthrough[];
 	},
 ): Promise<SubsystemModelVerification> {
@@ -864,7 +862,7 @@ export async function getSubsystemModel(id: string): Promise<StoredSubsystemMode
 
 /** Create a new subsystem graph. Returns the stored record with generated id + timestamps. */
 export async function createSubsystemModel(
-	doc: SubsystemModelDocument & {
+	doc: SubsystemDocumentBody & {
 		title: string;
 		description?: string;
 		walkthroughs?: SubsystemWalkthrough[];
@@ -898,7 +896,6 @@ export async function updateSubsystemModel(
 			| "title"
 			| "description"
 			| "components"
-			| "relations"
 			| "walkthroughs"
 			| "gist"
 		>

@@ -16,12 +16,11 @@ import type {
 	SubsystemModelSecondOpinion,
 	SubsystemSignatureClaim,
 } from "../shared/contract";
-import { upsertAcceptedConstructAugmentation, upsertAcceptedSignatureAugmentation, upsertAcceptedRelationAugmentation, upsertAcceptedModuleAugmentation } from "./augmentation-store";
+import { upsertAcceptedConstructAugmentation, upsertAcceptedSignatureAugmentation, upsertAcceptedModuleAugmentation } from "./augmentation-store";
 import { deriveProposalLane } from "./proposal-lane";
 import {
 	getSubsystemModel,
 	purlRepoKey,
-	SUBSYSTEM_RELATION_TYPES,
 	updateSubsystemModel,
 	type StoredSubsystemModel,
 } from "./subsystem-model-store";
@@ -109,45 +108,6 @@ function resolveAugmentationTarget(
 	return { file, symbol, purl, componentName: c.name };
 }
 
-function resolveRelationAugmentationTarget(
-	graph: StoredSubsystemModel,
-	relationId: string,
-): {
-	purl: string;
-	fromFile: string;
-	fromSymbol: string;
-	relationType: string;
-	toFile?: string;
-	toSymbol?: string;
-	toAlias: string;
-	toName: string;
-	label: string;
-} | null {
-	const rel = (graph.relations ?? []).find((r) => r.id === relationId);
-	if (!rel) return null;
-	const from = graph.components.find((c) => c.alias === rel.from);
-	const to = graph.components.find((c) => c.alias === rel.to);
-	if (!from || !to) return null;
-	const fromFile = (from.file ?? "").trim();
-	const fromSymbol = (from.symbol ?? "").trim();
-	const purl = purlRepoKey(from.purl) || "";
-	if (!fromFile || !fromSymbol || !purl) return null;
-	const toFile = (to.file ?? "").trim() || undefined;
-	const toSymbol = (to.symbol ?? "").trim() || undefined;
-	if (!toFile && !toSymbol && !to.alias && !to.name) return null;
-	return {
-		purl,
-		fromFile,
-		fromSymbol,
-		relationType: rel.relationType,
-		toFile,
-		toSymbol,
-		toAlias: to.alias,
-		toName: to.name,
-		label: `${rel.from} → ${rel.to} (${rel.relationType})`,
-	};
-}
-
 /** Render an agent-extracted signature claim as `(a: T, b?: U) → R`. */
 function formatSignatureClaim(sig: SubsystemSignatureClaim): string {
 	const params = (Array.isArray(sig.parameters) ? sig.parameters : [])
@@ -205,33 +165,6 @@ function buildPreview(
 					ch.field,
 				),
 				after: ch.value,
-			});
-		} else if (ch.target === "relation") {
-			const rel = (graph.relations ?? []).find((r) => r.id === ch.relationId);
-			const label = `relation ${ch.relationId}`;
-			if (ch.field === "delete") {
-				rows.push({
-					label,
-					before: rel
-						? `${rel.from} → ${rel.to} (${rel.relationType})`
-						: "(missing)",
-					after: "(deleted)",
-				});
-			} else {
-				rows.push({
-					label: `${label}.${ch.field}`,
-					before: rel ? (rel as unknown as Record<string, unknown>)[ch.field] : undefined,
-					after: ch.value,
-				});
-			}
-		} else if (ch.target === "augmentation" && ch.field === "relation") {
-			const resolved = resolveRelationAugmentationTarget(graph, ch.relationId);
-			rows.push({
-				label: `augment relation ${ch.relationId}`,
-				before: "not yet confirmed",
-				after: resolved
-					? `confirmed ${resolved.label}`
-					: `confirmed relation ${ch.relationId}`,
 			});
 		} else if (ch.target === "augmentation" && ch.field === "module") {
 			const resolved = resolveAugmentationTarget(graph, ch);
@@ -349,17 +282,7 @@ function validateChanges(
 				return `${ch.field} value must be a string or null`;
 			}
 		} else if (ch.target === "augmentation") {
-			if (ch.field === "relation") {
-				if (ch.value !== true) {
-					return "augmentation relation value must be true";
-				}
-				if (!(graph.relations ?? []).some((r) => r.id === ch.relationId)) {
-					return `unknown relation: ${ch.relationId}`;
-				}
-				if (!resolveRelationAugmentationTarget(graph, ch.relationId)) {
-					return `augmentation for relation ${ch.relationId} needs from file+symbol+purl and a resolvable to endpoint`;
-				}
-			} else if (
+			if (
 				ch.field !== "construct" &&
 				ch.field !== "signature" &&
 				ch.field !== "module"
@@ -416,32 +339,6 @@ function validateChanges(
 					return `augmentation for ${ch.componentAlias} needs file, symbol, and purl (on the change or component)`;
 				}
 			}
-		} else if (ch.target === "relation") {
-			const rels = graph.relations ?? [];
-			if (!rels.some((r) => r.id === ch.relationId)) {
-				return `unknown relation: ${ch.relationId}`;
-			}
-			if (ch.field === "delete") {
-				if (ch.value !== true) {
-					return "relation delete value must be true";
-				}
-			} else if (ch.field === "from" || ch.field === "to") {
-				if (typeof ch.value !== "string" || !ch.value.trim()) {
-					return `relation ${ch.field} must be a non-empty component id`;
-				}
-				if (!graph.components.some((c) => c.alias === ch.value)) {
-					return `unknown component for relation.${ch.field}: ${ch.value}`;
-				}
-			} else if (ch.field === "relationType") {
-				if (
-					typeof ch.value !== "string" ||
-					!(SUBSYSTEM_RELATION_TYPES as readonly string[]).includes(ch.value)
-				) {
-					return `unknown relationType ${JSON.stringify(ch.value)}`;
-				}
-			} else {
-				return `unsupported relation field: ${(ch as { field: string }).field}`;
-			}
 		} else {
 			return "invalid change target";
 		}
@@ -452,9 +349,7 @@ function validateChanges(
 function applyChangesToGraph(
 	graph: StoredSubsystemModel,
 	changes: SubsystemModelProposalChange[],
-): (Pick<StoredSubsystemModel, "components" | "walkthroughs"> & {
-	relations?: StoredSubsystemModel["relations"];
-}) | null {
+): Pick<StoredSubsystemModel, "components" | "walkthroughs"> | null {
 	const graphChanges = changes.filter((ch) => ch.target !== "augmentation");
 	if (graphChanges.length === 0) return null;
 
@@ -463,8 +358,6 @@ function applyChangesToGraph(
 		...t,
 		steps: t.steps.map((s) => ({ ...s })),
 	}));
-	let relations = (graph.relations ?? []).map((r) => ({ ...r }));
-	let relationsTouched = false;
 
 	for (const ch of graphChanges) {
 		if (ch.target === "component") {
@@ -502,22 +395,12 @@ function applyChangesToGraph(
 			if (ch.value === null) delete next[ch.field];
 			else next[ch.field] = ch.value;
 			tl.steps[ch.stepIndex] = next as (typeof tl.steps)[number];
-		} else if (ch.target === "relation") {
-			relationsTouched = true;
-			if (ch.field === "delete") {
-				relations = relations.filter((r) => r.id !== ch.relationId);
-			} else {
-				const idx = relations.findIndex((r) => r.id === ch.relationId);
-				if (idx < 0) continue;
-				relations[idx] = { ...relations[idx]!, [ch.field]: ch.value };
-			}
 		}
 	}
 
 	return {
 		components,
 		walkthroughs: walkthroughs.length > 0 ? walkthroughs : graph.walkthroughs,
-		...(relationsTouched ? { relations } : {}),
 	};
 }
 
@@ -528,30 +411,6 @@ async function applyAugmentationChanges(
 ): Promise<string | null> {
 	for (const ch of changes) {
 		if (ch.target !== "augmentation") continue;
-		if (ch.field === "relation") {
-			const resolved = resolveRelationAugmentationTarget(graph, ch.relationId);
-			if (!resolved) {
-				return `augmentation for relation ${ch.relationId} needs from file+symbol+purl and a resolvable to endpoint`;
-			}
-			const written = await upsertAcceptedRelationAugmentation({
-				purl: resolved.purl,
-				fromFile: resolved.fromFile,
-				fromSymbol: resolved.fromSymbol,
-				relationType: resolved.relationType,
-				toFile: resolved.toFile,
-				toSymbol: resolved.toSymbol,
-				toAlias: resolved.toAlias,
-				toName: resolved.toName,
-				source: proposal.author?.trim() || "proposal",
-				rationale: proposal.rationale,
-				evidence: [
-					`proposal ${proposal.id}`,
-					`relation ${ch.relationId}`,
-				],
-			});
-			if (!written.ok) return written.error;
-			continue;
-		}
 		const resolved = resolveAugmentationTarget(graph, ch);
 		if (!resolved) {
 			return `augmentation for ${ch.componentAlias} needs file, symbol, and purl`;
@@ -598,8 +457,6 @@ async function applyAugmentationChanges(
 				],
 			});
 			if (!written.ok) return written.error;
-		} else {
-			return `unsupported augmentation field: ${(ch as { field: string }).field}`;
 		}
 	}
 	return null;

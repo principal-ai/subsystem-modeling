@@ -83,7 +83,6 @@ export interface StoredSubsystemModel {
   title: string;
   description?: string;
   components: unknown[];
-  relations: unknown[];
   walkthroughs?: unknown[];
   createdAt: string;
   updatedAt: string;
@@ -101,7 +100,6 @@ export interface CreateSubsystemModelInput {
   title: string;
   description?: string;
   components: unknown[];
-  relations: unknown[];
   walkthroughs?: unknown[];
 }
 
@@ -159,7 +157,6 @@ function indexEntryFor(record: StoredSubsystemModel): SubsystemModelIndexEntry {
     description: record.description,
     componentCount: record.components.length,
     edgeCount: deriveGraphEdges({
-      relations: record.relations as Parameters<typeof deriveGraphEdges>[0]['relations'],
       walkthroughs: record.walkthroughs as Parameters<typeof deriveGraphEdges>[0]['walkthroughs'],
     }).length,
     createdAt: record.createdAt,
@@ -262,7 +259,6 @@ export async function updateSubsystemModel(
       | 'title'
       | 'description'
       | 'components'
-      | 'relations'
       | 'walkthroughs'
       | 'gist'
     >

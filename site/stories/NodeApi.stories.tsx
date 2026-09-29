@@ -4,7 +4,6 @@ import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme
 import { SubsystemComponentGraph } from '@principal-ai/subsystems-react';
 import type {
   SubsystemComponent,
-  SubsystemRelation,
   SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
 import { makeShowcaseRenderers } from '../src/showcase/files.tsx';
@@ -70,8 +69,6 @@ const components: SubsystemComponent[] = [
   },
 ];
 
-const relations: SubsystemRelation[] = [];
-
 const walkthroughs: SubsystemWalkthrough[] = [
   {
     id: 'tl-post-order',
@@ -133,7 +130,6 @@ function OrdersApiDemo() {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={components}
-        relations={relations}
         walkthroughs={walkthroughs}
         title="Orders API"
         description="A typical Express service: a router as the wire boundary, a service class with the business rules, a repository for persistence — and the retained state (Postgres, Redis) plus payment capture (Stripe) as external systems. Open the **Walkthroughs** tab to walk the `POST /orders` request path."

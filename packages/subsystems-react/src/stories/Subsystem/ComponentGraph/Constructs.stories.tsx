@@ -260,7 +260,6 @@ function CatalogDemo({ hideSidebar = false }: { hideSidebar?: boolean }) {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={constructsOnly}
-        relations={[]}
         title="Constructs at a glance"
         description="Layer 1 — constructs only. Click a file path or L# to open the declaration source."
         hideSidebar={hideSidebar}

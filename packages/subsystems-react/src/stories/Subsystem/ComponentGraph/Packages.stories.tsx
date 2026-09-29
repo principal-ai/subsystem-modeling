@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import type { SubsystemComponent } from '../../../subsystem/model';
-import { graphSpecFromEdges } from './fixtures';
+import { graphSpecFromHops } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Packages',
@@ -80,7 +80,7 @@ const multiRepoComponents: SubsystemComponent[] = [
   },
 ];
 
-const multiRepoEdges = graphSpecFromEdges([
+const multiRepoEdges = graphSpecFromHops([
   ['dispatch', 'session', 'calls'],
   ['dispatch', 'parse', 'calls'],
   ['parse', 'normalize', 'calls'],
@@ -90,7 +90,6 @@ export const MultiRepoPackageFrames: Story = {
   name: 'Multi-repo package frames',
   args: {
     components: multiRepoComponents,
-    relations: multiRepoEdges.relations,
     walkthroughs: multiRepoEdges.walkthroughs,
   },
   render: (args) => (
@@ -107,7 +106,6 @@ export const SingleRepoNoPackageFrames: Story = {
   name: 'Single-repo (no package frames)',
   args: {
     components: singleRepo,
-    relations: multiRepoEdges.relations,
     walkthroughs: multiRepoEdges.walkthroughs,
   },
   render: (args) => (
@@ -220,7 +218,7 @@ const nestedComponents: SubsystemComponent[] = [
   },
 ];
 
-const nestedEdges = graphSpecFromEdges([
+const nestedEdges = graphSpecFromHops([
   ['boot', 'dispatch', 'calls'],
   ['dispatch', 'session', 'calls'],
   ['dispatch', 'parse', 'calls'],
@@ -231,7 +229,6 @@ export const PackageProcessModuleNesting: Story = {
   name: 'Package → process → module nesting',
   args: {
     components: nestedComponents,
-    relations: nestedEdges.relations,
     walkthroughs: nestedEdges.walkthroughs,
   },
   render: (args) => (

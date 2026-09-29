@@ -197,7 +197,6 @@ export const AutoplayFocus: Story = {
       <SubsystemComponentGraph
         {...args}
         components={components}
-        relations={[]}
         walkthroughs={walkthroughs}
         hideSidebar
         hideDrawer

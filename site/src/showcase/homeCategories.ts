@@ -5,7 +5,6 @@
 import type {
   SubsystemComponent,
   SubsystemEdgeView,
-  SubsystemRelation,
   SubsystemWalkthrough,
 } from '@principal-ai/subsystems-react';
 import { bookingPageCase } from './cases/booking-page';
@@ -21,7 +20,6 @@ export type HomeCategoryModel = {
   title: string;
   description?: string;
   components: SubsystemComponent[];
-  relations: SubsystemRelation[];
   walkthroughs?: SubsystemWalkthrough[];
 };
 
@@ -33,13 +31,15 @@ export type HomeCategory = {
   graph: {
     showEdgeLabels: boolean;
     /**
-     * Which edge vocabulary this layer teaches: `relations` for the topology
-     * layers, `walkthroughs` for the runtime-hops layer. The two are never
-     * shown together.
+     * Which edge vocabulary this layer teaches: `graphify` for the derived
+     * containment edges, `walkthroughs` for the runtime-hops layer. The two are
+     * never shown together.
      */
     edgeView: SubsystemEdgeView;
     autoPlayWalkthroughs: boolean;
     showWalkthroughTitle: boolean;
+    /** Derive directory frames from module paths and nest modules under them. */
+    moduleNesting?: 'exact' | 'path';
     /** Explicit boundary frame colors (region key → color); host override. */
     boundaryColors?: Record<string, string>;
   };
@@ -51,7 +51,6 @@ export type HomeProgressionSource = {
   /** Subsystem-level description, shown as the model overview on every layer. */
   description?: string;
   components: SubsystemComponent[];
-  relations: SubsystemRelation[];
   walkthroughs?: SubsystemWalkthrough[];
 };
 
@@ -77,14 +76,13 @@ export type HomeProgressionExample = {
 };
 
 function constructsOnly(components: readonly SubsystemComponent[]): SubsystemComponent[] {
-  // Keep `process`: the constructs list sorts by it. Only module frames are
-  // dropped (no topology in this layer).
-  return components.map(({ module: _m, ...rest }) => rest);
+  // Layer 1: declarations only — no containment (`module`) or process frames.
+  return components.map(({ module: _m, process: _p, ...rest }) => rest);
 }
 
 function staticView(components: readonly SubsystemComponent[]): SubsystemComponent[] {
-  // Static topology = relations only; containment (module) and process are dynamic.
-  return components.map(({ process: _p, module: _m, ...rest }) => rest);
+  // Static topology = source containment: keep `module`, drop `process`.
+  return components.map(({ process: _p, ...rest }) => rest);
 }
 
 function dynamicView(components: readonly SubsystemComponent[]): SubsystemComponent[] {
@@ -116,12 +114,11 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
         // so it stays the same across every layer.
         description: source.description,
         components: constructsOnly(source.components),
-        relations: [],
         walkthroughs: undefined,
       },
       graph: {
         showEdgeLabels: false,
-        edgeView: 'relations',
+        edgeView: 'graphify',
         autoPlayWalkthroughs: false,
         showWalkthroughTitle: false,
         boundaryColors: example.boundaryColors,
@@ -135,14 +132,14 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
         title,
         description: source.description,
         components: staticView(source.components),
-        relations: source.relations,
         walkthroughs: undefined,
       },
       graph: {
         showEdgeLabels: true,
-        edgeView: 'relations',
+        edgeView: 'graphify',
         autoPlayWalkthroughs: false,
         showWalkthroughTitle: false,
+        moduleNesting: 'path',
         boundaryColors: example.boundaryColors,
       },
     },
@@ -154,9 +151,8 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
         title,
         description: source.description,
         components: dynamicView(source.components),
-        // Runtime layer: mechanism edges from the walkthrough hops replace the
-        // structural relations, over the process/module containment frames.
-        relations: [],
+        // Runtime layer: mechanism edges from the walkthrough hops over the
+        // process/module containment frames.
         walkthroughs: source.walkthroughs,
       },
       graph: {
@@ -164,6 +160,7 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
         edgeView: 'walkthroughs',
         autoPlayWalkthroughs: false,
         showWalkthroughTitle: false,
+        moduleNesting: 'path',
         boundaryColors: example.boundaryColors,
       },
     },
@@ -175,7 +172,6 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
         title,
         description: source.description,
         components: source.components,
-        relations: source.relations,
         walkthroughs: source.walkthroughs,
       },
       graph: {
@@ -183,6 +179,7 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
         edgeView: 'walkthroughs',
         autoPlayWalkthroughs: true,
         showWalkthroughTitle: true,
+        moduleNesting: 'path',
         boundaryColors: example.boundaryColors,
       },
     },
@@ -203,23 +200,22 @@ export const homeProgressionExamples: Record<string, HomeProgressionExample> = {
       title: bookingPageCase.model.title,
       description: bookingPageCase.model.description,
       components: bookingPageCase.model.components,
-      relations: bookingPageCase.model.relations,
       walkthroughs: bookingPageCase.model.walkthroughs,
     },
     copy: {
       constructs: {
         blurb: 'Start with the declarations on the booking path.',
-        description: 'Layer 1 — constructs only. No map, no processes, no walks yet.',
+        description: 'Layer 1 — constructs only. No frames, no processes, no walks yet.',
       },
       'static-topology': {
-        blurb: 'Connect them in source — relations.',
+        blurb: 'See the source modules each construct lives in.',
         description:
-          'Layer 2 — add structural relations. Containment and runtime come next.',
+          'Layer 2 — containment: components grouped into their source modules. Runtime comes next.',
       },
       'dynamic-topology': {
         blurb: 'Same nodes, framed by process — now wired by runtime seams.',
         description:
-          'Layer 3 — process framing (booking-web/client · booking-web/server) plus module containment, with runtime mechanism edges (calls / reads / writes) replacing the structural relations.',
+          'Layer 3 — process framing (booking-web/client · booking-web/server) plus module containment, with runtime mechanism edges (calls / reads / writes).',
       },
       walkthrough: {
         blurb: 'Follow pick, book, and cancel at the real file:line seams.',
@@ -235,23 +231,22 @@ export const homeProgressionExamples: Record<string, HomeProgressionExample> = {
       title: tracedApiCase.model.title,
       description: tracedApiCase.model.description,
       components: tracedApiCase.model.components,
-      relations: tracedApiCase.model.relations,
       walkthroughs: tracedApiCase.model.walkthroughs,
     },
     copy: {
       constructs: {
         blurb: 'Start with the declarations on the request path.',
-        description: 'Layer 1 — constructs only. No map, no processes, no walks yet.',
+        description: 'Layer 1 — constructs only. No frames, no processes, no walks yet.',
       },
       'static-topology': {
-        blurb: 'Connect routes and services in source — relations.',
+        blurb: 'Group routes and services by the source module that owns them.',
         description:
-          'Layer 2 — add structural relations. Containment and runtime come next.',
+          'Layer 2 — containment: components grouped into their source modules. Runtime comes next.',
       },
       'dynamic-topology': {
         blurb: 'Same nodes, framed by process — now wired by runtime seams.',
         description:
-          'Layer 3 — process framing (orders-api · payments-api) plus module containment, with runtime mechanism edges replacing the structural relations.',
+          'Layer 3 — process framing (orders-api · payments-api) plus module containment, with runtime mechanism edges (calls / reads / writes).',
       },
       walkthrough: {
         blurb: 'Follow a traced GET and POST across the real seams.',

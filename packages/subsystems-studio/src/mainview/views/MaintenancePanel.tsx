@@ -69,12 +69,12 @@ const LANE_HELP: Record<SubsystemVerificationLane, { name: string; blurb: string
 		"static-topology": {
 			name: "Static topology",
 			blurb:
-				"Layer 2 — typed relations[] between constructs (extends, implements, …).",
+				"Layer 2 — package/module containment: the module boundary each construct belongs to, checked against its source file.",
 		},
 		"dynamic-topology": {
 			name: "Dynamic topology",
 			blurb:
-				"Layer 3 — how constructs are arranged at runtime: deployment-unit membership via process, and containment via package / module.",
+				"Layer 3 — runtime arrangement: deployment-unit membership via the process each construct runs in.",
 		},
 		walkthrough: {
 			name: "Walkthrough verification",

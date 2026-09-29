@@ -6,7 +6,7 @@ import { describe, expect, test } from 'bun:test';
 import { findSubsystemModelProblems } from '../lib/subsystem-model-validation.js';
 
 describe('findSubsystemModelProblems', () => {
-  test('requires title, components, relations (schema)', () => {
+  test('requires title and components (schema)', () => {
     const problems = findSubsystemModelProblems({});
     expect(problems.length).toBeGreaterThan(0);
     expect(problems.join(' ')).toContain('required');
@@ -25,7 +25,6 @@ describe('findSubsystemModelProblems', () => {
             purl: 'pkg:github/you/app',
           },
         ],
-        relations: [],
       }),
     ).toEqual([]);
   });
@@ -36,7 +35,6 @@ describe('findSubsystemModelProblems', () => {
       components: [
         { alias: 'a', name: 'A', construct: 'module', file: 'src/a.ts', purl: 'pkg:github/a/b' },
       ],
-      relations: [],
     });
     expect(problems).toHaveLength(1);
     expect(problems[0]).toContain('allowed:');
@@ -60,7 +58,6 @@ describe('findSubsystemModelProblems', () => {
             },
           },
         ],
-        relations: [],
       }),
     ).toEqual([]);
   });
@@ -71,19 +68,7 @@ describe('findSubsystemModelProblems', () => {
       components: [
         { alias: 'a', name: 'a', construct: 'function', module: 'src/host', file: '', purl: 'pkg:github/a/b' },
       ],
-      relations: [],
     });
     expect(problems.some((p) => p.includes('file is empty'))).toBe(true);
-  });
-
-  test('rejects a relation endpoint with no component (cross-field)', () => {
-    const problems = findSubsystemModelProblems({
-      title: 'x',
-      components: [
-        { alias: 'a', name: 'a', construct: 'function', file: 'src/a.ts', purl: 'pkg:github/a/b' },
-      ],
-      relations: [{ id: 'r1', from: 'a', to: 'ghost', relationType: 'method' }],
-    });
-    expect(problems.some((p) => p.includes('/relations/0/to'))).toBe(true);
   });
 });

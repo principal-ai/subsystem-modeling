@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import type { SubsystemComponent } from '../../../subsystem/model';
-import { graphSpecFromEdges } from './fixtures';
+import { graphSpecFromHops } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/WorkspacePackages',
@@ -114,7 +114,7 @@ const components: SubsystemComponent[] = [
   },
 ];
 
-const spec = graphSpecFromEdges([
+const spec = graphSpecFromHops([
   ['read-file', 'get-model', 'calls'],
   ['model-view', 'component-graph', 'uses'],
   ['component-graph', 'file-drawer', 'calls'],
@@ -125,7 +125,6 @@ export const PackageOwnedProcess: Story = {
   name: 'Package-owned process · library outside',
   args: {
     components,
-    relations: spec.relations,
     walkthroughs: spec.walkthroughs,
     graphTitle: 'Opening a file — app package owns the process',
   },

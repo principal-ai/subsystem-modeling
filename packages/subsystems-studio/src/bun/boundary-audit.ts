@@ -1,6 +1,6 @@
 /**
- * Boundary (process / module) audit helpers — membership for frames, not
- * relations[]. Mechanical checks only; no Graphify.
+ * Boundary (process / module) audit helpers — membership for frames.
+ * Mechanical checks only; no Graphify.
  *
  * Soft rule: module≠file and process-nest disagreement are gaps (never hard
  * fails). Module without a file anchor on a grounded component is an issue.

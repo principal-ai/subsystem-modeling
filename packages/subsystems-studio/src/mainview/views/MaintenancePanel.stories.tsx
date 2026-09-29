@@ -95,7 +95,7 @@ const OVERVIEW: MaintenanceOverview = {
 			},
 			repos: [{ owner: "principal-ai", name: "subsystem-modeling" }],
 			nextRoute: {
-				agent: "static-topology-fixer",
+				agent: "package-module-fixer",
 				layer: "static-topology",
 				mode: "issues",
 			},
@@ -128,15 +128,15 @@ const PROPOSALS: SubsystemModelProposal[] = [
 		status: "pending",
 		createdAt: T0,
 		lane: "static-topology",
-		rationale: "Relation target renamed.",
+		rationale: "Module boundary renamed.",
 		changes: [],
 		preview: [],
-		author: "static-topology-fixer",
+		author: "package-module-fixer",
 	},
 ];
 
 const RUNS: SubsystemModelRun[] = [
-	run({ id: "run-1", graphId: "g-payments", agent: "static-topology-verifier" }),
+	run({ id: "run-1", graphId: "g-payments", agent: "package-module-verifier" }),
 	run({ id: "run-2", graphId: "g-notify", agent: "construct-fixer", status: "error", error: "OpenCode session failed" }),
 ];
 

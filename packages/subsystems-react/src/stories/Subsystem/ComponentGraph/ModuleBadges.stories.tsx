@@ -9,7 +9,7 @@ import type {
   SubsystemGraphNode,
   SubsystemProcessRegion,
 } from '../../../subsystem/model';
-import { graphSpecFromEdges } from './fixtures';
+import { graphSpecFromHops } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/ModuleBadges',
@@ -102,12 +102,12 @@ const deepComponents: SubsystemComponent[] = [
   },
 ];
 
-const deepEdges = graphSpecFromEdges([
-  ['node-comp', 'group-comp', 'method'],
-  ['edge-comp', 'group-comp', 'method'],
-  ['model-view', 'layers', 'method'],
-  ['use-drawings', 'model-view', 'method'],
-  ['model-view', 'node-comp', 'method'],
+const deepEdges = graphSpecFromHops([
+  ['node-comp', 'group-comp', 'calls'],
+  ['edge-comp', 'group-comp', 'calls'],
+  ['model-view', 'layers', 'calls'],
+  ['use-drawings', 'model-view', 'calls'],
+  ['model-view', 'node-comp', 'calls'],
 ]);
 
 /** Collapsed module badges show `first/…/last`. Click one to expand the full
@@ -122,7 +122,6 @@ export const DeepModulePaths: Story = {
           'click the badge to expand the full path (the badge widens past the frame edge — the frame itself stays put), click again to collapse it back.'
         }
         components={deepComponents}
-        relations={deepEdges.relations}
         walkthroughs={deepEdges.walkthroughs}
       />
     </div>

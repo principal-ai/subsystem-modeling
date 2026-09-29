@@ -24,7 +24,6 @@ const DOCUMENT_KEYS = [
   'title',
   'description',
   'components',
-  'relations',
   'walkthroughs',
 ] as const;
 

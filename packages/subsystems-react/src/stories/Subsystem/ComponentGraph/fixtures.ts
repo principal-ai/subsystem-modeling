@@ -1,12 +1,9 @@
 import type {
   SubsystemComponent,
   SubsystemComponentEdge,
-  SubsystemRelation,
-  SubsystemRelationType,
   SubsystemWalkthrough,
   SubsystemWalkthroughMechanism,
 } from '../../../subsystem/model';
-import { derivedGraphEdgeId } from '../../../subsystem/model';
 import type { GraphifyComponentDetail } from '../../../graphify';
 
 // ---------------------------------------------------------------------------
@@ -24,26 +21,6 @@ export function components(
     purpose,
     symbol,
     declaration,
-  }));
-}
-
-const RELATION_TYPES = new Set<string>([
-  'extends',
-  'inherits',
-  'implements',
-  'mixes_in',
-  'method',
-]);
-
-export function relations(
-  spec: Array<[from: string, to: string, relationType: SubsystemRelationType, refs?: string[]]>,
-): SubsystemRelation[] {
-  return spec.map(([from, to, relationType, refs], i) => ({
-    id: `r${i}`,
-    from,
-    to,
-    relationType,
-    refs,
   }));
 }
 
@@ -68,48 +45,32 @@ export function walkthroughFromHops(
   };
 }
 
-/** @deprecated story helper — prefer `relations` + `walkthroughFromHops`. */
+/** @deprecated story helper — prefer `graphSpecFromHops` + `walkthroughFromHops`. */
 export function edges(
-  spec: Array<[from: string, to: string, mechanism: SubsystemComponentEdge['mechanism'], refs?: string[]]>,
+  spec: Array<[from: string, to: string, mechanism: SubsystemComponentEdge['mechanism']]>,
 ): SubsystemComponentEdge[] {
-  return spec.map(([from, to, mechanism, refs], i) => ({
+  return spec.map(([from, to, mechanism], i) => ({
     id: `e${i}`,
     from,
     to,
     mechanism,
-    refs,
   }));
 }
 
-/** Split mixed mechanism lists into relations + optional walkthrough for stories. */
-export function graphSpecFromEdges(
-  spec: Array<[from: string, to: string, mechanism: SubsystemComponentEdge['mechanism'], refs?: string[]]>,
-): { relations: SubsystemRelation[]; walkthroughs?: SubsystemWalkthrough[] } {
-  const rels: SubsystemRelation[] = [];
-  const hops: SubsystemWalkthrough['steps'] = [];
-  for (const [from, to, mechanism, refs] of spec) {
-    if (RELATION_TYPES.has(mechanism)) {
-      rels.push({
-        id: derivedGraphEdgeId(from, to, mechanism as SubsystemRelationType),
-        from,
-        to,
-        relationType: mechanism as SubsystemRelationType,
-        refs,
-      });
-    } else {
-      hops.push({
-        from,
-        to,
-        mechanism: mechanism as SubsystemWalkthroughMechanism,
-        file: 'story-placeholder.ts',
-        line: 1,
-        purl: 'pkg:github/storybook/fixture#story-placeholder.ts',
-        symbol: from,
-      });
-    }
-  }
+/** Turn every spec entry into a walkthrough hop — the sole authored edge form. */
+export function graphSpecFromHops(
+  spec: Array<[from: string, to: string, mechanism: SubsystemComponentEdge['mechanism']]>,
+): { walkthroughs?: SubsystemWalkthrough[] } {
+  const hops: SubsystemWalkthrough['steps'] = spec.map(([from, to, mechanism]) => ({
+    from,
+    to,
+    mechanism: mechanism as SubsystemWalkthroughMechanism,
+    file: 'story-placeholder.ts',
+    line: 1,
+    purl: 'pkg:github/storybook/fixture#story-placeholder.ts',
+    symbol: from,
+  }));
   return {
-    relations: rels,
     walkthroughs:
       hops.length > 0
         ? [{ id: 'story-hops', title: 'Story hops', steps: hops }]
@@ -192,17 +153,16 @@ export const investigateOnlyComponents: SubsystemComponent[] = [
   },
 ];
 
-const investigateSpec = graphSpecFromEdges([
+const investigateSpec = graphSpecFromHops([
   ['v1', 'input', 'produces'],
   ['v2', 'input', 'produces'],
   ['input', 'acc', 'feeds'],
   ['acc', 'out', 'produces'],
 ]);
 
-export const investigateOnlyRelations = investigateSpec.relations;
 export const investigateOnlyWalkthroughs = investigateSpec.walkthroughs;
 
-/** @deprecated use investigateOnlyRelations + investigateOnlyWalkthroughs */
+/** @deprecated use investigateOnlyWalkthroughs */
 export const investigateOnlyEdges: SubsystemComponentEdge[] = edges([
   ['v1', 'input', 'produces'],
   ['v2', 'input', 'produces'],

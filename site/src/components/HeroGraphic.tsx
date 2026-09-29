@@ -29,7 +29,6 @@ const SUBSYSTEM_MODEL_JSON = `{
       "construct": "external", "purl": "external"
     }
   ],
-  "relations": [],
   "walkthroughs": [
     {
       "id": "wt-checkout",

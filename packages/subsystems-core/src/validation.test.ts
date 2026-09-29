@@ -20,7 +20,6 @@ function doc(partial: Partial<SubsystemModelDocument>): SubsystemModelDocument {
   return {
     title: 't',
     components: [],
-    relations: [],
     ...partial,
   } as SubsystemModelDocument;
 }
@@ -29,7 +28,6 @@ describe('validateSubsystemModelCrossField', () => {
   test('accepts a consistent document', () => {
     const d = doc({
       components: [comp('a'), comp('b')],
-      relations: [{ id: 'r1', from: 'a', to: 'b', relationType: 'method' }],
       walkthroughs: [
         {
           id: 'w1',
@@ -47,17 +45,6 @@ describe('validateSubsystemModelCrossField', () => {
     );
     expect(problems).toHaveLength(1);
     expect(problems[0]!.message).toContain('duplicate alias');
-  });
-
-  test('flags relation endpoints that reference no component', () => {
-    const problems = validateSubsystemModelCrossField(
-      doc({
-        components: [comp('a')],
-        relations: [{ id: 'r1', from: 'a', to: 'ghost', relationType: 'method' }],
-      }),
-    );
-    expect(problems).toHaveLength(1);
-    expect(problems[0]!.path).toBe('/relations/0/to');
   });
 
   test('flags walkthrough step endpoints that reference no component', () => {

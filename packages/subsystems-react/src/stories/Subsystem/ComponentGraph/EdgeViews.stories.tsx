@@ -3,8 +3,8 @@ import '@xyflow/react/dist/style.css';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
-import type { SubsystemEdgeView } from '../../../subsystem/model';
-import { components, relations, walkthroughFromHops } from './fixtures';
+import type { SubsystemEdgeView, SubsystemGraphifyRelation } from '../../../subsystem/model';
+import { components, walkthroughFromHops } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/EdgeViews',
@@ -26,11 +26,11 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 // ---------------------------------------------------------------------------
-// A graph that carries BOTH vocabularies between overlapping node pairs:
-//   svc --references--> reader (topology)
-//   svc --calls--> reader      (runtime hop)
-//   store --references--> db   (topology)
-//   store --calls--> db        (runtime hop)
+// A graph that carries BOTH edge sources between overlapping node pairs:
+//   svc --references--> reader  (graphify static edge)
+//   svc --calls--> reader       (runtime hop)
+//   store --references--> db    (graphify static edge)
+//   store --calls--> db         (runtime hop)
 // so switching the label view visibly changes which labels appear.
 // ---------------------------------------------------------------------------
 const labelViewComponents = components([
@@ -42,12 +42,12 @@ const labelViewComponents = components([
   ['db', 'PostgresStore', 'external', 'src/db/PostgresStore.ts', 'pkg:github/principal-ai/agent-monitoring', 'external persistence driver', 'PostgresStore'],
 ]);
 
-const labelViewRelations = relations([
-  ['svc', 'reader', 'method'],
-  ['svc', 'event', 'method'],
-  ['store', 'db', 'method'],
-  ['reader', 'event', 'method'],
-]);
+const labelViewGraphify: SubsystemGraphifyRelation[] = [
+  { id: 'g-svc-reader', from: 'svc', to: 'reader', relation: 'references' },
+  { id: 'g-svc-event', from: 'svc', to: 'event', relation: 'references' },
+  { id: 'g-store-db', from: 'store', to: 'db', relation: 'references' },
+  { id: 'g-reader-event', from: 'reader', to: 'event', relation: 'references' },
+];
 
 const labelViewWalkthroughs = [
   walkthroughFromHops('tl-capture', 'Capture session', [
@@ -63,12 +63,12 @@ const labelViewWalkthroughs = [
 ];
 
 const VIEWS: { value: SubsystemEdgeView; label: string }[] = [
-  { value: 'relations', label: 'Relations' },
+  { value: 'graphify', label: 'Graphify' },
   { value: 'walkthroughs', label: 'Walkthroughs' },
 ];
 
 function EdgeViewDemo() {
-  const [view, setView] = useState<SubsystemEdgeView>('relations');
+  const [view, setView] = useState<SubsystemEdgeView>('graphify');
   const [showEdgeLabels, setShowEdgeLabels] = useState(true);
 
   return (
@@ -118,10 +118,10 @@ function EdgeViewDemo() {
       <div style={{ flex: 1, minHeight: 0 }}>
         <SubsystemComponentGraph
           components={labelViewComponents}
-          relations={labelViewRelations}
+          graphifyRelations={labelViewGraphify}
           walkthroughs={labelViewWalkthroughs}
           title="edge views"
-          description="The relation and walkthrough vocabularies are disjoint and never shown together. Toggle the view: **Relations** draws `svc --references--> reader`; **Walkthroughs** draws `svc --calls--> reader`. The model is the same either way."
+          description="The graphify and walkthrough edge sources are disjoint and never shown together. Toggle the view: **Graphify** draws `svc --references--> reader`; **Walkthroughs** draws `svc --calls--> reader`. The model is the same either way."
           showEdgeLabels={showEdgeLabels}
           edgeView={view}
         />
@@ -130,7 +130,7 @@ function EdgeViewDemo() {
   );
 }
 
-/** Interactive toggle between the `relations` and `walkthroughs` edge views. */
+/** Interactive toggle between the `graphify` and `walkthroughs` edge views. */
 export const ToggleEdgeView: Story = {
   render: () => <EdgeViewDemo />,
 };
@@ -141,7 +141,7 @@ export const ViewControl: Story = {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={labelViewComponents}
-        relations={labelViewRelations}
+        graphifyRelations={labelViewGraphify}
         walkthroughs={labelViewWalkthroughs}
         showEdgeLabels={args.showEdgeLabels}
         edgeView={args.edgeView}
@@ -150,10 +150,10 @@ export const ViewControl: Story = {
   ),
   args: {
     showEdgeLabels: true,
-    edgeView: 'relations',
+    edgeView: 'graphify',
   },
   argTypes: {
     showEdgeLabels: { control: 'boolean' },
-    edgeView: { control: 'inline-radio', options: ['relations', 'walkthroughs'] },
+    edgeView: { control: 'inline-radio', options: ['graphify', 'walkthroughs'] },
   },
 };

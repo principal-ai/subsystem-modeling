@@ -203,7 +203,6 @@ describe("verifyModelFiles", () => {
 				{ alias: "u1", name: "U", construct: "function", file: "somewhere.ts", purl: "pkg:github/a/repo-remote" },
 				{ alias: "f1", name: "F", construct: "function", file: "", purl: "pkg:github/a/repo-a" },
 			],
-			relations: [],
 		});
 
 		expect(result.verifiedCount).toBe(2);
@@ -252,7 +251,6 @@ describe("verifyModelFiles symbol pass", () => {
 				{ alias: "mention-only", name: "E", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "buildAgentSessionsView" },
 				{ alias: "no-symbol", name: "F", construct: "function", file: "exists.ts", purl: "pkg:github/a/repo-a" },
 			],
-			relations: [],
 		});
 
 		expect(result.verifiedCount).toBe(6);
@@ -346,21 +344,15 @@ describe("declaration provenance", () => {
 		] as unknown as Parameters<typeof verifyModelFiles>[0]["components"];
 		const result = await verifyModelFiles({
 			components,
-			relations: [],
 		});
 		expect(result.declarationsVerified).toBe(1);
 		expect(result.declarationsAuthored).toBe(1); // defaulted from missing
 	});
 });
 
-describe("relation and walkthrough mechanism sets", () => {
+describe("edge mechanism sets", () => {
 	test("pins the combined edge-mechanism union for drift checks", () => {
 		expect([...SUBSYSTEM_EDGE_MECHANISMS]).toEqual([
-			"extends",
-			"inherits",
-			"implements",
-			"mixes_in",
-			"method",
 			"calls",
 			"uses",
 			"feeds",
@@ -383,7 +375,6 @@ describe("walkthrough verify pass", () => {
 		];
 		const result = await verifyModelFiles({
 			components,
-			relations: [],
 			walkthroughs: [
 				{
 					id: "wt",
@@ -432,7 +423,6 @@ describe("commit provenance", () => {
 		const created = await createSubsystemModel({
 			title: "prov",
 			components,
-			relations: [],
 		});
 		const commits = created.createdAtCommits ?? {};
 		expect(commits[KEY]).toMatch(/^[0-9a-f]{40}$/);
@@ -448,7 +438,6 @@ describe("commit provenance", () => {
 		const created = await createSubsystemModel({
 			title: "prov2",
 			components,
-			relations: [],
 		});
 		const pin = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 		const stamped = await stampVerifiedCommits(created.id, { [KEY]: pin });
@@ -470,7 +459,6 @@ describe("commit provenance", () => {
 				id: "sg-legacy-1",
 				title: "legacy",
 				components,
-				relations: [],
 				createdAt: new Date().toISOString(),
 				updatedAt: new Date().toISOString(),
 			}),

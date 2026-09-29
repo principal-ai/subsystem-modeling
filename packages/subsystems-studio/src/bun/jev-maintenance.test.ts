@@ -49,23 +49,28 @@ describe("accuracyInstruction", () => {
 		expect(s).toContain("named or union return type");
 		expect(s).toContain("structural object parameter");
 	});
-	test("static topology uses relation wording", () => {
+	test("static topology uses package/module containment wording", () => {
 		const s = accuracyInstruction(
 			proposal("static-topology", [
-				{ target: "relation", relationId: "r", field: "to", value: "b" },
+				{
+					target: "component",
+					componentAlias: "a",
+					field: "module",
+					value: "src/web",
+				},
 			]),
 		);
-		expect(s).toContain("relation claim");
-		expect(s).not.toContain("containment");
+		expect(s).toContain("containment claim");
+		expect(s).not.toContain("relation");
 	});
-	test("dynamic topology uses process + containment wording", () => {
+	test("dynamic topology uses process wording", () => {
 		const s = accuracyInstruction(
 			proposal("dynamic-topology", [
 				{ target: "component", componentAlias: "a", field: "process", value: "web" },
 			]),
 		);
 		expect(s).toContain("deployment-unit");
-		expect(s).toContain("containment");
+		expect(s).not.toContain("containment");
 	});
 	test("walkthrough uses step wording", () => {
 		const s = accuracyInstruction(
@@ -135,15 +140,15 @@ describe("changeKindQuestion", () => {
 		expect(Object.keys(q.criteria)).toContain("signature_augment");
 		expect(Object.keys(q.criteria)).toContain("identity_fix");
 	});
-	test("static topology offers relation only", () => {
+	test("static topology offers module only", () => {
 		const q = changeKindQuestion(proposal("static-topology", []));
-		expect(Object.keys(q.criteria)).toContain("relation_fix");
-		expect(Object.keys(q.criteria)).not.toContain("module_fix");
-	});
-	test("dynamic topology offers module + process", () => {
-		const q = changeKindQuestion(proposal("dynamic-topology", []));
 		expect(Object.keys(q.criteria)).toContain("module_fix");
+		expect(Object.keys(q.criteria)).not.toContain("process_fix");
+	});
+	test("dynamic topology offers process only", () => {
+		const q = changeKindQuestion(proposal("dynamic-topology", []));
 		expect(Object.keys(q.criteria)).toContain("process_fix");
+		expect(Object.keys(q.criteria)).not.toContain("module_fix");
 	});
 	test("walkthrough offers walkthrough_fix", () => {
 		const q = changeKindQuestion(proposal("walkthrough", []));

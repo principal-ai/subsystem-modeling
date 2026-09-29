@@ -37,8 +37,8 @@ export function MaintainerConstruct() {
         </h2>
         <p className="maintainer-lede">
           Construct layer only. One list action; the host re-audits and picks
-          the agent. Construct issues win over construct unconfirmed claims — and over
-          topology — so relation retargets run against a stable component set.
+          the agent.           Construct issues win over construct unconfirmed claims — and over
+          topology — so containment retargets run against a stable component set.
           Agents propose; you confirm.
         </p>
         <div className="maintainer-agents">

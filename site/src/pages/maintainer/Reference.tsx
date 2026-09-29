@@ -19,18 +19,18 @@ export function MaintainerReference() {
           <li>
             <strong>Author</strong>
             <span>
-              A model claims constructs (nodes), static topology (relations),
-              dynamic topology (<em>process</em> + package/<em>module</em>), and
-              walkthroughs (ordered hops with file:line sites).
+              A model claims constructs (nodes), static topology (package /{' '}
+              <em>module</em> containment), dynamic topology (<em>process</em>),
+              and walkthroughs (ordered hops with file:line sites).
             </span>
           </li>
           <li>
             <strong>Audit</strong>
             <span>
               Four layers: construct → static topology → dynamic topology →
-              walkthrough. Construct, relations, and module/process field checks
-              run in Studio audit today; package-layer soft checks and
-              walkthrough audit are next.
+              walkthrough. Construct, module, and process field checks run in
+              Studio audit today; package-layer soft checks and walkthrough audit
+              are next.
             </span>
           </li>
           <li>
@@ -44,9 +44,8 @@ export function MaintainerReference() {
             <strong>Maintain</strong>
             <span>
               Construct: <em>construct-fixer</em> / <em>construct-verifier</em>;
-              static topology: <em>static-topology-fixer</em> /{' '}
-              <em>static-topology-verifier</em>; dynamic topology:{' '}
-              <em>package-module-fixer</em> / <em>package-module-verifier</em> /{' '}
+              static topology: <em>package-module-fixer</em> /{' '}
+              <em>package-module-verifier</em>; dynamic topology:{' '}
               <em>runtime-topology-verifier</em>. Walkthrough Maintain is a later,
               separate pass.
             </span>
@@ -85,7 +84,7 @@ export function MaintainerReference() {
               source or in the graphify cache. Counts toward{' '}
               <em>verification failed</em>. Studio Maintain runs a{' '}
               <strong>fixer</strong> (<em>construct-fixer</em>,{' '}
-              <em>static-topology-fixer</em>, <em>package-module-fixer</em>).
+              <em>package-module-fixer</em>).
             </p>
           </div>
           <div>
@@ -94,7 +93,6 @@ export function MaintainerReference() {
               Nothing failed, but we could not fully confirm a claim. Counts
               toward <em>partially verified</em>. Studio Maintain runs a{' '}
               <strong>verifier</strong> (<em>construct-verifier</em>,{' '}
-              <em>static-topology-verifier</em>,{' '}
               <em>package-module-verifier</em>,{' '}
               <em>runtime-topology-verifier</em>) — judgment proposals, not
               automatic rewrites.

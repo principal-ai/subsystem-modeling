@@ -44,9 +44,8 @@ export const MAINTAINER_SECTIONS: MaintainerSection[] = [
     path: '/maintainer/static-topology',
     label: 'Static topology',
     children: [
-      { id: 'relation-types', label: 'Relation types' },
-      { id: 'topology-mechanical-checks', label: 'Relation checks' },
-      { id: 'topology-agents', label: 'Relation agents' },
+      { id: 'package-module-membership', label: 'Package & module' },
+      { id: 'module-membership-agents', label: 'Module agents' },
     ],
   },
   {
@@ -54,8 +53,6 @@ export const MAINTAINER_SECTIONS: MaintainerSection[] = [
     path: '/maintainer/dynamic-topology',
     label: 'Dynamic topology',
     children: [
-      { id: 'package-module-membership', label: 'Package & module' },
-      { id: 'module-membership-agents', label: 'Module agents' },
       { id: 'process-boundary-checks', label: 'Process' },
       { id: 'process-boundary-agents', label: 'Process agents' },
     ],

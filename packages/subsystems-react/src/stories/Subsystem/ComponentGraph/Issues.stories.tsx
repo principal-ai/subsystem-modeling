@@ -4,7 +4,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import { SubsystemIssueList, type SubsystemIssue } from '../../../subsystem/IssueList';
-import { components, graphSpecFromEdges } from './fixtures';
+import { components, graphSpecFromHops } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Issues',
@@ -46,13 +46,6 @@ const ISSUES: SubsystemIssue[] = [
     kind: 'signature_unconfirmed',
     message: 'Named parameter types are not present in the graphify cache.',
     target: { kind: 'component', id: 'entry', label: 'checkoutApi' },
-  },
-  {
-    id: 'i4',
-    severity: 'error',
-    kind: 'topology_broken_endpoint',
-    message: 'Relationship endpoint "store" does not resolve to a component.',
-    target: { kind: 'relation', id: 'r1', label: 'checkoutApi → cartStore', detail: 'writes' },
   },
   {
     id: 'i5',
@@ -132,21 +125,7 @@ const ISSUES: SubsystemIssue[] = [
     message: 'Graphify cache missing for pkg:github/you/your-app — build it to verify constructs and anchors',
     target: { kind: 'repo', id: 'pkg:github/you/your-app', label: 'pkg:github/you/your-app' },
   },
-  {
-    id: 'i14',
-    severity: 'info',
-    kind: 'topology_import_unconfirmed',
-    message: 'No import edge from checkoutApi to cartStore found in Graphify.',
-    target: { kind: 'relation', id: 'r1', label: 'checkoutApi → cartStore', detail: 'references' },
-  },
-  {
-    id: 'i15',
-    severity: 'info',
-    kind: 'topology_relation_unconfirmed',
-    message: 'Graphify found no inheritance evidence for FileSessionStore → SessionStore.',
-    target: { kind: 'relation', id: 'r2', label: 'FileSessionStore → SessionStore', detail: 'extends' },
-  },
-];
+  ];
 
 const graphComponents = components([
   ['entry', 'checkoutApi', 'function', 'src/checkout/api.ts', 'pkg:github/you/your-app', 'Handles cart requests.', 'checkoutApi'],
@@ -154,7 +133,7 @@ const graphComponents = components([
   ['stripe', 'Stripe', 'external', '', 'external', undefined, undefined],
 ]);
 
-const graphEdges = graphSpecFromEdges([
+const graphEdges = graphSpecFromHops([
   ['entry', 'store', 'writes'],
   ['entry', 'stripe', 'calls'],
 ]);
@@ -187,7 +166,6 @@ export const GraphWithIssues: Story = {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={graphComponents}
-        relations={graphEdges.relations}
         walkthroughs={graphEdges.walkthroughs}
         title="Checkout"
         description="A small e-commerce checkout subsystem."

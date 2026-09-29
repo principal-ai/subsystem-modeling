@@ -109,17 +109,6 @@ export interface SubsystemDeclToken {
 }
 
 /**
- * Topology relation type — structural / module / type claims.
- * Belongs on `relations[]`, not on walkthrough hops.
- */
-export type SubsystemRelationType =
-  | 'extends'
-  | 'inherits'
-  | 'implements'
-  | 'mixes_in'
-  | 'method';
-
-/**
  * Walkthrough hop mechanism — runtime seams with a `file:line` site.
  */
 export type SubsystemWalkthroughMechanism =
@@ -132,24 +121,21 @@ export type SubsystemWalkthroughMechanism =
   | 'watches'
   | 'registers-into';
 
-/** Union for derived graph-edge styling (relationType or hop mechanism). */
-export type SubsystemEdgeMechanism =
-  | SubsystemRelationType
-  | SubsystemWalkthroughMechanism;
+/** Union for derived graph-edge styling — the walkthrough hop mechanism. */
+export type SubsystemEdgeMechanism = SubsystemWalkthroughMechanism;
 
 /**
- * Which edge vocabulary the canvas draws. The two vocabularies are disjoint;
- * a view shows only edges (and their labels) from the selected source.
- * - `relations`: only topology relation edges (`extends`, `implements`, …)
+ * Which edge source the canvas draws. The two sources are disjoint; a view
+ * shows only edges (and their labels) from the selected source.
+ * - `graphify`: only graphify-native static edges (`imports`, `contains`, …)
  * - `walkthroughs`: only walkthrough hop edges (`calls`, `feeds`, …)
  */
-export type SubsystemEdgeView = 'relations' | 'walkthroughs';
+export type SubsystemEdgeView = 'graphify' | 'walkthroughs';
 
 /**
  * Where a display edge came from.
  *
- * - `subsystem` (default): a verb from the authored vocabularies
- *   (`SubsystemRelationType` / `SubsystemWalkthroughMechanism`), colored from
+ * - `subsystem` (default): a walkthrough hop mechanism verb, colored from
  *   `MECHANISM_COLOR`.
  * - `graphify`: a raw relation read off graphify's static symbol graph
  *   (`imports`, `contains`, `re_exports`, …). These are DERIVED, never authored,
@@ -162,10 +148,8 @@ export type SubsystemEdgeProvenance = 'subsystem' | 'graphify';
  * A graphify-native topology edge — a raw graphify relation that has no
  * subsystem mechanism equivalent.
  *
- * Kept structurally separate from `SubsystemRelation`: those are authored into
- * a portable model and validated against a closed vocabulary, whereas these are
- * derived from a graphify run and carry graphify's own (open) verb set. They are
- * a display input only — never written back into a `SubsystemModelDocument`.
+ * Derived from a graphify run and carry graphify's own (open) verb set. They
+ * are a display input only — never written back into a `SubsystemModelDocument`.
  */
 export interface SubsystemGraphifyRelation {
   id: string;
@@ -192,8 +176,8 @@ export interface SubsystemGraphifyRelation {
 /** A component node — the named unit, construct-tagged; `file` is its location. */
 export interface SubsystemComponent {
   /**
-   * Model-local stable alias, unique per model. Referenced by relation /
-   * walkthrough `from` / `to`; edges point at the alias, not the location.
+   * Model-local stable alias, unique per model. Referenced by walkthrough
+   * `from` / `to`; edges point at the alias, not the location.
    * Code identity (for composed multi-model views) lives on
    * `purl` + `file` + `symbol`, not here.
    */
@@ -330,19 +314,9 @@ export interface SubsystemComponent {
   declarationRef?: SubsystemDeclarationRef;
 }
 
-/** A topology relation between components (structural / module / type). */
-export interface SubsystemRelation {
-  id: string;
-  from: string;
-  to: string;
-  relationType: SubsystemRelationType;
-  /** Concrete file/symbol refs backing the relation. */
-  refs?: string[];
-}
-
 /**
- * Derived / display graph edge used by renderers. Built from `relations`
- * and/or walkthrough hops — not authored as its own document field.
+ * Derived / display graph edge used by renderers. Built from walkthrough hops
+ * (and graphify-native relations) — not authored as its own document field.
  */
 export interface SubsystemComponentEdge {
   id: string;
@@ -352,8 +326,8 @@ export interface SubsystemComponentEdge {
    * The edge verb. For `provenance: 'subsystem'` (the default) this is a
    * `SubsystemEdgeMechanism`; for `provenance: 'graphify'` it is the raw
    * graphify relation. Typed as `string` because the display edge is a derived
-   * structure and graphify's verb set is open — the authored vocabularies
-   * (`SubsystemRelationType` / `SubsystemWalkthroughMechanism`) stay closed.
+   * structure and graphify's verb set is open — the walkthrough vocabulary
+   * (`SubsystemWalkthroughMechanism`) stays closed.
    */
   mechanism: string;
   /** Origin of the edge; absent means `'subsystem'`. */
@@ -414,13 +388,11 @@ export interface SubsystemWalkthrough {
 
 export interface SubsystemModelDocument {
   components: SubsystemComponent[];
-  /** Topology relations (structural / module / type). May be empty. */
-  relations: SubsystemRelation[];
   /** Ordered runtime walkthroughs (one per named behavior). */
   walkthroughs?: SubsystemWalkthrough[];
 }
 
-/** Stable id for a derived graph edge from a relation or walkthrough hop. */
+/** Stable id for a derived graph edge from a walkthrough hop. */
 export function derivedGraphEdgeId(
   from: string,
   to: string,
@@ -429,10 +401,6 @@ export function derivedGraphEdgeId(
   return `${from}--${mechanism}-->${to}`;
 }
 
-/**
- * Build display edges for the graph canvas from topology relations and
- * walkthrough hops (deduped by from/to/mechanism).
- */
 /** React Flow / canvas edge id for a walkthrough hop. */
 export function walkthroughStepGraphEdgeId(
   step: Pick<SubsystemWalkthroughStep, 'from' | 'to' | 'mechanism'>,
@@ -472,23 +440,10 @@ export function reorderTargetIndex(boundary: number, from: number): number {
 }
 
 export function deriveGraphEdges(doc: {
-  relations?: readonly SubsystemRelation[];
   walkthroughs?: readonly SubsystemWalkthrough[];
   graphifyRelations?: readonly SubsystemGraphifyRelation[];
 }): SubsystemComponentEdge[] {
   const byId = new Map<string, SubsystemComponentEdge>();
-  for (const r of doc.relations ?? []) {
-    const id = r.id || derivedGraphEdgeId(r.from, r.to, r.relationType);
-    if (!byId.has(id)) {
-      byId.set(id, {
-        id,
-        from: r.from,
-        to: r.to,
-        mechanism: r.relationType,
-        refs: r.refs,
-      });
-    }
-  }
   for (const w of doc.walkthroughs ?? []) {
     for (const step of w.steps) {
       const id = derivedGraphEdgeId(step.from, step.to, step.mechanism);
@@ -522,18 +477,24 @@ export function deriveGraphEdges(doc: {
 }
 
 /**
- * True when the model has components but no topology or walkthrough edges.
- * Those snapshots are a catalog of declarations, not a graph.
+ * True when the model has components but no graph structure at all: no
+ * walkthrough/graphify edges AND no boundary containment (`module` / `process`)
+ * to frame. Those snapshots are a catalog of declarations, not a graph.
+ *
+ * A model that carries `module` / `process` membership still draws frames even
+ * with zero edges — that is static topology, so it is not constructs-only.
  */
 export function isConstructsOnlyModel(doc: {
-  components: readonly { alias: string }[];
-  relations?: readonly SubsystemRelation[];
+  components: readonly { alias: string; module?: string; process?: string }[];
   walkthroughs?: readonly SubsystemWalkthrough[];
   graphifyRelations?: readonly SubsystemGraphifyRelation[];
 }): boolean {
   if (doc.components.length === 0) return false;
+  const hasBoundary = doc.components.some(
+    (c) => (c.module?.trim() ?? '') !== '' || (c.process?.trim() ?? '') !== '',
+  );
+  if (hasBoundary) return false;
   return deriveGraphEdges({
-    relations: doc.relations,
     walkthroughs: doc.walkthroughs,
     graphifyRelations: doc.graphifyRelations,
   }).length === 0;
@@ -655,7 +616,7 @@ export type SubsystemGraphNodeType = 'subsystem-component' | 'subsystem-group';
  */
 export interface SubsystemProcessRegion {
   /** Discriminator — which field / identity produced this region. */
-  kind: 'process' | 'module' | 'package';
+  kind: 'process' | 'module' | 'directory' | 'package';
   /** The `process` / `module` value, or purl repo key for packages. */
   key: string;
   /** Display label for the boundary frame. */
@@ -678,6 +639,15 @@ export interface BoundaryFrameOptions {
    * - `never`: no package frames
    */
   packageFrames?: 'multi-repo' | 'always' | 'never';
+  /**
+   * How module frames group.
+   * - `exact` (default): one frame per distinct `module` string.
+   * - `path`: derive directory frames from the path segments of each
+   *   component's `module`, and nest module frames under the directories that
+   *   contain them. Directory frames are interposed between process/package
+   *   and module frames.
+   */
+  moduleNesting?: 'exact' | 'path';
 }
 
 /** React Flow id for a process boundary group node. */
@@ -688,6 +658,23 @@ export function processGroupNodeId(processKey: string): string {
 /** React Flow id for a module boundary group node. */
 export function moduleGroupNodeId(moduleKey: string): string {
   return `module:${moduleKey}`;
+}
+
+/** React Flow id for a directory boundary group node (path-derived nesting). */
+export function directoryGroupNodeId(dirKey: string): string {
+  return `directory:${dirKey}`;
+}
+
+/** Normalize a module path to forward slashes, no trailing slash or `./`. */
+function normalizeModulePath(p: string): string {
+  return p.trim().replace(/\\/g, '/').replace(/\/+$/, '').replace(/^\.\//, '');
+}
+
+/** Parent directory of a path-like key, or `''` when it has no slash. */
+function parentDirectory(path: string): string {
+  const norm = normalizeModulePath(path);
+  const idx = norm.lastIndexOf('/');
+  return idx <= 0 ? '' : norm.slice(0, idx);
 }
 
 export const MODULE_BADGE_INSET = 12;
@@ -765,6 +752,7 @@ export function packageGroupNodeId(packageKey: string): string {
 /** React Flow id for a boundary group of any kind. */
 export function boundaryGroupNodeId(region: Pick<SubsystemProcessRegion, 'kind' | 'key'>): string {
   if (region.kind === 'module') return moduleGroupNodeId(region.key);
+  if (region.kind === 'directory') return directoryGroupNodeId(region.key);
   if (region.kind === 'package') return packageGroupNodeId(region.key);
   return processGroupNodeId(region.key);
 }
@@ -887,6 +875,9 @@ export function buildBoundaryLayoutGroups(
   doc: Pick<SubsystemModelDocument, 'components'>,
   opts: BoundaryFrameOptions = {},
 ): BoundaryLayoutGroup[] {
+  if (opts.moduleNesting === 'path') {
+    return buildBoundaryLayoutGroupsByPath(doc, opts);
+  }
   const showSingletons = opts.showSingletonFrames === true;
   const packageMode = opts.packageFrames ?? 'multi-repo';
   const byAlias = new Map(doc.components.map((c) => [c.alias, c]));
@@ -1030,6 +1021,288 @@ export function buildBoundaryLayoutGroups(
   return [...moduleGroups, ...processGroups, ...packageGroups];
 }
 
+/**
+ * Path-nesting variant of {@link buildBoundaryLayoutGroups}.
+ *
+ * Adds directory frames derived from each component's `module` path segments
+ * (`src/session/transcript.ts` → `src` → `src/session` → module frame) and
+ * nests module frames under the deepest directory that contains them. Directory
+ * frames are kept when they hold 2+ leaves (or `showSingletonFrames`). Process
+ * and package frames nest above directories exactly as before.
+ *
+ * Module frames are unchanged (one per exact `module` string); leaves still
+ * parent to their module frame in `convertSubsystemToNodes`.
+ */
+export function buildBoundaryLayoutGroupsByPath(
+  doc: Pick<SubsystemModelDocument, 'components'>,
+  opts: BoundaryFrameOptions = {},
+): BoundaryLayoutGroup[] {
+  const showSingletons = opts.showSingletonFrames === true;
+  const packageMode = opts.packageFrames ?? 'multi-repo';
+  const byAlias = new Map(doc.components.map((c) => [c.alias, c]));
+
+  const allPackages = getSubsystemPackageRegions(doc);
+  const packageEligible =
+    packageMode === 'always'
+      ? true
+      : packageMode === 'never'
+        ? false
+        : allPackages.length >= 2;
+  const packages = packageEligible
+    ? allPackages.filter((r) => keepRegion(r, showSingletons))
+    : [];
+  const keptPackageKeys = new Set(packages.map((r) => r.key));
+
+  const processes = getSubsystemRegions(doc).filter((r) =>
+    keepRegion(r, showSingletons),
+  );
+  const keptProcessKeys = new Set(processes.map((r) => r.key));
+
+  const modules = getSubsystemModuleRegions(doc).filter((r) =>
+    keepRegion(r, showSingletons),
+  );
+
+  // Directory nesting is SCOPED to the enclosing process (else package, else
+  // root), so module grouping stays subordinate to process boundaries. A
+  // folder that spans two processes is split per process rather than becoming
+  // a frame that belongs to neither — which would leave the process frames
+  // childless and drop them. Composite key = `${scopeKey}\0${path}`.
+  const scopeKeyFor = (c: SubsystemComponent): string => {
+    const p = c.process?.trim();
+    if (p && keptProcessKeys.has(p)) return `p:${p}`;
+    const pkg = componentPackageKey(c);
+    if (pkg && keptPackageKeys.has(pkg)) return `k:${pkg}`;
+    return 'root';
+  };
+  const scopeParentId = (scopeKey: string): string | undefined => {
+    if (scopeKey.startsWith('p:')) return processGroupNodeId(scopeKey.slice(2));
+    if (scopeKey.startsWith('k:')) return packageGroupNodeId(scopeKey.slice(2));
+    return undefined;
+  };
+  const dirGroupId = (scopeKey: string, path: string): string =>
+    scopeKey === 'root'
+      ? directoryGroupNodeId(path)
+      : `directory:${scopeKey}::${path}`;
+
+  const dirMembers = new Map<string, Set<string>>();
+  const dirPathOf = new Map<string, string>();
+  const dirScopeOf = new Map<string, string>();
+  for (const c of doc.components) {
+    const m = c.module?.trim();
+    if (!m) continue;
+    const scope = scopeKeyFor(c);
+    let d = parentDirectory(m);
+    while (d) {
+      const ck = `${scope}\0${d}`;
+      const set = dirMembers.get(ck) ?? new Set<string>();
+      set.add(c.alias);
+      dirMembers.set(ck, set);
+      dirPathOf.set(ck, d);
+      dirScopeOf.set(ck, scope);
+      d = parentDirectory(d);
+    }
+  }
+  const keptDirs = new Set<string>();
+  for (const [ck, members] of dirMembers) {
+    if (members.size >= 2 || showSingletons) keptDirs.add(ck);
+  }
+
+  // Files sitting directly in each directory (drives chain compaction below).
+  const directFileCount = new Map<string, number>();
+  for (const c of doc.components) {
+    const m = c.module?.trim();
+    if (!m) continue;
+    const d = parentDirectory(m);
+    if (!d) continue;
+    const ck = `${scopeKeyFor(c)}\0${d}`;
+    directFileCount.set(ck, (directFileCount.get(ck) ?? 0) + 1);
+  }
+  const nearestKeptDirCk = (ck: string): string | undefined => {
+    const scope = dirScopeOf.get(ck)!;
+    let a = parentDirectory(dirPathOf.get(ck)!);
+    while (a) {
+      const cand = `${scope}\0${a}`;
+      if (keptDirs.has(cand)) return cand;
+      a = parentDirectory(a);
+    }
+    return undefined;
+  };
+  // Compact single-child directory chains within a scope, mirroring the file
+  // tree: `app` → `app/book` renders one `app/book` frame, not `app` wrapping
+  // `book`.
+  let compacting = true;
+  while (compacting) {
+    compacting = false;
+    const childDirsOf = new Map<string, string[]>();
+    for (const ck of keptDirs) {
+      const a = nearestKeptDirCk(ck);
+      if (!a) continue;
+      const list = childDirsOf.get(a) ?? [];
+      list.push(ck);
+      childDirsOf.set(a, list);
+    }
+    for (const ck of [...keptDirs]) {
+      if (
+        (childDirsOf.get(ck) ?? []).length === 1 &&
+        (directFileCount.get(ck) ?? 0) === 0
+      ) {
+        keptDirs.delete(ck);
+        compacting = true;
+      }
+    }
+  }
+  const dirLabel = (ck: string): string => {
+    const path = dirPathOf.get(ck)!;
+    const ancestor = nearestKeptDirCk(ck);
+    return ancestor ? path.slice(dirPathOf.get(ancestor)!.length + 1) : path;
+  };
+
+  const moduleRegionByKey = new Map(modules.map((r) => [r.key, r]));
+  // A module's scope is uniform across its members (else undefined → root), so
+  // a module straddling processes is never forced into one.
+  const moduleScope = new Map<string, string | undefined>();
+  for (const r of modules) {
+    const scopes = new Set<string>();
+    for (const a of r.memberAliases) {
+      const c = byAlias.get(a);
+      if (c) scopes.add(scopeKeyFor(c));
+    }
+    moduleScope.set(r.key, scopes.size === 1 ? [...scopes][0] : undefined);
+  }
+  const moduleDirCk = (moduleKey: string): string | undefined => {
+    const scope = moduleScope.get(moduleKey);
+    if (scope === undefined) return undefined;
+    let d = parentDirectory(moduleKey);
+    while (d) {
+      const cand = `${scope}\0${d}`;
+      if (keptDirs.has(cand)) return cand;
+      d = parentDirectory(d);
+    }
+    return undefined;
+  };
+
+  const sharedPackageParent = (
+    memberAliases: readonly string[],
+  ): string | undefined => {
+    const seen = new Set<string>();
+    for (const alias of memberAliases) {
+      const c = byAlias.get(alias);
+      const pkg = c ? componentPackageKey(c) : undefined;
+      if (pkg) seen.add(pkg);
+    }
+    if (seen.size !== 1) return undefined;
+    const pkg = [...seen][0]!;
+    return keptPackageKeys.has(pkg) ? packageGroupNodeId(pkg) : undefined;
+  };
+
+  const moduleGroups: BoundaryLayoutGroup[] = modules.map((r) => {
+    const ck = moduleDirCk(r.key);
+    const parentId = ck
+      ? dirGroupId(dirScopeOf.get(ck)!, dirPathOf.get(ck)!)
+      : scopeParentId(moduleScope.get(r.key) ?? 'root');
+    // Relative label when nested: `app/book/actions.ts` under `app/book`
+    // reads as `actions.ts`. At the root the full module path stays.
+    const label = ck ? r.key.slice(dirPathOf.get(ck)!.length + 1) : r.label;
+    return {
+      id: moduleGroupNodeId(r.key),
+      memberAliases: [...r.memberAliases],
+      parentId,
+      region: { ...r, label },
+    };
+  });
+
+  const dirGroups: BoundaryLayoutGroup[] = [...keptDirs].map((ck) => {
+    const scope = dirScopeOf.get(ck)!;
+    const path = dirPathOf.get(ck)!;
+    const ancestor = nearestKeptDirCk(ck);
+    const parentId = ancestor
+      ? dirGroupId(dirScopeOf.get(ancestor)!, dirPathOf.get(ancestor)!)
+      : scopeParentId(scope);
+    // Immediate children: subdirectories and module frames parented here.
+    // Only child *group ids* go in the layout member list — a group's
+    // descendant leaves belong to its child groups alone, or ELK sees the
+    // same leaf in two compound parents and rejects the layout.
+    const childDirCks = [...keptDirs].filter((d) => nearestKeptDirCk(d) === ck);
+    const childModuleKeys = modules
+      .filter((m) => moduleDirCk(m.key) === ck)
+      .map((m) => m.key);
+    const claimed = new Set<string>();
+    for (const d of childDirCks) {
+      for (const a of dirMembers.get(d) ?? []) claimed.add(a);
+    }
+    for (const mk of childModuleKeys) {
+      for (const a of moduleRegionByKey.get(mk)?.memberAliases ?? []) claimed.add(a);
+    }
+    const directLeaves = [...(dirMembers.get(ck) ?? [])].filter(
+      (a) => !claimed.has(a),
+    );
+    const region: SubsystemProcessRegion = {
+      kind: 'directory',
+      key: path,
+      label: dirLabel(ck),
+      memberAliases: [...(dirMembers.get(ck) ?? [])],
+    };
+    return {
+      id: dirGroupId(scope, path),
+      memberAliases: [
+        ...childDirCks.map((d) => dirGroupId(dirScopeOf.get(d)!, dirPathOf.get(d)!)),
+        ...childModuleKeys.map(moduleGroupNodeId),
+        ...directLeaves,
+      ],
+      parentId,
+      region,
+    };
+  });
+
+  const frameGroups = [...dirGroups, ...moduleGroups];
+
+  // Aliases owned by a module frame (singleton or not) must not become direct
+  // leaves of an enclosing process/package frame.
+  const moduleMemberAliases = new Set<string>();
+  for (const r of modules) for (const a of r.memberAliases) moduleMemberAliases.add(a);
+
+  const processGroups: BoundaryLayoutGroup[] = processes.map((r) => {
+    const processId = processGroupNodeId(r.key);
+    const nested = frameGroups.filter((g) => g.parentId === processId);
+    const claimed = new Set<string>();
+    for (const g of nested) for (const a of g.region.memberAliases) claimed.add(a);
+    const directLeaves = r.memberAliases.filter(
+      (alias) => !claimed.has(alias) && !moduleMemberAliases.has(alias),
+    );
+    return {
+      id: processId,
+      memberAliases: [...nested.map((g) => g.id), ...directLeaves],
+      parentId: sharedPackageParent(r.memberAliases),
+      region: r,
+    };
+  });
+
+  const processMemberAliases = new Set<string>();
+  for (const r of processes) for (const a of r.memberAliases) processMemberAliases.add(a);
+
+  const packageGroups: BoundaryLayoutGroup[] = packages.map((r) => {
+    const packageId = packageGroupNodeId(r.key);
+    const nested = [...processGroups, ...frameGroups].filter(
+      (g) => g.parentId === packageId,
+    );
+    const claimed = new Set<string>();
+    for (const g of nested) for (const a of g.region.memberAliases) claimed.add(a);
+    const directLeaves = r.memberAliases.filter(
+      (alias) =>
+        !claimed.has(alias) &&
+        !moduleMemberAliases.has(alias) &&
+        !processMemberAliases.has(alias),
+    );
+    return {
+      id: packageId,
+      memberAliases: [...nested.map((g) => g.id), ...directLeaves],
+      region: r,
+    };
+  });
+
+  return [...frameGroups, ...processGroups, ...packageGroups];
+}
+
 export interface SubsystemGraphNodeData extends Record<string, unknown> {
   component: SubsystemComponent;
   /** Set while a file is open in the drawer: true if this node's component
@@ -1131,19 +1404,6 @@ export interface SubsystemGraphEdgeData extends Record<string, unknown> {
 
 export type SubsystemGraphEdge = Edge<SubsystemGraphEdgeData>;
 
-/**
- * Runtime vocabulary of relation types — mirrors `SubsystemRelationType`.
- * Used to split derived display edges into their relation vs walkthrough
- * source (the two unions are disjoint).
- */
-export const SUBSYSTEM_RELATION_TYPES = [
-  'extends',
-  'inherits',
-  'implements',
-  'mixes_in',
-  'method',
-] as const satisfies readonly SubsystemRelationType[];
-
 /** Runtime vocabulary of walkthrough hop mechanisms — mirrors `SubsystemWalkthroughMechanism`. */
 export const SUBSYSTEM_WALKTHROUGH_MECHANISMS = [
   'calls',
@@ -1156,17 +1416,9 @@ export const SUBSYSTEM_WALKTHROUGH_MECHANISMS = [
   'registers-into',
 ] as const satisfies readonly SubsystemWalkthroughMechanism[];
 
-const RELATION_TYPE_SET: ReadonlySet<string> = new Set(SUBSYSTEM_RELATION_TYPES);
 const WALKTHROUGH_MECHANISM_SET: ReadonlySet<string> = new Set(
   SUBSYSTEM_WALKTHROUGH_MECHANISMS,
 );
-
-/** True when a mechanism belongs to the topology relation vocabulary. */
-export function isRelationMechanism(
-  mechanism: string,
-): mechanism is SubsystemRelationType {
-  return RELATION_TYPE_SET.has(mechanism);
-}
 
 /** True when a mechanism belongs to the walkthrough hop vocabulary. */
 export function isWalkthroughMechanism(
@@ -1177,12 +1429,7 @@ export function isWalkthroughMechanism(
 
 export const MECHANISM_COLOR: Record<SubsystemEdgeMechanism, string> = {
   calls: '#22c55e', // green
-  extends: '#b48ead', // purple
-  inherits: '#9b6fd0', // purple
-  implements: '#c586c0', // magenta
-  mixes_in: '#d474a8', // pink-magenta
   uses: '#e3b341', // gold
-  method: '#c586c0', // magenta
   feeds: '#4ec9b0', // teal — data-flow into a processor
   produces: '#a78bfa', // violet — emits an output type
   writes: '#e8853a', // orange — mutates retained state
@@ -1193,12 +1440,7 @@ export const MECHANISM_COLOR: Record<SubsystemEdgeMechanism, string> = {
 
 export const MECHANISM_STYLE: Record<SubsystemEdgeMechanism, 'solid' | 'dashed' | 'dotted'> = {
   calls: 'solid',
-  extends: 'dashed',
-  inherits: 'dashed',
-  implements: 'dashed',
-  mixes_in: 'dashed',
   uses: 'solid',
-  method: 'solid',
   feeds: 'solid',
   produces: 'solid',
   writes: 'solid',
@@ -1363,12 +1605,7 @@ export function boundaryFill(color: string, alpha = '1f'): string {
  *  directly verifiable" styling of edge labels. */
 export const MECHANISM_DESCRIPTIONS: [SubsystemEdgeMechanism, string, boolean][] = [
   ['calls', 'function/method call (call graph edge)', true],
-  ['extends', 'class inheritance', true],
-  ['inherits', 'class inheritance', true],
-  ['implements', 'implements interface / protocol', true],
-  ['mixes_in', 'applies mixin', true],
   ['uses', 'general dependency (import, call, or reference)', false],
-  ['method', 'structural: has method / member', true],
   ['feeds', 'data flow: output feeds into input', false],
   ['produces', 'data flow: produces / outputs', false],
   ['writes', 'state access: mutates retained state', true],
@@ -1376,6 +1613,30 @@ export const MECHANISM_DESCRIPTIONS: [SubsystemEdgeMechanism, string, boolean][]
   ['watches', 'observes retained state without owning it', false],
   ['registers-into', 'registration pattern', false],
 ];
+
+/**
+ * Single border/badge color for directory (folder) frames. Folders read as one
+ * kind of container, so they share a neutral hue rather than hashing per-path
+ * like modules / processes / packages. Host `boundaryColors` still overrides.
+ */
+export const FOLDER_FRAME_COLOR = '#7aa2d4';
+
+/**
+ * True when a boundary frame names a folder. `directory` frames always are.
+ * A `module` frame is a folder when its key looks like a directory path — the
+ * last segment has no file extension (the model has no explicit file/folder
+ * flag, so this is a heuristic; `Dockerfile`-style extensionless files read as
+ * folders).
+ */
+export function isFolderFrame(
+  region: { kind: string; key: string } | undefined,
+): boolean {
+  if (!region) return false;
+  if (region.kind === 'directory') return true;
+  if (region.kind !== 'module') return false;
+  const last = region.key.split('/').pop() ?? '';
+  return last !== '' && !last.includes('.');
+}
 
 /** Package color palette (derived deterministically from the package name). */
 export function packageColor(name: string): string {
@@ -1733,7 +1994,7 @@ export function convertSubsystemToEdges(
 
 /** Stable key for layout-affecting graph fields (ignores declarationRef, etc.). */
 export function subsystemGraphLayoutKey(
-  doc: Pick<SubsystemModelDocument, 'components' | 'relations' | 'walkthroughs'> & {
+  doc: Pick<SubsystemModelDocument, 'components' | 'walkthroughs'> & {
     graphifyRelations?: readonly SubsystemGraphifyRelation[];
   },
 ): string {
@@ -1792,10 +2053,15 @@ export async function buildSubsystemGraph(
     measuredHeights,
     showSingletonFrames,
     packageFrames,
+    moduleNesting,
     graphifyRelations,
     orderByLine = false,
   } = opts;
-  const frameOpts: BoundaryFrameOptions = { showSingletonFrames, packageFrames };
+  const frameOpts: BoundaryFrameOptions = {
+    showSingletonFrames,
+    packageFrames,
+    moduleNesting,
+  };
   const nodes = convertSubsystemToNodes(doc, { maxNodeWidth });
   const edges = convertSubsystemToEdges(doc, graphifyRelations);
   // Nested boundary tree: package → process → module → leaves.
@@ -1887,7 +2153,12 @@ export async function buildSubsystemGraph(
     try {
       const result = await computeElkLayout(nodes, edges, {
         routingStyle: 'orthogonal',
-        direction: 'RIGHT',
+        // Edge-driven graphs flow left-to-right. With no edges (pure
+        // containment, e.g. the static-topology layer) a RIGHT layout stacks
+        // disconnected top-level frames in one vertical column; DOWN makes the
+        // layered pass place those sibling frames along the horizontal axis
+        // while each frame's members stack vertically.
+        direction: edges.length > 0 ? 'RIGHT' : 'DOWN',
         nodeSpacing: 60,
         edgeSpacing: 30,
         edgeNodeSpacing: 60,
@@ -1908,7 +2179,7 @@ export async function buildSubsystemGraph(
           // room for the collapsed badge. Processes/packages never collapse:
           // size the frame to hold the full centered label plus padding.
           minWidth:
-            g.region.kind === 'module'
+            g.region.kind === 'module' || g.region.kind === 'directory'
               ? moduleMinWidthForBadge(g.region.label)
               : boundaryMinWidthForBadge(g.region.label),
         })),
@@ -1973,7 +2244,7 @@ export async function buildSubsystemGraph(
           position: { x: 0, y: 0 },
           width: Math.max(
             400,
-            g.region.kind === 'module'
+            g.region.kind === 'module' || g.region.kind === 'directory'
               ? moduleMinWidthForBadge(g.region.label)
               : boundaryMinWidthForBadge(g.region.label),
           ),

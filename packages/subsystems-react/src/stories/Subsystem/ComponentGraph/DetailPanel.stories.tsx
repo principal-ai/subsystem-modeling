@@ -207,7 +207,6 @@ function DetailKindsDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={detailKindComponents}
-        relations={[]}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -303,7 +302,6 @@ function DeclarationLineOpenDemo() {
         title="Declaration line open (Storybook)"
         description="Uses bundled ?raw fixtures + PierreSnippetView from this package. Select ComponentDeclaration, toggle file, click the path or L251."
         components={declarationOpenComponents}
-        relations={[]}
         renderFileViewer={renderFileViewer}
       />
     </div>

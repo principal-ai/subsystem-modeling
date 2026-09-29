@@ -59,17 +59,6 @@ export type SubsystemFramework = string;
 export type SubsystemStereotype = string;
 
 /**
- * Topology relation type — structural / module / type claims between
- * components. Belongs on `relations[]`, not on walkthrough hops.
- */
-export type SubsystemRelationType =
-  | 'extends'
-  | 'inherits'
-  | 'implements'
-  | 'mixes_in'
-  | 'method';
-
-/**
  * Walkthrough hop mechanism — runtime seams with a `file:line` site.
  * Belongs on walkthrough steps; graph edges for these are derived.
  */
@@ -84,12 +73,10 @@ export type SubsystemWalkthroughMechanism =
   | 'registers-into';
 
 /**
- * Union used by derived graph edges / styling (topology relationType or
- * walkthrough hop mechanism).
+ * Edge mechanism used by derived display edges / styling. Display edges are
+ * derived from walkthrough hops, so this is the walkthrough mechanism.
  */
-export type SubsystemEdgeMechanism =
-  | SubsystemRelationType
-  | SubsystemWalkthroughMechanism;
+export type SubsystemEdgeMechanism = SubsystemWalkthroughMechanism;
 
 export type SubsystemDeclarationProvenance = 'verified' | 'authored';
 
@@ -280,7 +267,7 @@ export type SubsystemConstructDeclaration =
 /** A component node — the named unit, construct-tagged. */
 export interface SubsystemComponent {
   /**
-   * Model-local stable alias. Referenced by relation / walkthrough `from` /
+   * Model-local stable alias. Referenced by walkthrough `from` /
    * `to`; unique per model. Edges point at the alias, not the location — a
    * file move or symbol rename leaves edges intact. Code identity lives on
    * `purl` + `file` + `symbol` and is what composed (multi-model) views
@@ -344,28 +331,15 @@ export interface SubsystemComponent {
   declarationRef?: SubsystemDeclarationRef;
 }
 
-/** A topology relation between components (structural / module / type). */
-export interface SubsystemRelation {
-  id: string;
-  /** Source component alias. */
-  from: string;
-  /** Target component alias (or external label). */
-  to: string;
-  relationType: SubsystemRelationType;
-  /** Concrete file/symbol evidence (often purls). */
-  refs?: string[];
-}
-
 /**
- * Derived / display graph edge used by renderers. Built from `relations`
- * and/or walkthrough hops — not authored as its own document field.
+ * Derived / display graph edge used by renderers. Built from walkthrough
+ * hops — not authored as its own document field.
  */
 export interface SubsystemComponentEdge {
   id: string;
   from: string;
   to: string;
   mechanism: SubsystemEdgeMechanism;
-  refs?: string[];
 }
 
 export interface SubsystemWalkthroughStep {
@@ -428,8 +402,6 @@ export interface SubsystemModelDocument {
   title: string;
   description?: string;
   components: SubsystemComponent[];
-  /** Topology relations (structural / module / type). May be empty. */
-  relations: SubsystemRelation[];
   /** Runtime walkthroughs (ordered hops with sites). */
   walkthroughs?: SubsystemWalkthrough[];
   /**
@@ -470,13 +442,8 @@ export function isSubsystemModelDocument(value: unknown): value is SubsystemMode
   const v = value as {
     title?: unknown;
     components?: unknown;
-    relations?: unknown;
   };
-  return (
-    typeof v.title === 'string' &&
-    Array.isArray(v.components) &&
-    Array.isArray(v.relations)
-  );
+  return typeof v.title === 'string' && Array.isArray(v.components);
 }
 
 /**
@@ -490,7 +457,6 @@ export function toPortableDocument(
   const out: SubsystemModelDocument = {
     title: doc.title,
     components: doc.components,
-    relations: doc.relations,
   };
   if (doc.$schema) out.$schema = doc.$schema;
   if (doc.description) out.description = doc.description;
@@ -500,7 +466,7 @@ export function toPortableDocument(
   return out;
 }
 
-/** Stable id for a derived graph edge from a relation or walkthrough hop. */
+/** Stable id for a derived graph edge from a walkthrough hop. */
 export function derivedGraphEdgeId(
   from: string,
   to: string,
@@ -510,26 +476,13 @@ export function derivedGraphEdgeId(
 }
 
 /**
- * Build display edges for the graph canvas from topology relations and
- * walkthrough hops (deduped by from/to/mechanism).
+ * Build display edges for the graph canvas from walkthrough hops
+ * (deduped by from/to/mechanism).
  */
 export function deriveGraphEdges(doc: {
-  relations?: SubsystemRelation[];
   walkthroughs?: SubsystemWalkthrough[];
 }): SubsystemComponentEdge[] {
   const byId = new Map<string, SubsystemComponentEdge>();
-  for (const r of doc.relations ?? []) {
-    const id = r.id || derivedGraphEdgeId(r.from, r.to, r.relationType);
-    if (!byId.has(id)) {
-      byId.set(id, {
-        id,
-        from: r.from,
-        to: r.to,
-        mechanism: r.relationType,
-        refs: r.refs,
-      });
-    }
-  }
   for (const w of doc.walkthroughs ?? []) {
     for (const step of w.steps) {
       const id = derivedGraphEdgeId(step.from, step.to, step.mechanism);

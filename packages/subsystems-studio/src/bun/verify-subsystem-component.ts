@@ -48,13 +48,8 @@ import {
 import {
 	findAcceptedConstructAugmentation,
 	findAcceptedModuleAugmentation,
-	findAcceptedRelationAugmentation,
 	findAcceptedSignatureAugmentation,
 } from "./augmentation-store";
-import {
-	auditTopologyRelations,
-	type GraphifyBundle,
-} from "./topology-audit";
 import { auditBoundaryFields } from "./boundary-audit";
 import {
 	buildAuditFingerprint,
@@ -395,6 +390,12 @@ async function finalizeResult(
  * parse per purl per pass is enough (same semantics, far less IO).
  */
 export type GraphifyPassCache = Map<string, Promise<GraphifyBundle | null>>;
+
+/** Parsed graphify nodes + edges for one repo — the shared pass unit. */
+interface GraphifyBundle {
+	nodes: GraphifyNode[];
+	edges: GraphifyEdge[];
+}
 
 async function parseGraphifyBundle(
 	cached: Awaited<ReturnType<typeof getCachedGraphifyGraph>>,
@@ -955,14 +956,12 @@ export async function verifySubsystemModel(
 /**
  * Dry-run deterministic audit focused on component currency: files exist,
  * symbols declare, declaration freshness, and (when graphify is ready)
- * construct/signature/anchor checks — plus topology endpoint integrity and
- * soft Graphify corroboration for covered relation types. Walkthrough site
- * affinity is intentionally omitted — that seam check is heuristic and better
- * suited to an agent pass.
+ * construct/signature/anchor checks, plus mechanical process/module boundary
+ * membership. Walkthrough site affinity is intentionally omitted — that seam
+ * check is heuristic and better suited to an agent pass.
  *
  * Always returns a per-component `checks` checklist so a clean run still shows
- * what was inspected. Layer 2 topology: endpoint integrity + soft Graphify
- * corroboration for covered relation types.
+ * what was inspected.
  */
 export async function auditSubsystemModel(
 	graphId: string,
@@ -1326,57 +1325,7 @@ export async function auditSubsystemModel(
 		checks.push(check);
 	}
 
-	// --- Layer 2: topology relations ---
-	const topologyBundles = new Map<string, GraphifyBundle | null>();
-	const readiness = await assessSubsystemGraphifyReadiness(graph);
-	for (const p of readiness.purls) {
-		if (p.status !== "ready") {
-			topologyBundles.set(p.purl, null);
-			continue;
-		}
-		// Reuse the per-pass parse from the component loop.
-		topologyBundles.set(
-			p.purl,
-			await loadGraphifyBundle(graphifyCache, p.purl, p.repoRoot),
-		);
-	}
-
-	const byComponentAlias = new Map(graph.components.map((c) => [c.alias, c]));
-	const augmentedRelationIds = new Set<string>();
-	for (const rel of graph.relations ?? []) {
-		const from = byComponentAlias.get(rel.from);
-		const to = byComponentAlias.get(rel.to);
-		if (!from?.file?.trim() || !from.symbol?.trim()) continue;
-		const purl = from.purl?.trim();
-		if (!purl || purl === "external") continue;
-		const hit = await findAcceptedRelationAugmentation({
-			purl,
-			fromFile: from.file,
-			fromSymbol: from.symbol,
-			relationType: rel.relationType,
-			toFile: to?.file,
-			toSymbol: to?.symbol,
-			toAlias: to?.alias,
-			toName: to?.name,
-		});
-		if (hit) augmentedRelationIds.add(rel.id);
-	}
-
-	const topology = auditTopologyRelations(
-		graph.components,
-		graph.relations ?? [],
-		topologyBundles,
-		{ augmentedRelationIds },
-	);
-	for (const f of topology.findings) {
-		findings.push({
-			kind: f.kind,
-			severity: f.severity,
-			relationId: f.relationId,
-			message: f.message,
-		});
-	}
-
+	// --- Boundary membership: process (runtime) + module (containment) ---
 	const augmentedModuleAliases = new Set<string>();
 	for (const c of graph.components) {
 		const mod = c.module?.trim();
@@ -1425,11 +1374,6 @@ export async function auditSubsystemModel(
 		weakAnchors,
 		unresolved,
 		ok: okComponents,
-		relations: topology.summary.relations,
-		softChecked: topology.summary.softChecked,
-		softConfirmed: topology.summary.softConfirmed,
-		softUnconfirmed: topology.summary.softUnconfirmed,
-		brokenRelationEndpoints: topology.summary.brokenEndpoints,
 		modulesClaimed: boundary.summary.modulesClaimed,
 		moduleFileOk: boundary.summary.moduleFileOk,
 		moduleFileMismatch: boundary.summary.moduleFileMismatch,
@@ -1447,7 +1391,6 @@ export async function auditSubsystemModel(
 		needsUpdate,
 		summary,
 		checks,
-		topologyChecks: topology.checks,
 		boundaryChecks: boundary.checks,
 		findings,
 	};

@@ -19,17 +19,18 @@
  * models from the store.
  */
 
-import type {
-	SubsystemComponent,
-	SubsystemModelDocument,
-} from "../shared/contract";
-import { purlRepoKey, type StoredSubsystemModel } from "./subsystem-model-store";
+import type { SubsystemComponent } from "../shared/contract";
+import {
+	purlRepoKey,
+	type StoredSubsystemModel,
+	type SubsystemDocumentBody,
+} from "./subsystem-model-store";
 
 /** One stored model participating in the compose, with its store id. */
 export interface MergeInputModel {
 	/** Store id (sg-...) — stable ordering + local namespacing. */
 	id: string;
-	document: SubsystemModelDocument;
+	document: SubsystemDocumentBody;
 }
 
 export interface MergeConflictValue {
@@ -59,13 +60,13 @@ export interface MergeSidecar {
 
 export interface MergeResult {
 	/**
-	 * Materialized composed graph: validatable components/relations/
-	 * walkthroughs plus a traceable title/description (stored-model shape
-	 * minus store metadata — the contract document itself has no title).
+	 * Materialized composed graph: validatable components/walkthroughs plus a
+	 * traceable title/description (stored-model shape minus store metadata —
+	 * the contract document itself has no title).
 	 */
 	document: Pick<
 		StoredSubsystemModel,
-		"title" | "description" | "components" | "relations" | "walkthroughs"
+		"title" | "description" | "components" | "walkthroughs"
 	>;
 	sidecar: MergeSidecar;
 }
@@ -228,10 +229,10 @@ function uniqueId(base: string, used: Set<string>): string {
 }
 
 /**
- * Compose models into one materialized document + sidecar. Relations and
- * walkthrough steps are rebased to canonical aliases through each model's
- * own alias space; unresolvable endpoints (external labels) pass through
- * untouched. Id collisions across models are disambiguated deterministically.
+ * Compose models into one materialized document + sidecar. Walkthrough steps
+ * are rebased to canonical aliases through each model's own alias space;
+ * unresolvable endpoints (external labels) pass through untouched. Id
+ * collisions across models are disambiguated deterministically.
  */
 export function mergeSubsystemModels(models: MergeInputModel[]): MergeResult {
 	const ordered = stableOrder(models);
@@ -280,16 +281,6 @@ export function mergeSubsystemModels(models: MergeInputModel[]): MergeResult {
 	const rebase = (modelId: string, endpoint: string): string =>
 		aliasIndex.get(`${modelId}\0${endpoint}`) ?? endpoint;
 
-	const usedRelationIds = new Set<string>();
-	const relations = ordered.flatMap((m) =>
-		(m.document.relations ?? []).map((r) => ({
-			...r,
-			id: uniqueId(r.id, usedRelationIds),
-			from: rebase(m.id, r.from),
-			to: rebase(m.id, r.to),
-		})),
-	);
-
 	const usedWalkthroughIds = new Set<string>();
 	const walkthroughs = ordered.flatMap((m) =>
 		(m.document.walkthroughs ?? []).map((w) => ({
@@ -321,7 +312,6 @@ export function mergeSubsystemModels(models: MergeInputModel[]): MergeResult {
 			title,
 			description: `Composed from ${ordered.length} model(s): ${modelIds.join(", ")}.`,
 			components,
-			relations,
 			walkthroughs,
 		},
 		sidecar: { nodes: sources, conflicts },

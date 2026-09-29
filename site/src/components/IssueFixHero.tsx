@@ -14,7 +14,7 @@ const WALKTHROUGH_STEP_MS = 3_200
 const REMEDIATION_LABEL: Record<IssueFixExample['remediation'], string> = {
   deterministic: 'Apply',
   'construct-fixer': 'construct-fixer',
-  'static-topology-fixer': 'static-topology-fixer',
+  'package-module-fixer': 'package-module-fixer',
   none: 'report only',
 }
 
@@ -34,7 +34,6 @@ function GraphPane({
       <SubsystemComponentGraph
         key={`${exampleId}-${side}`}
         components={model.components}
-        relations={model.relations}
         walkthroughs={model.walkthroughs}
         title={model.title}
         hideSidebar

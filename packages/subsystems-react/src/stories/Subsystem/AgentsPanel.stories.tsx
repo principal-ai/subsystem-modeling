@@ -9,11 +9,9 @@ import { SubsystemAgentsPanel, type SubsystemAgent } from '../../subsystem/Agent
 
 const AGENTS: SubsystemAgent[] = [
   { id: 'construct-fixer', label: 'construct-fixer', lane: 'construct', mode: 'issues' },
-  { id: 'static-topology-fixer', label: 'static-topology-fixer', lane: 'static-topology', mode: 'issues' },
-  { id: 'package-module-fixer', label: 'package-module-fixer', lane: 'dynamic-topology', mode: 'issues' },
+  { id: 'package-module-fixer', label: 'package-module-fixer', lane: 'static-topology', mode: 'issues' },
   { id: 'construct-verifier', label: 'construct-verifier', lane: 'construct', mode: 'verify' },
-  { id: 'static-topology-verifier', label: 'static-topology-verifier', lane: 'static-topology', mode: 'verify' },
-  { id: 'package-module-verifier', label: 'package-module-verifier', lane: 'dynamic-topology', mode: 'verify' },
+  { id: 'package-module-verifier', label: 'package-module-verifier', lane: 'static-topology', mode: 'verify' },
   { id: 'runtime-topology-verifier', label: 'runtime-topology-verifier', lane: 'dynamic-topology', mode: 'verify' },
 ];
 
@@ -41,7 +39,7 @@ const meta = {
   ],
   args: {
     agents: AGENTS,
-    nextAgentId: 'static-topology-fixer',
+    nextAgentId: 'package-module-fixer',
     running: false,
     onRun: () => {},
   },

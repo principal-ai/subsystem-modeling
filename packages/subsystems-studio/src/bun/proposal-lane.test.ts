@@ -10,8 +10,6 @@ const component = (field: string): SubsystemModelProposalChange =>
 	({ target: "component", componentAlias: "a", field, value: "x" }) as never;
 const augmentation = (field: string): SubsystemModelProposalChange =>
 	({ target: "augmentation", componentAlias: "a", field, value: "x" }) as never;
-const relation = (): SubsystemModelProposalChange =>
-	({ target: "relation", relationId: "r", field: "to", value: "b" }) as never;
 const step = (): SubsystemModelProposalChange =>
 	({
 		target: "walkthrough-step",
@@ -46,15 +44,11 @@ describe("laneForChange", () => {
 		expect(laneForChange(declaration("valueType"))).toBe("construct");
 		expect(laneForChange(declaration("storage"))).toBe("construct");
 	});
-	test("module is dynamic topology", () => {
-		expect(laneForChange(component("module"))).toBe("dynamic-topology");
-		expect(laneForChange(augmentation("module"))).toBe("dynamic-topology");
+	test("module is static topology", () => {
+		expect(laneForChange(component("module"))).toBe("static-topology");
+		expect(laneForChange(augmentation("module"))).toBe("static-topology");
 	});
-	test("relations are static topology", () => {
-		expect(laneForChange(augmentation("relation"))).toBe("static-topology");
-		expect(laneForChange(relation())).toBe("static-topology");
-	});
-	test("process is runtime topology", () => {
+	test("process is dynamic topology", () => {
 		expect(laneForChange(component("process"))).toBe("dynamic-topology");
 	});
 	test("walkthrough step", () => {
@@ -69,15 +63,9 @@ describe("laneForFindingKind", () => {
 		expect(laneForFindingKind("missing_file")).toBe("construct");
 		expect(laneForFindingKind("store_type_undeclared")).toBe("construct");
 	});
-	test("maps topology findings", () => {
-		expect(laneForFindingKind("topology_broken_endpoint")).toBe(
-			"static-topology",
-		);
-		expect(laneForFindingKind("topology_relation_unconfirmed")).toBe(
-			"static-topology",
-		);
+	test("maps boundary findings onto their lanes", () => {
 		expect(laneForFindingKind("boundary_module_file_mismatch")).toBe(
-			"dynamic-topology",
+			"static-topology",
 		);
 		expect(laneForFindingKind("boundary_process_nest_disagree")).toBe(
 			"dynamic-topology",

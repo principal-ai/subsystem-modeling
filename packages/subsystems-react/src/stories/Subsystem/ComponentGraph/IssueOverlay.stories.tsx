@@ -21,7 +21,7 @@ import {
  * renderer picker → host RPC → background runner → maintain orchestrator →
  * opencode V2 session, plus the liveness-probe handshake. Its components and
  * three walkthroughs are reproduced verbatim below; the topology is carried by
- * the walkthroughs (`relations: []`), exactly as stored.
+ * the walkthroughs, exactly as stored.
  *
  * What this story exercises: the graph's diagnostics surface over the real
  * model — the title-row status chip, the grouped issue list, the per-node
@@ -483,30 +483,6 @@ const MAINTAIN_ISSUES: SubsystemIssue[] = [
     target: { kind: 'component', id: 'live-feed-store', label: 'OpencodeLiveFeedState store' },
   },
   {
-    id: 'mr-endpoint',
-    severity: 'error',
-    kind: 'topology_broken_endpoint',
-    message: 'Relationship endpoint "maintain-background-runner" does not resolve to a component.',
-    target: {
-      kind: 'relation',
-      id: 'maintain-rpc-handler→maintain-background-runner',
-      label: 'maintainSubsystemModel RPC → maintainSubsystemModelInBackground',
-      detail: 'calls',
-    },
-  },
-  {
-    id: 'mr-hang',
-    severity: 'error',
-    kind: 'topology_broken_endpoint',
-    message: 'Run reaches the 15-minute deadline without an endpoint on the finish event.',
-    target: {
-      kind: 'relation',
-      id: 'session-runner→opencode-v2-server',
-      label: 'runOpencodeV2AgentSession → OpenCode V2 service',
-      detail: 'calls',
-    },
-  },
-  {
     id: 'mr-boundary',
     severity: 'info',
     kind: 'boundary_process_nest_disagree',
@@ -580,7 +556,6 @@ function MaintainRunGraph({
       <div style={{ flex: 1, minHeight: 0 }}>
         <SubsystemComponentGraph
           components={MAINTAIN_COMPONENTS}
-          relations={[]}
           walkthroughs={MAINTAIN_WALKTHROUGHS}
           title="Maintain run"
           description="Fire-and-forget RPC, wait for the finish event — picker → RPC → background runner → orchestrator → opencode V2 session, plus the liveness-probe handshake."

@@ -7,7 +7,6 @@ import type {
 	SubsystemModelAuditBoundaryCheck,
 	SubsystemModelAuditCheck,
 	SubsystemModelAuditReport,
-	SubsystemModelAuditTopologyCheck,
 } from "../shared/contract";
 import {
 	buildAuditFingerprint,
@@ -186,20 +185,6 @@ function componentCheck(
 	};
 }
 
-function topologyCheck(
-	over: Partial<SubsystemModelAuditTopologyCheck>,
-): SubsystemModelAuditTopologyCheck {
-	return {
-		relationId: "r",
-		relationType: "calls",
-		from: "a",
-		to: "b",
-		graphify: "confirmed",
-		verdict: "ok",
-		...over,
-	};
-}
-
 function boundaryCheck(
 	over: Partial<SubsystemModelAuditBoundaryCheck>,
 ): SubsystemModelAuditBoundaryCheck {
@@ -238,11 +223,6 @@ function report(
 			weakAnchors: 0,
 			unresolved: 0,
 			ok: 0,
-			relations: 0,
-			softChecked: 0,
-			softConfirmed: 0,
-			softUnconfirmed: 0,
-			brokenRelationEndpoints: 0,
 			modulesClaimed: 0,
 			moduleFileOk: 0,
 			moduleFileMismatch: 0,
@@ -261,16 +241,14 @@ describe("summarizeVerification", () => {
 		const v = summarizeVerification(
 			report({
 				checks: [componentCheck({}), componentCheck({ componentAlias: "c2" })],
-				topologyChecks: [topologyCheck({})],
 				boundaryChecks: [boundaryCheck({})],
 			}),
 		);
-		expect(v.verified).toBe(4);
+		expect(v.verified).toBe(3);
 		expect(v.open).toBe(0);
 		expect(v.blocking).toBe(0);
 		expect(v.coverage).toBe(1);
 		expect(v.byLayer.construct.verified).toBe(2);
-		expect(v.byLayer.topology.verified).toBe(1);
 		expect(v.byLayer.boundary.verified).toBe(1);
 	});
 
@@ -322,7 +300,7 @@ describe("summarizeVerification", () => {
 						verdict: "issue",
 					}),
 				],
-				topologyChecks: [topologyCheck({ verdict: "issue" })],
+				boundaryChecks: [boundaryCheck({ verdict: "issue" })],
 			}),
 		);
 		expect(v.open).toBe(2);
@@ -405,21 +383,15 @@ describe("summarizeVerification", () => {
 		expect(v.coverage).toBe(0);
 	});
 
-	test("topology and boundary gaps land in their layers", () => {
+	test("module/file boundary gaps land in the boundary layer", () => {
 		const v = summarizeVerification(
 			report({
-				topologyChecks: [
-					topologyCheck({}),
-					topologyCheck({ relationId: "r2", verdict: "gap" }),
-				],
 				boundaryChecks: [
 					boundaryCheck({}),
 					boundaryCheck({ componentAlias: "b2", verdict: "gap" }),
 				],
 			}),
 		);
-		expect(v.byLayer.topology.verified).toBe(1);
-		expect(v.byLayer.topology.open).toBe(1);
 		expect(v.byLayer.boundary.verified).toBe(1);
 		expect(v.byLayer.boundary.open).toBe(1);
 		expect(v.byLayer.construct.na).toBe(0);
@@ -431,7 +403,6 @@ describe("summarizeLanes", () => {
 		const lanes = summarizeLanes(
 			report({
 				checks: [componentCheck({})],
-				topologyChecks: [topologyCheck({})],
 				boundaryChecks: [
 					boundaryCheck({}),
 					boundaryCheck({ componentAlias: "p", kind: "process_nest" }),
@@ -453,7 +424,7 @@ describe("summarizeLanes", () => {
 				checks: [
 					componentCheck({ componentAlias: "gap", signature: "skipped" }),
 				],
-				topologyChecks: [topologyCheck({ verdict: "issue" })],
+				boundaryChecks: [boundaryCheck({ verdict: "issue" })],
 			}),
 			{ hasWalkthroughs: false },
 		);

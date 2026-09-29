@@ -7,11 +7,9 @@ import {
 	augmentationKey,
 	findAcceptedConstructAugmentation,
 	findAcceptedModuleAugmentation,
-	findAcceptedRelationAugmentation,
 	findAcceptedSignatureAugmentation,
 	upsertAcceptedConstructAugmentation,
 	upsertAcceptedModuleAugmentation,
-	upsertAcceptedRelationAugmentation,
 	upsertAcceptedSignatureAugmentation,
 } from "./augmentation-store";
 
@@ -131,76 +129,6 @@ describe("graphify augmentations", () => {
 				{ name: "opts", type: "Options", optional: true },
 			]);
 			expect(hit?.claims.signature?.returnType).toBe("Promise<Session>");
-		} finally {
-			rmSync(root, { recursive: true, force: true });
-		}
-	});
-
-	test("upsert then find accepted relation", async () => {
-		const root = mkdtempSync(join(tmpdir(), "ga-store-"));
-		try {
-			const written = await upsertAcceptedRelationAugmentation({
-				purl: "pkg:github/acme/widget",
-				fromFile: "src/child.ts",
-				fromSymbol: "Child",
-				relationType: "extends",
-				toFile: "src/parent.ts",
-				toSymbol: "Parent",
-				source: "topology-gap-filler",
-				rationale: "class Child extends Parent",
-				storeRoot: root,
-			});
-			expect(written.ok).toBe(true);
-			if (!written.ok) return;
-			const hit = await findAcceptedRelationAugmentation({
-				purl: "pkg:github/acme/widget",
-				fromFile: "src/child.ts",
-				fromSymbol: "Child",
-				relationType: "extends",
-				toFile: "src/parent.ts",
-				toSymbol: "Parent",
-				storeRoot: root,
-			});
-			expect(hit?.id).toBe(written.augmentation.id);
-			expect(hit?.claims.relation?.relationType).toBe("extends");
-		} finally {
-			rmSync(root, { recursive: true, force: true });
-		}
-	});
-
-	test("relation aug matches external by toAlias", async () => {
-		const root = mkdtempSync(join(tmpdir(), "ga-store-"));
-		try {
-			await upsertAcceptedRelationAugmentation({
-				purl: "pkg:github/acme/widget",
-				fromFile: "src/a.ts",
-				fromSymbol: "A",
-				relationType: "method",
-				toAlias: "xyflow",
-				toName: "@xyflow/react",
-				source: "topology-gap-filler",
-				storeRoot: root,
-			});
-			const hit = await findAcceptedRelationAugmentation({
-				purl: "pkg:github/acme/widget",
-				fromFile: "src/a.ts",
-				fromSymbol: "A",
-				relationType: "method",
-				toAlias: "xyflow",
-				toName: "@xyflow/react",
-				storeRoot: root,
-			});
-			expect(hit?.claims.relation?.toAlias).toBe("xyflow");
-			const miss = await findAcceptedRelationAugmentation({
-				purl: "pkg:github/acme/widget",
-				fromFile: "src/a.ts",
-				fromSymbol: "A",
-				relationType: "method",
-				toAlias: "other",
-				toName: "other",
-				storeRoot: root,
-			});
-			expect(miss).toBeNull();
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}

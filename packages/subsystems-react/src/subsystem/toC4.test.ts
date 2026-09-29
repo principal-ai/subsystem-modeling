@@ -18,17 +18,12 @@ const doc: SubsystemModelDocument = {
     { alias: 'x', name: 'Gist API', construct: 'external', file: '', purl: 'external:api.github.com/gists' },
     { alias: 'agent', name: 'Maintenance agent', construct: 'custom_entity', file: '', purl: 'external' },
   ],
-  relations: [
-    { id: 'r1', from: 'a', to: 'b', relationType: 'method' }, // intra p1
-    { id: 'r2', from: 'a', to: 'c', relationType: 'method' },
-    { id: 'r3', from: 'b', to: 'c', relationType: 'method' },
-    { id: 'r4', from: 'a', to: 'x', relationType: 'method' },
-  ],
   walkthroughs: [
     {
       id: 'w1',
       title: 'flow',
       steps: [
+        { from: 'a', to: 'b', mechanism: 'calls', file: 'src/a.ts', line: 1, purl: `${REPO}#src/a.ts`, symbol: 'Alpha' },
         { from: 'b', to: 'c', mechanism: 'calls', file: 'src/b.ts', line: 1, purl: `${REPO}#src/b.ts`, symbol: 'Beta' },
         { from: 'a', to: 'c', mechanism: 'calls', file: 'src/a.ts', line: 2, purl: `${REPO}#src/a.ts`, symbol: 'Alpha' },
         { from: 'a', to: 'agent', mechanism: 'calls', file: 'src/a.ts', line: 3, purl: `${REPO}#src/a.ts`, symbol: 'Alpha' },
@@ -77,18 +72,16 @@ describe('container view', () => {
     expect(model.groups[0]!.memberIds.sort()).toEqual(['container:p1', 'container:p2']);
   });
 
-  test('edges roll up and intra-container edges drop', () => {
+  test('flow edges roll up to containers; only flow edges exist', () => {
     const byId = Object.fromEntries(model.edges.map((e) => [e.id, e]));
     // a->b is intra-p1 — dropped.
     expect(model.edges.some((e) => e.source === e.target)).toBe(false);
-    const rel = byId['relationship:container:p1\u0000container:p2']!;
-    expect(rel.kind).toBe('relationship');
-    expect(rel.count).toBe(2); // r2 + r3
     const flow = byId['flow:container:p1\u0000container:p2']!;
+    expect(flow.kind).toBe('flow');
     expect(flow.count).toBe(2); // a->c + b->c
-    expect(byId['relationship:container:p1\u0000external:external:api.github.com/gists']).toBeDefined();
     expect(byId['flow:container:p1\u0000actor:agent']).toBeDefined();
-    expect(model.edges).toHaveLength(4);
+    expect(model.edges.every((e) => e.kind === 'flow')).toBe(true);
+    expect(model.edges).toHaveLength(2);
   });
 });
 

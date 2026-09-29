@@ -2,12 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://principal-ai.dev/schemas/subsystem-model.schema.json",
   "title": "Subsystem Model",
-  "description": "Portable subsystem model — the shareable standard. Construct-tagged components (nodes) plus topology relations and/or runtime walkthroughs describing one subsystem of a codebase. Ontology: construct = what a node is, framework + stereotype = which framework pattern it plays, role = where it sits, process = where it runs, module = which source file/module the export belongs to. Symbol is the code identity; name is the display label (often derived from symbol). Host-only fields (local path binding, provenance, store ids, verification) are NOT part of this document; they belong on a hydrated envelope around it.",
+  "description": "Portable subsystem model — the shareable standard. Construct-tagged components (nodes) plus runtime walkthroughs describing one subsystem of a codebase. Ontology: construct = what a node is, framework + stereotype = which framework pattern it plays, role = where it sits, process = where it runs, module = which source file/module the export belongs to. Symbol is the code identity; name is the display label (often derived from symbol). Host-only fields (local path binding, provenance, store ids, verification) are NOT part of this document; they belong on a hydrated envelope around it.",
   "type": "object",
   "required": [
     "title",
-    "components",
-    "relations"
+    "components"
   ],
   "additionalProperties": false,
   "properties": {
@@ -29,13 +28,6 @@
       "description": "Graph nodes — named units anchored to a real exported symbol (or external targets). Prefer 4–15 components per graph; split sprawling subsystems. Each component's `purl` identifies its repo/package; there is no document-level repo field.",
       "items": {
         "$ref": "#/$defs/component"
-      }
-    },
-    "relations": {
-      "type": "array",
-      "description": "Topology relations (structural / module / type). `from` / `to` reference component `alias`es. Runtime seams belong on walkthrough steps, not here.",
-      "items": {
-        "$ref": "#/$defs/relation"
       }
     },
     "walkthroughs": {
@@ -106,17 +98,6 @@
         "authored"
       ]
     },
-    "relationType": {
-      "type": "string",
-      "description": "Topology relation type — structural / module / type claim between components.",
-      "enum": [
-        "extends",
-        "inherits",
-        "implements",
-        "mixes_in",
-        "method"
-      ]
-    },
     "mechanism": {
       "type": "string",
       "description": "Walkthrough hop mechanism — how `from` relates to `to` at a runtime site. `uses` = general dependency; `feeds` = data-flow into a processor; `produces` = emits an output; `writes`/`reads`/`watches` = retained-state interactions.",
@@ -145,7 +126,7 @@
         "alias": {
           "type": "string",
           "minLength": 1,
-          "description": "Model-local stable alias, unique per model. Referenced by relation / walkthrough `from` / `to`; edges point at the alias, not the location, so a file move or symbol rename leaves edges intact. Code identity (for composed multi-model views) lives on `purl` + `file` + `symbol`, not here."
+          "description": "Model-local stable alias, unique per model. Referenced by walkthrough `from` / `to`; edges point at the alias, not the location, so a file move or symbol rename leaves edges intact. Code identity (for composed multi-model views) lives on `purl` + `file` + `symbol`, not here."
         },
         "name": {
           "type": "string",
@@ -221,44 +202,6 @@
         "declarationRef": {
           "$ref": "#/$defs/declarationRef",
           "description": "Anchored declaration location (start line + line hash). Usually populated by verify tooling, not hand-authored. Distinct from `declaration`, which is the structured shape."
-        }
-      }
-    },
-    "relation": {
-      "type": "object",
-      "required": [
-        "id",
-        "from",
-        "to",
-        "relationType"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Stable unique relation id."
-        },
-        "from": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Source component `alias`."
-        },
-        "to": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Target component `alias` (or external target label)."
-        },
-        "relationType": {
-          "$ref": "#/$defs/relationType"
-        },
-        "refs": {
-          "type": "array",
-          "description": "Concrete file/symbol evidence backing the relation (often purl refs).",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          }
         }
       }
     },

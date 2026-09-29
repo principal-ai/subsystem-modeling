@@ -39,7 +39,6 @@ import {
   deriveGraphEdges,
   isConstructsOnlyModel,
   moduleGroupNodeId,
-  isRelationMechanism,
   isWalkthroughMechanism,
   edgeColor,
   MECHANISM_DESCRIPTIONS,
@@ -52,7 +51,6 @@ import {
   type SubsystemGraphifyRelation,
   type SubsystemNodeIssue,
   type SubsystemRegionIssue,
-  type SubsystemRelation,
   type SubsystemWalkthrough,
 } from './model';
 import { ConstructsCatalog } from './ConstructsCatalog';
@@ -182,8 +180,6 @@ function writeViewState(
 
 export interface SubsystemComponentGraphProps {
   components: SubsystemComponent[];
-  /** Topology relations (structural / module / type). Display edges are derived with walkthrough hops. */
-  relations: SubsystemRelation[];
   /**
    * Ordered runtime walkthroughs — one walkthrough per flow. When present the
    * sidebar's bottom half offers a Files/Walkthroughs toggle:
@@ -198,7 +194,7 @@ export interface SubsystemComponentGraphProps {
    * graphify-native relations (raw static-graph edges: `imports`, `contains`,
    * `re_exports`, …). Display-only, drawn with the separate
    * `GRAPHIFY_RELATION_COLOR` palette so they read as derived facts, distinct
-   * from authored subsystem mechanisms. Visible in the `relations` edge view.
+   * from authored subsystem mechanisms. Visible in the `graphify` edge view.
    */
   graphifyRelations?: readonly SubsystemGraphifyRelation[];
   /**
@@ -239,16 +235,22 @@ export interface SubsystemComponentGraphProps {
    */
   showSingletonFrames?: boolean;
   /**
-   * Which edge vocabulary the canvas draws. The relation and walkthrough
-   * vocabularies are disjoint, so a graph carrying both shows one or the
-   * other — never both. Edges outside the view are hidden (labels go too).
-   * - `relations`: topology relation edges (`extends`, `implements`, …)
+   * How module frames group.
+   * - `exact` (default): one frame per distinct `module` string.
+   * - `path`: derive directory frames from `module` path segments and nest
+   *   module frames inside them (`src` → `src/session` → module).
+   */
+  moduleNesting?: 'exact' | 'path';
+  /**
+   * Which edge source the canvas draws. The graphify and walkthrough sources
+   * are disjoint, so a graph carrying both shows one or the other — never
+   * both. Edges outside the view are hidden (labels go too).
+   * - `graphify`: graphify-native static edges (`imports`, `contains`, …)
    * - `walkthroughs`: walkthrough hop edges (`calls`, `feeds`, …), including
    *   step numbers when a flow is focused/hovered
    * Leave unset to let the sidebar's Files / Walkthroughs tab drive it: Files
-   * draws topology relations, Walkthroughs draws runtime hops. Without visible
-   * tabs, defaults to `walkthroughs` for a flow-only model (walkthroughs but
-   * no relations), otherwise `relations`.
+   * draws graphify edges, Walkthroughs draws runtime hops. Without visible
+   * tabs, defaults to `walkthroughs`.
    */
   edgeView?: SubsystemEdgeView;
   /** Subsystem title displayed in the sidebar. */
@@ -348,7 +350,7 @@ export interface SubsystemComponentGraphProps {
   /**
    * Click an issue. The graph first focuses the target on the canvas itself —
    * a component target is selected and framed (any edge / walkthrough focus
-   * that would hide it is cleared), a relation target frames its edge, and a
+   * that would hide it is cleared), and a
    * module target frames that boundary frame — then this fires so the host can
    * open its own detail. Collapsing the card again reverses that (deselect +
    * zoom out). Other target kinds (flow / repo) have no node to frame and just
@@ -522,16 +524,16 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, relations, walkthroughs, graphifyRelations, orderByLine, initialWalkthroughId, onReorderWalkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, walkthroughFocusDurationMs = 300, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
+function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initialWalkthroughId, onReorderWalkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, walkthroughFocusDurationMs = 300, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
   const { theme } = useTheme();
-  const { fitView, fitBounds } = useReactFlow();
+  const { fitView, fitBounds, screenToFlowPosition } = useReactFlow();
   const viewport = useViewport();
   // Restored once per mount from `localStorage` (see `readViewState`). Each
   // graph is its own tab/mount, so `persistKey` is stable for a mount.
   const persisted = useMemo(() => readViewState(persistKey), [persistKey]);
   const graphEdges = useMemo(
-    () => deriveGraphEdges({ relations, walkthroughs }),
-    [relations, walkthroughs],
+    () => deriveGraphEdges({ walkthroughs }),
+    [walkthroughs],
   );
   const [built, setBuilt] = useState<{
     nodes: Node[];
@@ -559,6 +561,73 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
   const pendingFocusFitRef = useRef<number | null>(null);
   // Component the pointer is over (null on leave) → transient tree highlight.
   const [hoveredComponentAlias, setHoveredComponentId] = useState<string | null>(null);
+  // Boundary frame hovered on the canvas → highlight the matching folder row in
+  // the sidebar file tree, so a frame's place in the repo tree is visible.
+  const [hoveredRegion, setHoveredRegion] = useState<{
+    kind: string;
+    key: string;
+  } | null>(null);
+  const hoveredBoundaryPath =
+    hoveredRegion && (hoveredRegion.kind === 'module' || hoveredRegion.kind === 'directory')
+      ? hoveredRegion.key
+      : null;
+  // Path frames (module / directory) as absolute flow-coord rects, hit-tested
+  // on pointer move. A pointer hit-test keeps the frames' interior hoverable
+  // WITHOUT an overlay that would block edges / child nodes.
+  const pathFrameRects = useMemo(() => {
+    const out: Array<{ kind: string; key: string; x: number; y: number; w: number; h: number }> = [];
+    for (const n of built.nodes) {
+      if (n.type !== 'subsystem-group') continue;
+      const region = (n.data as { region?: { kind?: string; key?: string } } | undefined)?.region;
+      if (!region?.key || (region.kind !== 'module' && region.kind !== 'directory')) continue;
+      const r = built.absoluteRects.get(n.id);
+      if (!r) continue;
+      out.push({ kind: region.kind, key: region.key, x: r.x, y: r.y, w: r.width, h: r.height });
+    }
+    return out;
+  }, [built.nodes, built.absoluteRects]);
+  useEffect(() => {
+    if (pathFrameRects.length === 0) return;
+    let raf = 0;
+    let last: { x: number; y: number } | null = null;
+    const overCanvas = (e: MouseEvent): boolean =>
+      e.composedPath().some(
+        (el) => el instanceof HTMLElement && el.classList.contains(GRAPH_CANVAS_CLASS),
+      );
+    const onMove = (e: MouseEvent) => {
+      if (!overCanvas(e)) {
+        last = null;
+        setHoveredRegion((prev) => (prev == null ? prev : null));
+        return;
+      }
+      last = { x: e.clientX, y: e.clientY };
+      if (raf) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = 0;
+        if (!last) return;
+        const p = screenToFlowPosition(last);
+        let best: { kind: string; key: string } | null = null;
+        let bestArea = Number.POSITIVE_INFINITY;
+        for (const f of pathFrameRects) {
+          if (p.x >= f.x && p.x <= f.x + f.w && p.y >= f.y && p.y <= f.y + f.h) {
+            const area = f.w * f.h;
+            if (area < bestArea) {
+              bestArea = area;
+              best = { kind: f.kind, key: f.key };
+            }
+          }
+        }
+        setHoveredRegion((prev) =>
+          prev?.kind === best?.kind && prev?.key === best?.key ? prev : best,
+        );
+      });
+    };
+    window.addEventListener('mousemove', onMove);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [pathFrameRects, screenToFlowPosition]);
   // Walkthrough focus — selected flow (or step) is full strength; other
   // opened-flow members stay visible but dimmed; everything else is hidden.
   // Restored from the persisted view state when a `persistKey` is set.
@@ -586,27 +655,20 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
   const [diagnosticsTab, setDiagnosticsTab] = useState<'issues' | 'agents'>(
     () => persisted.diagnosticsTab ?? 'issues',
   );
-  // Temporary edge-vocabulary override. Focusing a relation finding whose edge
-  // belongs to the *other* vocabulary flips the canvas so the edge is actually
-  // visible; it reverts when the focus is undone (see `unfocusIssueTarget`) or
-  // when the diagnostics list closes. Null = use the host-pinned / tab view.
-  const [edgeViewOverride, setEdgeViewOverride] = useState<SubsystemEdgeView | null>(
-    null,
-  );
-  // One edge vocabulary at a time. When the caller doesn't pick, the sidebar's
-  // Files / Walkthroughs tab picks: Files draws topology relation edges,
+  // One edge source at a time. When the caller doesn't pick, the sidebar's
+  // Files / Walkthroughs tab picks: Files draws graphify static edges,
   // Walkthroughs draws runtime hop edges. Without visible tabs (no walkthroughs,
-  // or a sidebar-less embed) fall back to the model: a flow-only graph defaults
-  // to walkthrough edges rather than empty, everything else to relations.
+  // or a sidebar-less embed) fall back to walkthrough edges.
   const sidebarTabsVisible = !hideSidebar && (walkthroughs?.length ?? 0) > 0;
   const resolvedEdgeView: SubsystemEdgeView =
-    edgeViewOverride ??
     edgeView ??
     (sidebarTabsVisible
-      ? (sidebarView === 'walkthroughs' ? 'walkthroughs' : 'relations')
-      : relations.length === 0 && (walkthroughs?.length ?? 0) > 0
+      ? (sidebarView === 'walkthroughs' ? 'walkthroughs' : 'graphify')
+      : (walkthroughs?.length ?? 0) > 0
         ? 'walkthroughs'
-        : 'relations');
+        : (graphifyRelations?.length ?? 0) > 0
+          ? 'graphify'
+          : 'walkthroughs');
   // Walkthrough flows the user has expanded (via the title row). Closed by
   // default so a graph with several flows doesn't dump every step list at once.
   // Restored from the persisted view state when a `persistKey` is set.
@@ -807,15 +869,13 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
   // The pane stays hidden until Pass 2 completes. Key off layout-affecting
   // fields only — declarationRef updates after verify must not re-run ELK.
   const layoutKey = useMemo(
-    () => subsystemGraphLayoutKey({ components, relations, walkthroughs, graphifyRelations }),
-    [components, relations, walkthroughs, graphifyRelations],
+    () => subsystemGraphLayoutKey({ components, walkthroughs, graphifyRelations }),
+    [components, walkthroughs, graphifyRelations],
   );
   const componentsRef = useRef(components);
-  const relationsRef = useRef(relations);
   const walkthroughsRef = useRef(walkthroughs);
   const graphifyRelationsRef = useRef(graphifyRelations);
   componentsRef.current = components;
-  relationsRef.current = relations;
   walkthroughsRef.current = walkthroughs;
   graphifyRelationsRef.current = graphifyRelations;
 
@@ -836,13 +896,13 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
     pass2GenRef.current += 1;
     const doc = {
       components: componentsRef.current,
-      relations: relationsRef.current,
       walkthroughs: walkthroughsRef.current,
     };
     void buildSubsystemGraph(doc, {
       maxNodeWidth,
       showEdgeLabels,
       showSingletonFrames,
+      moduleNesting,
       graphifyRelations: graphifyRelationsRef.current,
       orderByLine,
     })
@@ -867,7 +927,7 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
         setLayoutReady(true);
       });
     return () => { alive = false; };
-  }, [layoutKey, maxNodeWidth, showEdgeLabels]);
+  }, [layoutKey, maxNodeWidth, showEdgeLabels, moduleNesting]);
 
   // Pass 2: once every leaf node has a measured dimension, re-run ELK.
   // Group parents are sized by ELK, not measured — exclude them or pass 2
@@ -893,8 +953,8 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
     const measuredHeights = new Map(leafNodes.map((n) => [n.id, dims.get(n.id)!.height]));
     const gen = ++pass2GenRef.current;
     void buildSubsystemGraph(
-      { components, relations, walkthroughs },
-      { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights, showSingletonFrames, graphifyRelations, orderByLine },
+      { components, walkthroughs },
+      { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights, showSingletonFrames, moduleNesting, graphifyRelations, orderByLine },
     )
       .then(({ nodes, edges: e, absoluteRects }) => {
         if (gen !== pass2GenRef.current) return;
@@ -907,7 +967,7 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
         // Reveal Pass 1 layout rather than leaving the cover up forever.
         setLayoutReady(true);
       });
-  }, [built.nodes, components, relations, walkthroughs, graphifyRelations, orderByLine, maxNodeWidth, showEdgeLabels]);
+  }, [built.nodes, components, walkthroughs, graphifyRelations, orderByLine, maxNodeWidth, showEdgeLabels, moduleNesting]);
 
   // After Pass 1 commits, try Pass 2 immediately with retained measurements.
   // Same-id live updates often get no new React Flow `dimensions` events, so
@@ -991,7 +1051,7 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
 
   // Resolve an issue's component target to the matching node. `id` is the
   // stable alias; `label` may be an alias, name, or symbol. Non-component
-  // targets (relation / module / flow / repo) have no single node → null.
+  // targets (module / flow / repo) have no single node → null.
   const issueComponent = useCallback(
     (issue: SubsystemIssue): SubsystemComponent | null => {
       const target = issue.target;
@@ -1007,33 +1067,6 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
       );
     },
     [components],
-  );
-
-  // Resolve a `relation` issue target to the display edge it flags. The target
-  // names the two endpoints (`from → to`); match an edge joining both, in
-  // either direction, preferring the target's `detail` mechanism when it names
-  // one. Null when no display edge matches.
-  const issueEdge = useCallback(
-    (issue: SubsystemIssue): Edge | null => {
-      const target = issue.target;
-      if (target?.kind !== 'relation') return null;
-      const parts = `${target.id ?? ''} → ${target.label}`
-        .split('→')
-        .map((p) => p.replace(/\(\)$/, '').trim())
-        .filter(Boolean);
-      const joins = (e: Edge): boolean =>
-        parts.includes(e.source) && parts.includes(e.target);
-      const matches = baseEdges.filter(joins);
-      const byMechanism = target.detail
-        ? matches.filter(
-            (e) =>
-              (e.data as { mechanism?: string } | undefined)?.mechanism ===
-              target.detail,
-          )
-        : matches;
-      return byMechanism[0] ?? matches[0] ?? null;
-    },
-    [baseEdges],
   );
 
   // A `module` issue target names a boundary frame, so focusing the card frames
@@ -1160,7 +1193,6 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
   // the canvas keeps while everything else dims. Derived from each finding's
   // target:
   //   component   → that node
-  //   relation    → the edge it flags (+ its two endpoint nodes)
   //   module      → every component in that module
   //   walkthrough → the flow's nodes + its hop edges
   //   repo        → every component of that repo
@@ -1180,20 +1212,6 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
       if (t.kind === 'component') {
         const a = resolveAlias(t.id ?? t.label);
         if (a) nodeIds.add(a);
-      } else if (t.kind === 'relation') {
-        // The target names the two endpoints (`from → to`); light the edge and
-        // its endpoints. Falls back to endpoints alone if no edge matches.
-        const edge = issueEdge(issue);
-        if (edge) {
-          edgeIds.add(edge.id);
-          nodeIds.add(edge.source);
-          nodeIds.add(edge.target);
-        } else {
-          for (const part of `${t.id ?? ''} → ${t.label}`.split('→')) {
-            const a = resolveAlias(part);
-            if (a) nodeIds.add(a);
-          }
-        }
       } else if (t.kind === 'module') {
         const key = t.id ?? t.label;
         const prefix = `${key.replace(/\/$/, '')}/`;
@@ -1232,7 +1250,7 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
       if (nodeIds.has(e.source) && nodeIds.has(e.target)) edgeIds.add(e.id);
     }
     return { nodeIds, edgeIds };
-  }, [issues, expandedIssueCategories, components, walkthroughs, baseEdges, resolveAlias, issueEdge]);
+  }, [issues, expandedIssueCategories, components, walkthroughs, resolveAlias]);
   const issueFocusNodeIds = issueFocus?.nodeIds ?? null;
   const issueFocusEdgeIds = issueFocus?.edgeIds ?? null;
 
@@ -1479,15 +1497,15 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
       };
     };
     // Edges outside the selected view are hidden entirely (labels included).
-    // graphify-native edges belong to the relations view (they are static
+    // graphify-native edges belong to the graphify view (they are static
     // topology, not runtime hops) regardless of their verb.
     const edgeInView = (e: Edge): boolean => {
       const d = e.data as
         | { mechanism?: string; provenance?: SubsystemEdgeProvenance }
         | undefined;
       const mechanism = d?.mechanism ?? 'uses';
-      if (resolvedEdgeView === 'relations') {
-        return d?.provenance === 'graphify' || isRelationMechanism(mechanism);
+      if (resolvedEdgeView === 'graphify') {
+        return d?.provenance === 'graphify';
       }
       return isWalkthroughMechanism(mechanism);
     };
@@ -1586,7 +1604,6 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
     setSelectedEdgeId(null);
     setFocusedWalkthroughId(null);
     setFocusedStepIndex(null);
-    setEdgeViewOverride(null);
     issueModuleFocusRef.current = null;
   }, []);
 
@@ -1612,7 +1629,6 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
   useEffect(() => {
     if (!issuesActive) {
       setExpandedIssueCategories([]);
-      setEdgeViewOverride(null);
     }
   }, [issuesActive]);
   const toggleIssues = () => {
@@ -2081,11 +2097,7 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
     if (playable.length === 0) return;
     // Only run the cycles that can actually be shown in the current edge view.
     const inView = playable.filter((tl) =>
-      tl.steps.some((s) =>
-        resolvedEdgeView === 'relations'
-          ? isRelationMechanism(s.mechanism)
-          : isWalkthroughMechanism(s.mechanism),
-      ),
+      tl.steps.some((s) => isWalkthroughMechanism(s.mechanism)),
     );
     if (inView.length === 0) return;
     const cyc = inView;
@@ -2254,16 +2266,14 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
   );
 
   // Issue click → select + frame the target on the canvas. Component targets
-  // frame their node; relation targets frame their edge (endpoints + the routed
-  // line); other kinds (module / flow / repo) have no single element and just
-  // forward. Selections / focus that would hide the target are cleared first,
-  // then the camera flies to it on the next frame. The host's `onSelectIssue`
-  // still fires afterwards for its own detail.
+  // frame their node; other kinds (module / flow / repo) have no single element
+  // and just forward. Selections / focus that would hide the target are cleared
+  // first, then the camera flies to it on the next frame. The host's
+  // `onSelectIssue` still fires afterwards for its own detail.
   const focusIssueTarget = useCallback(
     (issue: SubsystemIssue) => {
       const comp = issueComponent(issue);
-      const edge = comp ? null : issueEdge(issue);
-      const step = comp || edge ? null : issueStep(issue);
+      const step = comp ? null : issueStep(issue);
       if (comp) {
         setSelected(comp);
         setSelectedEdgeId(null);
@@ -2280,27 +2290,6 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
             minZoom: 0.05,
             maxZoom: 1.5,
           });
-        });
-      } else if (edge) {
-        setSelected(null);
-        setFocusedWalkthroughId(null);
-        setFocusedStepIndex(null);
-        setHoveredWalkthroughStep(null);
-        setSelectedEdgeId(edge.id);
-        issueModuleFocusRef.current = null;
-        // Flip to the vocabulary this edge belongs to, so a hop flagged in the
-        // relations view (or vice versa) is actually drawn while focused.
-        const d = edge.data as
-          | { mechanism?: string; provenance?: SubsystemEdgeProvenance }
-          | undefined;
-        const mechanism = d?.mechanism ?? 'uses';
-        setEdgeViewOverride(
-          d?.provenance === 'graphify' || isRelationMechanism(mechanism)
-            ? 'relations'
-            : 'walkthroughs',
-        );
-        requestAnimationFrame(() => {
-          fitFocusBounds(new Set([edge.id]));
         });
       } else if (step) {
         // A step finding focuses the step itself, through the same entry point
@@ -2329,14 +2318,12 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
     },
     [
       issueComponent,
-      issueEdge,
       issueStep,
       issueModuleNodeId,
       focusWalkthroughStep,
       onSelect,
       onSelectIssue,
       fitView,
-      fitFocusBounds,
       fitNodeRects,
     ],
   );
@@ -2355,14 +2342,9 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
         setSelected(null);
         setSelectedEdgeId(null);
       } else {
-        const edge = issueEdge(issue);
-        const step = edge ? null : issueStep(issue);
-        const moduleNodeId = edge || step ? null : issueModuleNodeId(issue);
-        if (edge) {
-          if (selectedEdgeIdRef.current !== edge.id) return;
-          setSelectedEdgeId(null);
-          setEdgeViewOverride(null);
-        } else if (step) {
+        const step = issueStep(issue);
+        const moduleNodeId = step ? null : issueModuleNodeId(issue);
+        if (step) {
           // Only unwind a step focus this card still owns. A dim-mode graph
           // keeps its step focus in hover state instead (owned by the pointer,
           // not the card), and correctly leaves that alone here.
@@ -2388,7 +2370,7 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
         fitView({ padding: 0.1, duration: 300, minZoom: 0.05, maxZoom: 2 });
       });
     },
-    [issueComponent, issueEdge, issueStep, issueModuleNodeId, fitView],
+    [issueComponent, issueStep, issueModuleNodeId, fitView],
   );
 
   // Construct tokens inside a walkthrough snippet. A step's line is an edge
@@ -2800,6 +2782,7 @@ function Inner({ components, relations, walkthroughs, graphifyRelations, orderBy
                         selectedFile={selected?.file ?? openFile}
                         hoveredFile={hoveredFile}
                         onSelectFile={onTreeSelectFile}
+                        hoveredFolder={hoveredBoundaryPath}
                         headerless={repoGroups.multiRepo}
                       />
                     )}
@@ -3362,7 +3345,6 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
 
   const constructsOnly = isConstructsOnlyModel({
     components: props.components,
-    relations: props.relations,
     walkthroughs: props.walkthroughs,
     graphifyRelations: props.graphifyRelations,
   });
