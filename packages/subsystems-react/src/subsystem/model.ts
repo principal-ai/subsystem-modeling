@@ -2159,6 +2159,9 @@ export async function buildSubsystemGraph(
         // layered pass place those sibling frames along the horizontal axis
         // while each frame's members stack vertically.
         direction: edges.length > 0 ? 'RIGHT' : 'DOWN',
+        // Edge-less containment: fold the root frames into a column-major grid
+        // so the shape reads closer to square than one long strip.
+        reflowGrid: edges.length === 0,
         nodeSpacing: 60,
         edgeSpacing: 30,
         edgeNodeSpacing: 60,

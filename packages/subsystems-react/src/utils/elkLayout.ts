@@ -95,6 +95,15 @@ export interface ElkLayoutOptions {
   orderByLine?: boolean;
 
   /**
+   * Reflow root-level compound frames into a column-major grid after ELK runs:
+   * fill each column top-to-bottom, then start the next column to the right.
+   * Gives an approximately square shape for edge-less containment graphs, which
+   * ELK otherwise packs into one long strip. No effect when edges exist (their
+   * routes would need re-routing).
+   */
+  reflowGrid?: boolean;
+
+  /**
    * Compound groups — each becomes an ELK parent whose `memberIds` are laid
    * out inside it. `memberIds` may be leaf node ids or other group ids
    * (for nesting, e.g. process → module → leaves). Optional `parentId`
@@ -529,6 +538,7 @@ export async function computeElkLayout(
   const edgeLabels = options.edgeLabels;
   const endpointInset = options.endpointInset ?? 0;
   const direction = options.direction ?? 'RIGHT';
+  const reflowGrid = options.reflowGrid === true;
   const orderByLine = options.orderByLine ?? false;
 
   // Build a map of original node positions BEFORE passing to ELK
@@ -1022,6 +1032,102 @@ export async function computeElkLayout(
         }
         return node;
       });
+
+  // Optional column-major grid reflow for edge-less containment graphs. ELK
+  // packs disconnected root frames into one long strip; fold them into a grid
+  // (fill a column top-to-bottom, then start the next column) so the shape
+  // approaches a square. Root frames are moved; their descendants (relative
+  // group bounds / leaf positions) ride along, and absoluteRects is rebased so
+  // hit-testing stays correct.
+  if (reflowGrid && edges.length === 0) {
+    const rootGroupIds: string[] = [];
+    for (const g of groupDefs) {
+      if (!builtGroups.has(g.id)) continue;
+      if (g.parentId && builtGroups.has(g.parentId)) continue;
+      rootGroupIds.push(g.id);
+    }
+    type GridItem = {
+      id: string;
+      kind: 'group' | 'leaf';
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+    };
+    const items: GridItem[] = [];
+    for (const id of rootGroupIds) {
+      const b = groupBounds.get(id);
+      if (b) items.push({ id, kind: 'group', x: b.x, y: b.y, w: b.width, h: b.height });
+    }
+    for (const id of ungroupedElkNodes.map((nd) => nd.id)) {
+      const rel = elkRelativePositions.get(id) ?? { x: 0, y: 0 };
+      const r = absoluteRects.get(id);
+      items.push({ id, kind: 'leaf', x: rel.x, y: rel.y, w: r?.width ?? 160, h: r?.height ?? 60 });
+    }
+    if (items.length > 1) {
+      const count = items.length;
+      const rows = Math.max(1, Math.ceil(Math.sqrt(count)));
+      const cols = Math.ceil(count / rows);
+      const GAP = 80;
+      const PAD = 40;
+      const colW: number[] = new Array(cols).fill(0);
+      const rowH: number[] = new Array(rows).fill(0);
+      items.forEach((it, i) => {
+        const c = Math.floor(i / rows);
+        const r = i % rows;
+        colW[c] = Math.max(colW[c] ?? 0, it.w);
+        rowH[r] = Math.max(rowH[r] ?? 0, it.h);
+      });
+      const colX: number[] = [];
+      let acc = PAD;
+      for (let c = 0; c < cols; c++) {
+        colX[c] = acc;
+        acc += (colW[c] ?? 0) + GAP;
+      }
+      const rowY: number[] = [];
+      acc = PAD;
+      for (let r = 0; r < rows; r++) {
+        rowY[r] = acc;
+        acc += (rowH[r] ?? 0) + GAP;
+      }
+      const shiftAbsSubtree = (id: string, dx: number, dy: number) => {
+        const ar = absoluteRects.get(id);
+        if (ar) absoluteRects.set(id, { ...ar, x: ar.x + dx, y: ar.y + dy });
+        const g = groupById.get(id);
+        if (!g) return;
+        for (const mid of g.memberIds) {
+          if (builtGroups.has(mid)) shiftAbsSubtree(mid, dx, dy);
+          else {
+            const mar = absoluteRects.get(mid);
+            if (mar) absoluteRects.set(mid, { ...mar, x: mar.x + dx, y: mar.y + dy });
+          }
+        }
+      };
+      const movedLeaves = new Map<string, { x: number; y: number }>();
+      items.forEach((it, i) => {
+        const c = Math.floor(i / rows);
+        const r = i % rows;
+        const dx = (colX[c] ?? 0) - it.x;
+        const dy = (rowY[r] ?? 0) - it.y;
+        if (dx === 0 && dy === 0) return;
+        if (it.kind === 'group') {
+          const b = groupBounds.get(it.id);
+          if (b) groupBounds.set(it.id, { ...b, x: b.x + dx, y: b.y + dy });
+          shiftAbsSubtree(it.id, dx, dy);
+        } else {
+          shiftAbsSubtree(it.id, dx, dy);
+          const rel = elkRelativePositions.get(it.id);
+          if (rel) movedLeaves.set(it.id, { x: rel.x + dx, y: rel.y + dy });
+        }
+      });
+      if (movedLeaves.size > 0) {
+        for (const node of resultNodes) {
+          const m = movedLeaves.get(node.id);
+          if (m) (node as { position: { x: number; y: number } }).position = m;
+        }
+      }
+    }
+  }
 
   return {
     nodes: resultNodes,
