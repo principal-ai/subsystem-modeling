@@ -18,6 +18,7 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
+  useStore,
   type Edge,
   type EdgeProps,
   type EdgeTypes,
@@ -244,6 +245,9 @@ function TransitionInner({
 }: SubsystemModelTransitionProps) {
   const { theme } = useTheme();
   const { fitBounds } = useReactFlow();
+  // React Flow only owns a size once its pane has mounted + measured; fitting
+  // before that clamps the view. Gate the fit on RF's own dimensions.
+  const rfSized = useStore((s) => (s.width ?? 0) > 0 && (s.height ?? 0) > 0);
   const [layouts, setLayouts] = useState<StepLayout[] | null>(null);
   const [display, setDisplay] = useState<Map<string, Live>>(new Map());
   const [settled, setSettled] = useState(false);
@@ -334,7 +338,7 @@ function TransitionInner({
   // Refit the viewport to the active step — once the pane is sized, and on every
   // step change. Kept separate so the initial fit waits for a real pane size.
   useEffect(() => {
-    if (!sized || !layouts) return;
+    if (!sized || !rfSized || !layouts) return;
     const step = layouts[activeIndex];
     if (!step) return;
     const rects = [...step.rects.values()];
@@ -347,7 +351,7 @@ function TransitionInner({
       { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
       { padding: fitPadding, duration: durationMs },
     );
-  }, [sized, layouts, activeIndex, fitPadding, durationMs, fitBounds]);
+  }, [sized, rfSized, layouts, activeIndex, fitPadding, durationMs, fitBounds]);
 
   const unionMeta = useMemo(() => {
     const m = new Map<string, StepMeta>();
@@ -475,7 +479,8 @@ function TransitionInner({
   // Camera: frame a focused hop's endpoints, or the whole graph during the
   // "whole flow" phase.
   useEffect(() => {
-    if (walkthroughStepMode !== 'focus' || !settled || !sized || !autoPlaySteps) return;
+    if (walkthroughStepMode !== 'focus' || !settled || !sized || !rfSized || !autoPlaySteps)
+      return;
     if (!activeLayout) return;
     const rects = focusedHop
       ? [focusedHop.from, focusedHop.to]
@@ -496,6 +501,7 @@ function TransitionInner({
     focusedHop,
     settled,
     sized,
+    rfSized,
     activeLayout,
     durationMs,
     fitBounds,
