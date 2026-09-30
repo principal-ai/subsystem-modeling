@@ -101,6 +101,11 @@ export type { UseElkLayoutOptions, UseElkLayoutResult } from './hooks/useElkLayo
 // Subsystem component graph
 export { SubsystemComponentGraph } from './subsystem/SubsystemComponentGraph';
 export type { SubsystemComponentGraphProps, WalkthroughViewerContext } from './subsystem/SubsystemComponentGraph';
+export { SubsystemModelTransition } from './subsystem/SubsystemModelTransition';
+export type {
+  SubsystemModelTransitionProps,
+  SubsystemTransitionStep,
+} from './subsystem/SubsystemModelTransition';
 export { SubsystemAggregateGraph } from './subsystem/SubsystemAggregateGraph';
 export type {
   SubsystemAggregateGraphProps,

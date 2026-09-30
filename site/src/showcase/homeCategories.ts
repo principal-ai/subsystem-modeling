@@ -151,9 +151,8 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
         title,
         description: source.description,
         components: dynamicView(source.components),
-        // Runtime layer: mechanism edges from the walkthrough hops over the
-        // process/module containment frames.
-        walkthroughs: source.walkthroughs,
+        // Runtime boundaries only (process over module frames). Edges belong to
+        // the walkthrough layer, so no walkthroughs here.
       },
       graph: {
         showEdgeLabels: true,
@@ -213,9 +212,9 @@ export const homeProgressionExamples: Record<string, HomeProgressionExample> = {
           'Layer 2 — containment: components grouped into their source modules. Runtime comes next.',
       },
       'dynamic-topology': {
-        blurb: 'Same nodes, framed by process — now wired by runtime seams.',
+        blurb: 'Same nodes, now framed by the processes they run in.',
         description:
-          'Layer 3 — process framing (booking-web/client · booking-web/server) plus module containment, with runtime mechanism edges (calls / reads / writes).',
+          'Layer 3 — process framing (booking-web/client · booking-web/server) plus module containment. Runtime edges come next.',
       },
       walkthrough: {
         blurb: 'Follow pick, book, and cancel at the real file:line seams.',
@@ -244,9 +243,9 @@ export const homeProgressionExamples: Record<string, HomeProgressionExample> = {
           'Layer 2 — containment: components grouped into their source modules. Runtime comes next.',
       },
       'dynamic-topology': {
-        blurb: 'Same nodes, framed by process — now wired by runtime seams.',
+        blurb: 'Same nodes, now framed by the processes they run in.',
         description:
-          'Layer 3 — process framing (orders-api · payments-api) plus module containment, with runtime mechanism edges (calls / reads / writes).',
+          'Layer 3 — process framing (orders-api · payments-api) plus module containment. Runtime edges come next.',
       },
       walkthrough: {
         blurb: 'Follow a traced GET and POST across the real seams.',

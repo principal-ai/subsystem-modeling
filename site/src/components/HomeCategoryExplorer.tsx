@@ -5,13 +5,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import '@xyflow/react/dist/style.css';
 import { ThemeProvider, defaultEditorTheme, useTheme } from '@principal-ade/industry-theme';
-import { SubsystemComponentGraph } from '@principal-ai/subsystems-react/dist/subsystem/SubsystemComponentGraph.js';
-import {
-  activeHomeExample,
-  homeCategories,
-  type HomeCategoryId,
-} from '../showcase/homeCategories';
-import { makeShowcaseRenderers } from '../showcase/files';
+import { SubsystemModelTransition } from '@principal-ai/subsystems-react/dist/subsystem/SubsystemModelTransition.js';
+import { homeCategories, type HomeCategoryId } from '../showcase/homeCategories';
 
 const LAYER_DWELL_MS = 10_000;
 const WALKTHROUGH_STEP_MS = 4_500;
@@ -22,9 +17,9 @@ function walkthroughCycleMs(
   if (!walkthroughs?.length) return LAYER_DWELL_MS;
   const steps = walkthroughs.reduce((n, w) => n + w.steps.length, 0);
   if (steps === 0) return LAYER_DWELL_MS;
-  // Autoplay shows the first step immediately, then waits interval between steps;
-  // one full pass through all steps takes steps * interval before it would loop.
-  return steps * WALKTHROUGH_STEP_MS;
+  // Autoplay opens on the whole flow, then advances one hop per interval; a full
+  // pass is (hops + 1) ticks before it loops.
+  return (steps + 1) * WALKTHROUGH_STEP_MS;
 }
 
 function ExplorerInner() {
@@ -36,11 +31,24 @@ function ExplorerInner() {
   // Transient pause: while the cursor is over the graph, auto-advance freezes
   // and resumes on leave (so hovering to inspect doesn't get advanced away).
   const [hovering, setHovering] = useState(false);
-  const [descriptionOpen, setDescriptionOpen] = useState(false);
   const [progress, setProgress] = useState(0);
   const remainingRef = useRef(LAYER_DWELL_MS);
-  const fileRenderers = useMemo(
-    () => makeShowcaseRenderers(activeHomeExample.caseDir),
+  // One transition step per layer — the graph morphs between them.
+  const steps = useMemo(
+    () =>
+      homeCategories.map((cat) => ({
+        model: {
+          title: cat.model.title,
+          description: cat.model.description,
+          components: cat.model.components,
+          walkthroughs: cat.model.walkthroughs,
+        },
+        moduleNesting: cat.graph.moduleNesting,
+        showEdgeLabels: cat.graph.showEdgeLabels,
+        boundaryColors: cat.graph.boundaryColors,
+        autoPlayWalkthroughs: cat.graph.autoPlayWalkthroughs,
+        showWalkthroughTitle: cat.graph.showWalkthroughTitle,
+      })),
     [],
   );
 
@@ -63,7 +71,6 @@ function ExplorerInner() {
   useEffect(() => {
     remainingRef.current = dwellMs;
     setProgress(0);
-    setDescriptionOpen(false);
   }, [selectedId, dwellMs]);
 
   // Drive progress + advance; freeze while paused (e.g. graph interaction).
@@ -202,23 +209,6 @@ function ExplorerInner() {
           }}
         >
           <h2 className="home-explorer-stage-title">{selected.model.title}</h2>
-          {selected.id === 'constructs' && selected.model.description && (
-            <button
-              type="button"
-              className="home-explorer-description-toggle"
-              onClick={() => {
-                setPaused(true);
-                setDescriptionOpen((v) => !v);
-              }}
-              aria-expanded={descriptionOpen}
-              aria-label={
-                descriptionOpen ? 'Hide description' : 'Show description'
-              }
-              title={descriptionOpen ? 'Hide description' : 'Show description'}
-            >
-              Description
-            </button>
-          )}
         </div>
         <div
           className="home-explorer-graph"
@@ -227,27 +217,10 @@ function ExplorerInner() {
           onPointerDown={pauseForInteraction}
           onWheel={pauseForInteraction}
         >
-          <SubsystemComponentGraph
-            key={selected.id}
-            components={selected.model.components}
-            walkthroughs={selected.model.walkthroughs}
-            title={selected.model.title}
-            hideSidebar
-            description={selected.model.description}
-            descriptionOpen={descriptionOpen}
-            onDescriptionOpenChange={setDescriptionOpen}
-            showEdgeLabels={selected.graph.showEdgeLabels}
-            edgeView={selected.graph.edgeView}
-            moduleNesting={selected.graph.moduleNesting}
-            autoPlayWalkthroughs={selected.graph.autoPlayWalkthroughs}
+          <SubsystemModelTransition
+            steps={steps}
+            activeIndex={selectedIndex}
             walkthroughAutoPlayIntervalMs={WALKTHROUGH_STEP_MS}
-            walkthroughStepMode="focus"
-            zoomOnWalkthroughFocus
-            walkthroughFocusDurationMs={900}
-            showWalkthroughTitle={selected.graph.showWalkthroughTitle}
-            boundaryColors={selected.graph.boundaryColors}
-            renderFileViewer={fileRenderers.renderFileViewer}
-            renderWalkthroughViewer={fileRenderers.renderWalkthroughViewer}
           />
         </div>
       </div>
