@@ -217,9 +217,9 @@ export const homeProgressionExamples: Record<string, HomeProgressionExample> = {
           'Layer 3 — process framing (booking-web/client · booking-web/server) plus module containment. Runtime edges come next.',
       },
       walkthrough: {
-        blurb: 'Follow pick, book, and cancel at the real file:line seams.',
+        blurb: 'Follow a booking at the real file:line seams.',
         description:
-          'Layer 4 — ordered hops (pick / book / cancel) over the map you just built.',
+          'Layer 4 — the ordered hops of “Guest books a slot” over the map you just built.',
       },
     },
   },

@@ -410,12 +410,15 @@ function TransitionInner({
       ? hopList[(stepPointer - 1) % hopList.length]
       : undefined;
   const stepNoByEdge = useMemo(() => {
+    // Unique step numbers per edge — a hop reused across walkthroughs (e.g. a
+    // shared `capture-event` call) would otherwise stack `4: 4: 4:`.
     const m = new Map<string, number[]>();
     for (const h of hopList) {
       const arr = m.get(h.edgeId) ?? [];
-      arr.push(h.stepNo);
+      if (!arr.includes(h.stepNo)) arr.push(h.stepNo);
       m.set(h.edgeId, arr);
     }
+    for (const arr of m.values()) arr.sort((a, b) => a - b);
     return m;
   }, [hopList]);
   const focusParticipants = useMemo(
