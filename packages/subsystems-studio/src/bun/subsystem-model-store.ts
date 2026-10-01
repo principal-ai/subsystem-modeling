@@ -431,36 +431,6 @@ export function resolveRepoRootForComponent(
 	return resolveRepoRootFromAlexandria(owner, name) ?? undefined;
 }
 
-/**
- * Backfill file-anchored `purl`s on trail steps written before step
- * purls were required. Derives `repoKey(endpointPurl)#step.file` from the
- * step's from ?? to component — the same attribution verification and the
- * file panel already used. Mutates the passed record in place and returns
- * true when any step was filled.
- */
-export function backfillStepPurls(doc: {
-	components?: ReadonlyArray<{ alias: string; purl?: string }>;
-	trails?: Array<{
-		steps?: Array<{ file?: string; purl?: string; from?: string; to?: string }>;
-	}>;
-}): boolean {
-	const byAlias = new Map(
-		(doc.components ?? []).map((c) => [c.alias, c]),
-	);
-	let filled = false;
-	for (const w of doc.trails ?? []) {
-		for (const s of w.steps ?? []) {
-			if (s.purl || !s.file) continue;
-			const key = purlRepoKey(
-				byAlias.get(s.from ?? "")?.purl ?? byAlias.get(s.to ?? "")?.purl,
-			);
-			if (!key) continue;
-			s.purl = `${key}#${s.file}`;
-			filled = true;
-		}
-	}
-	return filled;
-}
 
 /**
  * Check every component's `file` against its repo's local root. When the graph
@@ -680,9 +650,8 @@ export async function getSubsystemModel(id: string): Promise<StoredSubsystemMode
 	try {
 		const raw = await fs.readFile(graphPath(id), "utf8");
 		const record = JSON.parse(raw) as StoredSubsystemModel;
-		// Normalize provenance defaults + backfill renderer-required arrays on read.
+		// Normalize on read.
 		normalizeDeclarationProvenance(record.components);
-		backfillStepPurls(record);
 		return record;
 	} catch {
 		return null;

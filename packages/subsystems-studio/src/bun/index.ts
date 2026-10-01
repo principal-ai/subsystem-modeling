@@ -1148,14 +1148,12 @@ function subsystemFilesFromComponents(
 }
 
 /**
- * Per-trail step sites for the Subsystems tab file → trail
- * expansion. Step `file`s are repo-root-relative (same form as component
- * `file`); repo attribution is the step's own `purl`, falling back to the
- * step endpoint's purl (from ?? to) for older graphs, mirroring file
- * verification's resolution.
+ * Per-trail step sites for the Subsystems tab file → trail expansion. Step
+ * `file`s are repo-root-relative (same form as component `file`) and repo
+ * attribution is the step's own `purl`, which is required — there is nothing to
+ * infer from the endpoint components, so they are not consulted.
  */
 function subsystemTrailsFromModel(
-	components: ReadonlyArray<{ alias: string; file?: string; purl?: string }>,
 	trails?: ReadonlyArray<{
 		id: string;
 		title: string;
@@ -1168,7 +1166,6 @@ function subsystemTrailsFromModel(
 	files: Array<{ file: string; purl?: string; lines?: number[] }>;
 	steps: Array<{ file: string; purl?: string; line?: number }>;
 }> {
-	const byAlias = new Map(components.map((c) => [c.alias, c]));
 	const out: Array<{
 		id: string;
 		title: string;
@@ -1183,10 +1180,11 @@ function subsystemTrailsFromModel(
 		const stepSites: Array<{ file: string; purl?: string; line?: number }> = [];
 		for (const s of steps) {
 			if (!s.file) continue;
-			// Preferred: the step names its own site purl. Fall back to the
-			// endpoint components' purls for graphs written before step
-			// purls were required.
-			const purl = s.purl ?? byAlias.get(s.from)?.purl ?? byAlias.get(s.to)?.purl;
+			// A step names its own site purl — `purl` is required on a trail step,
+			// so there is nothing to infer. An unauthored step (hand-written file,
+			// or a record predating the requirement) falls through with no purl and
+			// is still listed by file.
+			const purl = s.purl;
 			const key = `${purl ?? ""}\0${s.file}`;
 			let entry = byKey.get(key);
 			if (!entry) {
@@ -1897,10 +1895,7 @@ const requests: RequestHandlers = {
 						? subsystemFilesFromComponents(full.components)
 						: undefined,
 					trails: full
-						? subsystemTrailsFromModel(
-								full.components,
-								full.trails,
-							)
+						? subsystemTrailsFromModel(full.trails)
 						: undefined,
 						path: subsystemModelFilePath(e.id),
 							gist: e.gist ?? full?.gist,
