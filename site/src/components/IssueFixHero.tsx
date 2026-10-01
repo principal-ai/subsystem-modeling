@@ -9,7 +9,7 @@ import {
 } from '../showcase/issueFixes'
 import { PierreExampleCode } from './PierreExampleCode'
 
-const WALKTHROUGH_STEP_MS = 3_200
+const TRAIL_STEP_MS = 3_200
 
 const REMEDIATION_LABEL: Record<IssueFixExample['remediation'], string> = {
   deterministic: 'Apply',
@@ -34,16 +34,16 @@ function GraphPane({
       <SubsystemComponentGraph
         key={`${exampleId}-${side}`}
         components={model.components}
-        walkthroughs={model.walkthroughs}
+        trails={model.trails}
         title={model.title}
         hideSidebar
         showEdgeLabels={graph.showEdgeLabels}
         edgeView={graph.edgeView}
-        autoPlayWalkthroughs={graph.autoPlayWalkthroughs}
-        walkthroughAutoPlayIntervalMs={WALKTHROUGH_STEP_MS}
-        walkthroughStepMode="dim"
-        zoomOnWalkthroughFocus={false}
-        showWalkthroughTitle={graph.autoPlayWalkthroughs}
+        autoPlayTrails={graph.autoPlayTrails}
+        trailAutoPlayIntervalMs={TRAIL_STEP_MS}
+        trailStepMode="dim"
+        zoomOnTrailFocus={false}
+        showTrailTitle={graph.autoPlayTrails}
         maxNodeWidth={240}
       />
     </div>

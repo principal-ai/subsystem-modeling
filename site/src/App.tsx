@@ -32,8 +32,8 @@ const MaintainerStaticTopology = lazy(() =>
 const MaintainerDynamicTopology = lazy(() =>
   import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerDynamicTopology })),
 )
-const MaintainerWalkthrough = lazy(() =>
-  import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerWalkthrough })),
+const MaintainerTrail = lazy(() =>
+  import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerTrail })),
 )
 const MaintainerReference = lazy(() =>
   import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerReference })),
@@ -354,10 +354,10 @@ function App() {
               }
             />
             <Route
-              path="walkthrough"
+              path="trail"
               element={
                 <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
-                  <MaintainerWalkthrough />
+                  <MaintainerTrail />
                 </Suspense>
               }
             />

@@ -5,7 +5,7 @@ import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import type { SubsystemComponent, SubsystemComponentEdge } from '../../../subsystem/model';
 import type { GraphifyCustomEntityDetail } from '../../../graphify';
-import { graphSpecFromHops } from './fixtures';
+import { graphSpecFromSteps } from './fixtures';
 
 /** Authored attributes surfaced in the declaration panel. */
 function entityDetail(attributes: Array<[string, string]>): GraphifyCustomEntityDetail {
@@ -143,7 +143,7 @@ const components: SubsystemComponent[] = [
   },
 ];
 
-const entityGraph = graphSpecFromHops([
+const entityGraph = graphSpecFromSteps([
   ['wr', 'store', 'feeds'],
   ['store', 'tech', 'feeds'],
   ['tech', 'sup', 'watches'],
@@ -178,7 +178,7 @@ export const NovaTechWorkRequests: Story = {
         title="Custom entities — NovaTech work-request chain"
         description="Persons, an agent, and a queue as `custom_entity` nodes (badge = entityKind). Actors keep the themed coral; the agent and queue wear authored `color` overrides. Click a node for its declaration — `entity 'Name' — kind` plus authored `attributes` (key: value)."
         components={components}
-        walkthroughs={entityGraph.walkthroughs}
+        trails={entityGraph.trails}
       />
     </div>
   ),

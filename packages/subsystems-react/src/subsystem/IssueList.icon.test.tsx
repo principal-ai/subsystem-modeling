@@ -27,7 +27,7 @@ afterEach(cleanup);
 const issue: SubsystemIssue = {
   id: 'i1',
   severity: 'info',
-  kind: 'walkthrough',
+  kind: 'trail',
   message: 'Step 2 references a line that moved.',
   target: {
     kind: 'step',
@@ -59,7 +59,7 @@ const hasIcon = (container: HTMLElement, name: string) =>
 
 describe('issue card icon', () => {
   test('a step finding wears the step icon, not the flow lane icon', () => {
-    // The audit kind is `walkthrough` (the whole flow), so without a
+    // The audit kind is `trail` (the whole flow), so without a
     // target-shape icon this card would read as a comment on the flow rather
     // than on the one step that is wrong.
     const { container } = renderCard();
@@ -69,7 +69,7 @@ describe('issue card icon', () => {
 
   test('a finding about the flow as a whole keeps the lane icon', () => {
     const { container } = renderCard({
-      target: { kind: 'walkthrough', id: 'flow-1', label: 'Checkout' },
+      target: { kind: 'trail', id: 'flow-1', label: 'Checkout' },
     });
     expect(hasIcon(container, 'route')).toBe(true);
     expect(hasIcon(container, 'footprints')).toBe(false);

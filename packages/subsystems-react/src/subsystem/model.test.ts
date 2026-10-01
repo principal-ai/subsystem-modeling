@@ -40,10 +40,10 @@ import {
   packageColor,
   subsystemGraphLayoutKey,
   describeConstructBreakdown,
-  reorderWalkthroughs,
+  reorderTrails,
   reorderTargetIndex,
 } from './model';
-import type { SubsystemComponent, SubsystemComponentEdge, SubsystemWalkthrough } from './model';
+import type { SubsystemComponent, SubsystemComponentEdge, SubsystemTrail } from './model';
 
 const comps: SubsystemComponent[] = [
   { alias: 'reader', name: 'SessionReader', construct: 'class', file: 'SessionReader.ts', purl: 'pkg:github/principal-ai/agent-monitoring' },
@@ -51,7 +51,7 @@ const comps: SubsystemComponent[] = [
 ];
 
 // 'host' is NOT a component — this is the cross-package external case.
-const walkthroughs: SubsystemWalkthrough[] = [
+const trails: SubsystemTrail[] = [
   {
     id: 'wt',
     title: 'flow',
@@ -78,7 +78,7 @@ const walkthroughs: SubsystemWalkthrough[] = [
   },
 ];
 
-const doc = { components: comps, walkthroughs };
+const doc = { components: comps, trails };
 
 describe('subsystem graph model', () => {
   test('converts all components to flat component nodes', () => {
@@ -109,7 +109,7 @@ describe('subsystem graph model', () => {
     ];
     const { nodes } = await buildSubsystemGraph({
       components: withExternal,
-      walkthroughs: [{
+      trails: [{
         id: 'w1',
         title: 'feed',
         steps: [{ from: 'reader', to: 'proposed-watcher', mechanism: 'feeds', file: 'x.ts', line: 1 }],
@@ -452,7 +452,7 @@ describe('subsystem graph model', () => {
         { alias: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
         { alias: 'solo', name: 'solo', construct: 'function', file: 's.ts', purl: 'pkg:github/acme/app', process: 'app/lonely' },
       ],
-      walkthroughs: [{
+      trails: [{
         id: 'w1',
         title: 'call',
         steps: [{ from: 'a', to: 'b', mechanism: 'calls', file: 'a.ts', line: 1 }],
@@ -808,7 +808,7 @@ describe('subsystem graph model', () => {
             }
           : c,
       ),
-      walkthroughs,
+      trails,
     };
     expect(subsystemGraphLayoutKey(base)).toBe(subsystemGraphLayoutKey(withRef));
   });
@@ -816,7 +816,7 @@ describe('subsystem graph model', () => {
 
 describe('isConstructsOnlyModel', () => {
   test('true when components exist and there are no edges', () => {
-    expect(isConstructsOnlyModel({ components: comps, walkthroughs: [] })).toBe(true);
+    expect(isConstructsOnlyModel({ components: comps, trails: [] })).toBe(true);
     expect(isConstructsOnlyModel({ components: comps })).toBe(true);
   });
 
@@ -829,13 +829,13 @@ describe('isConstructsOnlyModel', () => {
     ).toBe(false);
   });
 
-  test('false when empty, or when walkthrough hops exist', () => {
+  test('false when empty, or when trail steps exist', () => {
     expect(isConstructsOnlyModel({ components: [] })).toBe(false);
-    expect(isConstructsOnlyModel({ components: comps, walkthroughs })).toBe(false);
+    expect(isConstructsOnlyModel({ components: comps, trails })).toBe(false);
     expect(
       isConstructsOnlyModel({
         components: comps,
-        walkthroughs: [
+        trails: [
           {
             id: 'wt',
             title: 'flow',
@@ -1079,41 +1079,41 @@ describe('boundary frame min width (process / package badges)', () => {
   });
 });
 
-describe('reorderWalkthroughs', () => {
-  const wts: SubsystemWalkthrough[] = [
+describe('reorderTrails', () => {
+  const wts: SubsystemTrail[] = [
     { id: 'a', title: 'A', steps: [] },
     { id: 'b', title: 'B', steps: [] },
     { id: 'c', title: 'C', steps: [] },
   ];
-  const ids = (list: SubsystemWalkthrough[]) => list.map((w) => w.id);
+  const ids = (list: SubsystemTrail[]) => list.map((w) => w.id);
 
   test('moves an item forward to the target index', () => {
-    expect(ids(reorderWalkthroughs(wts, 0, 2))).toEqual(['b', 'c', 'a']);
+    expect(ids(reorderTrails(wts, 0, 2))).toEqual(['b', 'c', 'a']);
   });
 
   test('moves an item backward to the target index', () => {
-    expect(ids(reorderWalkthroughs(wts, 2, 0))).toEqual(['c', 'a', 'b']);
+    expect(ids(reorderTrails(wts, 2, 0))).toEqual(['c', 'a', 'b']);
   });
 
   test('returns a new array and leaves the input untouched', () => {
-    const next = reorderWalkthroughs(wts, 1, 2);
+    const next = reorderTrails(wts, 1, 2);
     expect(next).not.toBe(wts);
     expect(ids(wts)).toEqual(['a', 'b', 'c']);
     expect(ids(next)).toEqual(['a', 'c', 'b']);
   });
 
   test('no-op when source and target match', () => {
-    expect(ids(reorderWalkthroughs(wts, 1, 1))).toEqual(['a', 'b', 'c']);
+    expect(ids(reorderTrails(wts, 1, 1))).toEqual(['a', 'b', 'c']);
   });
 
   test('out-of-range source returns a shallow copy unchanged', () => {
-    const next = reorderWalkthroughs(wts, 5, 0);
+    const next = reorderTrails(wts, 5, 0);
     expect(next).not.toBe(wts);
     expect(ids(next)).toEqual(['a', 'b', 'c']);
   });
 
   test('clamps a target beyond the end to the last slot', () => {
-    expect(ids(reorderWalkthroughs(wts, 0, 99))).toEqual(['b', 'c', 'a']);
+    expect(ids(reorderTrails(wts, 0, 99))).toEqual(['b', 'c', 'a']);
   });
 });
 
@@ -1140,15 +1140,15 @@ describe('reorderTargetIndex', () => {
     expect(reorderTargetIndex(0, 0)).toBe(0);
   });
 
-  test('composes with reorderWalkthroughs to match the indicator', () => {
-    const wts: SubsystemWalkthrough[] = [
+  test('composes with reorderTrails to match the indicator', () => {
+    const wts: SubsystemTrail[] = [
       { id: 'a', title: 'A', steps: [] },
       { id: 'b', title: 'B', steps: [] },
       { id: 'c', title: 'C', steps: [] },
     ];
     // Drag A onto the gap below B (boundary 2) → A lands between B and C.
     const target = reorderTargetIndex(2, 0);
-    expect(reorderWalkthroughs(wts, 0, target).map((w) => w.id)).toEqual(['b', 'a', 'c']);
+    expect(reorderTrails(wts, 0, target).map((w) => w.id)).toEqual(['b', 'a', 'c']);
   });
 });
 
@@ -1167,9 +1167,9 @@ describe('graphify-native edges', () => {
     expect(e.mechanism).toBe('imports');
   });
 
-  test('walkthrough edges keep no graphify provenance', () => {
+  test('trail edges keep no graphify provenance', () => {
     const [e] = deriveGraphEdges({
-      walkthroughs: [walkthroughs[0]!],
+      trails: [trails[0]!],
     });
     expect(e.provenance).toBeUndefined();
     expect(e.mechanism).toBe('calls');

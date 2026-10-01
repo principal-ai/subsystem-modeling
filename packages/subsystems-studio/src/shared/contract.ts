@@ -23,9 +23,9 @@ import type {
 	SubsystemDeclarationRef,
 	SubsystemEdgeMechanism,
 	SubsystemModelDocument,
-	SubsystemWalkthrough,
-	SubsystemWalkthroughMechanism,
-	SubsystemWalkthroughStep,
+	SubsystemTrail,
+	SubsystemTrailMechanism,
+	SubsystemTrailStep,
 	SymbolInspection,
 } from "@principal-ai/subsystems-react";
 
@@ -36,13 +36,12 @@ export type {
 	SubsystemComponentEdge,
 	SubsystemModelDocument,
 	SubsystemEdgeMechanism,
-	SubsystemWalkthrough,
-	SubsystemWalkthroughMechanism,
-	SubsystemWalkthroughStep,
+	SubsystemTrail,
+	SubsystemTrailMechanism,
+	SubsystemTrailStep,
 };
 
 export type ViewerMode = "local" | "remote";
-export type PayloadKind = "trail" | "tour";
 
 /**
  * Which permanent tabs appear in the strip by default. Toggled from the
@@ -55,8 +54,8 @@ export interface DefaultTabFlags {
 	sessions: boolean;
 	/** Historical Maintain sessions overview tab. */
 	maintenanceSessions: boolean;
-	/** Trails library tab. */
-	trails: boolean;
+	/** Tours library tab. */
+	tours: boolean;
 	/** Graphify repos tab. */
 	graphify: boolean;
 	/** Package layers (codebase-composition) repos tab. */
@@ -73,7 +72,7 @@ export interface DefaultTabFlags {
 export const DEFAULT_TAB_FLAGS: DefaultTabFlags = {
 	sessions: false,
 	maintenanceSessions: false,
-	trails: false,
+	tours: false,
 	graphify: false,
 	packageLayers: false,
 	subsystems: true,
@@ -122,7 +121,7 @@ export interface ViewerSettings {
 	maintenanceRepoKey: string | null;
 	/**
 	 * Permanent tab that was active when Studio last closed, restored on the
-	 * next launch. `null` = use the default start tab. Transient tabs (trails,
+	 * next launch. `null` = use the default start tab. Transient tabs (tours,
 	 * models) are not persisted — they don't survive a restart.
 	 */
 	lastActiveTabId: string | null;
@@ -333,8 +332,8 @@ export interface StoredSubsystemModel {
 	title: string;
 	description?: string;
 	components: SubsystemComponent[];
-	/** Ordered runtime walkthroughs (one per flow). */
-	walkthroughs?: SubsystemWalkthrough[];
+	/** Ordered runtime trails (one per flow). */
+	trails?: SubsystemTrail[];
 	createdAt: string;
 	updatedAt: string;
 	/** Host-local: when a viewer last opened this graph (machine-specific). */
@@ -392,7 +391,7 @@ export interface SubsystemModelFileRef {
 	file: string;
 	/** PURL for repo grouping. Multi-repo graphs draw one tree per repo key. */
 	purl?: string;
-	/** Components declared in this file (powers the no-walkthrough fallback). */
+	/** Components declared in this file (powers the no-trail fallback). */
 	components?: Array<{
 		alias: string;
 		name: string;
@@ -401,7 +400,7 @@ export interface SubsystemModelFileRef {
 		startLine?: number;
 	}>;
 	/**
-	 * 1-based step lines sited in this file (walkthrough entries only;
+	 * 1-based step lines sited in this file (trail entries only;
 	 * sorted, deduped). Powers line focus in the file preview.
 	 */
 	lines?: number[];
@@ -462,12 +461,12 @@ export interface SubsystemModelSummary {
 	 */
 	files?: SubsystemModelFileRef[];
 	/**
-	 * Per-walkthrough step sites, derived from the full model the host
-	 * already loads per listing. Powers file → walkthrough expansion
+	 * Per-trail step sites, derived from the full model the host
+	 * already loads per listing. Powers file → trail expansion
 	 * without extra detail fetches. Step `file`s are in component-`file`
 	 * form; `purl` is the step endpoint's repo (from ?? to).
 	 */
-	walkthroughs?: Array<{
+	trails?: Array<{
 		id: string;
 		title: string;
 		stepCount: number;
@@ -592,7 +591,7 @@ export type SubsystemModelAuditFindingKind =
 	| "missing_file"
 	| "symbol_ambiguous"
 	| "symbol_unmatched"
-	| "walkthrough"
+	| "trail"
 	| "stale_declaration"
 	| "construct_mismatch"
 	| "construct_unconfirmed"
@@ -642,7 +641,7 @@ export interface SubsystemModelAuditFinding {
 	moduleKey?: string;
 	/** Repo purl when the finding is graph-level, about a repo rather than a node. */
 	purl?: string;
-	walkthroughId?: string;
+	trailId?: string;
 	step?: number;
 	message: string;
 	/** Present when a one-click deterministic fix is available. */
@@ -725,7 +724,7 @@ export interface SubsystemModelAuditReport {
 		externalsSkipped: number;
 		missingFiles: number;
 		missingSymbols: number;
-		walkthroughFailures: number;
+		trailFailures: number;
 		staleDeclarations: number;
 		constructMismatches: number;
 		signatureMismatches: number;
@@ -816,7 +815,7 @@ export interface MaintenanceOverviewModel {
 	recentRunAt?: string;
 	stale: boolean;
 	checkedAt?: string;
-	/** Per-lane verification status (construct / static / runtime / walkthrough). */
+	/** Per-lane verification status (construct / static / runtime / trail). */
 	lanes: Record<SubsystemVerificationLane, VerificationLaneStatus>;
 	/**
 	 * GitHub repos this model references (owner/name), derived from its
@@ -960,8 +959,8 @@ export type SubsystemModelProposalChange =
 			value: SubsystemDeclarationRef | null;
 	  }
 	| {
-			target: "walkthrough-step";
-			walkthroughId: string;
+			target: "trail-step";
+			trailId: string;
 			stepIndex: number;
 			field: "file" | "line" | "symbol" | "from" | "to" | "mechanism" | "annotation";
 			value: string | number | null;
@@ -1086,7 +1085,7 @@ export interface SubsystemModelSecondOpinionRequest {
  */
 /**
  * Verification lane a proposal belongs to — the four layers of the model:
- * construct (L1), static topology (L2), dynamic topology (L3), walkthrough (L4).
+ * construct (L1), static topology (L2), dynamic topology (L3), trail (L4).
  * Static topology = package/module (containment); dynamic topology = process
  * (runtime). Derived from the proposal's changes
  * (+ finding kind) at creation.
@@ -1095,7 +1094,7 @@ export type SubsystemVerificationLane =
 	| "construct"
 	| "static-topology"
 	| "dynamic-topology"
-	| "walkthrough";
+	| "trail";
 
 export interface SubsystemModelProposal {
 	id: string;
@@ -1115,7 +1114,7 @@ export interface SubsystemModelProposal {
 		severity?: string;
 		componentAlias?: string;
 		componentName?: string;
-		walkthroughId?: string;
+		trailId?: string;
 		step?: number;
 		message?: string;
 	};
@@ -1252,10 +1251,9 @@ export interface PackageLayerRepoEntry {
 
 export interface TabSummary {
 	id: string;
-	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "maintenance" | "graphify" | "package-layers" | "opencode-v2";
+	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "maintenance" | "graphify" | "package-layers" | "opencode-v2";
 	title: string;
 	mode?: ViewerMode;
-	payloadKind?: PayloadKind;
 	/** For `subsystem-model` tabs — absolute path to the persisted JSON. */
 	path?: string;
 }
@@ -1264,20 +1262,19 @@ export interface TabFullState {
 	ok: boolean;
 	error?: string;
 	id: string;
-	kind: "library" | "trail" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "maintenance" | "graphify" | "package-layers" | "opencode-v2";
+	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "maintenance" | "graphify" | "package-layers" | "opencode-v2";
 	title: string;
 	mode?: ViewerMode;
-	payloadKind?: PayloadKind;
 	repoRoot?: string;
-	trailFilePath?: string;
+	tourFilePath?: string;
 	sessionId?: string;
 	/** For `session-events` tabs — agent label when known. */
 	agent?: string;
 	/** For `subsystem-model` tabs — the graph id the tab renders. */
 	graphId?: string;
-	/** For `subsystem-model` tabs opened from a walkthrough row — the
-	 *  walkthrough to select when the view mounts. */
-	focusWalkthroughId?: string;
+	/** For `subsystem-model` tabs opened from a trail row — the
+	 *  trail to select when the view mounts. */
+	focusTrailId?: string;
 	/** For `subsystem-model` tabs opened with the issues view — whether the
 	 *  sidebar starts on the issues list, and which layer it focuses. */
 	showIssues?: boolean;
@@ -1315,7 +1312,7 @@ export interface GitConfigIdentity {
 }
 
 /** Identity of the person using the viewer, resolved host-side from
- *  gh CLI → TRAIL_GH_TOKEN → git config. */
+ *  gh CLI → TOUR_GH_TOKEN → git config. */
 export interface UserIdentity {
 	login?: string;
 	name?: string;
@@ -1366,8 +1363,8 @@ export type StudioRequests = {
 		params: Record<string, never>;
 		response: {
 			tabs: TabSummary[];
-			/** Which tab the host suggests showing: the boot start tab, a trail
-			 *  seeded by LOAD_TRAIL, or the last tab the renderer reported via
+			/** Which tab the host suggests showing: the boot start tab, a tour
+			 *  seeded by LOAD_TOUR, or the last tab the renderer reported via
 			 *  setActiveTab. The renderer owns the active tab; it applies this
 			 *  only as its initial/resume value (until the user clicks). */
 			suggestedActiveTabId: string;
@@ -1524,7 +1521,7 @@ export type StudioRequests = {
 	};
 	/**
 	 * Apply a partial patch to a stored model from the renderer — e.g. the
-	 * flows panel's drag-reorder writing the reordered `walkthroughs`. Only the
+	 * flows panel's drag-reorder writing the reordered `trails`. Only the
 	 * keys present are applied; the host merges, re-verifies, writes, and
 	 * broadcasts the change (so every surface reloads).
 	 */
@@ -1534,7 +1531,7 @@ export type StudioRequests = {
 			patch: {
 				title?: string;
 				description?: string;
-				walkthroughs?: SubsystemWalkthrough[];
+				trails?: SubsystemTrail[];
 			};
 		};
 		response: { ok: boolean; error?: string; graph?: StoredSubsystemModel };
@@ -1570,7 +1567,7 @@ export type StudioRequests = {
 				title: string;
 				description?: string;
 				components: SubsystemComponent[];
-				walkthroughs?: SubsystemWalkthrough[];
+				trails?: SubsystemTrail[];
 			};
 			sidecar?: MergeSidecar;
 			modelIds?: string[];
@@ -1579,7 +1576,7 @@ export type StudioRequests = {
 	openSubsystemModel: {
 		params: {
 			graphId: string;
-			walkthroughId?: string;
+			trailId?: string;
 			/** Force the sidebar's issues view open when the tab mounts. */
 			showIssues?: boolean;
 			/** With `showIssues`, land focused on this verification layer. */
@@ -1595,7 +1592,7 @@ export type StudioRequests = {
 	 * Publish the portable document for a stored model as a public GitHub
 	 * gist. Creates on first share; PATCHes the linked gist when `gist` is
 	 * already stamped on the record. Requires a local GitHub token
-	 * (`gh auth token`, git credential helper, or `TRAIL_GH_TOKEN`).
+	 * (`gh auth token`, git credential helper, or `TOUR_GH_TOKEN`).
 	 */
 	shareSubsystemModelAsGist: {
 		params: { graphId: string };
@@ -1635,7 +1632,7 @@ export type StudioRequests = {
 	 * Dry-run deterministic audit of a whole subsystem model (files, symbols,
 	 * declarations, graphify anchors). Does not mutate the stored graph.
 	 * Persists the report under ~/.principal/subsystem-model-audits for reuse.
-	 * Walkthrough affinity is not included — reserved for a later agent pass.
+	 * Trail affinity is not included — reserved for a later agent pass.
 	 */
 	auditSubsystemModel: {
 		params: { graphId: string };

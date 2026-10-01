@@ -2,7 +2,7 @@
  * toC4 — project a subsystem-model (or a composition of them) onto C4 levels.
  *
  * The stored document is flat: `components[]` carry `process` (runtime unit),
- * `purl` (repo/package), `construct`, `role`, `module`, plus `walkthroughs[]`
+ * `purl` (repo/package), `construct`, `role`, `module`, plus `trails[]`
  * (dynamic). C4 wants a hierarchy above the
  * component — system → container → component — with externals and actors
  * outside it. This module derives that hierarchy without inventing data:
@@ -59,7 +59,7 @@ export interface C4Group {
   memberIds: string[];
 }
 
-/** A rolled-up collaboration — a walkthrough flow between owners. */
+/** A rolled-up collaboration — a trail flow between owners. */
 export interface C4Edge {
   id: string;
   source: string;
@@ -254,7 +254,7 @@ export function toC4(doc: SubsystemModelDocument, options: ToC4Options = {}): C4
     if (!edge.mechanisms.includes(mechanism)) edge.mechanisms.push(mechanism);
   };
 
-  for (const w of doc.walkthroughs ?? []) {
+  for (const w of doc.trails ?? []) {
     for (const s of w.steps ?? []) {
       addEdge(flowEdges, ownerOf.get(s.from), ownerOf.get(s.to), 'flow', s.mechanism);
     }

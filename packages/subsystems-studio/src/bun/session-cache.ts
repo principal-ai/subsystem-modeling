@@ -9,7 +9,7 @@
  * plus the repoRoot/repos/session metadata the renderer consumes — so a cold
  * load can serve cached output instead of recomputing it.
  *
- * Layout mirrors the trail cache convention under `~/.principal/`:
+ * Layout follows the per-day directory convention under `~/.principal/`:
  *   `~/.principal/session-events/<dayKey>/<sessionId>.json`
  *
  * where `dayKey` is the calendar day the entry was written (`YYYY-MM-DD`).

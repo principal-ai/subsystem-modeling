@@ -9,17 +9,17 @@ import { SubsystemModelTransition } from '@principal-ai/subsystems-react/dist/su
 import { homeCategories, type HomeCategoryId } from '../showcase/homeCategories';
 
 const LAYER_DWELL_MS = 10_000;
-const WALKTHROUGH_STEP_MS = 4_500;
+const TRAIL_STEP_MS = 4_500;
 
-function walkthroughCycleMs(
-  walkthroughs: { steps: unknown[] }[] | undefined,
+function trailCycleMs(
+  trails: { steps: unknown[] }[] | undefined,
 ): number {
-  if (!walkthroughs?.length) return LAYER_DWELL_MS;
-  const steps = walkthroughs.reduce((n, w) => n + w.steps.length, 0);
+  if (!trails?.length) return LAYER_DWELL_MS;
+  const steps = trails.reduce((n, w) => n + w.steps.length, 0);
   if (steps === 0) return LAYER_DWELL_MS;
-  // Autoplay opens on the whole flow, then advances one hop per interval; a full
-  // pass is (hops + 1) ticks before it loops.
-  return (steps + 1) * WALKTHROUGH_STEP_MS;
+  // Autoplay opens on the whole flow, then advances one step per interval; a full
+  // pass is (steps + 1) ticks before it loops.
+  return (steps + 1) * TRAIL_STEP_MS;
 }
 
 function ExplorerInner() {
@@ -41,13 +41,13 @@ function ExplorerInner() {
           title: cat.model.title,
           description: cat.model.description,
           components: cat.model.components,
-          walkthroughs: cat.model.walkthroughs,
+          trails: cat.model.trails,
         },
         moduleNesting: cat.graph.moduleNesting,
         showEdgeLabels: cat.graph.showEdgeLabels,
         boundaryColors: cat.graph.boundaryColors,
-        autoPlayWalkthroughs: cat.graph.autoPlayWalkthroughs,
-        showWalkthroughTitle: cat.graph.showWalkthroughTitle,
+        autoPlayTrails: cat.graph.autoPlayTrails,
+        showTrailTitle: cat.graph.showTrailTitle,
       })),
     [],
   );
@@ -61,8 +61,8 @@ function ExplorerInner() {
   const isPaused = paused || hovering;
 
   const dwellMs = useMemo(() => {
-    if (selected.id === 'walkthrough') {
-      return walkthroughCycleMs(selected.model.walkthroughs);
+    if (selected.id === 'trail') {
+      return trailCycleMs(selected.model.trails);
     }
     return LAYER_DWELL_MS;
   }, [selected]);
@@ -220,7 +220,7 @@ function ExplorerInner() {
           <SubsystemModelTransition
             steps={steps}
             activeIndex={selectedIndex}
-            walkthroughAutoPlayIntervalMs={WALKTHROUGH_STEP_MS}
+            trailAutoPlayIntervalMs={TRAIL_STEP_MS}
           />
         </div>
       </div>

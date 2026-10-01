@@ -1,6 +1,6 @@
 import type {
   SubsystemComponent,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from '@principal-ai/subsystems-react';
 
 const PURL = 'pkg:github/you/terraform-site';
@@ -77,7 +77,7 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const walkthroughs = [
+export const trails = [
   {
     "id": "tl-apply",
     "title": "terraform apply",
@@ -124,8 +124,8 @@ export const walkthroughs = [
       }
     ]
   }
-] as SubsystemWalkthrough[];
+] as SubsystemTrail[];
 
 export const title = 'Terraform static site';
 export const description =
-  'Infra-as-code subsystem: **root module → static_site module → AWS** (S3 website bucket). Open **Walkthroughs** for `terraform apply`.';
+  'Infra-as-code subsystem: **root module → static_site module → AWS** (S3 website bucket). Open **Trails** for `terraform apply`.';

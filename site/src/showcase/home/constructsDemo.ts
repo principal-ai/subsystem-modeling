@@ -4,7 +4,7 @@
  */
 import type {
   SubsystemComponent,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from '@principal-ai/subsystems-react';
 
 const PURL = 'pkg:github/you/notes-intake';
@@ -78,4 +78,4 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const walkthroughs = [] as SubsystemWalkthrough[];
+export const trails = [] as SubsystemTrail[];

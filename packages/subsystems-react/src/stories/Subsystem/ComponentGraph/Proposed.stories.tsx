@@ -9,7 +9,7 @@ import type {
   SubsystemComponent,
   SubsystemGraphNode,
 } from '../../../subsystem/model';
-import { walkthroughFromHops } from './fixtures';
+import { trailFromSteps } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Proposed',
@@ -225,8 +225,8 @@ const migrationComponents: SubsystemComponent[] = [
   },
 ];
 
-const migrationWalkthroughs = [
-  walkthroughFromHops('migration-hops', 'Migration hops', [
+const migrationTrails = [
+  trailFromSteps('migration-steps', 'Migration steps', [
     ['audit', 'maintain', 'calls', 'src/bun/verify-subsystem-component.ts', 1],
     ['maintain', 'lifecycle', 'uses', 'src/bun/maintain-model.ts', 1],
     ['lifecycle', 'cli', 'calls', 'src/bun/opencode-v2.ts', 1],
@@ -239,7 +239,7 @@ function MigrationDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={migrationComponents}
-        walkthroughs={migrationWalkthroughs}
+        trails={migrationTrails}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, padding: '0 12px', fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>

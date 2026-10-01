@@ -93,7 +93,7 @@ export function Gist() {
               <SubsystemComponentGraph
                 key={`${state.gistId}:${state.fileName}:${refParam ?? 'main'}`}
                 components={state.document.components}
-                walkthroughs={state.document.walkthroughs}
+                trails={state.document.trails}
                 title={state.document.title}
                 description={state.document.description}
                 showEdgeLabels

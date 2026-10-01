@@ -71,7 +71,7 @@ export const DerivedFromOverview: Story = {
 						construct: "issues",
 						"static-topology": "none",
 						"dynamic-topology": "none",
-						walkthrough: "none",
+						trail: "none",
 					},
 					repos: [{ owner: "principal-ai", name: "subsystem-modeling" }],
 				},
@@ -91,7 +91,7 @@ export const DerivedFromOverview: Story = {
 						construct: "partial",
 						"static-topology": "none",
 						"dynamic-topology": "none",
-						walkthrough: "none",
+						trail: "none",
 					},
 					repos: [
 						{ owner: "principal-ai", name: "subsystem-modeling" },

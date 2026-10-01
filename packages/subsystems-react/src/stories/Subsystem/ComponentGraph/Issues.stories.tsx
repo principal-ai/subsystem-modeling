@@ -4,7 +4,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import { SubsystemIssueList, type SubsystemIssue } from '../../../subsystem/IssueList';
-import { components, graphSpecFromHops } from './fixtures';
+import { components, graphSpecFromSteps } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Issues',
@@ -57,7 +57,7 @@ const ISSUES: SubsystemIssue[] = [
   {
     id: 'i6',
     severity: 'info',
-    kind: 'walkthrough',
+    kind: 'trail',
     message: 'Step 2 references a line that moved (was :42).',
     target: {
       kind: 'step',
@@ -133,7 +133,7 @@ const graphComponents = components([
   ['stripe', 'Stripe', 'external', '', 'external', undefined, undefined],
 ]);
 
-const graphEdges = graphSpecFromHops([
+const graphEdges = graphSpecFromSteps([
   ['entry', 'store', 'writes'],
   ['entry', 'stripe', 'calls'],
 ]);
@@ -166,7 +166,7 @@ export const GraphWithIssues: Story = {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={graphComponents}
-        walkthroughs={graphEdges.walkthroughs}
+        trails={graphEdges.trails}
         title="Checkout"
         description="A small e-commerce checkout subsystem."
         diagnostic={{

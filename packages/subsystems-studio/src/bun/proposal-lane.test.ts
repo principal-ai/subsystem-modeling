@@ -12,8 +12,8 @@ const augmentation = (field: string): SubsystemModelProposalChange =>
 	({ target: "augmentation", componentAlias: "a", field, value: "x" }) as never;
 const step = (): SubsystemModelProposalChange =>
 	({
-		target: "walkthrough-step",
-		walkthroughId: "w",
+		target: "trail-step",
+		trailId: "w",
 		stepIndex: 0,
 		field: "line",
 		value: 1,
@@ -51,8 +51,8 @@ describe("laneForChange", () => {
 	test("process is dynamic topology", () => {
 		expect(laneForChange(component("process"))).toBe("dynamic-topology");
 	});
-	test("walkthrough step", () => {
-		expect(laneForChange(step())).toBe("walkthrough");
+	test("trail step", () => {
+		expect(laneForChange(step())).toBe("trail");
 	});
 });
 
@@ -70,7 +70,7 @@ describe("laneForFindingKind", () => {
 		expect(laneForFindingKind("boundary_process_nest_disagree")).toBe(
 			"dynamic-topology",
 		);
-		expect(laneForFindingKind("walkthrough")).toBe("walkthrough");
+		expect(laneForFindingKind("trail")).toBe("trail");
 	});
 	test("unknown -> null", () => {
 		expect(laneForFindingKind(undefined)).toBeNull();
@@ -88,13 +88,13 @@ describe("deriveProposalLane", () => {
 		expect(
 			deriveProposalLane({
 				changes: [component("file"), step()],
-				finding: { kind: "walkthrough" },
+				finding: { kind: "trail" },
 			}),
-		).toBe("walkthrough");
+		).toBe("trail");
 	});
 	test("mixed lanes with no finding use first change", () => {
 		expect(
 			deriveProposalLane({ changes: [step(), component("file")] }),
-		).toBe("walkthrough");
+		).toBe("trail");
 	});
 });

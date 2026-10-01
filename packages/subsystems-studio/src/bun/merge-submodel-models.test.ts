@@ -34,7 +34,7 @@ describe("mergeSubsystemModels", () => {
 							symbol: "readGraph",
 						}),
 					],
-					walkthroughs: [
+					trails: [
 						{
 							id: "w1",
 							title: "Read",
@@ -62,9 +62,9 @@ describe("mergeSubsystemModels", () => {
 		const node = r.document.components[0]!;
 		expect(node.purpose).toBe("Reads one stored graph from disk.");
 		expect(node.role).toBe("entry");
-		// Walkthrough step rebased to the canonical alias; the external label
+		// Trail step rebased to the canonical alias; the external label
 		// passes through untouched.
-		expect(r.document.walkthroughs?.[0]?.steps[0]).toMatchObject({
+		expect(r.document.trails?.[0]?.steps[0]).toMatchObject({
 			from: "reader",
 			to: "outside",
 		});
@@ -243,13 +243,13 @@ describe("mergeSubsystemModels", () => {
 		expect(r.sidecar.conflicts.some((c) => c.field === "purpose")).toBe(false);
 	});
 
-	test("walkthrough id collisions disambiguate deterministically", () => {
+	test("trail id collisions disambiguate deterministically", () => {
 		const r = mergeSubsystemModels([
 			{
 				id: "sg-1",
 				document: doc({
 					components: [code("a"), code("b")],
-					walkthroughs: [
+					trails: [
 						{
 							id: "w1",
 							title: "One",
@@ -262,7 +262,7 @@ describe("mergeSubsystemModels", () => {
 				id: "sg-2",
 				document: doc({
 					components: [code("c")],
-					walkthroughs: [
+					trails: [
 						{
 							id: "w1",
 							title: "Two",
@@ -272,9 +272,9 @@ describe("mergeSubsystemModels", () => {
 				}),
 			},
 		]);
-		expect((r.document.walkthroughs ?? []).map((w) => w.id)).toEqual(["w1", "w1__dup1"]);
+		expect((r.document.trails ?? []).map((w) => w.id)).toEqual(["w1", "w1__dup1"]);
 		// Cross-model step rebased through sg-2's alias space.
-		expect(r.document.walkthroughs?.[1]?.steps[0]).toMatchObject({ from: "c", to: "a" });
+		expect(r.document.trails?.[1]?.steps[0]).toMatchObject({ from: "c", to: "a" });
 	});
 
 	test("single-repo title and traceable description", () => {
@@ -292,7 +292,7 @@ describe("mergeSubsystemModels", () => {
 	test("empty input yields an empty document", () => {
 		const r = mergeSubsystemModels([]);
 		expect(r.document.components).toEqual([]);
-		expect(r.document.walkthroughs).toEqual([]);
+		expect(r.document.trails).toEqual([]);
 		expect(r.sidecar.conflicts).toEqual([]);
 	});
 });

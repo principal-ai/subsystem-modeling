@@ -1,6 +1,6 @@
 import type {
   SubsystemComponent,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from '@principal-ai/subsystems-react';
 
 const PURL = 'pkg:github/you/multiplayer-board';
@@ -125,7 +125,7 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const walkthroughs = [
+export const trails = [
   {
     "id": "tl-draw",
     "title": "Draw a stroke",
@@ -224,9 +224,9 @@ export const walkthroughs = [
       }
     ]
   }
-] as SubsystemWalkthrough[];
+] as SubsystemTrail[];
 
 export const title = 'Multiplayer whiteboard';
 
 export const description =
-  'Excalidraw-style Next.js board backed by **Convex**: local strokes upsert shapes, peers see them via reactive queries, and presence tracks live cursors. Open **Walkthroughs** for draw / remote update / presence.';
+  'Excalidraw-style Next.js board backed by **Convex**: local strokes upsert shapes, peers see them via reactive queries, and presence tracks live cursors. Open **Trails** for draw / remote update / presence.';

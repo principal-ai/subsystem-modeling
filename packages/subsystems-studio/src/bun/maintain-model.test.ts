@@ -51,7 +51,7 @@ function emptyReport(
 			externalsSkipped: 0,
 			missingFiles: 0,
 			missingSymbols: 0,
-			walkthroughFailures: 0,
+			trailFailures: 0,
 			staleDeclarations: 0,
 			constructMismatches: 0,
 			signatureMismatches: 0,

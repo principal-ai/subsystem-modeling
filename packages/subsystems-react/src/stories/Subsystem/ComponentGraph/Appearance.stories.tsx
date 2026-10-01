@@ -5,7 +5,7 @@ import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import type { SubsystemComponent, SubsystemComponentEdge } from '../../../subsystem/model';
 import type { GraphifyComponentDetail } from '../../../graphify';
-import { investigateOnlyComponents, investigateOnlyWalkthroughs } from './fixtures';
+import { investigateOnlyComponents, investigateOnlyTrails } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Appearance',
@@ -32,7 +32,7 @@ export const NarrowMaxWidth: Story = {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={investigateOnlyComponents}
-        walkthroughs={investigateOnlyWalkthroughs}
+        trails={investigateOnlyTrails}
         maxNodeWidth={140}
       />
     </div>

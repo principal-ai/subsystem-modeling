@@ -4,7 +4,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import type { SubsystemComponent, SubsystemComponentEdge } from '../../../subsystem/model';
-import { components, graphSpecFromHops } from './fixtures';
+import { components, graphSpecFromSteps } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Basics',
@@ -33,7 +33,7 @@ const twoNodeComponents = components([
   ['dst', 'SessionReader', 'class', 'SessionReader.ts', 'pkg:github/principal-ai/agent-monitoring', 'normalizes sessions into events'],
 ]);
 
-const twoNodeEdges = graphSpecFromHops([
+const twoNodeEdges = graphSpecFromSteps([
   ['src', 'dst', 'calls'],
 ]);
 
@@ -44,7 +44,7 @@ function TwoNodeDemo({ showEdgeLabels = true }: { showEdgeLabels?: boolean }) {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={twoNodeComponents}
-        walkthroughs={twoNodeEdges.walkthroughs}
+        trails={twoNodeEdges.trails}
         onSelect={(id) => setSelected(id)}
         onEdgeSelect={(e) => setSelectedEdge(e)}
         showEdgeLabels={showEdgeLabels}
@@ -102,11 +102,11 @@ function PlaygroundDemo({ leftCount, rightCount, showEdgeLabels }: { leftCount: 
       edgeSpec.push([`l${i}`, `r${j}`, 'calls']);
     }
   }
-  const graph = graphSpecFromHops(edgeSpec);
+  const graph = graphSpecFromSteps(edgeSpec);
 
   return (
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <SubsystemComponentGraph components={comps} walkthroughs={graph.walkthroughs} showEdgeLabels={showEdgeLabels} />
+      <SubsystemComponentGraph components={comps} trails={graph.trails} showEdgeLabels={showEdgeLabels} />
     </div>
   );
 }

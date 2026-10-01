@@ -47,7 +47,7 @@ interface StepLike {
 	to?: string;
 }
 
-interface WalkthroughLike {
+interface TrailLike {
 	steps?: ReadonlyArray<StepLike>;
 }
 
@@ -108,12 +108,12 @@ export function referencedPurlKeys(
 
 /**
  * Repo-root-relative files referenced by the model, grouped by purl repo key.
- * Components contribute their own `file`; walkthrough steps prefer their own
+ * Components contribute their own `file`; trail steps prefer their own
  * `purl`, falling back to an endpoint component's purl.
  */
 export function referencedFilesByPurl(
 	components: ReadonlyArray<ComponentLike>,
-	walkthroughs?: ReadonlyArray<WalkthroughLike>,
+	trails?: ReadonlyArray<TrailLike>,
 ): Map<string, string[]> {
 	const byAlias = new Map(components.map((c) => [c.alias, c]));
 	const grouped = new Map<string, Set<string>>();
@@ -126,7 +126,7 @@ export function referencedFilesByPurl(
 	};
 
 	for (const c of components) add(c.purl, c.file);
-	for (const w of walkthroughs ?? []) {
+	for (const w of trails ?? []) {
 		for (const step of w.steps ?? []) {
 			const purl =
 				step.purl ??
@@ -191,12 +191,12 @@ export async function capturePurlCommits(
  */
 export async function referencedFilesClean(
 	components: ReadonlyArray<ComponentLike>,
-	walkthroughs?: ReadonlyArray<WalkthroughLike>,
+	trails?: ReadonlyArray<TrailLike>,
 	opts?: CleanOptions,
 ): Promise<boolean> {
 	const resolveRoot = opts?.resolveRoot ?? resolveRepoRootForComponent;
 	const isClean = opts?.isClean ?? filesClean;
-	for (const [key, files] of referencedFilesByPurl(components, walkthroughs)) {
+	for (const [key, files] of referencedFilesByPurl(components, trails)) {
 		const root = resolveRoot(key);
 		if (!root) continue;
 		if (!(await isClean(root, files))) return false;
@@ -256,7 +256,7 @@ export interface ProvenanceSource {
 	createdAtCommits?: Record<string, PurlCommit>;
 	verifiedAtCommits?: Record<string, PurlCommit>;
 	components: ReadonlyArray<ComponentLike>;
-	walkthroughs?: ReadonlyArray<WalkthroughLike>;
+	trails?: ReadonlyArray<TrailLike>;
 }
 
 /**
@@ -280,7 +280,7 @@ export async function modelProvenance(
 	const diff = probes?.diff ?? diffScopedFiles;
 	const dirty = probes?.dirty ?? filesDirty;
 
-	const byPurl = referencedFilesByPurl(stored.components, stored.walkthroughs);
+	const byPurl = referencedFilesByPurl(stored.components, stored.trails);
 	const keys = referencedPurlKeys([
 		...Object.keys(stored.createdAtCommits ?? {}),
 		...Object.keys(stored.verifiedAtCommits ?? {}),
@@ -363,7 +363,7 @@ export async function planAutoRePin(
 	const resolveRoot = probes?.resolveRoot ?? resolveRepoRootForComponent;
 	const head = probes?.head ?? headSha;
 	const dirty = probes?.dirty ?? filesDirty;
-	const byPurl = referencedFilesByPurl(stored.components, stored.walkthroughs);
+	const byPurl = referencedFilesByPurl(stored.components, stored.trails);
 	const out: Record<string, AutoRePinOutcome> = {};
 
 	for (const key of referencedPurlKeys(stored.components.map((c) => c.purl))) {
@@ -415,7 +415,7 @@ export async function modelProvenanceDetail(
 	const head = probes?.head ?? headSha;
 	const walk = probes?.commits ?? commitTouches;
 	const remote = probes?.remote ?? remoteRefSha;
-	const byPurl = referencedFilesByPurl(stored.components, stored.walkthroughs);
+	const byPurl = referencedFilesByPurl(stored.components, stored.trails);
 	const out: Record<string, AnchorChanges> = {};
 
 	for (const key of referencedPurlKeys(stored.components.map((c) => c.purl))) {

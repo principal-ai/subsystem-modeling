@@ -1,6 +1,6 @@
 import type {
   SubsystemComponent,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from '@principal-ai/subsystems-react';
 
 const PURL = 'pkg:github/you/job-worker';
@@ -97,7 +97,7 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const walkthroughs = [
+export const trails = [
   {
     "id": "tl-success",
     "title": "Process job (ack)",
@@ -210,9 +210,9 @@ export const walkthroughs = [
       }
     ]
   }
-] as SubsystemWalkthrough[];
+] as SubsystemTrail[];
 
 export const title = 'Tokio job worker';
 
 export const description =
-  'Rust **Tokio** background worker: connect a Redis queue, dequeue forever, dispatch handlers, **ack** on success and **nack** on failure. Open **Walkthroughs** for the happy path and the retry path.';
+  'Rust **Tokio** background worker: connect a Redis queue, dequeue forever, dispatch handlers, **ack** on success and **nack** on failure. Open **Trails** for the happy path and the retry path.';

@@ -9,7 +9,7 @@ import type {
   SubsystemGraphNode,
   SubsystemProcessRegion,
 } from '../../../subsystem/model';
-import { graphSpecFromHops } from './fixtures';
+import { graphSpecFromSteps } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/ModuleBadges',
@@ -102,7 +102,7 @@ const deepComponents: SubsystemComponent[] = [
   },
 ];
 
-const deepEdges = graphSpecFromHops([
+const deepEdges = graphSpecFromSteps([
   ['node-comp', 'group-comp', 'calls'],
   ['edge-comp', 'group-comp', 'calls'],
   ['model-view', 'layers', 'calls'],
@@ -122,7 +122,7 @@ export const DeepModulePaths: Story = {
           'click the badge to expand the full path (the badge widens past the frame edge — the frame itself stays put), click again to collapse it back.'
         }
         components={deepComponents}
-        walkthroughs={deepEdges.walkthroughs}
+        trails={deepEdges.trails}
       />
     </div>
   ),

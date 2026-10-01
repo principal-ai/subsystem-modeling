@@ -1,6 +1,6 @@
 import type {
   SubsystemComponent,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from '@principal-ai/subsystems-react';
 
 const PURL = 'pkg:github/you/android-notes';
@@ -121,7 +121,7 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const walkthroughs = [
+export const trails = [
   {
     "id": "tl-open",
     "title": "Open notes screen",
@@ -270,9 +270,9 @@ export const walkthroughs = [
       }
     ]
   }
-] as SubsystemWalkthrough[];
+] as SubsystemTrail[];
 
 export const title = 'Android notes screen';
 
 export const description =
-  'Classic Android layering: **Activity → ViewModel → Repository → Room/API**. The UI never talks to the database. Open **Walkthroughs** for open, save, and network refresh.';
+  'Classic Android layering: **Activity → ViewModel → Repository → Room/API**. The UI never talks to the database. Open **Trails** for open, save, and network refresh.';

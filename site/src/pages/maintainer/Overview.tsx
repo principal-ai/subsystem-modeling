@@ -10,7 +10,7 @@ export function MaintainerOverview() {
           In order for a diagram to be maintainable by agents, we have dissected
           its components into four concepts: <strong>Constructs</strong>,{' '}
           <strong>Static topology</strong>, <strong>Dynamic topology</strong>,
-          and <strong>Walkthrough</strong>.
+          and <strong>Trail</strong>.
         </p>
         <p>
           <strong>Constructs</strong> are primitives such as types, functions,
@@ -25,7 +25,7 @@ export function MaintainerOverview() {
           runtime: deployment-unit membership (<em>process</em>).
         </p>
         <p>
-          <strong>Walkthrough</strong> is the content necessary to help
+          <strong>Trail</strong> is the content necessary to help
           understand a concept. It houses mechanisms similar to a stacktrace,
           but allows for more loose definitions.
         </p>

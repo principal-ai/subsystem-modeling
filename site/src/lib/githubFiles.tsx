@@ -2,9 +2,9 @@ import type { ReactNode } from 'react'
 import {
   PierreFileView,
   PierreSnippetView,
-  PierreWalkthroughCodeView,
+  PierreTrailCodeView,
   type SubsystemOpenFileOptions,
-  type WalkthroughViewerContext,
+  type TrailViewerContext,
 } from '@principal-ai/subsystems-react'
 import type { SubsystemComponent } from '@principal-ai/subsystems-core'
 
@@ -109,7 +109,7 @@ export function makeGithubRenderers(
   refOverride?: string,
 ): {
   renderFileViewer: (file: string, opts?: SubsystemOpenFileOptions) => ReactNode
-  renderWalkthroughViewer: (ctx: WalkthroughViewerContext) => ReactNode
+  renderTrailViewer: (ctx: TrailViewerContext) => ReactNode
 } | null {
   const readFile = makeGithubReadFile(components, refOverride)
   if (!readFile) return null
@@ -140,9 +140,9 @@ export function makeGithubRenderers(
         />
       )
     },
-    renderWalkthroughViewer: (ctx) => (
-      <PierreWalkthroughCodeView
-        walkthrough={ctx.walkthrough}
+    renderTrailViewer: (ctx) => (
+      <PierreTrailCodeView
+        trail={ctx.trail}
         stepIndex={ctx.stepIndex}
         readFile={readFile}
         onOpenFile={ctx.onOpenFile}

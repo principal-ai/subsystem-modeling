@@ -1,6 +1,6 @@
 import type {
   SubsystemComponent,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from '@principal-ai/subsystems-react';
 
 const PURL = 'pkg:github/you/lua-embed';
@@ -71,7 +71,7 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const walkthroughs = [
+export const trails = [
   {
     "id": "tl-embed",
     "title": "Host runs Lua (with callback)",
@@ -138,8 +138,8 @@ export const walkthroughs = [
       }
     ]
   }
-] as SubsystemWalkthrough[];
+] as SubsystemTrail[];
 
 export const title = 'Lua embedded in C';
 export const description =
-  'Scripting-island pattern: **C host** embeds a **Lua VM**, calls `greet`, and Lua calls back via `host_log`. Open **Walkthroughs** for the round trip.';
+  'Scripting-island pattern: **C host** embeds a **Lua VM**, calls `greet`, and Lua calls back via `host_log`. Open **Trails** for the round trip.';

@@ -4,7 +4,7 @@
  *
  * Lets the CLI create/list models without Studio's HTTP bridge running.
  * Structural validation mirrors the Studio POST gate (construct / mechanism /
- * walkthroughs / detail provenance). File/symbol verification is Studio-only
+ * trails / detail provenance). File/symbol verification is Studio-only
  * for now and may be empty on CLI-created records until opened/updated there.
  */
 
@@ -83,7 +83,7 @@ export interface StoredSubsystemModel {
   title: string;
   description?: string;
   components: unknown[];
-  walkthroughs?: unknown[];
+  trails?: unknown[];
   createdAt: string;
   updatedAt: string;
   lastOpenedAt?: string;
@@ -100,7 +100,7 @@ export interface CreateSubsystemModelInput {
   title: string;
   description?: string;
   components: unknown[];
-  walkthroughs?: unknown[];
+  trails?: unknown[];
 }
 
 function graphId(): string {
@@ -157,7 +157,7 @@ function indexEntryFor(record: StoredSubsystemModel): SubsystemModelIndexEntry {
     description: record.description,
     componentCount: record.components.length,
     edgeCount: deriveGraphEdges({
-      walkthroughs: record.walkthroughs as Parameters<typeof deriveGraphEdges>[0]['walkthroughs'],
+      trails: record.trails as Parameters<typeof deriveGraphEdges>[0]['trails'],
     }).length,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
@@ -259,7 +259,7 @@ export async function updateSubsystemModel(
       | 'title'
       | 'description'
       | 'components'
-      | 'walkthroughs'
+      | 'trails'
       | 'gist'
     >
   >,

@@ -71,7 +71,7 @@ function openCodeDBPath(): string {
 // future diagnosing UI that compares the raw → normalized → accumulated
 // pipeline enables this to get the full shapes.
 const INCLUDE_RAW_EVENT_PAYLOADS =
-	((process.env as Record<string, string | undefined>)["TRAIL_INCLUDE_RAW"] ?? "") === "1";
+	((process.env as Record<string, string | undefined>)["PRINCIPAL_STUDIO_INCLUDE_RAW"] ?? "") === "1";
 
 function wantRawPayloads(requestIncludeRaw: boolean): boolean {
 	return INCLUDE_RAW_EVENT_PAYLOADS || requestIncludeRaw;

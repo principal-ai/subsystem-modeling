@@ -59,10 +59,10 @@ export type SubsystemFramework = string;
 export type SubsystemStereotype = string;
 
 /**
- * Walkthrough hop mechanism — runtime seams with a `file:line` site.
- * Belongs on walkthrough steps; graph edges for these are derived.
+ * Trail step mechanism — runtime seams with a `file:line` site.
+ * Belongs on trail steps; graph edges for these are derived.
  */
-export type SubsystemWalkthroughMechanism =
+export type SubsystemTrailMechanism =
   | 'calls'
   | 'uses'
   | 'feeds'
@@ -74,9 +74,9 @@ export type SubsystemWalkthroughMechanism =
 
 /**
  * Edge mechanism used by derived display edges / styling. Display edges are
- * derived from walkthrough hops, so this is the walkthrough mechanism.
+ * derived from trail steps, so this is the trail mechanism.
  */
-export type SubsystemEdgeMechanism = SubsystemWalkthroughMechanism;
+export type SubsystemEdgeMechanism = SubsystemTrailMechanism;
 
 export type SubsystemDeclarationProvenance = 'verified' | 'authored';
 
@@ -267,7 +267,7 @@ export type SubsystemConstructDeclaration =
 /** A component node — the named unit, construct-tagged. */
 export interface SubsystemComponent {
   /**
-   * Model-local stable alias. Referenced by walkthrough `from` /
+   * Model-local stable alias. Referenced by trail `from` /
    * `to`; unique per model. Edges point at the alias, not the location — a
    * file move or symbol rename leaves edges intact. Code identity lives on
    * `purl` + `file` + `symbol` and is what composed (multi-model) views
@@ -332,8 +332,8 @@ export interface SubsystemComponent {
 }
 
 /**
- * Derived / display graph edge used by renderers. Built from walkthrough
- * hops — not authored as its own document field.
+ * Derived / display graph edge used by renderers. Built from trail
+ * steps — not authored as its own document field.
  */
 export interface SubsystemComponentEdge {
   id: string;
@@ -342,13 +342,13 @@ export interface SubsystemComponentEdge {
   mechanism: SubsystemEdgeMechanism;
 }
 
-export interface SubsystemWalkthroughStep {
+export interface SubsystemTrailStep {
   /** Source component alias. */
   from: string;
   /** Target component alias. */
   to: string;
   /** Runtime seam label (Set B). */
-  mechanism: SubsystemWalkthroughMechanism;
+  mechanism: SubsystemTrailMechanism;
   file: string;
   /** 1-based line within `file`. */
   line: number;
@@ -360,24 +360,24 @@ export interface SubsystemWalkthroughStep {
    */
   purl: string;
   /**
-   * Frame name for this hop — the function/method on the stack at the site.
-   * Required: the Walkthroughs list shows this instead of a bare
+   * Frame name for this step — the function/method on the stack at the site.
+   * Required: the Trails list shows this instead of a bare
    * mechanism + filename fallback.
    */
   symbol: string;
   /**
-   * Free-text note anchored to this hop's site line. Optional — informative
+   * Free-text note anchored to this step's site line. Optional — informative
    * only, never verified against source; viewers surface it via the codeview's
    * annotation column.
    */
   annotation?: string;
 }
 
-/** Ordered runtime walkthrough (one named behavior story). */
-export interface SubsystemWalkthrough {
+/** Ordered runtime trail (one named behavior story). */
+export interface SubsystemTrail {
   id: string;
   title: string;
-  steps: SubsystemWalkthroughStep[];
+  steps: SubsystemTrailStep[];
 }
 
 /**
@@ -402,8 +402,8 @@ export interface SubsystemModelDocument {
   title: string;
   description?: string;
   components: SubsystemComponent[];
-  /** Runtime walkthroughs (ordered hops with sites). */
-  walkthroughs?: SubsystemWalkthrough[];
+  /** Runtime trails (ordered steps with sites). */
+  trails?: SubsystemTrail[];
   /**
    * The commit each referenced repo was at when the model was created. The
    * coordinate system for every `file:line` in the document: without it, a
@@ -460,13 +460,13 @@ export function toPortableDocument(
   };
   if (doc.$schema) out.$schema = doc.$schema;
   if (doc.description) out.description = doc.description;
-  if (doc.walkthroughs) out.walkthroughs = doc.walkthroughs;
+  if (doc.trails) out.trails = doc.trails;
   if (doc.createdAtCommits) out.createdAtCommits = doc.createdAtCommits;
   if (doc.verifiedAtCommits) out.verifiedAtCommits = doc.verifiedAtCommits;
   return out;
 }
 
-/** Stable id for a derived graph edge from a walkthrough hop. */
+/** Stable id for a derived graph edge from a trail step. */
 export function derivedGraphEdgeId(
   from: string,
   to: string,
@@ -476,14 +476,14 @@ export function derivedGraphEdgeId(
 }
 
 /**
- * Build display edges for the graph canvas from walkthrough hops
+ * Build display edges for the graph canvas from trail steps
  * (deduped by from/to/mechanism).
  */
 export function deriveGraphEdges(doc: {
-  walkthroughs?: SubsystemWalkthrough[];
+  trails?: SubsystemTrail[];
 }): SubsystemComponentEdge[] {
   const byId = new Map<string, SubsystemComponentEdge>();
-  for (const w of doc.walkthroughs ?? []) {
+  for (const w of doc.trails ?? []) {
     for (const step of w.steps) {
       const id = derivedGraphEdgeId(step.from, step.to, step.mechanism);
       if (!byId.has(id)) {

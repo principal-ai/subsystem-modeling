@@ -26,7 +26,7 @@ const BASE: MaintenanceOverviewModel = {
 		construct: "verified",
 		"static-topology": "partial",
 		"dynamic-topology": "verified",
-		walkthrough: "none",
+		trail: "none",
 	},
 };
 
@@ -195,7 +195,7 @@ export const IssuesWithProposals: Story = {
 				construct: "issues",
 				"static-topology": "partial",
 				"dynamic-topology": "verified",
-				walkthrough: "none",
+				trail: "none",
 			},
 			nextRoute: { agent: "construct-fixer", layer: "construct", mode: "issues" },
 		},
@@ -218,7 +218,7 @@ export const FullyVerified: Story = {
 				construct: "verified",
 				"static-topology": "verified",
 				"dynamic-topology": "verified",
-				walkthrough: "verified",
+				trail: "verified",
 			},
 		},
 	},
@@ -234,7 +234,7 @@ export const Blocked: Story = {
 				construct: "verified",
 				"static-topology": "blocked",
 				"dynamic-topology": "partial",
-				walkthrough: "none",
+				trail: "none",
 			},
 			nextRoute: {
 				agent: "package-module-fixer",
@@ -356,7 +356,7 @@ export const ProvenanceWithIssues: Story = {
 				construct: "issues",
 				"static-topology": "partial",
 				"dynamic-topology": "verified",
-				walkthrough: "none",
+				trail: "none",
 			},
 			nextRoute: {
 				agent: "construct-fixer",

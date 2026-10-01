@@ -3,7 +3,7 @@ import '@xyflow/react/dist/style.css';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
-import type { SubsystemComponent, SubsystemWalkthrough } from '../../../subsystem/model';
+import type { SubsystemComponent, SubsystemTrail } from '../../../subsystem/model';
 import {
   issueCategory,
   type SubsystemIssue,
@@ -20,8 +20,8 @@ import {
  * ("Maintain run — fire-and-forget RPC, wait for the finish event"): the
  * renderer picker → host RPC → background runner → maintain orchestrator →
  * opencode V2 session, plus the liveness-probe handshake. Its components and
- * three walkthroughs are reproduced verbatim below; the topology is carried by
- * the walkthroughs, exactly as stored.
+ * three trails are reproduced verbatim below; the topology is carried by
+ * the trails, exactly as stored.
  *
  * What this story exercises: the graph's diagnostics surface over the real
  * model — the title-row status chip, the grouped issue list, the per-node
@@ -204,8 +204,8 @@ const MAINTAIN_COMPONENTS: SubsystemComponent[] = [
   },
 ];
 
-/** The model's three runtime walkthroughs, verbatim (these carry the topology). */
-const MAINTAIN_WALKTHROUGHS: SubsystemWalkthrough[] = [
+/** The model's three runtime trails, verbatim (these carry the topology). */
+const MAINTAIN_TRAILS: SubsystemTrail[] = [
   {
     id: 'wt-start-maintain',
     title: 'Start a maintenance run',
@@ -421,7 +421,7 @@ const MAINTAIN_WALKTHROUGHS: SubsystemWalkthrough[] = [
  * Maintain-run model. The stored model's verification block is clean
  * (13/13 anchored, 0 missing), so these are the *shape* of findings the
  * diagnostics layer would receive — one per rung of the verification ladder
- * (file → symbol → declaration → type → signature) plus the topology / walkthrough
+ * (file → symbol → declaration → type → signature) plus the topology / trail
  * layers — to exercise the proposal end to end.
  */
 const MAINTAIN_ISSUES: SubsystemIssue[] = [
@@ -497,7 +497,7 @@ const MAINTAIN_ISSUES: SubsystemIssue[] = [
   {
     id: 'mr-wt',
     severity: 'info',
-    kind: 'walkthrough',
+    kind: 'trail',
     message:
       'Step 7 (terminal-matcher → session-runner) references a line that moved (was :469).',
     target: {
@@ -556,7 +556,7 @@ function MaintainRunGraph({
       <div style={{ flex: 1, minHeight: 0 }}>
         <SubsystemComponentGraph
           components={MAINTAIN_COMPONENTS}
-          walkthroughs={MAINTAIN_WALKTHROUGHS}
+          trails={MAINTAIN_TRAILS}
           title="Maintain run"
           description="Fire-and-forget RPC, wait for the finish event — picker → RPC → background runner → orchestrator → opencode V2 session, plus the liveness-probe handshake."
           diagnostic={{ status, issueCount, onToggle: () => {} }}

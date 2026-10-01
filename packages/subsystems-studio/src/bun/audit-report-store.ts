@@ -254,11 +254,11 @@ function laneStatus(t: VerificationTally): VerificationLaneStatus {
 /**
  * Coarse per-lane status mapped onto the four model layers: construct (L1),
  * static topology (L2 = package/module containment), dynamic topology
- * (L3 = process runtime), walkthrough (L4).
+ * (L3 = process runtime), trail (L4).
  */
 export function summarizeLanes(
 	report: SubsystemModelAuditReport,
-	opts: { hasWalkthroughs: boolean },
+	opts: { hasTrails: boolean },
 ): Record<SubsystemVerificationLane, VerificationLaneStatus> {
 	const construct = emptyTally();
 	for (const c of report.checks) classifyConstructCheck(c, construct);
@@ -270,9 +270,9 @@ export function summarizeLanes(
 		if (c.kind === "process_nest") classifyBoundaryCheck(c, dynamicTopology);
 	}
 
-	const walkthrough: VerificationLaneStatus = !opts.hasWalkthroughs
+	const trail: VerificationLaneStatus = !opts.hasTrails
 		? "none"
-		: report.summary.walkthroughFailures > 0
+		: report.summary.trailFailures > 0
 			? "issues"
 			: "verified";
 
@@ -287,7 +287,7 @@ export function summarizeLanes(
 		construct: constructStatus,
 		"static-topology": laneStatus(staticTopology),
 		"dynamic-topology": laneStatus(dynamicTopology),
-		walkthrough,
+		trail,
 	};
 }
 
@@ -386,7 +386,7 @@ export async function deleteSubsystemModelAudit(graphId: string): Promise<void> 
 export async function getSubsystemModelAuditListSummary(
 	graphId: string,
 	liveFingerprint: string,
-	opts?: { hasWalkthroughs?: boolean },
+	opts?: { hasTrails?: boolean },
 ): Promise<SubsystemModelAuditListSummary | null> {
 	const saved = await loadSubsystemModelAudit(graphId);
 	if (!saved) return null;
@@ -397,7 +397,7 @@ export async function getSubsystemModelAuditListSummary(
 		verdict: classifyAuditReport(saved.report),
 		verification: summarizeVerification(saved.report),
 		lanes: summarizeLanes(saved.report, {
-			hasWalkthroughs: opts?.hasWalkthroughs === true,
+			hasTrails: opts?.hasTrails === true,
 		}),
 		stale: saved.fingerprint !== liveFingerprint,
 		fingerprint: saved.fingerprint,

@@ -1,8 +1,8 @@
 import type {
   SubsystemComponent,
   SubsystemComponentEdge,
-  SubsystemWalkthrough,
-  SubsystemWalkthroughMechanism,
+  SubsystemTrail,
+  SubsystemTrailMechanism,
 } from '../../../subsystem/model';
 import type { GraphifyComponentDetail } from '../../../graphify';
 
@@ -24,16 +24,16 @@ export function components(
   }));
 }
 
-/** Story helper: one walkthrough whose hops derive Set B display edges. */
-export function walkthroughFromHops(
+/** Story helper: one trail whose steps derive Set B display edges. */
+export function trailFromSteps(
   id: string,
   title: string,
-  hops: Array<[from: string, to: string, mechanism: SubsystemWalkthroughMechanism, file: string, line: number, symbol?: string]>,
-): SubsystemWalkthrough {
+  steps: Array<[from: string, to: string, mechanism: SubsystemTrailMechanism, file: string, line: number, symbol?: string]>,
+): SubsystemTrail {
   return {
     id,
     title,
-    steps: hops.map(([from, to, mechanism, file, line, symbol]) => ({
+    steps: steps.map(([from, to, mechanism, file, line, symbol]) => ({
       from,
       to,
       mechanism,
@@ -45,7 +45,7 @@ export function walkthroughFromHops(
   };
 }
 
-/** @deprecated story helper — prefer `graphSpecFromHops` + `walkthroughFromHops`. */
+/** @deprecated story helper — prefer `graphSpecFromSteps` + `trailFromSteps`. */
 export function edges(
   spec: Array<[from: string, to: string, mechanism: SubsystemComponentEdge['mechanism']]>,
 ): SubsystemComponentEdge[] {
@@ -57,23 +57,23 @@ export function edges(
   }));
 }
 
-/** Turn every spec entry into a walkthrough hop — the sole authored edge form. */
-export function graphSpecFromHops(
+/** Turn every spec entry into a trail step — the sole authored edge form. */
+export function graphSpecFromSteps(
   spec: Array<[from: string, to: string, mechanism: SubsystemComponentEdge['mechanism']]>,
-): { walkthroughs?: SubsystemWalkthrough[] } {
-  const hops: SubsystemWalkthrough['steps'] = spec.map(([from, to, mechanism]) => ({
+): { trails?: SubsystemTrail[] } {
+  const steps: SubsystemTrail['steps'] = spec.map(([from, to, mechanism]) => ({
     from,
     to,
-    mechanism: mechanism as SubsystemWalkthroughMechanism,
+    mechanism: mechanism as SubsystemTrailMechanism,
     file: 'story-placeholder.ts',
     line: 1,
     purl: 'pkg:github/storybook/fixture#story-placeholder.ts',
     symbol: from,
   }));
   return {
-    walkthroughs:
-      hops.length > 0
-        ? [{ id: 'story-hops', title: 'Story hops', steps: hops }]
+    trails:
+      steps.length > 0
+        ? [{ id: 'story-steps', title: 'Story steps', steps: steps }]
         : undefined,
   };
 }
@@ -153,16 +153,16 @@ export const investigateOnlyComponents: SubsystemComponent[] = [
   },
 ];
 
-const investigateSpec = graphSpecFromHops([
+const investigateSpec = graphSpecFromSteps([
   ['v1', 'input', 'produces'],
   ['v2', 'input', 'produces'],
   ['input', 'acc', 'feeds'],
   ['acc', 'out', 'produces'],
 ]);
 
-export const investigateOnlyWalkthroughs = investigateSpec.walkthroughs;
+export const investigateOnlyTrails = investigateSpec.trails;
 
-/** @deprecated use investigateOnlyWalkthroughs */
+/** @deprecated use investigateOnlyTrails */
 export const investigateOnlyEdges: SubsystemComponentEdge[] = edges([
   ['v1', 'input', 'produces'],
   ['v2', 'input', 'produces'],

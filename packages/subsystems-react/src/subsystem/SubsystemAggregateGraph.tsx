@@ -4,12 +4,12 @@
  * Same stack and interaction language as SubsystemComponentGraph
  * (React Flow + ELK + custom nodes + select/hover), but purpose-built for
  * composed views: nodes are process / module frames (plus one ungrouped
- * bucket), edges are the deduped walkthrough flows between them.
+ * bucket), edges are the deduped trail flows between them.
  *
  * Deliberately leaner than the component graph: fixed node sizes (no
  * measurement passes), flat ELK layout (no compound groups, so the
  * double-parent failure mode is structurally impossible), no edge labels,
- * no walkthrough playback, no drawers. Frame detail (members, models)
+ * no trail playback, no drawers. Frame detail (members, models)
  * renders in a side panel.
  */
 
@@ -57,7 +57,7 @@ export interface AggregateFrameEdge {
   from: string;
   to: string;
   mechanisms: string[];
-  walkthroughIds: string[];
+  trailIds: string[];
   steps: number;
   /** Real member endpoint behind a hub-routed edge (see aggregate). */
   source?: string;

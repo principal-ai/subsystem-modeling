@@ -344,7 +344,7 @@ export async function handleSubsystemModelRequest(
 			title: body["title"] as string,
 			description: typeof body["description"] === "string" ? body["description"] : undefined,
 			components: body["components"] as SubsystemModelDocument["components"],
-			walkthroughs: body["walkthroughs"] as StoredSubsystemModel["walkthroughs"],
+			trails: body["trails"] as StoredSubsystemModel["trails"],
 		});
 		return json({ ok: true, graph: record }, 201);
 	}

@@ -17,9 +17,9 @@ import { createConnection } from 'node:net';
 
 export const SOCKET_PATH = join(homedir(), '.principal', 'principal-studio.sock');
 
-export interface LoadTrailMessage {
-  kind: 'LOAD_TRAIL';
-  trailFile: string;
+export interface LoadTourMessage {
+  kind: 'LOAD_TOUR';
+  tourFile: string;
   mode: 'local' | 'remote';
   repoRoot?: string;
   ghToken?: string;
@@ -46,7 +46,7 @@ export interface LoadSubsystemModelMessage {
 }
 
 export type ViewerIpcMessage =
-  | LoadTrailMessage
+  | LoadTourMessage
   | ActivateTabMessage
   | FocusMessage
   | LoadSubsystemModelMessage;

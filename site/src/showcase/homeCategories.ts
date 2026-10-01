@@ -1,11 +1,11 @@
 /**
  * Progressive homepage examples — full showcase models projected into
- * constructs → static topology → dynamic topology → walkthrough.
+ * constructs → static topology → dynamic topology → trail.
  */
 import type {
   SubsystemComponent,
   SubsystemEdgeView,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from '@principal-ai/subsystems-react';
 import { bookingPageCase } from './cases/booking-page';
 import { tracedApiCase } from './cases/traced-api';
@@ -14,13 +14,13 @@ export type HomeCategoryId =
   | 'constructs'
   | 'static-topology'
   | 'dynamic-topology'
-  | 'walkthrough';
+  | 'trail';
 
 export type HomeCategoryModel = {
   title: string;
   description?: string;
   components: SubsystemComponent[];
-  walkthroughs?: SubsystemWalkthrough[];
+  trails?: SubsystemTrail[];
 };
 
 export type HomeCategory = {
@@ -32,12 +32,12 @@ export type HomeCategory = {
     showEdgeLabels: boolean;
     /**
      * Which edge vocabulary this layer teaches: `graphify` for the derived
-     * containment edges, `walkthroughs` for the runtime-hops layer. The two are
+     * containment edges, `trails` for the runtime-steps layer. The two are
      * never shown together.
      */
     edgeView: SubsystemEdgeView;
-    autoPlayWalkthroughs: boolean;
-    showWalkthroughTitle: boolean;
+    autoPlayTrails: boolean;
+    showTrailTitle: boolean;
     /** Derive directory frames from module paths and nest modules under them. */
     moduleNesting?: 'exact' | 'path';
     /** Explicit boundary frame colors (region key → color); host override. */
@@ -51,7 +51,7 @@ export type HomeProgressionSource = {
   /** Subsystem-level description, shown as the model overview on every layer. */
   description?: string;
   components: SubsystemComponent[];
-  walkthroughs?: SubsystemWalkthrough[];
+  trails?: SubsystemTrail[];
 };
 
 /** Per-example copy for each layer (generic projections + specific blurbs). */
@@ -59,7 +59,7 @@ export type HomeProgressionCopy = {
   constructs: { blurb: string; description: string };
   'static-topology': { blurb: string; description: string };
   'dynamic-topology': { blurb: string; description: string };
-  walkthrough: { blurb: string; description: string };
+  trail: { blurb: string; description: string };
 };
 
 export type HomeProgressionExample = {
@@ -87,7 +87,7 @@ function staticView(components: readonly SubsystemComponent[]): SubsystemCompone
 
 function dynamicView(components: readonly SubsystemComponent[]): SubsystemComponent[] {
   // Dynamic topology keeps process (runtime) + module (containment); the layer
-  // switches the edge vocabulary to runtime seams (walkthrough hops).
+  // switches the edge vocabulary to runtime seams (trail steps).
   return [...components];
 }
 
@@ -95,7 +95,7 @@ const LAYER_LABELS: Record<HomeCategoryId, string> = {
   constructs: 'Constructs',
   'static-topology': 'Static topology',
   'dynamic-topology': 'Dynamic topology',
-  walkthrough: 'Walkthrough',
+  trail: 'Trail',
 };
 
 /** Project one full model into the four homepage teaching layers. */
@@ -114,13 +114,13 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
         // so it stays the same across every layer.
         description: source.description,
         components: constructsOnly(source.components),
-        walkthroughs: undefined,
+        trails: undefined,
       },
       graph: {
         showEdgeLabels: false,
         edgeView: 'graphify',
-        autoPlayWalkthroughs: false,
-        showWalkthroughTitle: false,
+        autoPlayTrails: false,
+        showTrailTitle: false,
         boundaryColors: example.boundaryColors,
       },
     },
@@ -132,13 +132,13 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
         title,
         description: source.description,
         components: staticView(source.components),
-        walkthroughs: undefined,
+        trails: undefined,
       },
       graph: {
         showEdgeLabels: true,
         edgeView: 'graphify',
-        autoPlayWalkthroughs: false,
-        showWalkthroughTitle: false,
+        autoPlayTrails: false,
+        showTrailTitle: false,
         moduleNesting: 'path',
         boundaryColors: example.boundaryColors,
       },
@@ -152,32 +152,32 @@ export function buildHomeCategories(example: HomeProgressionExample): HomeCatego
         description: source.description,
         components: dynamicView(source.components),
         // Runtime boundaries only (process over module frames). Edges belong to
-        // the walkthrough layer, so no walkthroughs here.
+        // the trail layer, so no trails here.
       },
       graph: {
         showEdgeLabels: true,
-        edgeView: 'walkthroughs',
-        autoPlayWalkthroughs: false,
-        showWalkthroughTitle: false,
+        edgeView: 'trails',
+        autoPlayTrails: false,
+        showTrailTitle: false,
         moduleNesting: 'path',
         boundaryColors: example.boundaryColors,
       },
     },
     {
-      id: 'walkthrough',
-      label: LAYER_LABELS.walkthrough,
-      blurb: copy.walkthrough.blurb,
+      id: 'trail',
+      label: LAYER_LABELS.trail,
+      blurb: copy.trail.blurb,
       model: {
         title,
         description: source.description,
         components: source.components,
-        walkthroughs: source.walkthroughs,
+        trails: source.trails,
       },
       graph: {
         showEdgeLabels: true,
-        edgeView: 'walkthroughs',
-        autoPlayWalkthroughs: true,
-        showWalkthroughTitle: true,
+        edgeView: 'trails',
+        autoPlayTrails: true,
+        showTrailTitle: true,
         moduleNesting: 'path',
         boundaryColors: example.boundaryColors,
       },
@@ -199,7 +199,7 @@ export const homeProgressionExamples: Record<string, HomeProgressionExample> = {
       title: bookingPageCase.model.title,
       description: bookingPageCase.model.description,
       components: bookingPageCase.model.components,
-      walkthroughs: bookingPageCase.model.walkthroughs,
+      trails: bookingPageCase.model.trails,
     },
     copy: {
       constructs: {
@@ -216,10 +216,10 @@ export const homeProgressionExamples: Record<string, HomeProgressionExample> = {
         description:
           'Layer 3 — process framing (booking-web/client · booking-web/server) plus module containment. Runtime edges come next.',
       },
-      walkthrough: {
+      trail: {
         blurb: 'Follow a booking at the real file:line seams.',
         description:
-          'Layer 4 — the ordered hops of “Guest books a slot” over the map you just built.',
+          'Layer 4 — the ordered steps of “Guest books a slot” over the map you just built.',
       },
     },
   },
@@ -230,7 +230,7 @@ export const homeProgressionExamples: Record<string, HomeProgressionExample> = {
       title: tracedApiCase.model.title,
       description: tracedApiCase.model.description,
       components: tracedApiCase.model.components,
-      walkthroughs: tracedApiCase.model.walkthroughs,
+      trails: tracedApiCase.model.trails,
     },
     copy: {
       constructs: {
@@ -247,10 +247,10 @@ export const homeProgressionExamples: Record<string, HomeProgressionExample> = {
         description:
           'Layer 3 — process framing (orders-api · payments-api) plus module containment. Runtime edges come next.',
       },
-      walkthrough: {
+      trail: {
         blurb: 'Follow a traced GET and POST across the real seams.',
         description:
-          'Layer 4 — GET / POST / boot walkthroughs over the map you just built.',
+          'Layer 4 — GET / POST / boot trails over the map you just built.',
       },
     },
   },

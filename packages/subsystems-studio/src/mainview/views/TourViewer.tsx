@@ -1,6 +1,6 @@
 /**
  * TourViewer (active tab content) — renders a File City introduction tour via
- * the panel library's FileCityGuidePanel, the sibling of the trail explorer.
+ * the panel library's FileCityGuidePanel.
  * Tour steps drive the city's focusDirectory + highlight layers; the panel
  * derives its own layers per step, so the host highlightLayers slice is left
  * null. Audio is disabled (no fetchAudioUrls action) for the standalone viewer.
@@ -29,9 +29,8 @@ import { nullSlice } from "../types";
 import { GithubMark } from "../components/GithubMark";
 
 // TourHeader — slim chrome for tour tabs. Tours aren't published or annotated
-// (the tour panel exposes no notes / sign-offs), so this drops the Trail
-// header's Publish / Share / notes affordances and keeps just the owner/repo
-// crumbs plus a GitHub link when the repo has a remote.
+// (the tour panel exposes no notes / sign-offs), so this keeps just the
+// owner/repo crumbs plus a GitHub link when the repo has a remote.
 function TourHeader({
 	owner,
 	repo,

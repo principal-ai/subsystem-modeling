@@ -1,8 +1,8 @@
 /**
  * Publish a portable subsystem model as a public GitHub gist.
  *
- * Token resolution mirrors the CLI trail publish path: `TRAIL_GH_TOKEN` →
- * `gh auth token` → git credential helper. The token is never logged.
+ * Token resolution reads `TOUR_GH_TOKEN` → `gh auth token` → git credential
+ * helper. The token is never logged.
  */
 
 import { spawnSync } from "node:child_process";
@@ -14,7 +14,7 @@ export type GistPublishDocument = {
 	title: string;
 	description?: string;
 	components: unknown;
-	walkthroughs?: unknown;
+	trails?: unknown;
 	$schema?: string;
 };
 
@@ -38,21 +38,21 @@ function toPortableGistPayload(doc: GistPublishDocument): {
 	components: unknown;
 	$schema?: string;
 	description?: string;
-	walkthroughs?: unknown;
+	trails?: unknown;
 } {
 	const out: {
 		title: string;
 		components: unknown;
 		$schema?: string;
 		description?: string;
-		walkthroughs?: unknown;
+		trails?: unknown;
 	} = {
 		title: doc.title,
 		components: doc.components,
 	};
 	if (doc.$schema) out.$schema = doc.$schema;
 	if (doc.description) out.description = doc.description;
-	if (doc.walkthroughs) out.walkthroughs = doc.walkthroughs;
+	if (doc.trails) out.trails = doc.trails;
 	return out;
 }
 
@@ -86,7 +86,7 @@ function resolveTokenViaGitCredential(): string | null {
 
 /** Resolve a GitHub token for gist write. Prefer env (Studio launch), then gh/git. */
 export function resolveGithubToken(): string | null {
-	const fromEnv = process.env["TRAIL_GH_TOKEN"]?.trim();
+	const fromEnv = process.env["TOUR_GH_TOKEN"]?.trim();
 	if (fromEnv) return fromEnv;
 	return resolveTokenViaGh() ?? resolveTokenViaGitCredential();
 }
@@ -119,7 +119,7 @@ export async function publishSubsystemModelGist(opts: {
 		return {
 			ok: false,
 			error:
-				"No GitHub token found. Run `gh auth login` (gist scope) or set TRAIL_GH_TOKEN.",
+				"No GitHub token found. Run `gh auth login` (gist scope) or set TOUR_GH_TOKEN.",
 		};
 	}
 

@@ -271,7 +271,7 @@ Named props type (destructured params collapse to the one props param):
 
 ```json
 {
-  "rationale": "Source declares `WalkthroughsPanel({ walkthroughs, … }: WalkthroughsPanelProps)`. The single destructurized param is the exported interface `WalkthroughsPanelProps` (lines 390-420); no declared return type, returns JSX, so `JSX.Element` is inferred. Graphify has no signature edges.",
+  "rationale": "Source declares `TrailsPanel({ trails, … }: TrailsPanelProps)`. The single destructurized param is the exported interface `TrailsPanelProps` (lines 390-420); no declared return type, returns JSX, so `JSX.Element` is inferred. Graphify has no signature edges.",
   "author": "construct-verifier",
   "finding": {
     "kind": "signature_unconfirmed",
@@ -286,7 +286,7 @@ Named props type (destructured params collapse to the one props param):
       "lines": { "start": 390, "end": 628 },
       "value": {
         "parameters": [
-          { "type": "WalkthroughsPanelProps" }
+          { "type": "TrailsPanelProps" }
         ],
         "returnType": "JSX.Element"
       }
@@ -303,7 +303,7 @@ Allowed change targets:
   store, not the model JSON). `file` / `symbol` / `purl` optional — default
   from the component.
 - component: `file` | `symbol` | `construct` | `name` | `purl` | `declarationRef`
-- walkthrough-step: `file` | `line` | `symbol` | `from` | `to` | `mechanism` | `annotation`
+- trail-step: `file` | `line` | `symbol` | `from` | `to` | `mechanism` | `annotation`
 
 5. **Verify.** List proposals with the brief’s proposals curl. Do **not**
    accept or reject.

@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import type { SubsystemComponent } from '../../../subsystem/model';
-import { graphSpecFromHops } from './fixtures';
+import { graphSpecFromSteps } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Modules',
@@ -120,7 +120,7 @@ const moduleComponents: SubsystemComponent[] = [
   },
 ];
 
-const moduleEdges = graphSpecFromHops([
+const moduleEdges = graphSpecFromSteps([
   ['parse', 'record', 'uses'],
   ['is-rollout', 'record', 'uses'],
   ['reader', 'normalize', 'calls'],
@@ -137,7 +137,7 @@ export const ModuleBoundaries: Story = {
         title="Module boundaries"
         description="Concrete exports keep their real construct. Shared `module` (the source path) draws the file as a dashed frame — not `construct: module`. Singleton modules (registerAgent) stay unframed."
         components={moduleComponents}
-        walkthroughs={moduleEdges.walkthroughs}
+        trails={moduleEdges.trails}
       />
     </div>
   ),
@@ -259,7 +259,7 @@ const nestedComponents: SubsystemComponent[] = [
   },
 ];
 
-const nestedEdges = graphSpecFromHops([
+const nestedEdges = graphSpecFromSteps([
   ['boot', 'write-session', 'calls'],
   ['trail-view', 'bridge', 'calls'],
   ['trail-view', 'use-trail', 'uses'],
@@ -278,7 +278,7 @@ export const ProcessAndModuleNesting: Story = {
         title="Process × module nesting"
         description="process frames wrap module frames wrap exports. Leaves parent to module:; module groups parent to process: when every member shares that process."
         components={nestedComponents}
-        walkthroughs={nestedEdges.walkthroughs}
+        trails={nestedEdges.trails}
       />
     </div>
   ),

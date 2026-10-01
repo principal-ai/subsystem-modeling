@@ -7,7 +7,7 @@ import {
   SubsystemDiagnosticToggle,
   type SubsystemDiagnosticStatus,
 } from '../../../subsystem/DiagnosticToggle';
-import { components, graphSpecFromHops } from './fixtures';
+import { components, graphSpecFromSteps } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Diagnostics',
@@ -34,7 +34,7 @@ const graphComponents = components([
   ['caller', 'Web client', 'external', '', 'external', undefined, undefined],
 ]);
 
-const graphEdges = graphSpecFromHops([
+const graphEdges = graphSpecFromSteps([
   ['caller', 'entry', 'calls'],
   ['entry', 'store', 'writes'],
   ['entry', 'stripe', 'calls'],
@@ -81,7 +81,7 @@ export const GraphClean: Story = {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={graphComponents}
-        walkthroughs={graphEdges.walkthroughs}
+        trails={graphEdges.trails}
         title="Checkout"
         description={GRAPH_DESCRIPTION}
         diagnostic={{ status: 'ok', onToggle: () => {} }}
@@ -95,7 +95,7 @@ export const GraphWithIssues: Story = {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={graphComponents}
-        walkthroughs={graphEdges.walkthroughs}
+        trails={graphEdges.trails}
         title="Checkout"
         description={GRAPH_DESCRIPTION}
         diagnostic={{ status: 'issues', issueCount: 3, onToggle: () => {} }}
@@ -110,7 +110,7 @@ export const GraphStale: Story = {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={graphComponents}
-        walkthroughs={graphEdges.walkthroughs}
+        trails={graphEdges.trails}
         title="Checkout"
         description={GRAPH_DESCRIPTION}
         diagnostic={{ status: 'issues', issueCount: 3, stale: true, onToggle: () => {} }}
@@ -125,7 +125,7 @@ export const GraphChipOnly: Story = {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={graphComponents}
-        walkthroughs={graphEdges.walkthroughs}
+        trails={graphEdges.trails}
         title="Checkout"
         diagnostic={{ status: 'gaps', issueCount: 2, onToggle: () => {} }}
       />

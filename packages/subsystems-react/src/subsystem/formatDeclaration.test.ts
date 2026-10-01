@@ -192,29 +192,29 @@ describe('generateDeclarationString — signature augmentation', () => {
     expect(
       generateDeclarationString(
         base({
-          name: 'WalkthroughsPanel',
-          symbol: 'WalkthroughsPanel',
+          name: 'TrailsPanel',
+          symbol: 'TrailsPanel',
           signatureAugmentation: {
-            parameters: [{ type: 'WalkthroughsPanelProps' }],
+            parameters: [{ type: 'TrailsPanelProps' }],
             returnType: 'JSX.Element',
           },
         }),
       ),
-    ).toBe('function WalkthroughsPanel(arg0: WalkthroughsPanelProps): JSX.Element;');
+    ).toBe('function TrailsPanel(arg0: TrailsPanelProps): JSX.Element;');
   });
 
   test('resolveComponentDeclaration returns the augmentation when there is no own declaration', () => {
     const d = resolveComponentDeclaration(
       base({
         signatureAugmentation: {
-          parameters: [{ type: 'WalkthroughsPanelProps' }],
+          parameters: [{ type: 'TrailsPanelProps' }],
           returnType: 'JSX.Element',
         },
       }),
     );
     expect(d?.kind).toBe('function');
     if (d?.kind === 'function') {
-      expect(d.parameters).toEqual([{ type: 'WalkthroughsPanelProps' }]);
+      expect(d.parameters).toEqual([{ type: 'TrailsPanelProps' }]);
       expect(d.returnType).toBe('JSX.Element');
     }
   });

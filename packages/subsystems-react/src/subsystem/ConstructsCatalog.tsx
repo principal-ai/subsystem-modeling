@@ -1,6 +1,6 @@
 /**
  * ConstructsCatalog — master/detail for a constructs-only subsystem
- * (components, no topology or walkthrough edges).
+ * (components, no topology or trail edges).
  *
  * Left: the model's files as a tree; clicking a file toggles its
  * constructs. Right: signatures grouped by repo, and within a repo stacked

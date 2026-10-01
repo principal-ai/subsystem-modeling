@@ -338,13 +338,13 @@ describe("modelProvenance", () => {
 		expect(snap.anchorChanges?.[KEY_A]?.dirty).toEqual(["src/w.ts"]);
 	});
 
-	test("walkthrough step sites join the pathspec", async () => {
+	test("trail step sites join the pathspec", async () => {
 		const seen: string[][] = [];
 		await modelProvenance(
 			{
 				createdAtCommits: { [KEY_A]: PIN },
 				components: [{ alias: "w", file: "src/w.ts", purl: `${KEY_A}#src/w.ts` }],
-				walkthroughs: [
+				trails: [
 					{ steps: [{ file: "src/flow.ts", purl: `${KEY_A}#src/flow.ts` }] },
 				],
 			},

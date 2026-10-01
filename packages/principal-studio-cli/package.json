@@ -1,7 +1,7 @@
 {
   "name": "@principal-ai/principal-studio-cli",
-  "version": "0.42.0",
-  "description": "Principal AI CLI — subsystem models, Subsystems Studio, trails, and agent sessions",
+  "version": "0.43.0",
+  "description": "Principal AI CLI — subsystem models, Subsystems Studio, tours, and agent sessions",
   "main": "dist/index.cjs",
   "types": "dist/index.d.ts",
   "bin": {
@@ -23,7 +23,7 @@
     "subsystems-studio",
     "cli",
     "principal-ai",
-    "trails"
+    "tours"
   ],
   "author": "Principal AI Team",
   "license": "Apache-2.0",
@@ -36,7 +36,7 @@
     "@principal-ai/codebase-composition": "^0.2.57",
     "@principal-ai/file-city-builder": "^0.5.0",
     "@principal-ai/repository-abstraction": "^0.5.7",
-    "@principal-ai/subsystems-core": "^0.43.0",
+    "@principal-ai/subsystems-core": "^0.44.0",
     "ajv": "^8.20.0",
     "better-sqlite3": "^13.0.0",
     "chalk": "5.6.2",

@@ -16,7 +16,7 @@ function comp(alias: string, extra: Partial<SubsystemComponent> = {}): Subsystem
 
 type ComposedInput = Pick<
 	SubsystemModelDocument,
-	"components" | "walkthroughs"
+	"components" | "trails"
 >;
 
 function doc(partial: Partial<ComposedInput>): ComposedInput {
@@ -94,7 +94,7 @@ describe("aggregateToFrames", () => {
 		expect(g.frames[0]!.members.map((m) => m.alias)).toEqual(["a", "plan"]);
 	});
 
-	test("walkthrough steps become deduped frame edges; intra-frame skipped", () => {
+	test("trail steps become deduped frame edges; intra-frame skipped", () => {
 		const g = aggregateToFrames(
 			doc({
 				components: [
@@ -102,7 +102,7 @@ describe("aggregateToFrames", () => {
 					comp("b", { module: "src/b.ts", process: "p1" }),
 					comp("c", { module: "src/a.ts", process: "p1" }),
 				],
-				walkthroughs: [
+				trails: [
 					{
 						id: "w1",
 						title: "One",
@@ -124,7 +124,7 @@ describe("aggregateToFrames", () => {
 			}),
 		);
 		// a->c is intra-frame (same module) and ghost is unknown: both skipped.
-		// p1 holds two frames, so it gets a hub pair — but both hops stay
+		// p1 holds two frames, so it gets a hub pair — but both steps stay
 		// inside the boundary, so edges remain direct (hubs only route
 		// crossings) and carry their real endpoints as source/target.
 		expect(g.hubs.map((h) => h.id)).toEqual([
@@ -136,7 +136,7 @@ describe("aggregateToFrames", () => {
 				from: "module:src/a.ts",
 				to: "module:src/b.ts",
 				mechanisms: ["calls"],
-				walkthroughIds: ["w1"],
+				trailIds: ["w1"],
 				steps: 2,
 				source: "module:src/a.ts",
 				target: "module:src/b.ts",
@@ -145,7 +145,7 @@ describe("aggregateToFrames", () => {
 				from: "module:src/b.ts",
 				to: "module:src/a.ts",
 				mechanisms: ["feeds"],
-				walkthroughIds: ["w2"],
+				trailIds: ["w2"],
 				steps: 1,
 				source: "module:src/b.ts",
 				target: "module:src/a.ts",
@@ -153,7 +153,7 @@ describe("aggregateToFrames", () => {
 		]);
 	});
 
-	test("multi-frame boundaries get hubs and inter-boundary hops route through them", () => {
+	test("multi-frame boundaries get hubs and inter-boundary steps route through them", () => {
 		const g = aggregateToFrames(
 			doc({
 				components: [
@@ -162,7 +162,7 @@ describe("aggregateToFrames", () => {
 					comp("c", { module: "src/c.ts", process: "p2" }),
 					comp("d", { module: "src/d.ts", process: "p2" }),
 				],
-				walkthroughs: [
+				trails: [
 					{
 						id: "w1",
 						title: "One",
@@ -199,7 +199,7 @@ describe("aggregateToFrames", () => {
 					comp("a", { module: "src/a.ts", process: "p1" }),
 					comp("c", { module: "src/c.ts", process: "p2" }),
 				],
-				walkthroughs: [
+				trails: [
 					{
 						id: "w1",
 						title: "One",
@@ -214,7 +214,7 @@ describe("aggregateToFrames", () => {
 				from: "module:src/a.ts",
 				to: "module:src/c.ts",
 				mechanisms: ["calls"],
-				walkthroughIds: ["w1"],
+				trailIds: ["w1"],
 				steps: 1,
 				source: "module:src/a.ts",
 				target: "module:src/c.ts",
@@ -241,10 +241,10 @@ describe("aggregateToFrames", () => {
 		expect(g.processes).toEqual([]);
 		expect(g.frames).toEqual([]);
 		expect(g.edges).toEqual([]);
-		expect(g.document).toEqual({ components: [], walkthroughs: [] });
+		expect(g.document).toEqual({ components: [], trails: [] });
 	});
 
-	test("document carries frame nodes with rebased walkthroughs", () => {
+	test("document carries frame nodes with rebased trails", () => {
 		const g = aggregateToFrames(
 			doc({
 				components: [
@@ -252,7 +252,7 @@ describe("aggregateToFrames", () => {
 					comp("b", { module: "src/b.ts", process: "p1" }),
 					comp("c", { module: "src/a.ts", process: "p1" }),
 				],
-				walkthroughs: [
+				trails: [
 					{
 						id: "w1",
 						title: "One",
@@ -291,8 +291,8 @@ describe("aggregateToFrames", () => {
 				purpose: "1 member",
 			},
 		]);
-		// Steps rebased with sites intact; emptied walkthrough dropped.
-		expect(g.document.walkthroughs).toEqual([
+		// Steps rebased with sites intact; emptied trail dropped.
+		expect(g.document.trails).toEqual([
 			{
 				id: "w1",
 				title: "One",

@@ -100,7 +100,7 @@ export type { UseElkLayoutOptions, UseElkLayoutResult } from './hooks/useElkLayo
 
 // Subsystem component graph
 export { SubsystemComponentGraph } from './subsystem/SubsystemComponentGraph';
-export type { SubsystemComponentGraphProps, WalkthroughViewerContext } from './subsystem/SubsystemComponentGraph';
+export type { SubsystemComponentGraphProps, TrailViewerContext } from './subsystem/SubsystemComponentGraph';
 export { SubsystemModelTransition } from './subsystem/SubsystemModelTransition';
 export type {
   SubsystemModelTransitionProps,
@@ -205,12 +205,12 @@ export type {
 export { SubsystemFileTree } from './subsystem/SubsystemFileTree';
 export type { SubsystemFileTreeProps } from './subsystem/SubsystemFileTree';
 export {
-  WalkthroughsPanel,
-  WALKTHROUGH_PLAY_PAUSE_MS,
+  TrailsPanel,
+  TRAIL_PLAY_PAUSE_MS,
   STEP_COPY_FEEDBACK_MS,
-} from './subsystem/WalkthroughsPanel';
-export type { WalkthroughsPanelProps } from './subsystem/WalkthroughsPanel';
-export { buildStepBrief } from './subsystem/walkthroughBrief';
+} from './subsystem/TrailsPanel';
+export type { TrailsPanelProps } from './subsystem/TrailsPanel';
+export { buildStepBrief } from './subsystem/trailBrief';
 export { GraphLayoutCover } from './subsystem/GraphLayoutCover';
 export type { GraphLayoutCoverProps } from './subsystem/GraphLayoutCover';
 export {
@@ -222,9 +222,9 @@ export type {
   SubsystemComponent,
   SubsystemGraphNodeData,
   SubsystemComponentEdge,
-  SubsystemWalkthrough,
-  SubsystemWalkthroughStep,
-  SubsystemWalkthroughMechanism,
+  SubsystemTrail,
+  SubsystemTrailStep,
+  SubsystemTrailMechanism,
   SubsystemModelDocument,
   SubsystemComponentConstruct,
   SubsystemComponentRole,
@@ -249,11 +249,11 @@ export {
   deriveGraphEdges,
   isConstructsOnlyModel,
   derivedGraphEdgeId,
-  walkthroughStepGraphEdgeId,
-  reorderWalkthroughs,
+  trailStepGraphEdgeId,
+  reorderTrails,
   reorderTargetIndex,
-  isWalkthroughMechanism,
-  SUBSYSTEM_WALKTHROUGH_MECHANISMS,
+  isTrailMechanism,
+  SUBSYSTEM_TRAIL_MECHANISMS,
   ROLE_COLOR,
   ROLE_LABEL,
   FRAMEWORK_BADGE_COLOR,
@@ -277,11 +277,11 @@ export {
 export type { PrettierBundle } from './subsystem/prettierProvider';
 
 // Pierre code views (@pierre/diffs wrappers)
-export { PierreFileView, PierreSnippetView, PierreWalkthroughCodeView, sliceSnippetWindow, resolvePierreSyntaxThemeName } from './pierre';
+export { PierreFileView, PierreSnippetView, PierreTrailCodeView, sliceSnippetWindow, resolvePierreSyntaxThemeName } from './pierre';
 export type {
   PierreFileViewProps,
   PierreSnippetViewProps,
-  PierreWalkthroughCodeViewProps,
+  PierreTrailCodeViewProps,
   SnippetSlice,
   PierreSyntaxThemeName,
 } from './pierre';

@@ -216,7 +216,7 @@ function report(
 			externalsSkipped: 0,
 			missingFiles: 0,
 			missingSymbols: 0,
-			walkthroughFailures: 0,
+			trailFailures: 0,
 			staleDeclarations: 0,
 			constructMismatches: 0,
 			signatureMismatches: 0,
@@ -434,13 +434,13 @@ describe("summarizeLanes", () => {
 					boundaryCheck({ componentAlias: "p", kind: "process_nest" }),
 				],
 			}),
-			{ hasWalkthroughs: true },
+			{ hasTrails: true },
 		);
 		expect(lanes).toEqual({
 			construct: "verified",
 			"static-topology": "verified",
 			"dynamic-topology": "verified",
-			walkthrough: "verified",
+			trail: "verified",
 		});
 	});
 
@@ -452,28 +452,28 @@ describe("summarizeLanes", () => {
 				],
 				boundaryChecks: [boundaryCheck({ verdict: "issue" })],
 			}),
-			{ hasWalkthroughs: false },
+			{ hasTrails: false },
 		);
 		expect(lanes.construct).toBe("partial");
 		expect(lanes["static-topology"]).toBe("issues");
 		expect(lanes["dynamic-topology"]).toBe("none");
-		expect(lanes.walkthrough).toBe("none");
+		expect(lanes.trail).toBe("none");
 	});
 
-	test("walkthrough failures -> issues when walkthroughs exist", () => {
+	test("trail failures -> issues when trails exist", () => {
 		const base = report();
 		const lanes = summarizeLanes(
-			report({ summary: { ...base.summary, walkthroughFailures: 2 } }),
-			{ hasWalkthroughs: true },
+			report({ summary: { ...base.summary, trailFailures: 2 } }),
+			{ hasTrails: true },
 		);
-		expect(lanes.walkthrough).toBe("issues");
+		expect(lanes.trail).toBe("issues");
 	});
 
 	test("construct is never none when the model has components", () => {
 		const base = report();
 		const lanes = summarizeLanes(
 			report({ summary: { ...base.summary, components: 3 } }),
-			{ hasWalkthroughs: false },
+			{ hasTrails: false },
 		);
 		expect(lanes.construct).toBe("partial");
 		expect(lanes["static-topology"]).toBe("none");

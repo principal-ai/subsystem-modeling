@@ -35,7 +35,7 @@ interface StoredModel {
 	id?: string;
 	title?: string;
 	components?: StoredComponent[];
-	walkthroughs?: Array<{ steps?: Array<{ purl?: string }> }>;
+	trails?: Array<{ steps?: Array<{ purl?: string }> }>;
 	createdAtCommits?: Record<string, string>;
 }
 
@@ -43,7 +43,7 @@ function referencedPurls(model: StoredModel): Array<string | undefined> {
 	const purls: Array<string | undefined> = (model.components ?? []).map(
 		(c) => c.purl,
 	);
-	for (const w of model.walkthroughs ?? []) {
+	for (const w of model.trails ?? []) {
 		for (const s of w.steps ?? []) purls.push(s.purl);
 	}
 	return purls;

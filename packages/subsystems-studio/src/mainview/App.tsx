@@ -163,7 +163,7 @@ function ActiveTab({
 						kind: "subsystem-model",
 						id: tab.id,
 						graphId: tab.graphId ?? "",
-						walkthroughId: tab.focusWalkthroughId,
+						trailId: tab.focusTrailId,
 						showIssues: tab.showIssues,
 						focusIssueCategory: tab.focusIssueCategory,
 						liveSessionId: tab.liveSessionId,
@@ -196,7 +196,7 @@ function ActiveTab({
 					commitSha: "local",
 					branch: "local",
 				});
-				if (tab.payloadKind === "tour") {
+				if (tab.kind === "tour") {
 					setState({
 						kind: "ready-tour",
 						id: tab.id,
@@ -208,11 +208,10 @@ function ActiveTab({
 					});
 					return;
 				}
-				// Only File City introduction tours are rendered; a non-tour cached
-				// payload has no viewer.
+				// Tour tabs are the only kind that carries a payload here.
 				setState({
 					kind: "error",
-					message: "This payload is not a tour and cannot be rendered.",
+					message: "This tab has no renderable payload.",
 				});
 			} catch (err) {
 				if (cancelled) return;
@@ -266,7 +265,7 @@ function ActiveTab({
 			<SubsystemModelView
 				tabId={state.id}
 				graphId={state.graphId}
-				focusWalkthroughId={state.walkthroughId}
+				focusTrailId={state.trailId}
 				showIssues={state.showIssues}
 				focusIssueCategory={state.focusIssueCategory}
 				liveSessionId={state.liveSessionId}
@@ -291,7 +290,7 @@ function ActiveTab({
  * Keep-alive wrapper for a subsystem-model tab. Resolves the tab once and
  * stays mounted (hidden while inactive) so its in-memory state survives tab
  * switches. Re-resolves when it regains focus so host-side deep links (issues
- * view, walkthrough focus) still apply on reopen.
+ * view, trail focus) still apply on reopen.
  */
 function KeptSubsystemModelTab({
 	tabId,
@@ -302,7 +301,7 @@ function KeptSubsystemModelTab({
 }) {
 	const [state, setState] = useState<{
 		graphId: string;
-		walkthroughId?: string;
+		trailId?: string;
 		showIssues?: boolean;
 		focusIssueCategory?: string;
 		liveSessionId?: string;
@@ -317,7 +316,7 @@ function KeptSubsystemModelTab({
 				if (tab.kind !== "subsystem-model") return;
 				setState({
 					graphId: tab.graphId ?? "",
-					walkthroughId: tab.focusWalkthroughId,
+					trailId: tab.focusTrailId,
 					showIssues: tab.showIssues,
 					focusIssueCategory: tab.focusIssueCategory,
 					liveSessionId: tab.liveSessionId,
@@ -355,7 +354,7 @@ function KeptSubsystemModelTab({
 			<SubsystemModelView
 				tabId={tabId}
 				graphId={state.graphId}
-				focusWalkthroughId={state.walkthroughId}
+				focusTrailId={state.trailId}
 				showIssues={state.showIssues}
 				focusIssueCategory={state.focusIssueCategory}
 				liveSessionId={state.liveSessionId}
@@ -381,7 +380,7 @@ export function App() {
 	const userChoseRef = useRef(false);
 	// False until the first listTabs lands. The seed above is a placeholder, so
 	// the first refresh takes the host's suggestion (restored last tab, CLI start
-	// tab, seeded trail) instead of the placeholder.
+	// tab, seeded tour) instead of the placeholder.
 	const bootedRef = useRef(false);
 	// Activation history (oldest → newest) for MRU fallback when the active
 	// tab is closed. The renderer owns the on-screen tab, so it owns the

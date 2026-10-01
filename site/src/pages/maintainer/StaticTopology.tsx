@@ -18,7 +18,7 @@ export function MaintainerStaticTopology() {
           <em>purl</em> (repo/package identity from discovery) and{' '}
           <em>module</em> (source-file membership, usually equals <em>file</em>).
           Unconfirmed claims never block publish. No runtime <em>file:line</em>{' '}
-          site — that belongs on walkthrough hops. Process (deployment-unit
+          site — that belongs on trail steps. Process (deployment-unit
           membership) lives under dynamic topology.
         </p>
 

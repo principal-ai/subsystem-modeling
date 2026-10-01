@@ -8,7 +8,7 @@ export function MaintainerReference() {
         <h1>Reference</h1>
         <p>
           Shared vocabulary for the Author → Audit → Verdict → Maintain loop
-          across construct, static topology, dynamic topology, and walkthrough.
+          across construct, static topology, dynamic topology, and trail.
         </p>
       </header>
 
@@ -21,15 +21,15 @@ export function MaintainerReference() {
             <span>
               A model claims constructs (nodes), static topology (package /{' '}
               <em>module</em> containment), dynamic topology (<em>process</em>),
-              and walkthroughs (ordered hops with file:line sites).
+              and trails (ordered steps with file:line sites).
             </span>
           </li>
           <li>
             <strong>Audit</strong>
             <span>
               Four layers: construct → static topology → dynamic topology →
-              walkthrough. Construct, module, and process field checks run in
-              Studio audit today; package-layer soft checks and walkthrough audit
+              trail. Construct, module, and process field checks run in
+              Studio audit today; package-layer soft checks and trail audit
               are next.
             </span>
           </li>
@@ -46,7 +46,7 @@ export function MaintainerReference() {
               Construct: <em>construct-fixer</em> / <em>construct-verifier</em>;
               static topology: <em>package-module-fixer</em> /{' '}
               <em>package-module-verifier</em>; dynamic topology:{' '}
-              <em>runtime-topology-verifier</em>. Walkthrough Maintain is a later,
+              <em>runtime-topology-verifier</em>. Trail Maintain is a later,
               separate pass.
             </span>
           </li>
@@ -59,7 +59,7 @@ export function MaintainerReference() {
           From not checked yet to fully confirmed. Only the three audited states
           mean checks actually ran — <em>unverified</em> means no verification
           has happened. These verdicts are the <em>construct</em> layer today;
-          static/dynamic topology and walkthrough get their own status later.
+          static/dynamic topology and trail get their own status later.
         </p>
         <ul className="maintainer-verdicts">
           {VERDICTS.map((v) => (

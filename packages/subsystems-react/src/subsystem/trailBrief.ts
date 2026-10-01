@@ -1,30 +1,30 @@
 /**
- * walkthroughBrief — build a paste-ready markdown brief for a single
- * walkthrough step so a reviewer can hand one hop to an agent without
+ * trailBrief — build a paste-ready markdown brief for a single
+ * trail step so a reviewer can hand one step to an agent without
  * transcribing it by hand.
  *
- * The unit of handoff is one hop, not the whole flow. A bare hop is ambiguous
+ * The unit of handoff is one step, not the whole flow. A bare step is ambiguous
  * on its own — the same `from`/`to`/`mechanism` can repeat across flows — so the
  * brief also carries the flow it belongs to and its position within it, plus
  * the exact seam site (`symbol`, `file:line`, `purl`) that resolves the
  * checkout.
  */
 
-import type { SubsystemWalkthrough } from './model';
+import type { SubsystemTrail } from './model';
 
 /**
- * Markdown brief for `walkthrough.steps[stepIndex]`. Returns `''` when the
+ * Markdown brief for `trail.steps[stepIndex]`. Returns `''` when the
  * index is out of range so a caller can treat it as "nothing to copy".
  */
 export function buildStepBrief(
-  walkthrough: SubsystemWalkthrough,
+  trail: SubsystemTrail,
   stepIndex: number,
 ): string {
-  const step = walkthrough.steps[stepIndex];
+  const step = trail.steps[stepIndex];
   if (!step) return '';
   const lines: string[] = [];
   lines.push(
-    `Walkthrough: ${walkthrough.title} (${walkthrough.id}) — step ${stepIndex + 1}/${walkthrough.steps.length}`,
+    `Trail: ${trail.title} (${trail.id}) — step ${stepIndex + 1}/${trail.steps.length}`,
   );
   lines.push('');
   lines.push(`- from: \`${step.from}\``);

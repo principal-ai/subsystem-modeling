@@ -30,7 +30,7 @@ const TAB_TOGGLES: Array<{
 		description: "Historical Maintain runs (not live)",
 	},
 	{
-		key: "trails",
+		key: "tours",
 		label: "Tours",
 		description: "Cached tour library",
 	},

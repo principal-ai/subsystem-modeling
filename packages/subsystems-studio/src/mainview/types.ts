@@ -23,7 +23,7 @@ export type TabState =
 			kind: "subsystem-model";
 			id: string;
 			graphId: string;
-			walkthroughId?: string;
+			trailId?: string;
 			/** Open the sidebar's issues view on mount. */
 			showIssues?: boolean;
 			/** With `showIssues`, land focused on this verification layer. */

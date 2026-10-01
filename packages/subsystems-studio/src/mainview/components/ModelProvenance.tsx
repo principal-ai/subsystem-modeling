@@ -287,7 +287,7 @@ export interface ModelProvenanceData {
 	 * nothing populates it.
 	 *
 	 * To make this real, add next to `purlCommitFreshness`:
-	 * `referencedFilesByPurl(components, walkthroughs)` for the pathspec
+	 * `referencedFilesByPurl(components, trails)` for the pathspec
 	 * (`purl-commits.ts:80`), then per resolvable root
 	 *   - committed: `git diff --name-only <pin> <live> -- <paths>`
 	 *     via `gitStdout` (`git-repo.ts:23`)

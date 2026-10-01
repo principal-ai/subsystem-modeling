@@ -2,9 +2,9 @@
  * Tour command — author, validate, analyze, and open File City introduction
  * tours (`*.tour.json`).
  *
- * Tours are the sibling of trails: a trail pins markers to `file:line`, a tour
- * scopes steps to a `focusDirectory` + highlight layers. This command bundles
- * the full tour lifecycle:
+ * A tour is an ordered trail of a codebase's structure: each step scopes
+ * to a `focusDirectory` plus highlight layers, and the panel derives the city's
+ * layers from it. This command bundles the full tour lifecycle:
  *
  *   principal-ai tour init      scaffold a tour from a template
  *   principal-ai tour validate  validate a tour against the spec
@@ -14,9 +14,9 @@
  * `init`/`validate`/`stats` were folded in from the deprecated
  * `@principal-ai/file-city-cli`; they delegate all schema work to
  * `@principal-ai/file-city-builder` (`parseTour`, `IntroductionTour`). `view`
- * is the lighter cousin of `trail view --file`, reusing the same viewer-launch
- * + IPC handoff plumbing — and because steps address whole directories, tours
- * are local-mode only (no remote slice resolution, no token).
+ * reuses the viewer's launch + IPC handoff plumbing — and because steps address
+ * whole directories, tours are local-mode only (no remote slice resolution, no
+ * token).
  */
 
 import { Command } from 'commander';
@@ -26,7 +26,7 @@ import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import chalk from 'chalk';
 import { parseTour, type IntroductionTour, type TourRepoRef } from '@principal-ai/file-city-builder';
-import { handoffToRunning, type LoadTrailMessage } from '../lib/viewer-ipc.js';
+import { handoffToRunning, type LoadTourMessage } from '../lib/viewer-ipc.js';
 import * as tourCache from '../lib/tour-cache.js';
 import {
   gitRemoteUrl,
@@ -192,16 +192,14 @@ async function viewTour(
 
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
-    TRAIL_FILE: absolute,
-    TRAIL_MODE: 'local',
-    TRAIL_REPO_ROOT: repoRoot,
+    TOUR_FILE: absolute,
+    TOUR_MODE: 'local',
+    TOUR_REPO_ROOT: repoRoot,
   };
 
-  // The viewer host auto-detects tour vs trail from the filename/shape, so the
-  // `LOAD_TRAIL` message carries the tour file just like a trail would.
-  const ipcMessage: LoadTrailMessage = {
-    kind: 'LOAD_TRAIL',
-    trailFile: absolute,
+  const ipcMessage: LoadTourMessage = {
+    kind: 'LOAD_TOUR',
+    tourFile: absolute,
     mode: 'local',
     repoRoot,
   };

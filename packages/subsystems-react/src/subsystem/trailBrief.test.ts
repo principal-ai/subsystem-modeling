@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { buildStepBrief } from './walkthroughBrief';
-import type { SubsystemWalkthrough } from './model';
+import { buildStepBrief } from './trailBrief';
+import type { SubsystemTrail } from './model';
 
-const walkthrough: SubsystemWalkthrough = {
+const trail: SubsystemTrail = {
   id: 'auth-flow',
   title: 'Auth flow',
   steps: [
@@ -30,8 +30,8 @@ const walkthrough: SubsystemWalkthrough = {
 
 describe('buildStepBrief', () => {
   test('includes flow identity, position, and seam anchors', () => {
-    const brief = buildStepBrief(walkthrough, 0);
-    expect(brief).toContain('Walkthrough: Auth flow (auth-flow) — step 1/2');
+    const brief = buildStepBrief(trail, 0);
+    expect(brief).toContain('Trail: Auth flow (auth-flow) — step 1/2');
     expect(brief).toContain('- from: `ui`');
     expect(brief).toContain('- to: `api`');
     expect(brief).toContain('- mechanism: `calls`');
@@ -41,17 +41,17 @@ describe('buildStepBrief', () => {
   });
 
   test('omits the note when the step has no annotation', () => {
-    expect(buildStepBrief(walkthrough, 0)).not.toContain('- note:');
+    expect(buildStepBrief(trail, 0)).not.toContain('- note:');
   });
 
   test('includes the note when the step has an annotation', () => {
-    const brief = buildStepBrief(walkthrough, 1);
-    expect(brief).toContain('Walkthrough: Auth flow (auth-flow) — step 2/2');
+    const brief = buildStepBrief(trail, 1);
+    expect(brief).toContain('Trail: Auth flow (auth-flow) — step 2/2');
     expect(brief).toContain('- note: session row is written here');
   });
 
   test('returns an empty string for an out-of-range index', () => {
-    expect(buildStepBrief(walkthrough, 9)).toBe('');
-    expect(buildStepBrief(walkthrough, -1)).toBe('');
+    expect(buildStepBrief(trail, 9)).toBe('');
+    expect(buildStepBrief(trail, -1)).toBe('');
   });
 });

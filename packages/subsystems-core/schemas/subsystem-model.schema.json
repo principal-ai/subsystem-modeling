@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://principal-ai.dev/schemas/subsystem-model.schema.json",
   "title": "Subsystem Model",
-  "description": "Portable subsystem model — the shareable standard. Construct-tagged components (nodes) plus runtime walkthroughs describing one subsystem of a codebase. Ontology: construct = what a node is, framework + stereotype = which framework pattern it plays, role = where it sits, process = where it runs, module = which source file/module the export belongs to. Symbol is the code identity; name is the display label (often derived from symbol). Host-only fields (local path binding, provenance, store ids, verification) are NOT part of this document; they belong on a hydrated envelope around it.",
+  "description": "Portable subsystem model — the shareable standard. Construct-tagged components (nodes) plus runtime trails describing one subsystem of a codebase. Ontology: construct = what a node is, framework + stereotype = which framework pattern it plays, role = where it sits, process = where it runs, module = which source file/module the export belongs to. Symbol is the code identity; name is the display label (often derived from symbol). Host-only fields (local path binding, provenance, store ids, verification) are NOT part of this document; they belong on a hydrated envelope around it.",
   "type": "object",
   "required": [
     "title",
@@ -30,11 +30,11 @@
         "$ref": "#/$defs/component"
       }
     },
-    "walkthroughs": {
+    "trails": {
       "type": "array",
-      "description": "Ordered runtime walkthroughs (one per named behavior). Each step names from/to/mechanism and the concrete file:line where that seam fires.",
+      "description": "Ordered runtime trails (one per named behavior). Each step names from/to/mechanism and the concrete file:line where that seam fires.",
       "items": {
-        "$ref": "#/$defs/walkthrough"
+        "$ref": "#/$defs/trail"
       }
     },
     "createdAtCommits": {
@@ -100,7 +100,7 @@
     },
     "mechanism": {
       "type": "string",
-      "description": "Walkthrough hop mechanism — how `from` relates to `to` at a runtime site. `uses` = general dependency; `feeds` = data-flow into a processor; `produces` = emits an output; `writes`/`reads`/`watches` = retained-state interactions.",
+      "description": "Trail step mechanism — how `from` relates to `to` at a runtime site. `uses` = general dependency; `feeds` = data-flow into a processor; `produces` = emits an output; `writes`/`reads`/`watches` = retained-state interactions.",
       "enum": [
         "calls",
         "uses",
@@ -126,7 +126,7 @@
         "alias": {
           "type": "string",
           "minLength": 1,
-          "description": "Model-local stable alias, unique per model. Referenced by walkthrough `from` / `to`; edges point at the alias, not the location, so a file move or symbol rename leaves edges intact. Code identity (for composed multi-model views) lives on `purl` + `file` + `symbol`, not here."
+          "description": "Model-local stable alias, unique per model. Referenced by trail `from` / `to`; edges point at the alias, not the location, so a file move or symbol rename leaves edges intact. Code identity (for composed multi-model views) lives on `purl` + `file` + `symbol`, not here."
         },
         "name": {
           "type": "string",
@@ -206,7 +206,7 @@
         }
       }
     },
-    "walkthroughStep": {
+    "trailStep": {
       "type": "object",
       "required": [
         "from",
@@ -236,7 +236,7 @@
           "type": "string",
           "minLength": 1,
           "pattern": "^(?!.*(^|/)node_modules(/|$)).*$",
-          "description": "Repo-root-relative path where the seam fires for this walkthrough."
+          "description": "Repo-root-relative path where the seam fires for this trail."
         },
         "line": {
           "type": "integer",
@@ -251,16 +251,16 @@
         "symbol": {
           "type": "string",
           "minLength": 1,
-          "description": "Frame name for this hop — the function/method on the stack at the site. Required; the Walkthroughs list shows this instead of a bare mechanism + filename fallback."
+          "description": "Frame name for this step — the function/method on the stack at the site. Required; the Trails list shows this instead of a bare mechanism + filename fallback."
         },
         "annotation": {
           "type": "string",
           "minLength": 1,
-          "description": "Free-text note anchored to this hop's site line. Optional, informative only, never verified against source; viewers surface it in the codeview's annotation column."
+          "description": "Free-text note anchored to this step's site line. Optional, informative only, never verified against source; viewers surface it in the codeview's annotation column."
         }
       }
     },
-    "walkthrough": {
+    "trail": {
       "type": "object",
       "required": [
         "id",
@@ -272,18 +272,18 @@
         "id": {
           "type": "string",
           "minLength": 1,
-          "description": "Stable unique walkthrough id."
+          "description": "Stable unique trail id."
         },
         "title": {
           "type": "string",
           "minLength": 1,
-          "description": "Walkthrough name (e.g. save, load, refresh)."
+          "description": "Trail name (e.g. save, load, refresh)."
         },
         "steps": {
           "type": "array",
-          "description": "Ordered hops; array order is execution order.",
+          "description": "Ordered steps; array order is execution order.",
           "items": {
-            "$ref": "#/$defs/walkthroughStep"
+            "$ref": "#/$defs/trailStep"
           }
         }
       }

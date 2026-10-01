@@ -191,7 +191,7 @@ async function createAction(options: {
       title: body['title'] as string,
       description: typeof body['description'] === 'string' ? body['description'] : undefined,
       components: body['components'] as unknown[],
-      walkthroughs: Array.isArray(body['walkthroughs']) ? body['walkthroughs'] : undefined,
+      trails: Array.isArray(body['trails']) ? body['trails'] : undefined,
     });
   }
 

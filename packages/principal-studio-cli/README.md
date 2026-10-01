@@ -1,6 +1,6 @@
 # @principal-ai/principal-studio-cli
 
-CLI for **Subsystem Models**, **Subsystems Studio**, trails, and agent sessions.
+CLI for **Subsystem Models**, **Subsystems Studio**, tours, and agent sessions.
 
 ## Install
 

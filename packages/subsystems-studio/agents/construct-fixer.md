@@ -201,7 +201,7 @@ Allowed change fields:
   store, not the model JSON; `file` / `symbol` / `purl` default from the
   component)
 - component: `file` | `symbol` | `construct` | `name` | `purl` | `declarationRef`
-- walkthrough-step: `file` | `line` | `symbol` | `from` | `to` | `mechanism` | `annotation`
+- trail-step: `file` | `line` | `symbol` | `from` | `to` | `mechanism` | `annotation`
 
 5. **Verify.** List proposals with the brief’s proposals curl. Do **not**
    accept or reject.

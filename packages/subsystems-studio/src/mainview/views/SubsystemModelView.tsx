@@ -16,7 +16,7 @@ import {
 	deriveGraphEdges,
 	PierreFileView,
 	PierreSnippetView,
-	PierreWalkthroughCodeView,
+	PierreTrailCodeView,
 	type DeclarationSymbolRef,
 	type SubsystemDiagnostic,
 	type SubsystemIssue,
@@ -24,7 +24,7 @@ import {
 	type SubsystemOpenFileOptions,
 	type SubsystemAgent,
 	type SymbolInspection,
-	type WalkthroughViewerContext,
+	type TrailViewerContext,
 } from "@principal-ai/subsystems-react";
 import { electrobun, maintainLivePanelSubscribers, opencodeLiveFeedSubscribers, reloadSubscribers, subsystemModelChangeSubscribers, subsystemModelMaintainChangeSubscribers } from "../rpc";
 import { CenteredMessage } from "../ui";
@@ -40,7 +40,7 @@ import type {
 	StoredSubsystemModel,
 	StudioMessages,
 	SubsystemModelAuditReport,
-	SubsystemWalkthrough,
+	SubsystemTrail,
 } from "../../shared/contract";
 
 // Disabled for now — Excalidraw edits don't save back to the store yet
@@ -72,7 +72,7 @@ const MAINTAIN_AGENTS: SubsystemAgent[] = [
 export function SubsystemModelView({
 	tabId,
 	graphId,
-	focusWalkthroughId,
+	focusTrailId,
 	showIssues: showIssuesOnOpen,
 	focusIssueCategory,
 	liveSessionId,
@@ -81,8 +81,8 @@ export function SubsystemModelView({
 }: {
 	tabId: string;
 	graphId: string;
-	/** Walkthrough to select on mount (opened from a row in the list). */
-	focusWalkthroughId?: string;
+	/** Trail to select on mount (opened from a row in the list). */
+	focusTrailId?: string;
 	/** Open the sidebar's issues view on mount (opened from a row in the list). */
 	showIssues?: boolean;
 	/** With `showIssues`, land focused on this verification layer. */
@@ -138,11 +138,11 @@ export function SubsystemModelView({
 	// Flows panel drag-reorder: apply the new order optimistically so the panel
 	// updates on drop, then persist. A failed write reloads the stored order;
 	// a successful one also pushes a change event that reloads every surface.
-	const onReorderWalkthroughs = useCallback(
-		(next: SubsystemWalkthrough[]) => {
-			setGraph((g) => (g ? { ...g, walkthroughs: next } : g));
+	const onReorderTrails = useCallback(
+		(next: SubsystemTrail[]) => {
+			setGraph((g) => (g ? { ...g, trails: next } : g));
 			void electrobun.rpc!.request
-				.updateSubsystemModel({ graphId, patch: { walkthroughs: next } })
+				.updateSubsystemModel({ graphId, patch: { trails: next } })
 				.then((res: { ok: boolean; error?: string }) => {
 					if (!res.ok) loadGraph();
 				})
@@ -388,17 +388,17 @@ export function SubsystemModelView({
 		[],
 	);
 
-	const renderWalkthroughViewer = useCallback(
+	const renderTrailViewer = useCallback(
 		({
-			walkthrough,
+			trail,
 			stepIndex,
 			onOpenFile,
 			proposedAliases,
 			resolveSymbol,
 			onSymbolClick,
-		}: WalkthroughViewerContext) => (
-			<PierreWalkthroughCodeView
-				walkthrough={walkthrough}
+		}: TrailViewerContext) => (
+			<PierreTrailCodeView
+				trail={trail}
 				stepIndex={stepIndex}
 				readFile={readFile}
 				contextLines={8}
@@ -470,14 +470,14 @@ export function SubsystemModelView({
 		>
 			<SubsystemComponentGraph
 				components={graph.components}
-				walkthroughs={graph.walkthroughs}
+				trails={graph.trails}
 				persistKey={graphId}
-				onReorderWalkthroughs={onReorderWalkthroughs}
-				initialWalkthroughId={focusWalkthroughId}
+				onReorderTrails={onReorderTrails}
+				initialTrailId={focusTrailId}
 				title={graph.title}
 				description={graph.description}
 				renderFileViewer={renderFileViewer}
-				renderWalkthroughViewer={renderWalkthroughViewer}
+				renderTrailViewer={renderTrailViewer}
 				onInspectSymbol={onInspectSymbol}
 				diagnostic={diagnostic}
 				issues={auditIssues}
@@ -565,7 +565,7 @@ export function SubsystemModelView({
 							title={graph.title}
 							components={graph.components}
 							edges={deriveGraphEdges({
-								walkthroughs: graph.walkthroughs,
+								trails: graph.trails,
 							})}
 							onSelectionChange={setSelection}
 						/>

@@ -60,13 +60,13 @@ export interface MergeSidecar {
 
 export interface MergeResult {
 	/**
-	 * Materialized composed graph: validatable components/walkthroughs plus a
+	 * Materialized composed graph: validatable components/trails plus a
 	 * traceable title/description (stored-model shape minus store metadata —
 	 * the contract document itself has no title).
 	 */
 	document: Pick<
 		StoredSubsystemModel,
-		"title" | "description" | "components" | "walkthroughs"
+		"title" | "description" | "components" | "trails"
 	>;
 	sidecar: MergeSidecar;
 }
@@ -229,7 +229,7 @@ function uniqueId(base: string, used: Set<string>): string {
 }
 
 /**
- * Compose models into one materialized document + sidecar. Walkthrough steps
+ * Compose models into one materialized document + sidecar. Trail steps
  * are rebased to canonical aliases through each model's own alias space;
  * unresolvable endpoints (external labels) pass through untouched. Id
  * collisions across models are disambiguated deterministically.
@@ -281,11 +281,11 @@ export function mergeSubsystemModels(models: MergeInputModel[]): MergeResult {
 	const rebase = (modelId: string, endpoint: string): string =>
 		aliasIndex.get(`${modelId}\0${endpoint}`) ?? endpoint;
 
-	const usedWalkthroughIds = new Set<string>();
-	const walkthroughs = ordered.flatMap((m) =>
-		(m.document.walkthroughs ?? []).map((w) => ({
+	const usedTrailIds = new Set<string>();
+	const trails = ordered.flatMap((m) =>
+		(m.document.trails ?? []).map((w) => ({
 			...w,
-			id: uniqueId(w.id, usedWalkthroughIds),
+			id: uniqueId(w.id, usedTrailIds),
 			steps: (w.steps ?? []).map((s) => ({
 				...s,
 				from: rebase(m.id, s.from),
@@ -312,7 +312,7 @@ export function mergeSubsystemModels(models: MergeInputModel[]): MergeResult {
 			title,
 			description: `Composed from ${ordered.length} model(s): ${modelIds.join(", ")}.`,
 			components,
-			walkthroughs,
+			trails,
 		},
 		sidecar: { nodes: sources, conflicts },
 	};

@@ -6,11 +6,11 @@ import {
   SubsystemModelTransition,
   type SubsystemTransitionStep,
 } from '../../../subsystem/SubsystemModelTransition';
-import type { SubsystemComponent, SubsystemWalkthrough } from '../../../subsystem/model';
+import type { SubsystemComponent, SubsystemTrail } from '../../../subsystem/model';
 
 /**
  * Harness for `SubsystemModelTransition` — the same progression cases
- * (constructs → static → dynamic → walkthrough) animated between, with a nav.
+ * (constructs → static → dynamic → trail) animated between, with a nav.
  */
 
 const meta = {
@@ -34,7 +34,7 @@ const components: SubsystemComponent[] = [
   { alias: 'Database', name: 'Database', construct: 'external', role: 'service', purl: 'external', file: '' },
 ];
 
-const walkthroughs: SubsystemWalkthrough[] = [
+const trails: SubsystemTrail[] = [
   {
     id: 'wt-book',
     title: 'Guest books',
@@ -56,7 +56,7 @@ const walkthroughs: SubsystemWalkthrough[] = [
   },
 ];
 
-const LABELS = ['Constructs', 'Static topology', 'Dynamic topology', 'Walkthrough'];
+const LABELS = ['Constructs', 'Static topology', 'Dynamic topology', 'Trail'];
 
 const STEPS: SubsystemTransitionStep[] = [
   {
@@ -72,22 +72,22 @@ const STEPS: SubsystemTransitionStep[] = [
     moduleNesting: 'path',
   },
   {
-    model: { title: 'Booking', components, walkthroughs },
+    model: { title: 'Booking', components, trails },
     moduleNesting: 'path',
-    autoPlayWalkthroughs: true,
-    showWalkthroughTitle: true,
+    autoPlayTrails: true,
+    showTrailTitle: true,
   },
 ];
 
 const STEP_MS = 4000;
 
-/** Dwell long enough for an autoplaying step to cycle all its hops. */
+/** Dwell long enough for an autoplaying step to cycle all its steps. */
 function dwellFor(index: number): number {
   const step = STEPS[index];
-  if (step?.autoPlayWalkthroughs) {
-    const hops = step.model.walkthroughs?.reduce((n, w) => n + w.steps.length, 0) ?? 0;
-    // Whole-flow phase + one tick per hop.
-    if (hops > 0) return (hops + 1) * STEP_MS;
+  if (step?.autoPlayTrails) {
+    const steps = step.model.trails?.reduce((n, w) => n + w.steps.length, 0) ?? 0;
+    // Whole-flow phase + one tick per step.
+    if (steps > 0) return (steps + 1) * STEP_MS;
   }
   return 3200;
 }
@@ -109,7 +109,7 @@ function Harness() {
       <SubsystemModelTransition
         steps={steps}
         activeIndex={active}
-        walkthroughAutoPlayIntervalMs={STEP_MS}
+        trailAutoPlayIntervalMs={STEP_MS}
       />
       <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', gap: 8, zIndex: 10 }}>
         {LABELS.map((label, i) => (

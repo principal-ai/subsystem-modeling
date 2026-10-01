@@ -5,7 +5,7 @@ import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import type { SubsystemComponent, SubsystemComponentEdge } from '../../../subsystem/model';
 import type { GraphifyComponentDetail } from '../../../graphify';
-import { components, graphSpecFromHops, readerDetail, investigateOnlyComponents, investigateOnlyWalkthroughs } from './fixtures';
+import { components, graphSpecFromSteps, readerDetail, investigateOnlyComponents, investigateOnlyTrails } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Captures',
@@ -37,7 +37,7 @@ const v2ReaderComponents = components([
   ['registry', 'supported-agents', 'function', 'supported-agents.ts', 'pkg:github/principal-ai/agent-monitoring', 'registry of supported agents (the shared seam)', 'registerAgent'],
 ]);
 
-const v2ReaderEdges = graphSpecFromHops([
+const v2ReaderEdges = graphSpecFromSteps([
   ['transcript', 'reader', 'calls'],
   ['paths', 'reader', 'uses'],
   ['capture', 'reader', 'calls'],
@@ -55,7 +55,7 @@ function V2ReaderDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={v2ReaderComponents}
-        walkthroughs={v2ReaderEdges.walkthroughs}
+        trails={v2ReaderEdges.trails}
         onSelect={(id) => setSelected(id)}
         onEdgeSelect={(e) => setSelectedEdge(e)}
       />
@@ -80,7 +80,7 @@ export const V2ReaderSubsystem: Story = {
 export const InvestigateOnly: Story = {
   render: () => (
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <SubsystemComponentGraph components={investigateOnlyComponents} walkthroughs={investigateOnlyWalkthroughs} />
+      <SubsystemComponentGraph components={investigateOnlyComponents} trails={investigateOnlyTrails} />
     </div>
   ),
 };
@@ -98,7 +98,7 @@ const minimalComponents = components([
   ['transcript', 'transcript', 'function', 'transcript.ts', 'pkg:github/principal-ai/agent-monitoring', 'parses session records + type guards', 'transcript'],
 ]);
 
-const sharedEdges = graphSpecFromHops([
+const sharedEdges = graphSpecFromSteps([
   ['transcript', 'record', 'uses'],
   ['reader', 'normalize', 'calls'],
   ['normalize', 'record', 'uses'],
@@ -137,7 +137,7 @@ function MinimalVsResolvedDemo({ resolved }: { resolved: boolean }) {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={resolved ? resolvedComponents : minimalComponents}
-        walkthroughs={sharedEdges.walkthroughs}
+        trails={sharedEdges.trails}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -191,7 +191,7 @@ const investigationComponents: SubsystemComponent[] = [
   },
 ];
 
-const investigationEdges = graphSpecFromHops([
+const investigationEdges = graphSpecFromSteps([
   ['adapter', 'contracts', 'uses'],
   ['ingestion', 'adapter', 'uses'],
   ['ingestion', 'contracts', 'uses'],
@@ -203,7 +203,7 @@ function InvestigationDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={investigationComponents}
-        walkthroughs={investigationEdges.walkthroughs}
+        trails={investigationEdges.trails}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>

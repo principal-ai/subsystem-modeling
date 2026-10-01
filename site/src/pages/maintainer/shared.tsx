@@ -507,18 +507,18 @@ export const PROCESS_BOUNDARY_AGENTS: MaintenanceAgent[] = [
   },
 ]
 
-export const WALKTHROUGH_MECHANICAL_CASES: AuditCase[] = [
+export const TRAIL_MECHANICAL_CASES: AuditCase[] = [
   {
     example: 'site drifted',
     meaning:
-      'Step file:line moved, shifted, or was deleted. Often surfaces as out-of-range, blank line, or missing file — same family as declaration drift, but per hop.',
+      'Step file:line moved, shifted, or was deleted. Often surfaces as out-of-range, blank line, or missing file — same family as declaration drift, but per step.',
     outcome: 'issue',
     remediation: 'none',
   },
   {
-    example: 'broken hop endpoints',
+    example: 'broken step endpoints',
     meaning:
-      'Step from/to names a component that was deleted or renamed. Can appear after nodes change without updating walkthroughs. Display edges for hops are derived — they stand on their own.',
+      'Step from/to names a component that was deleted or renamed. Can appear after nodes change without updating trails. Display edges for steps are derived — they stand on their own.',
     outcome: 'issue',
     remediation: 'none',
   },
@@ -539,14 +539,14 @@ export type CatalogEntry = {
 }
 
 /**
- * Walkthrough hop `mechanism` catalogue — runtime seams with a file:line
- * site. Topology labels do not belong on hops.
+ * Trail step `mechanism` catalogue — runtime seams with a file:line
+ * site. Topology labels do not belong on steps.
  */
-export const WALKTHROUGH_MECHANISM_CATALOG: CatalogEntry[] = [
+export const TRAIL_MECHANISM_CATALOG: CatalogEntry[] = [
   {
     label: 'calls',
     meaning:
-      'from invokes to — a function/method call, RPC dispatch, or similar request/response hop.',
+      'from invokes to — a function/method call, RPC dispatch, or similar request/response step.',
     example: `async function saveSession(id: string) {
   await writeSession(id)  // ← site: SessionApi calls WriteSession
 }`,

@@ -5,7 +5,7 @@ import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme
 import { SubsystemComponentGraph } from '@principal-ai/subsystems-react/dist/subsystem/SubsystemComponentGraph.js';
 import type {
   SubsystemComponent,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from '@principal-ai/subsystems-react';
 
 const components: SubsystemComponent[] = [
@@ -43,7 +43,7 @@ const components: SubsystemComponent[] = [
   },
 ]
 
-const walkthroughs: SubsystemWalkthrough[] = [
+const trails: SubsystemTrail[] = [
   {
     id: 'wt-checkout',
     title: 'Checkout',
@@ -84,7 +84,7 @@ export function SubsystemModelCanvas() {
     <ThemeProvider theme={defaultEditorTheme}>
       <SubsystemComponentGraph
         components={components}
-        walkthroughs={walkthroughs}
+        trails={trails}
         graphTitle="Checkout"
         hideSidebar
       />

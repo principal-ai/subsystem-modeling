@@ -39,14 +39,14 @@ export type SubsystemIssueSeverity = 'error' | 'info';
 export type SubsystemIssueTargetKind =
   | 'component'
   | 'module'
-  | 'walkthrough'
+  | 'trail'
   | 'step'
   | 'repo'
   | 'graph';
 
 /**
  * The four verification layers, in order. Mirrors the docs' progression:
- * constructs → static topology → dynamic topology → walkthrough.
+ * constructs → static topology → dynamic topology → trail.
  * Static topology = package/module (containment); dynamic topology = process
  * (runtime).
  */
@@ -55,7 +55,7 @@ export type SubsystemIssueCategory =
   | 'construct'
   | 'static-topology'
   | 'dynamic-topology'
-  | 'walkthrough';
+  | 'trail';
 
 /** Layer order + display names, shared by the list and its headers. */
 export const SUBSYSTEM_ISSUE_CATEGORIES: SubsystemIssueCategory[] = [
@@ -63,7 +63,7 @@ export const SUBSYSTEM_ISSUE_CATEGORIES: SubsystemIssueCategory[] = [
   'construct',
   'static-topology',
   'dynamic-topology',
-  'walkthrough',
+  'trail',
 ];
 
 /** Per-category header icon — mirrors the Maintainer tab's lane icons. */
@@ -75,7 +75,7 @@ export const SUBSYSTEM_ISSUE_CATEGORY_ICON: Record<
   construct: Component,
   'static-topology': Network,
   'dynamic-topology': Server,
-  walkthrough: Route,
+  trail: Route,
 };
 
 export const SUBSYSTEM_ISSUE_CATEGORY_LABEL: Record<
@@ -86,7 +86,7 @@ export const SUBSYSTEM_ISSUE_CATEGORY_LABEL: Record<
   construct: 'Constructs',
   'static-topology': 'Static topology',
   'dynamic-topology': 'Dynamic topology',
-  walkthrough: 'Walkthrough',
+  trail: 'Trail',
 };
 
 /** Default `kind` → layer. Module containment is static; process nest is dynamic. */
@@ -103,7 +103,7 @@ const KIND_CATEGORY: Record<string, SubsystemIssueCategory> = {
   graphify_unavailable: 'repo',
   boundary_module_file_mismatch: 'static-topology',
   boundary_process_nest_disagree: 'dynamic-topology',
-  walkthrough: 'walkthrough',
+  trail: 'trail',
 };
 
 /**
@@ -117,7 +117,7 @@ export function issueCategory(issue: SubsystemIssue): SubsystemIssueCategory {
 /**
  * Construct-layer verification rung for a finding kind (file → symbol →
  * declaration → type → signature), or null for findings outside that ladder
- * (topology / walkthrough / repo). Drives the node overlay's earliest-rung chip.
+ * (topology / trail / repo). Drives the node overlay's earliest-rung chip.
  */
 const KIND_RUNG: Record<string, SubsystemIssueRung> = {
   missing_file: 'file',
@@ -168,7 +168,7 @@ export const ISSUE_KIND_ICON: Record<string, LucideIcon> = {
 
 /**
  * Icons for target SHAPES that are more specific than their verification lane.
- * An audit `kind` of `walkthrough` covers the whole flow, so a finding about
+ * An audit `kind` of `trail` covers the whole flow, so a finding about
  * one step of it would otherwise wear the lane's `Route` icon and read as a
  * comment on the flow rather than on the step that is actually wrong.
  */
@@ -188,8 +188,8 @@ export interface SubsystemIssueTarget {
   /** Optional sub-label (step number, …). */
   detail?: string;
   /**
-   * For a `step` target: the walkthrough id, plus a 0-based index into that
-   * walkthrough's steps. Carried structurally rather than parsed back out of
+   * For a `step` target: the trail id, plus a 0-based index into that
+   * trail's steps. Carried structurally rather than parsed back out of
    * `detail` ("step 7") so focusing a step is exact rather than best-effort —
    * `detail` is a display string and is free to change its phrasing.
    */
@@ -243,7 +243,7 @@ const KIND_LABEL: Record<string, string> = {
   graphify_unavailable: 'Graphify cache unavailable',
   boundary_module_file_mismatch: 'Declaration file outside module',
   boundary_process_nest_disagree: 'Module spans multiple process contexts',
-  walkthrough: 'Step issue',
+  trail: 'Step issue',
 };
 
 /** Label for an issue's kind. Explicit `kindLabel` wins; unknown kinds humanize. */
@@ -275,8 +275,8 @@ const KIND_ORDER: Record<string, number> = {
   boundary_module_file_mismatch: 23,
   // Runtime topology — process containment
   boundary_process_nest_disagree: 30,
-  // Walkthrough
-  walkthrough: 40,
+  // Trail
+  trail: 40,
 };
 
 const KIND_ORDER_FALLBACK = 100;

@@ -80,13 +80,13 @@ function componentFieldBefore(
 	return (c as unknown as Record<string, unknown>)[field];
 }
 
-function walkthroughStepBefore(
+function trailStepBefore(
 	graph: StoredSubsystemModel,
-	walkthroughId: string,
+	trailId: string,
 	stepIndex: number,
 	field: string,
 ): unknown {
-	const tl = graph.walkthroughs?.find((t) => t.id === walkthroughId);
+	const tl = graph.trails?.find((t) => t.id === trailId);
 	const step = tl?.steps?.[stepIndex];
 	if (!step) return undefined;
 	return (step as unknown as Record<string, unknown>)[field];
@@ -155,12 +155,12 @@ function buildPreview(
 				before: current,
 				after: ch.value,
 			});
-		} else if (ch.target === "walkthrough-step") {
+		} else if (ch.target === "trail-step") {
 			rows.push({
-				label: `walkthrough ${ch.walkthroughId} step ${ch.stepIndex}.${ch.field}`,
-				before: walkthroughStepBefore(
+				label: `trail ${ch.trailId} step ${ch.stepIndex}.${ch.field}`,
+				before: trailStepBefore(
 					graph,
-					ch.walkthroughId,
+					ch.trailId,
 					ch.stepIndex,
 					ch.field,
 				),
@@ -260,15 +260,15 @@ function validateChanges(
 			) {
 				return "declaration change requires lines { start >= 1, end >= start }";
 			}
-		} else if (ch.target === "walkthrough-step") {
-			const tl = graph.walkthroughs?.find((t) => t.id === ch.walkthroughId);
-			if (!tl) return `unknown walkthrough: ${ch.walkthroughId}`;
+		} else if (ch.target === "trail-step") {
+			const tl = graph.trails?.find((t) => t.id === ch.trailId);
+			if (!tl) return `unknown trail: ${ch.trailId}`;
 			if (
 				!Number.isInteger(ch.stepIndex) ||
 				ch.stepIndex < 0 ||
 				ch.stepIndex >= tl.steps.length
 			) {
-				return `invalid stepIndex ${ch.stepIndex} for walkthrough ${ch.walkthroughId}`;
+				return `invalid stepIndex ${ch.stepIndex} for trail ${ch.trailId}`;
 			}
 			if (ch.field === "line") {
 				if (
@@ -349,12 +349,12 @@ function validateChanges(
 function applyChangesToGraph(
 	graph: StoredSubsystemModel,
 	changes: SubsystemModelProposalChange[],
-): Pick<StoredSubsystemModel, "components" | "walkthroughs"> | null {
+): Pick<StoredSubsystemModel, "components" | "trails"> | null {
 	const graphChanges = changes.filter((ch) => ch.target !== "augmentation");
 	if (graphChanges.length === 0) return null;
 
 	const components = graph.components.map((c) => ({ ...c }));
-	const walkthroughs = (graph.walkthroughs ?? []).map((t) => ({
+	const trails = (graph.trails ?? []).map((t) => ({
 		...t,
 		steps: t.steps.map((s) => ({ ...s })),
 	}));
@@ -386,8 +386,8 @@ function applyChangesToGraph(
 				declaration: existing as unknown as (typeof component)["declaration"],
 				declarationProvenance: "authored",
 			};
-		} else if (ch.target === "walkthrough-step") {
-			const tl = walkthroughs.find((t) => t.id === ch.walkthroughId);
+		} else if (ch.target === "trail-step") {
+			const tl = trails.find((t) => t.id === ch.trailId);
 			if (!tl) continue;
 			const step = tl.steps[ch.stepIndex];
 			if (!step) continue;
@@ -400,7 +400,7 @@ function applyChangesToGraph(
 
 	return {
 		components,
-		walkthroughs: walkthroughs.length > 0 ? walkthroughs : graph.walkthroughs,
+		trails: trails.length > 0 ? trails : graph.trails,
 	};
 }
 

@@ -3,7 +3,7 @@
  *
  * These are the rules the JSON Schema (`schemas/subsystem-model.schema.json`)
  * cannot express — anything that spans fields or arrays: alias uniqueness,
- * referential integrity between walkthroughs and components, and the
+ * referential integrity between trails and components, and the
  * `module` implies `file` invariant. Structural checks (types, `required`,
  * enums, ranges, closed objects) belong to the schema and are enforced per
  * surface; this module owns only what the schema can't.
@@ -14,11 +14,11 @@
 import type {
   SubsystemModelDocument,
   SubsystemComponent,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from './types/subsystem-model';
 
 export interface SubsystemValidationProblem {
-  /** JSON-pointer-ish location, e.g. `/components/2` or `/walkthroughs/0/steps/0/from`. */
+  /** JSON-pointer-ish location, e.g. `/components/2` or `/trails/0/steps/0/from`. */
   path: string;
   message: string;
 }
@@ -39,7 +39,7 @@ function isUngrounded(c: SubsystemComponent): boolean {
  * that draws a link nothing can open. `proposed` is exempt like every other
  * grounding rule: its file is a placeholder for something not placed yet.
  *
- * The same rule covers walkthrough step files — a seam into an external belongs
+ * The same rule covers trail step files — a seam into an external belongs
  * at the call site in the caller, which *is* in the repo.
  */
 function mentionsNodeModules(path: string): boolean {
@@ -55,10 +55,10 @@ export function validateSubsystemModelCrossField(
 ): SubsystemValidationProblem[] {
   const problems: SubsystemValidationProblem[] = [];
   const components = doc.components ?? [];
-  const walkthroughs = doc.walkthroughs ?? [];
+  const trails = doc.trails ?? [];
 
   // Component aliases must be unique, and the set is the referential target
-  // for walkthrough steps.
+  // for trail steps.
   const ids = new Set<string>();
   components.forEach((c, i) => {
     if (ids.has(c.alias)) {
@@ -87,18 +87,18 @@ export function validateSubsystemModelCrossField(
     }
   });
 
-  walkthroughs.forEach((w: SubsystemWalkthrough, wi) => {
+  trails.forEach((w: SubsystemTrail, ti) => {
     (w.steps ?? []).forEach((step, si) => {
       if (!ids.has(step.from)) {
         problems.push({
-          path: `/walkthroughs/${wi}/steps/${si}/from`,
-          message: `walkthrough ${JSON.stringify(w.id)}: step ${si} from ${JSON.stringify(step.from)} does not match any component alias`,
+          path: `/trails/${ti}/steps/${si}/from`,
+          message: `trail ${JSON.stringify(w.id)}: step ${si} from ${JSON.stringify(step.from)} does not match any component alias`,
         });
       }
       if (!ids.has(step.to)) {
         problems.push({
-          path: `/walkthroughs/${wi}/steps/${si}/to`,
-          message: `walkthrough ${JSON.stringify(w.id)}: step ${si} to ${JSON.stringify(step.to)} does not match any component alias`,
+          path: `/trails/${ti}/steps/${si}/to`,
+          message: `trail ${JSON.stringify(w.id)}: step ${si} to ${JSON.stringify(step.to)} does not match any component alias`,
         });
       }
       // A file-anchored step purl names its own site: the fragment must be
@@ -108,15 +108,15 @@ export function validateSubsystemModelCrossField(
         const fragment = step.purl.split('#').slice(1).join('#');
         if (fragment !== step.file) {
           problems.push({
-            path: `/walkthroughs/${wi}/steps/${si}/purl`,
-            message: `walkthrough ${JSON.stringify(w.id)}: step ${si} purl fragment ${JSON.stringify(fragment)} does not match step file ${JSON.stringify(step.file)}`,
+            path: `/trails/${ti}/steps/${si}/purl`,
+            message: `trail ${JSON.stringify(w.id)}: step ${si} purl fragment ${JSON.stringify(fragment)} does not match step file ${JSON.stringify(step.file)}`,
           });
         }
       }
       if (mentionsNodeModules(step.file)) {
         problems.push({
-          path: `/walkthroughs/${wi}/steps/${si}/file`,
-          message: `walkthrough ${JSON.stringify(w.id)}: step ${si} file ${JSON.stringify(step.file)} points into node_modules — anchor the seam at the call site inside the repo instead.`,
+          path: `/trails/${ti}/steps/${si}/file`,
+          message: `trail ${JSON.stringify(w.id)}: step ${si} file ${JSON.stringify(step.file)} points into node_modules — anchor the seam at the call site inside the repo instead.`,
         });
       }
     });

@@ -1,7 +1,7 @@
 /**
  * SubsystemModelTransition — a sibling of `SubsystemComponentGraph` that
  * presents ONE subsystem as a sequence of steps (e.g. constructs → static
- * topology → dynamic topology → walkthrough) and animates between them.
+ * topology → dynamic topology → trail) and animates between them.
  *
  * Same look as the component graph: it reuses the same node / frame / edge
  * components and the edge-label chrome, so only the motion is new. Each step is
@@ -31,11 +31,11 @@ import {
   buildSubsystemGraph,
   edgeColor,
   MECHANISM_DESCRIPTIONS,
-  walkthroughStepGraphEdgeId,
+  trailStepGraphEdgeId,
   type SubsystemEdgeProvenance,
   type SubsystemGraphNode,
   type SubsystemModelDocument,
-  type SubsystemWalkthrough,
+  type SubsystemTrail,
 } from './model';
 import {
   hexWithAlpha,
@@ -63,12 +63,12 @@ export interface SubsystemTransitionStep {
   /** Explicit boundary frame colors (region key → hex); host override. */
   boundaryColors?: Record<string, string>;
   /**
-   * Cycle this step's walkthrough hops: focus each step (dim non-participants,
-   * number the labels, frame the step). Typically only the walkthrough layer.
+   * Cycle this step's trail steps: focus each step (dim non-participants,
+   * number the labels, frame the step). Typically only the trail layer.
    */
-  autoPlayWalkthroughs?: boolean;
-  /** Show the focused walkthrough's title chip (with step ticks). */
-  showWalkthroughTitle?: boolean;
+  autoPlayTrails?: boolean;
+  /** Show the focused trail's title chip (with step ticks). */
+  showTrailTitle?: boolean;
 }
 
 export interface SubsystemModelTransitionProps {
@@ -81,10 +81,10 @@ export interface SubsystemModelTransitionProps {
   fitPadding?: number;
   /** Called when a node is clicked. */
   onSelect?: (componentAlias: string) => void;
-  /** How an autoplayed walkthrough step reads. @default 'focus' */
-  walkthroughStepMode?: 'focus' | 'dim';
-  /** Dwell per walkthrough step while autoplaying, ms. @default 4000 */
-  walkthroughAutoPlayIntervalMs?: number;
+  /** How an autoplayed trail step reads. @default 'focus' */
+  trailStepMode?: 'focus' | 'dim';
+  /** Dwell per trail step while autoplaying, ms. @default 4000 */
+  trailAutoPlayIntervalMs?: number;
   className?: string;
   style?: CSSProperties;
 }
@@ -238,8 +238,8 @@ function TransitionInner({
   durationMs = 950,
   fitPadding = 0.18,
   onSelect,
-  walkthroughStepMode = 'focus',
-  walkthroughAutoPlayIntervalMs = 4000,
+  trailStepMode = 'focus',
+  trailAutoPlayIntervalMs = 4000,
   className,
   style,
 }: SubsystemModelTransitionProps) {
@@ -361,69 +361,69 @@ function TransitionInner({
 
   const activeLayout = layouts?.[activeIndex];
 
-  // Walkthrough step focus: cycle the active step's hops, dim non-participants,
+  // Trail step focus: cycle the active step's steps, dim non-participants,
   // number the labels, and (in `focus` mode) frame the step.
   const activeStepDef = steps[activeIndex];
-  const activeWalkthroughs = activeStepDef?.model.walkthroughs;
+  const activeTrails = activeStepDef?.model.trails;
   const autoPlaySteps =
-    activeStepDef?.autoPlayWalkthroughs === true && (activeWalkthroughs?.length ?? 0) > 0;
-  const hopList = useMemo(() => {
+    activeStepDef?.autoPlayTrails === true && (activeTrails?.length ?? 0) > 0;
+  const stepList = useMemo(() => {
     const out: Array<{
       edgeId: string;
       from: string;
       to: string;
       stepNo: number;
       total: number;
-      walkthroughId: string;
-      walkthroughTitle: string;
+      trailId: string;
+      trailTitle: string;
     }> = [];
-    for (const wt of (activeWalkthroughs ?? []) as SubsystemWalkthrough[]) {
+    for (const wt of (activeTrails ?? []) as SubsystemTrail[]) {
       wt.steps.forEach((s, i) => {
         out.push({
-          edgeId: walkthroughStepGraphEdgeId(s),
+          edgeId: trailStepGraphEdgeId(s),
           from: s.from,
           to: s.to,
           stepNo: i + 1,
           total: wt.steps.length,
-          walkthroughId: wt.id,
-          walkthroughTitle: wt.title,
+          trailId: wt.id,
+          trailTitle: wt.title,
         });
       });
     }
     return out;
-  }, [activeWalkthroughs]);
+  }, [activeTrails]);
   const [stepPointer, setStepPointer] = useState(0);
   useEffect(() => {
     setStepPointer(0);
-  }, [activeIndex, hopList.length]);
+  }, [activeIndex, stepList.length]);
   useEffect(() => {
-    if (!autoPlaySteps || hopList.length === 0) return;
-    // Pointer 0 = whole flow (no step focus); 1..N = each hop, then wraps.
+    if (!autoPlaySteps || stepList.length === 0) return;
+    // Pointer 0 = whole flow (no step focus); 1..N = each step, then wraps.
     const t = window.setInterval(
-      () => setStepPointer((p) => (p + 1) % (hopList.length + 1)),
-      Math.max(600, walkthroughAutoPlayIntervalMs),
+      () => setStepPointer((p) => (p + 1) % (stepList.length + 1)),
+      Math.max(600, trailAutoPlayIntervalMs),
     );
     return () => window.clearInterval(t);
-  }, [autoPlaySteps, hopList.length, walkthroughAutoPlayIntervalMs]);
-  const focusedHop =
-    autoPlaySteps && hopList.length > 0 && stepPointer > 0
-      ? hopList[(stepPointer - 1) % hopList.length]
+  }, [autoPlaySteps, stepList.length, trailAutoPlayIntervalMs]);
+  const focusedStep =
+    autoPlaySteps && stepList.length > 0 && stepPointer > 0
+      ? stepList[(stepPointer - 1) % stepList.length]
       : undefined;
   const stepNoByEdge = useMemo(() => {
-    // Unique step numbers per edge — a hop reused across walkthroughs (e.g. a
+    // Unique step numbers per edge — a step reused across trails (e.g. a
     // shared `capture-event` call) would otherwise stack `4: 4: 4:`.
     const m = new Map<string, number[]>();
-    for (const h of hopList) {
+    for (const h of stepList) {
       const arr = m.get(h.edgeId) ?? [];
       if (!arr.includes(h.stepNo)) arr.push(h.stepNo);
       m.set(h.edgeId, arr);
     }
     for (const arr of m.values()) arr.sort((a, b) => a - b);
     return m;
-  }, [hopList]);
+  }, [stepList]);
   const focusParticipants = useMemo(
-    () => (focusedHop ? new Set([focusedHop.from, focusedHop.to]) : null),
-    [focusedHop],
+    () => (focusedStep ? new Set([focusedStep.from, focusedStep.to]) : null),
+    [focusedStep],
   );
 
   const nodes: Node[] = useMemo(() => {
@@ -459,34 +459,34 @@ function TransitionInner({
     return out;
   }, [display, activeLayout, unionMeta, focusParticipants]);
 
-  // Real graph edges once settled; step focus adds hop numbers and dims the
-  // non-focused hops.
+  // Real graph edges once settled; step focus adds step numbers and dims the
+  // non-focused steps.
   const edges: Edge[] = useMemo(() => {
     if (!settled) return [];
     const list = activeLayout?.edges ?? [];
-    const numbering = autoPlaySteps && hopList.length > 0;
-    if (!numbering && !focusedHop) return list;
+    const numbering = autoPlaySteps && stepList.length > 0;
+    if (!numbering && !focusedStep) return list;
     return list.map((e) => {
-      // Number every hop while autoplaying (whole view included); dim only the
-      // hops other than the focused one.
+      // Number every step while autoplaying (whole view included); dim only the
+      // steps other than the focused one.
       const stepNos = numbering ? stepNoByEdge.get(e.id) : undefined;
-      const dimmed = focusedHop ? e.id !== focusedHop.edgeId : false;
+      const dimmed = focusedStep ? e.id !== focusedStep.edgeId : false;
       if (!stepNos && !dimmed) return e;
       return {
         ...e,
         data: { ...(e.data as object), stepNos, dimmed },
       } as Edge;
     });
-  }, [settled, activeLayout, focusedHop, stepNoByEdge, autoPlaySteps, hopList.length]);
+  }, [settled, activeLayout, focusedStep, stepNoByEdge, autoPlaySteps, stepList.length]);
 
-  // Camera: frame a focused hop's endpoints, or the whole graph during the
+  // Camera: frame a focused step's endpoints, or the whole graph during the
   // "whole flow" phase.
   useEffect(() => {
-    if (walkthroughStepMode !== 'focus' || !settled || !sized || !rfSized || !autoPlaySteps)
+    if (trailStepMode !== 'focus' || !settled || !sized || !rfSized || !autoPlaySteps)
       return;
     if (!activeLayout) return;
-    const rects = focusedHop
-      ? [focusedHop.from, focusedHop.to]
+    const rects = focusedStep
+      ? [focusedStep.from, focusedStep.to]
           .map((id) => activeLayout.rects.get(id))
           .filter((r): r is Rect => !!r)
       : [...activeLayout.rects.values()];
@@ -497,11 +497,11 @@ function TransitionInner({
     const maxY = Math.max(...rects.map((r) => r.y + r.h));
     fitBounds(
       { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
-      { padding: focusedHop ? 0.3 : fitPadding, duration: durationMs },
+      { padding: focusedStep ? 0.3 : fitPadding, duration: durationMs },
     );
   }, [
-    walkthroughStepMode,
-    focusedHop,
+    trailStepMode,
+    focusedStep,
     settled,
     sized,
     rfSized,
@@ -546,9 +546,9 @@ function TransitionInner({
           </ReactFlow>
         </SubsystemCallbacksProvider>
       )}
-      {activeStepDef?.showWalkthroughTitle && focusedHop && (
+      {activeStepDef?.showTrailTitle && focusedStep && (
         <div
-          aria-label={`${focusedHop.walkthroughTitle}, step ${focusedHop.stepNo} of ${focusedHop.total}`}
+          aria-label={`${focusedStep.trailTitle}, step ${focusedStep.stepNo} of ${focusedStep.total}`}
           style={{
             position: 'absolute',
             top: 12,
@@ -581,14 +581,14 @@ function TransitionInner({
               textAlign: 'center',
             }}
           >
-            {focusedHop.walkthroughTitle}
+            {focusedStep.trailTitle}
           </div>
-          {focusedHop.total > 0 && (
+          {focusedStep.total > 0 && (
             <div style={{ display: 'flex', gap: 3, padding: '0 6px 5px' }} aria-hidden="true">
-              {Array.from({ length: focusedHop.total }, (_, i) => {
+              {Array.from({ length: focusedStep.total }, (_, i) => {
                 const n = i + 1;
-                const active = n === focusedHop.stepNo;
-                const done = n < focusedHop.stepNo;
+                const active = n === focusedStep.stepNo;
+                const done = n < focusedStep.stepNo;
                 return (
                   <span
                     key={n}

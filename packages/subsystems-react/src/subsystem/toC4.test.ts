@@ -18,7 +18,7 @@ const doc: SubsystemModelDocument = {
     { alias: 'x', name: 'Gist API', construct: 'external', file: '', purl: 'external:api.github.com/gists' },
     { alias: 'agent', name: 'Maintenance agent', construct: 'custom_entity', file: '', purl: 'external' },
   ],
-  walkthroughs: [
+  trails: [
     {
       id: 'w1',
       title: 'flow',

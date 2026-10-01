@@ -9,7 +9,7 @@ import type {
   SubsystemModelDocument,
 } from '../../../subsystem/model';
 import type { GraphifyComponentDetail } from '../../../graphify';
-import { components, graphSpecFromHops } from './fixtures';
+import { components, graphSpecFromSteps } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Scenarios',
@@ -92,7 +92,7 @@ const mermaidComponents: SubsystemComponent[] = [
   },
 ];
 
-const mermaidEdges = graphSpecFromHops([
+const mermaidEdges = graphSpecFromSteps([
   ['input', 'slide', 'feeds'],
   ['slide', 'chunk', 'produces'],
   ['chunk', 'lazy', 'feeds'],
@@ -106,7 +106,7 @@ function MermaidDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={mermaidComponents}
-        walkthroughs={mermaidEdges.walkthroughs}
+        trails={mermaidEdges.trails}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -137,7 +137,7 @@ const multiRepoComponents = components([
   ['rewire', 'extract.py', 'function', 'graphify/extract.py', graphifyPurl, 'corpus pass folding unique-label stubs onto definitions', '_rewire_unique_stub_nodes'],
 ]);
 
-const multiRepoEdges = graphSpecFromHops([
+const multiRepoEdges = graphSpecFromSteps([
   ['detail', 'reftypes', 'uses'],
   ['resolver', 'reftypes', 'uses'],
   ['resolver', 'engine', 'calls'],
@@ -151,7 +151,7 @@ function MultiRepoDemo() {
         title="Type-ref resolution across repos"
         description="Two repos → two file trees. Each tree is scoped to its repo's files and headed by the owner avatar + repo name. Cross-repo edges land on external stubs."
         components={multiRepoComponents}
-        walkthroughs={multiRepoEdges.walkthroughs}
+        trails={multiRepoEdges.trails}
       />
     </div>
   );
@@ -354,7 +354,7 @@ const accessSurfaceComponents: SubsystemComponent[] = [
   },
 ];
 
-const accessSurfaceEdges = graphSpecFromHops([
+const accessSurfaceEdges = graphSpecFromSteps([
   ['agents', 'http-entry', 'calls'],
   ['http-entry', 'create', 'calls'],
   ['http-entry', 'update', 'calls'],
@@ -384,7 +384,7 @@ function AccessSurfacesDemo() {
         title="Access surfaces, roles, and process boundaries"
         description="Two process regions (host, renderer) + boundary entries; agents and the external service float outside every boundary. Hover for the role badge; click the store to drill into its state-only detail."
         components={accessSurfaceComponents}
-        walkthroughs={accessSurfaceEdges.walkthroughs}
+        trails={accessSurfaceEdges.trails}
         onSelect={(id) => setSelected(id)}
         onEdgeSelect={(e) => setSelectedEdge(e)}
       />
@@ -534,7 +534,7 @@ const storeFlavorComponents: SubsystemComponent[] = [
   },
 ];
 
-const storeFlavorEdges = graphSpecFromHops([
+const storeFlavorEdges = graphSpecFromSteps([
   ['f1-create', 'f1-store', 'writes'],
   ['f1-get', 'f1-store', 'reads'],
   ['f2-cache', 'f2-store', 'writes'],
@@ -549,7 +549,7 @@ function StoreFlavorsDemo() {
         title="Store flavors"
         description="construct:= the node's verifiable anchor. Class-managed stores are TWO nodes: the manager class (declaration, methods) + the state (store block). Click any node to see its anchor-honest drill-down."
         components={storeFlavorComponents}
-        walkthroughs={storeFlavorEdges.walkthroughs}
+        trails={storeFlavorEdges.trails}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -637,7 +637,7 @@ const sharedStoreComponents: SubsystemComponent[] = [
   },
 ];
 
-const sharedStoreEdges = graphSpecFromHops([
+const sharedStoreEdges = graphSpecFromSteps([
   ['ss-load', 'ss-store', 'reads'],
   ['ss-save', 'ss-store', 'writes'],
   ['ss-watch', 'ss-store', 'watches'],
@@ -652,7 +652,7 @@ function SharedStoreDemo() {
         title="Shared store across processes"
         description="A store with no process sits outside every boundary; accessors from both processes reach across to it."
         components={sharedStoreComponents}
-        walkthroughs={sharedStoreEdges.walkthroughs}
+        trails={sharedStoreEdges.trails}
         onEdgeSelect={(e) => setSelectedEdge(e)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -919,7 +919,7 @@ const storeSpectrumComponents: SubsystemComponent[] = [
   },
 ];
 
-const storeSpectrumEdges = graphSpecFromHops([
+const storeSpectrumEdges = graphSpecFromSteps([
   ['load', 'db', 'reads'],
   ['create', 'graph-store', 'writes'],
   ['cache', 'cache-state', 'writes'],
@@ -938,7 +938,7 @@ function StoreStateSpectrumDemo() {
         title="State → Store spectrum, all modeled as store"
         description="Every holder here claims construct: 'store' (state-block anatomy). They differ only in what they hold and how long it lives. Which ones do you call a store? Where is the cut?"
         components={storeSpectrumComponents}
-        walkthroughs={storeSpectrumEdges.walkthroughs}
+        trails={storeSpectrumEdges.trails}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -1114,7 +1114,7 @@ const typeSpectrumComponents: SubsystemComponent[] = [
   },
 ];
 
-const typeSpectrumEdges = graphSpecFromHops([
+const typeSpectrumEdges = graphSpecFromSteps([
   ['listener', 'subscriber', 'uses'],
   ['subscriber', 'messages', 'uses'],
   ['state', 'listener', 'feeds'],
@@ -1130,7 +1130,7 @@ function TypeFamilySpectrumDemo() {
         title="Type-family — what a type can hold"
         description="Structured buckets: callable signature (generics + params), interface properties, enum members, union, plain alias reference. `rhs` = verbatim escape hatch for shapes that don't fit (mapped/conditional/template-literal). Click each to see the declaration."
         components={typeSpectrumComponents}
-        walkthroughs={typeSpectrumEdges.walkthroughs}
+        trails={typeSpectrumEdges.trails}
         onSelect={(id) => setSelected(id)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -1209,7 +1209,7 @@ const queueComponents: SubsystemComponent[] = [
   },
 ];
 
-const queueEdges = graphSpecFromHops([
+const queueEdges = graphSpecFromSteps([
   ['q-producer', 'q-queue', 'writes'],
   ['q-worker', 'q-queue', 'reads'],
   ['q-worker', 'q-results', 'writes'],
@@ -1223,7 +1223,7 @@ function QueueAsStoreDemo() {
         title="Queue as store"
         description="Ordered retained state. Stores as pipeline stages: producer writes the queue, the worker reads it and writes results."
         components={queueComponents}
-        walkthroughs={queueEdges.walkthroughs}
+        trails={queueEdges.trails}
         onEdgeSelect={(e) => setSelectedEdge(e)}
       />
       <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12, color: '#aaa' }}>
@@ -1343,10 +1343,10 @@ const dataVizDoc: SubsystemModelDocument = {
       },
     },
   ],
-  walkthroughs: [
+  trails: [
     {
-      id: 'data-viz-hops',
-      title: 'Runtime hops',
+      id: 'data-viz-steps',
+      title: 'Runtime steps',
       steps: [
         { from: 'agents', to: 'http-entry', mechanism: 'calls', file: 'src/http.ts', line: 1 },
         { from: 'http-entry', to: 'create', mechanism: 'calls', file: 'src/http.ts', line: 2 },
@@ -1430,7 +1430,7 @@ function DataVsVisualizationDemo() {
           title="the visualization"
           description="Same document, rendered: construct:→ node anatomy, role → topology glyph, process → boundary region, mechanism → edge color/style."
           components={doc.components}
-          walkthroughs={doc.walkthroughs}
+          trails={doc.trails}
         />
       </div>
     </div>

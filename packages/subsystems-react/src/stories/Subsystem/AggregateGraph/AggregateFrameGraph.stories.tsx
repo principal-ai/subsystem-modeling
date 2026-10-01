@@ -29,7 +29,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 // ---------------------------------------------------------------------------
-// Frame-level aggregate: process/module boxes with deduped walkthrough flows.
+// Frame-level aggregate: process/module boxes with deduped trail flows.
 // Same stack as the component graph (React Flow + ELK), purpose-built nodes.
 // Hover highlights the neighborhood; click selects and lists members.
 // ---------------------------------------------------------------------------

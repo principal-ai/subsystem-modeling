@@ -2,7 +2,7 @@
  * Persistent storage for subsystem models.
  *
  * Layout: `~/.principal/subsystem-models/<id>.json` + `_index.json`
- * mirrors the trail/topic conventions. Each file is a
+ * mirrors the topic store conventions. Each file is a
  * `StoredSubsystemModel` record; the index is a lightweight cache for
  * listing without full-file parsing.
  *
@@ -22,9 +22,9 @@ import type {
 	SubsystemComponentEdge,
 	SubsystemEdgeMechanism,
 	SubsystemModelDocument,
-	SubsystemWalkthrough,
-	SubsystemWalkthroughMechanism,
-	SubsystemWalkthroughStep,
+	SubsystemTrail,
+	SubsystemTrailMechanism,
+	SubsystemTrailStep,
 	StudioMessages,
 } from "../shared/contract";
 
@@ -36,8 +36,8 @@ export type {
 	SubsystemComponent,
 	SubsystemComponentEdge,
 	SubsystemModelDocument,
-	SubsystemWalkthrough,
-	SubsystemWalkthroughStep,
+	SubsystemTrail,
+	SubsystemTrailStep,
 };
 
 /**
@@ -185,8 +185,8 @@ export interface StoredSubsystemModel extends SubsystemDocumentBody {
 	/** Ordered execution stories over the graph's edges (one per flow). Mirrors
 	 *  the wire `StoredSubsystemModel` in ../shared/contract; duplicated here
 	 *  until the react package (this type's `SubsystemModelDocument` origin)
-	 *  carries `walkthroughs`. */
-	walkthroughs?: SubsystemWalkthrough[];
+	 *  carries `trails`. */
+	trails?: SubsystemTrail[];
 	createdAt: string;
 	updatedAt: string;
 	/**
@@ -251,18 +251,18 @@ export interface SubsystemModelVerification {
 	/** Components carrying hand-authored declarations. */
 	declarationsAuthored: number;
 	/**
-	 * Walkthrough step sites that fully resolved (file + line resolve against a
+	 * Trail step sites that fully resolved (file + line resolve against a
 	 * local root). Steps whose edge endpoints have no local root are skipped,
 	 * not failed — absence of a machine is not an error.
 	 */
-	walkthroughsChecked: number;
+	trailsChecked: number;
 	/**
-	 * Walkthrough steps that could not be taken as claimed: missing file, line
+	 * Trail steps that could not be taken as claimed: missing file, line
 	 * out of range, or a blank site line. (Text affinity — "does the line
-	 * mention the hop?" — is heuristic and intentionally not checked here.)
+	 * mention the step?" — is heuristic and intentionally not checked here.)
 	 */
-	walkthroughsFailed: Array<{
-		walkthroughId: string;
+	trailsFailed: Array<{
+		trailId: string;
 		step: number;
 		from: string;
 		to: string;
@@ -311,7 +311,7 @@ interface IndexFile {
  * a published member goes missing here. The store test additionally pins the
  * exact list as a runtime check.
  */
-export const SUBSYSTEM_WALKTHROUGH_MECHANISMS = [
+export const SUBSYSTEM_TRAIL_MECHANISMS = [
 	"calls",
 	"uses",
 	"feeds",
@@ -320,10 +320,10 @@ export const SUBSYSTEM_WALKTHROUGH_MECHANISMS = [
 	"reads",
 	"watches",
 	"registers-into",
-] as const satisfies readonly SubsystemWalkthroughMechanism[];
+] as const satisfies readonly SubsystemTrailMechanism[];
 
 export const SUBSYSTEM_EDGE_MECHANISMS = [
-	...SUBSYSTEM_WALKTHROUGH_MECHANISMS,
+	...SUBSYSTEM_TRAIL_MECHANISMS,
 ] as const satisfies readonly SubsystemEdgeMechanism[];
 
 export type EdgeMechanism = (typeof SUBSYSTEM_EDGE_MECHANISMS)[number];
@@ -496,7 +496,7 @@ export function resolveRepoRootForComponent(
 }
 
 /**
- * Backfill file-anchored `purl`s on walkthrough steps written before step
+ * Backfill file-anchored `purl`s on trail steps written before step
  * purls were required. Derives `repoKey(endpointPurl)#step.file` from the
  * step's from ?? to component — the same attribution verification and the
  * file panel already used. Mutates the passed record in place and returns
@@ -504,7 +504,7 @@ export function resolveRepoRootForComponent(
  */
 export function backfillStepPurls(doc: {
 	components?: ReadonlyArray<{ alias: string; purl?: string }>;
-	walkthroughs?: Array<{
+	trails?: Array<{
 		steps?: Array<{ file?: string; purl?: string; from?: string; to?: string }>;
 	}>;
 }): boolean {
@@ -512,7 +512,7 @@ export function backfillStepPurls(doc: {
 		(doc.components ?? []).map((c) => [c.alias, c]),
 	);
 	let filled = false;
-	for (const w of doc.walkthroughs ?? []) {
+	for (const w of doc.trails ?? []) {
 		for (const s of w.steps ?? []) {
 			if (s.purl || !s.file) continue;
 			const key = purlRepoKey(
@@ -542,13 +542,13 @@ export function fileDeclaresSymbol(content: string, symbol: string): boolean {
 
 /**
  * Check every component's `file` against its repo's local root. When the graph
- * carries `walkthroughs`, each step's site is also resolved. Symbol presence is
+ * carries `trails`, each step's site is also resolved. Symbol presence is
  * intentionally not checked here (graphify audit owns that). Purely
  * informational — never blocks create/update.
  */
 export async function verifyModelFiles(
 	doc: SubsystemDocumentBody & {
-		walkthroughs?: SubsystemWalkthrough[];
+		trails?: SubsystemTrail[];
 	},
 ): Promise<SubsystemModelVerification> {
 	const missing: Array<{ componentAlias: string; file: string }> = [];
@@ -584,20 +584,20 @@ export async function verifyModelFiles(
 		}
 		// Symbol presence is verified via graphify (audit), not a text regex here.
 	}
-	// Walkthrough step sites — alias-backed, so resolution reuses the same
+	// Trail step sites — alias-backed, so resolution reuses the same
 	// repo-root logic as components.
-	let walkthroughsChecked = 0;
-	const walkthroughsFailed: SubsystemModelVerification["walkthroughsFailed"] = [];
-	if (Array.isArray(doc.walkthroughs)) {
+	let trailsChecked = 0;
+	const trailsFailed: SubsystemModelVerification["trailsFailed"] = [];
+	if (Array.isArray(doc.trails)) {
 		const componentByAlias = new Map<string, SubsystemComponent>();
 		for (const c of doc.components) componentByAlias.set(c.alias, c);
-		for (const tl of doc.walkthroughs) {
+		for (const tl of doc.trails) {
 			if (!Array.isArray(tl.steps)) continue;
 			for (let i = 0; i < tl.steps.length; i++) {
 				const step = tl.steps[i];
 				const fail = (reason: string) =>
-					walkthroughsFailed.push({
-						walkthroughId: tl.id,
+					trailsFailed.push({
+						trailId: tl.id,
 						step: i,
 						from: step.from,
 						to: step.to,
@@ -628,7 +628,7 @@ export async function verifyModelFiles(
 						fail(`line ${step.line} in ${step.file} is blank`);
 						continue;
 					}
-					walkthroughsChecked++;
+					trailsChecked++;
 				} catch {
 					fail(`file ${JSON.stringify(step.file)} not found under ${root}`);
 				}
@@ -645,8 +645,8 @@ export async function verifyModelFiles(
 		symbolsMissing,
 		declarationsVerified,
 		declarationsAuthored,
-		walkthroughsChecked,
-		walkthroughsFailed,
+		trailsChecked,
+		trailsFailed,
 	};
 }
 
@@ -865,7 +865,7 @@ export async function createSubsystemModel(
 	doc: SubsystemDocumentBody & {
 		title: string;
 		description?: string;
-		walkthroughs?: SubsystemWalkthrough[];
+		trails?: SubsystemTrail[];
 	},
 ): Promise<StoredSubsystemModel> {
 	await ensureDir();
@@ -896,7 +896,7 @@ export async function updateSubsystemModel(
 			| "title"
 			| "description"
 			| "components"
-			| "walkthroughs"
+			| "trails"
 			| "gist"
 		>
 	>,

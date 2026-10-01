@@ -1,12 +1,12 @@
 /**
- * WalkthroughsPanel — the sidebar's flows panel: the ordered list of a
- * subsystem's walkthroughs, each rendered as a collapsible `WalkthroughFlow`
+ * TrailsPanel — the sidebar's flows panel: the ordered list of a
+ * subsystem's trails, each rendered as a collapsible `TrailFlow`
  * row. Extracted from `SubsystemComponentGraph`'s `Inner` so the panel (and the
  * drag-to-reorder controller it hosts) is a component boundary of its own.
  *
- * Ordering is authored order: the list renders `walkthroughs` in array order.
+ * Ordering is authored order: the list renders `trails` in array order.
  * When `onReorder` is supplied, each row grows a grip in its header and dropping
- * a row onto another emits the reordered array (see `reorderWalkthroughs`); the
+ * a row onto another emits the reordered array (see `reorderTrails`); the
  * host owns persistence.
  */
 
@@ -17,36 +17,36 @@ import { Check, ChevronDown, Copy, GripVertical, Pause, Play } from 'lucide-reac
 import {
   PROPOSED_COLOR,
   reorderTargetIndex,
-  reorderWalkthroughs,
-  walkthroughStepGraphEdgeId,
-  type SubsystemWalkthrough,
+  reorderTrails,
+  trailStepGraphEdgeId,
+  type SubsystemTrail,
 } from './model';
-import { buildStepBrief } from './walkthroughBrief';
+import { buildStepBrief } from './trailBrief';
 
-/** Pause (ms) between steps when a walkthrough autoplays. */
-export const WALKTHROUGH_PLAY_PAUSE_MS = 2500;
+/** Pause (ms) between steps when a trail autoplays. */
+export const TRAIL_PLAY_PAUSE_MS = 2500;
 
 /** How long a step's copy button flashes its "copied" checkmark (ms). */
 export const STEP_COPY_FEEDBACK_MS = 2000;
 
-/** Square size (px) of a walkthrough header's Play/Collapse control. */
-const WALKTHROUGH_CONTROL_SIZE = 34;
+/** Square size (px) of a trail header's Play/Collapse control. */
+const TRAIL_CONTROL_SIZE = 34;
 
 /** Drag state handed to a row's grip while a reorder is in flight. */
-interface WalkthroughReorderHandle {
+interface TrailReorderHandle {
   index: number;
   isDragging: boolean;
   onDragStart: (index: number, e: ReactDragEvent) => void;
   onDragEnd: () => void;
 }
 
-/** One collapsible walkthrough in the sidebar's flows panel. Clicking the
+/** One collapsible trail in the sidebar's flows panel. Clicking the
  *  title: closed → open + select; open with a step selected → select the whole
  *  flow (deselect the step, stay open); open with the whole flow selected →
  *  close + clear focus. The right-aligned close button collapses without
  *  selecting. A step row focuses that step's edge. */
-function WalkthroughFlow({
-  walkthrough,
+function TrailFlow({
+  trail,
   collapsed,
   active,
   onToggleCollapsed,
@@ -61,20 +61,20 @@ function WalkthroughFlow({
   isHoverSuppressed,
   proposedAliases,
 }: {
-  walkthrough: SubsystemWalkthrough;
+  trail: SubsystemTrail;
   collapsed: boolean;
   /** `{ stepIndex: null }` = whole flow focused; `{ stepIndex }` = one step. */
   active: { stepIndex: number | null } | null;
   onToggleCollapsed: (tlId: string) => void;
-  onFocusFlow: (tl: SubsystemWalkthrough) => void;
+  onFocusFlow: (tl: SubsystemTrail) => void;
   onClearFocus: () => void;
-  onFocusStep: (tl: SubsystemWalkthrough, stepIndex: number) => void;
-  onHoverStep: (tl: SubsystemWalkthrough, stepIndex: number) => void;
+  onFocusStep: (tl: SubsystemTrail, stepIndex: number) => void;
+  onHoverStep: (tl: SubsystemTrail, stepIndex: number) => void;
   /** Preview the whole flow on the canvas (used while the row is collapsed). */
-  onHoverFlow: (tl: SubsystemWalkthrough) => void;
+  onHoverFlow: (tl: SubsystemTrail) => void;
   onLeaveStep: () => void;
   /** When set, renders a grip in the header that starts a reorder drag. */
-  reorder?: WalkthroughReorderHandle;
+  reorder?: TrailReorderHandle;
   /** True while any row is mid-drag; used to reset stale hover styling. */
   dragActive?: boolean;
   /** True just after a drop; ignores the browser's synthetic hover until the pointer moves. */
@@ -93,7 +93,7 @@ function WalkthroughFlow({
   // A step is "proposed" when either endpoint is a proposed component.
   const stepProposed = (from: string, to: string) =>
     proposedAliases != null && (proposedAliases.has(from) || proposedAliases.has(to));
-  const touchesProposed = walkthrough.steps.some((s) => stepProposed(s.from, s.to));
+  const touchesProposed = trail.steps.some((s) => stepProposed(s.from, s.to));
   const [headerHover, setHeaderHover] = useState(false);
   const [collapseHover, setCollapseHover] = useState(false);
   const [playHover, setPlayHover] = useState(false);
@@ -125,7 +125,7 @@ function WalkthroughFlow({
 
   const copyStep = useCallback(
     (stepIndex: number) => {
-      const brief = buildStepBrief(walkthrough, stepIndex);
+      const brief = buildStepBrief(trail, stepIndex);
       if (brief.length === 0) return;
       const clipboard = navigator.clipboard;
       if (!clipboard) return;
@@ -145,7 +145,7 @@ function WalkthroughFlow({
           // best-effort — show nothing when the clipboard is unavailable
         });
     },
-    [walkthrough],
+    [trail],
   );
 
   useEffect(
@@ -167,9 +167,9 @@ function WalkthroughFlow({
   }, [dragActive]);
 
   const startPlaying = useCallback(() => {
-    if (collapsed) onToggleCollapsed(walkthrough.id);
-    if (active === null || active.stepIndex !== null) onFocusFlow(walkthrough);
-    const stepCount = walkthrough.steps.length;
+    if (collapsed) onToggleCollapsed(trail.id);
+    if (active === null || active.stepIndex !== null) onFocusFlow(trail);
+    const stepCount = trail.steps.length;
     if (stepCount === 0) return;
     setPlaying(true);
     let i = 0;
@@ -179,12 +179,12 @@ function WalkthroughFlow({
         setPlaying(false);
         return;
       }
-      onFocusStep(walkthrough, i);
+      onFocusStep(trail, i);
       i += 1;
-      playTimerRef.current = window.setTimeout(tick, WALKTHROUGH_PLAY_PAUSE_MS);
+      playTimerRef.current = window.setTimeout(tick, TRAIL_PLAY_PAUSE_MS);
     };
     tick();
-  }, [collapsed, active, onToggleCollapsed, onFocusFlow, walkthrough, onFocusStep]);
+  }, [collapsed, active, onToggleCollapsed, onFocusFlow, trail, onFocusStep]);
 
   const togglePlay = useCallback(() => {
     if (playing) {
@@ -208,7 +208,7 @@ function WalkthroughFlow({
         onMouseEnter={() => {
           if (isHoverSuppressed?.()) return;
           setHeaderHover(true);
-          if (collapsed) onHoverFlow(walkthrough);
+          if (collapsed) onHoverFlow(trail);
         }}
         onMouseLeave={() => {
           setHeaderHover(false);
@@ -218,7 +218,7 @@ function WalkthroughFlow({
           display: 'flex',
           alignItems: 'center',
           gap: 4,
-          height: WALKTHROUGH_CONTROL_SIZE,
+          height: TRAIL_CONTROL_SIZE,
           padding: '0 0 0 16px',
           background: wholeFlowActive || headerHover ? hoverBg : 'transparent',
           transition: 'background 120ms ease',
@@ -228,16 +228,16 @@ function WalkthroughFlow({
           type="button"
           onClick={() => {
             if (collapsed) {
-              onToggleCollapsed(walkthrough.id);
-              onFocusFlow(walkthrough);
+              onToggleCollapsed(trail.id);
+              onFocusFlow(trail);
             } else if (active !== null && active.stepIndex === null) {
               // Whole flow already selected → collapse + clear.
-              onToggleCollapsed(walkthrough.id);
+              onToggleCollapsed(trail.id);
               onClearFocus();
             } else {
               // Expanded with nothing (or a step) selected → select the whole
               // flow, which deselects any focused step without collapsing.
-              onFocusFlow(walkthrough);
+              onFocusFlow(trail);
             }
           }}
           style={{
@@ -263,14 +263,14 @@ function WalkthroughFlow({
               color: touchesProposed ? PROPOSED_COLOR : theme.colors.text,
             }}
           >
-            {walkthrough.title}
+            {trail.title}
           </span>
         </button>
         {!collapsed && (
           <>
           <button
             type="button"
-            aria-label={playing ? `Pause ${walkthrough.title} autoplay` : `Play ${walkthrough.title}`}
+            aria-label={playing ? `Pause ${trail.title} autoplay` : `Play ${trail.title}`}
             title={playing ? 'Pause' : 'Play through steps'}
             onMouseEnter={() => setPlayHover(true)}
             onMouseLeave={() => setPlayHover(false)}
@@ -284,7 +284,7 @@ function WalkthroughFlow({
               justifyContent: 'center',
               flexShrink: 0,
               alignSelf: 'stretch',
-              width: WALKTHROUGH_CONTROL_SIZE,
+              width: TRAIL_CONTROL_SIZE,
               padding: 0,
               border: 'none',
               borderRadius: 0,
@@ -298,13 +298,13 @@ function WalkthroughFlow({
           </button>
           <button
             type="button"
-            aria-label={`Collapse ${walkthrough.title}`}
+            aria-label={`Collapse ${trail.title}`}
             title="Collapse"
             onMouseEnter={() => setCollapseHover(true)}
             onMouseLeave={() => setCollapseHover(false)}
             onClick={(e) => {
               e.stopPropagation();
-              onToggleCollapsed(walkthrough.id);
+              onToggleCollapsed(trail.id);
               if (active !== null) onClearFocus();
             }}
             style={{
@@ -313,7 +313,7 @@ function WalkthroughFlow({
               justifyContent: 'center',
               flexShrink: 0,
               alignSelf: 'stretch',
-              width: WALKTHROUGH_CONTROL_SIZE,
+              width: TRAIL_CONTROL_SIZE,
               padding: 0,
               border: 'none',
               borderRadius: 0,
@@ -332,7 +332,7 @@ function WalkthroughFlow({
             role="button"
             tabIndex={-1}
             draggable
-            aria-label={`Reorder ${walkthrough.title}`}
+            aria-label={`Reorder ${trail.title}`}
             title="Drag to reorder"
             onMouseEnter={() => {
               if (!isHoverSuppressed?.()) setGripHover(true);
@@ -364,7 +364,7 @@ function WalkthroughFlow({
             onLeaveStep();
           }}
         >
-          {walkthrough.steps.map((step, i) => {
+          {trail.steps.map((step, i) => {
             const stepActive = active !== null && active.stepIndex === i;
             const proposed = stepProposed(step.from, step.to);
             const revealed =
@@ -373,7 +373,7 @@ function WalkthroughFlow({
             const copyHovered = copyHoverStep === i;
             return (
               <div
-                key={`${walkthroughStepGraphEdgeId(step)}-${i}`}
+                key={`${trailStepGraphEdgeId(step)}-${i}`}
                 style={{ position: 'relative' }}
                 onFocus={() => setFocusedStep(i)}
                 onBlur={(e) => {
@@ -390,9 +390,9 @@ function WalkthroughFlow({
                   title={proposed ? 'Step touches a proposed component' : undefined}
                   onMouseEnter={() => {
                     setHoveredStep(i);
-                    onHoverStep(walkthrough, i);
+                    onHoverStep(trail, i);
                   }}
-                  onClick={() => onFocusStep(walkthrough, i)}
+                  onClick={() => onFocusStep(trail, i)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -443,7 +443,7 @@ function WalkthroughFlow({
                 {revealed && (
                   <button
                     type="button"
-                    aria-label={`Copy step ${i + 1} of ${walkthrough.title} for an agent`}
+                    aria-label={`Copy step ${i + 1} of ${trail.title} for an agent`}
                     title={copied ? 'Copied' : 'Copy this step for an agent'}
                     onMouseDown={(e) => e.preventDefault()}
                     onMouseEnter={() => setCopyHoverStep(i)}
@@ -490,30 +490,30 @@ function WalkthroughFlow({
   );
 }
 
-export interface WalkthroughsPanelProps {
-  /** Ordered walkthroughs — the list renders them in array order. */
-  walkthroughs: SubsystemWalkthrough[];
+export interface TrailsPanelProps {
+  /** Ordered trails — the list renders them in array order. */
+  trails: SubsystemTrail[];
   /** Ids of the rows whose step lists are expanded. */
-  expandedWalkthroughs: Set<string>;
-  focusedWalkthroughId: string | null;
+  expandedTrails: Set<string>;
+  focusedTrailId: string | null;
   focusedStepIndex: number | null;
-  hoveredWalkthroughStep: {
-    walkthroughId: string;
+  hoveredTrailStep: {
+    trailId: string;
     stepIndex: number | null;
   } | null;
   onToggleCollapsed: (tlId: string) => void;
-  onFocusFlow: (tl: SubsystemWalkthrough) => void;
+  onFocusFlow: (tl: SubsystemTrail) => void;
   onClearFocus: () => void;
-  onFocusStep: (tl: SubsystemWalkthrough, stepIndex: number) => void;
-  onHoverStep: (tl: SubsystemWalkthrough, stepIndex: number) => void;
-  onHoverFlow: (tl: SubsystemWalkthrough) => void;
+  onFocusStep: (tl: SubsystemTrail, stepIndex: number) => void;
+  onHoverStep: (tl: SubsystemTrail, stepIndex: number) => void;
+  onHoverFlow: (tl: SubsystemTrail) => void;
   onLeaveStep: () => void;
   /**
    * When set, rows grow a drag grip (and become drop targets) so a drop emits
    * the reordered array. Grips show only while every row is collapsed. Omit
    * for a read-only panel.
    */
-  onReorder?: (next: SubsystemWalkthrough[]) => void;
+  onReorder?: (next: SubsystemTrail[]) => void;
   /**
    * Aliases of components marked `proposed`. A row whose steps touch one gets
    * its title tinted, and each such step (index and title) is tinted too
@@ -523,16 +523,16 @@ export interface WalkthroughsPanelProps {
 }
 
 /**
- * The flows panel: a scroll container of `WalkthroughFlow` rows, optionally
+ * The flows panel: a scroll container of `TrailFlow` rows, optionally
  * drag-reorderable. The host owns the array; a drop calls `onReorder` with the
  * next order and the host re-renders with it.
  */
-export function WalkthroughsPanel({
-  walkthroughs,
-  expandedWalkthroughs,
-  focusedWalkthroughId,
+export function TrailsPanel({
+  trails,
+  expandedTrails,
+  focusedTrailId,
   focusedStepIndex,
-  hoveredWalkthroughStep,
+  hoveredTrailStep,
   onToggleCollapsed,
   onFocusFlow,
   onClearFocus,
@@ -542,12 +542,12 @@ export function WalkthroughsPanel({
   onLeaveStep,
   onReorder,
   proposedAliases,
-}: WalkthroughsPanelProps) {
+}: TrailsPanelProps) {
   const { theme } = useTheme();
   // Reordering is offered only while every row is collapsed: the compact list
   // is what you drag, and expanded step lists would make drop targets tall and
   // the landing boundary ambiguous.
-  const allCollapsed = walkthroughs.every((w) => !expandedWalkthroughs.has(w.id));
+  const allCollapsed = trails.every((w) => !expandedTrails.has(w.id));
   const reorderable = onReorder != null && allCollapsed;
   // Row being dragged, and the gap the pointer is over (boundaries 0..n
   // between rows). The boundary is where the dragged row will be inserted.
@@ -621,9 +621,9 @@ export function WalkthroughsPanel({
       // Removing the dragged row shifts every boundary after it down one.
       const target = reorderTargetIndex(boundary, from);
       if (target === from) return;
-      onReorder(reorderWalkthroughs(walkthroughs, from, target));
+      onReorder(reorderTrails(trails, from, target));
     },
-    [dragIndex, dropBoundary, onReorder, resetDrag, walkthroughs],
+    [dragIndex, dropBoundary, onReorder, resetDrag, trails],
   );
 
   const accent = theme.colors.accent ?? theme.colors.primary ?? theme.colors.text;
@@ -639,19 +639,19 @@ export function WalkthroughsPanel({
       }}
       onDragEnd={reorderable ? resetDrag : undefined}
     >
-      {walkthroughs.map((tl, i) => {
+      {trails.map((tl, i) => {
         const isDragging = dragIndex === i;
         // One indicator per boundary: a row's top edge for boundaries above it,
         // the last row's bottom edge for the boundary at the very end.
         const showTop = reorderable && dropBoundary === i;
         const showBottom =
           reorderable &&
-          i === walkthroughs.length - 1 &&
-          dropBoundary === walkthroughs.length;
+          i === trails.length - 1 &&
+          dropBoundary === trails.length;
         return (
           <div
             key={tl.id}
-            data-walkthrough-row={tl.id}
+            data-trail-row={tl.id}
             data-reorder-index={i}
             onDragOver={reorderable ? (e) => handleDragOver(e, i) : undefined}
             onDrop={reorderable ? handleDrop : undefined}
@@ -692,14 +692,14 @@ export function WalkthroughsPanel({
                 }}
               />
             )}
-            <WalkthroughFlow
-              walkthrough={tl}
-              collapsed={!expandedWalkthroughs.has(tl.id)}
+            <TrailFlow
+              trail={tl}
+              collapsed={!expandedTrails.has(tl.id)}
               active={
-                focusedWalkthroughId === tl.id
+                focusedTrailId === tl.id
                   ? { stepIndex: focusedStepIndex }
-                  : hoveredWalkthroughStep?.walkthroughId === tl.id
-                    ? { stepIndex: hoveredWalkthroughStep.stepIndex }
+                  : hoveredTrailStep?.trailId === tl.id
+                    ? { stepIndex: hoveredTrailStep.stepIndex }
                     : null
               }
               onToggleCollapsed={onToggleCollapsed}

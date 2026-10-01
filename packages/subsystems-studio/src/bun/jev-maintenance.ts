@@ -90,8 +90,8 @@ const LANE_SUBJECT: Record<SubsystemVerificationLane, string> = {
 		"The proposed package/module containment claim is accurate given the source under review.",
 	"dynamic-topology":
 		"The proposed process (runtime deployment-unit) membership is accurate given the source under review.",
-	walkthrough:
-		"The proposed walkthrough step is accurate given the source under review.",
+	trail:
+		"The proposed trail step is accurate given the source under review.",
 };
 
 /** Construct-lane wording, finer-grained by change. */
@@ -179,12 +179,12 @@ export function changeKindQuestion(proposal: SubsystemModelProposal): {
 					process_fix: "Correcting a component's process (deployment unit)",
 				},
 			};
-		case "walkthrough":
+		case "trail":
 			return {
-				instructions: "What kind of walkthrough correction is this?",
+				instructions: "What kind of trail correction is this?",
 				criteria: {
-					walkthrough_fix:
-						"Correcting a walkthrough step (file, line, symbol, from/to, mechanism)",
+					trail_fix:
+						"Correcting a trail step (file, line, symbol, from/to, mechanism)",
 				},
 			};
 		default:

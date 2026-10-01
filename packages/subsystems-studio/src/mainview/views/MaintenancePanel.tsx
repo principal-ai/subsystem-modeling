@@ -77,10 +77,10 @@ const LANE_HELP: Record<SubsystemVerificationLane, { name: string; blurb: string
 			blurb:
 				"Layer 3 — runtime arrangement: deployment-unit membership via the process each construct runs in.",
 		},
-		walkthrough: {
-			name: "Walkthrough verification",
+		trail: {
+			name: "Trail verification",
 			blurb:
-				"Layer 4 — runtime file:line seams on walkthrough hops: each step's file, line, symbol, and mechanism.",
+				"Layer 4 — runtime file:line seams on trail steps: each step's file, line, symbol, and mechanism.",
 		},
 	};
 

@@ -985,7 +985,7 @@ export async function verifySubsystemModel(
  * Dry-run deterministic audit focused on component currency: files exist,
  * symbols declare, declaration freshness, and (when graphify is ready)
  * construct/signature/anchor checks, plus mechanical process/module boundary
- * membership. Walkthrough site affinity is intentionally omitted — that seam
+ * membership. Trail site affinity is intentionally omitted — that seam
  * check is heuristic and better suited to an agent pass.
  *
  * Always returns a per-component `checks` checklist so a clean run still shows
@@ -1450,7 +1450,7 @@ export async function auditSubsystemModel(
 		externalsSkipped,
 		missingFiles: files.missingCount,
 		missingSymbols,
-		walkthroughFailures: 0,
+		trailFailures: 0,
 		staleDeclarations,
 		constructMismatches,
 		signatureMismatches,
@@ -1499,7 +1499,7 @@ export async function auditSubsystemModel(
 	// reproducible commit, so we leave verifiedAtCommits unstamped.
 	if (classifyAuditReport(report) === "fully_verified") {
 		try {
-			if (await referencedFilesClean(graph.components, graph.walkthroughs)) {
+			if (await referencedFilesClean(graph.components, graph.trails)) {
 				const commits = await capturePurlCommits(graph.components);
 				await stampVerifiedCommits(graphId, commits);
 			}

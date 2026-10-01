@@ -1,13 +1,13 @@
 /**
- * Client-side helper for handing a local trail off to a running Principal
+ * Client-side helper for handing a local topic off to a running Principal
  * desktop app (electron-app) over its MCP bridge HTTP surface.
  *
  * Preferred over the Unix-socket handoff (viewer-ipc.ts) when the desktop app
- * is running: the bridge's `POST /api/file-city/trail/activate` route reads the
- * same on-disk trail store the app persists to, so a *local* trail id resolves
- * and opens in the app without a network fetch or GitHub token. Returns false
- * (caller falls back to the standalone viewer) when the app isn't running, the
- * probe times out, or the app doesn't have that trail.
+ * is running: the bridge's `POST /api/topics/<id>/activate` route reads the same
+ * on-disk topic store the app persists to, so a *local* topic id resolves and
+ * opens in the app without a network fetch. Returns false (caller falls back to
+ * its local path) when the app isn't running, the probe times out, or the app
+ * doesn't have that topic.
  *
  * Duplicated rather than shared because cli and electron-app are independent
  * packages in separate repos — the HTTP route is the contract, this module
@@ -43,12 +43,6 @@ const PROBE_TIMEOUT_MS = 300;
 // The activate call opens/focuses a window; allow a little more headroom.
 const ACTIVATE_TIMEOUT_MS = 2_000;
 
-interface ActivateResponse {
-  success?: boolean;
-  windowOpened?: string;
-  broadcastTo?: number;
-}
-
 /**
  * Probe the candidate bases and return the first that answers /health, so the
  * follow-up activate call reuses the exact host that worked. Returns null when
@@ -69,45 +63,12 @@ async function reachableBase(): Promise<string | null> {
 }
 
 /**
- * Ask a running desktop app to open `trailId` from its local store. Returns
- * true only when the app actually surfaced the trail — i.e. it found the id AND
- * opened/focused a window (or broadcast the payload to an open one). A 404 (app
- * running but trail not in its store) or a no-window result returns false so the
- * caller can fall back to the standalone viewer.
- */
-export async function handoffToBridge(trailId: string): Promise<boolean> {
-  const base = await reachableBase();
-  if (!base) return false;
-
-  let res: Response;
-  try {
-    res = await fetch(`${base}/api/file-city/trail/activate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: trailId }),
-      signal: AbortSignal.timeout(ACTIVATE_TIMEOUT_MS),
-    });
-  } catch {
-    return false;
-  }
-  if (!res.ok) return false;
-
-  let data: ActivateResponse;
-  try {
-    data = (await res.json()) as ActivateResponse;
-  } catch {
-    return false;
-  }
-
-  const surfaced =
-    (data.windowOpened !== undefined && data.windowOpened !== 'none') ||
-    (typeof data.broadcastTo === 'number' && data.broadcastTo > 0);
-  return data.success === true && surfaced;
-}
-
-/**
- * Ask a running desktop app to open `topicId` from its local store. Mirrors
- * `handoffToBridge` but targets the topic activate route.
+ * Ask a running desktop app to open `topicId` from its local store.
+ *
+ * Returns true only when the app actually surfaced the topic — i.e. it found the
+ * id AND opened/focused a window (or broadcast the payload to an open one). A 404
+ * (app running but topic not in its store) or a no-window result returns false
+ * so the caller can fall back.
  */
 export async function handoffTopicToBridge(topicId: string): Promise<boolean> {
   const base = await reachableBase();

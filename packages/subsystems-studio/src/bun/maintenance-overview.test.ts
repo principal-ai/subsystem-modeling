@@ -23,7 +23,7 @@ function model(
 			construct: "none",
 			"static-topology": "none",
 			"dynamic-topology": "none",
-			walkthrough: "none",
+			trail: "none",
 		},
 		...over,
 	};

@@ -14,11 +14,8 @@ import {
 	type PartialViewerSettings,
 	type ViewerSettings,
 } from "../shared/contract";
-import { migrateLegacyStoreFile } from "./legacy-store-migrate";
 
 const STORE_PATH = join(homedir(), ".principal", "principal-studio-settings.json");
-
-migrateLegacyStoreFile("trail-viewer-settings.json", STORE_PATH);
 
 /** Floor for regular audit interval (minutes). */
 export const REGULAR_AUDIT_INTERVAL_MIN_MINUTES = 5;
@@ -91,7 +88,7 @@ function normalize(raw: unknown): ViewerSettings {
 				tabs["maintenanceSessions"],
 				defaults.defaultTabs.maintenanceSessions,
 			),
-			trails: coerceBool(tabs["trails"], defaults.defaultTabs.trails),
+			tours: coerceBool(tabs["tours"], defaults.defaultTabs.tours),
 			graphify: coerceBool(tabs["graphify"], defaults.defaultTabs.graphify),
 			packageLayers: coerceBool(
 				tabs["packageLayers"],

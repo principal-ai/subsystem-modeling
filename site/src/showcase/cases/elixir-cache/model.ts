@@ -1,6 +1,6 @@
 import type {
   SubsystemComponent,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from '@principal-ai/subsystems-react';
 
 const PURL = 'pkg:github/you/elixir-cache';
@@ -77,7 +77,7 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const walkthroughs = [
+export const trails = [
   {
     "id": "tl-boot",
     "title": "Boot under supervisor",
@@ -186,8 +186,8 @@ export const walkthroughs = [
       }
     ]
   }
-] as SubsystemWalkthrough[];
+] as SubsystemTrail[];
 
 export const title = 'Elixir GenServer cache';
 export const description =
-  'OTP **Application → Supervisor → GenServer** cache: sync `call` gets, async `cast` puts, crash-restarted by the supervisor. Open **Walkthroughs** for boot, get, and put.';
+  'OTP **Application → Supervisor → GenServer** cache: sync `call` gets, async `cast` puts, crash-restarted by the supervisor. Open **Trails** for boot, get, and put.';

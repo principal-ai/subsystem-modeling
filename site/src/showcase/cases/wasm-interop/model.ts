@@ -1,6 +1,6 @@
 import type {
   SubsystemComponent,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from '@principal-ai/subsystems-react';
 
 const PURL = 'pkg:github/you/wasm-interop';
@@ -145,7 +145,7 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const walkthroughs = [
+export const trails = [
   {
     "id": "tl-pipeline",
     "title": "Full pipeline (browser/main ↔ wasm/worker)",
@@ -268,9 +268,9 @@ export const walkthroughs = [
       }
     ]
   }
-] as SubsystemWalkthrough[];
+] as SubsystemTrail[];
 
 export const title = 'Browser main ↔ WASM worker';
 
 export const description =
-  'Two clear process regions: **browser/main** (load, memory I/O, orchestrate) and **wasm/worker** (`normalize` → `checksum`). Main calls into the worker; the worker calls back via `host_trace`. Open **Walkthroughs** for the full cross-boundary pipeline.';
+  'Two clear process regions: **browser/main** (load, memory I/O, orchestrate) and **wasm/worker** (`normalize` → `checksum`). Main calls into the worker; the worker calls back via `host_trace`. Open **Trails** for the full cross-boundary pipeline.';

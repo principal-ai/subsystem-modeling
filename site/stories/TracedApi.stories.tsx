@@ -13,11 +13,11 @@ function TracedApiDemo() {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={model.components}
-        walkthroughs={model.walkthroughs}
+        trails={model.trails}
         title={model.title}
         description={model.description}
         renderFileViewer={showcase.renderFileViewer}
-        renderWalkthroughViewer={showcase.renderWalkthroughViewer}
+        renderTrailViewer={showcase.renderTrailViewer}
       />
     </div>
   );

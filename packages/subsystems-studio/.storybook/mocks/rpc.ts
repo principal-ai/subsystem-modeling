@@ -82,7 +82,7 @@ let viewerSettings: ViewerSettings = {
   defaultTabs: {
     sessions: true,
     maintenanceSessions: true,
-    trails: true,
+    tours: true,
     graphify: false,
     packageLayers: false,
     subsystems: true,

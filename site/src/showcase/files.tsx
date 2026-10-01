@@ -2,9 +2,9 @@ import type { ReactNode } from 'react';
 import {
   PierreFileView,
   PierreSnippetView,
-  PierreWalkthroughCodeView,
+  PierreTrailCodeView,
   type SubsystemOpenFileOptions,
-  type WalkthroughViewerContext,
+  type TrailViewerContext,
 } from '@principal-ai/subsystems-react';
 
 /**
@@ -43,13 +43,13 @@ export function makeShowcaseReadFile(caseDir: string) {
 
 export interface ShowcaseRenderers {
   renderFileViewer: (file: string, opts?: SubsystemOpenFileOptions) => ReactNode;
-  renderWalkthroughViewer: (ctx: WalkthroughViewerContext) => ReactNode;
+  renderTrailViewer: (ctx: TrailViewerContext) => ReactNode;
 }
 
 /**
  * Host renderers for `SubsystemComponentGraph` backed by the fixture files of
  * one showcase case — real syntax-highlighted source opens in the drawer when
- * a component, tree entry, or walkthrough step is clicked.
+ * a component, tree entry, or trail step is clicked.
  */
 export function makeShowcaseRenderers(caseDir: string): ShowcaseRenderers {
   const readFile = makeShowcaseReadFile(caseDir);
@@ -79,9 +79,9 @@ export function makeShowcaseRenderers(caseDir: string): ShowcaseRenderers {
         />
       );
     },
-    renderWalkthroughViewer: (ctx) => (
-      <PierreWalkthroughCodeView
-        walkthrough={ctx.walkthrough}
+    renderTrailViewer: (ctx) => (
+      <PierreTrailCodeView
+        trail={ctx.trail}
         stepIndex={ctx.stepIndex}
         readFile={readFile}
         onOpenFile={ctx.onOpenFile}

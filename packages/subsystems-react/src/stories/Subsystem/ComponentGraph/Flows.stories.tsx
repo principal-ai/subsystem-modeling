@@ -3,9 +3,9 @@ import '@xyflow/react/dist/style.css';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
-import type { SubsystemComponent, SubsystemWalkthrough } from '../../../subsystem/model';
-import { PierreWalkthroughCodeView } from '../../../pierre';
-import type { WalkthroughViewerContext } from '../../../subsystem/SubsystemComponentGraph';
+import type { SubsystemComponent, SubsystemTrail } from '../../../subsystem/model';
+import { PierreTrailCodeView } from '../../../pierre';
+import type { TrailViewerContext } from '../../../subsystem/SubsystemComponentGraph';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Flows',
@@ -129,7 +129,7 @@ const drawingComponents: SubsystemComponent[] = [
 const STORY_PURL = 'pkg:github/principal-ai/desktop-app';
 const stepPurl = (file: string) => `${STORY_PURL}#${file}`;
 
-const drawingWalkthroughs: SubsystemWalkthrough[] = [
+const drawingTrails: SubsystemTrail[] = [
   {
     id: 'tl-open-drawing',
     title: 'Open drawing',
@@ -165,17 +165,17 @@ const drawingWalkthroughs: SubsystemWalkthrough[] = [
 ];
 
 function FlowsDemo() {
-  const renderWalkthroughViewer = useCallback(
+  const renderTrailViewer = useCallback(
     ({
-      walkthrough,
+      trail,
       stepIndex,
       onOpenFile,
       proposedAliases,
       resolveSymbol,
       onSymbolClick,
-    }: WalkthroughViewerContext) => (
-      <PierreWalkthroughCodeView
-        walkthrough={walkthrough}
+    }: TrailViewerContext) => (
+      <PierreTrailCodeView
+        trail={trail}
         stepIndex={stepIndex}
         readFile={readStoryFile}
         contextLines={4}
@@ -192,10 +192,10 @@ function FlowsDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={drawingComponents}
-        walkthroughs={drawingWalkthroughs}
+        trails={drawingTrails}
         title="drawing-files flow"
-        description="Three walkthroughs over one graph — opening, saving, and deleting a drawing. The sidebar's **Walkthroughs** panel lists each step by **symbol**; clicking a step focuses that hop and scrolls the bottom CodeView to that snippet."
-        renderWalkthroughViewer={renderWalkthroughViewer}
+        description="Three trails over one graph — opening, saving, and deleting a drawing. The sidebar's **Trails** panel lists each step by **symbol**; clicking a step focuses that step and scrolls the bottom CodeView to that snippet."
+        renderTrailViewer={renderTrailViewer}
         renderFileViewer={(file, opts) => (
           <div
             style={{
@@ -222,10 +222,10 @@ export const ThreeFlows: Story = {
 };
 
 /**
- * The proposed-seam failure mode: a walkthrough hop whose component is
+ * The proposed-seam failure mode: a trail step whose component is
  * `proposed` points at a file that isn't in the checkout yet (no story
- * fixture). The hop must render an inline "Proposed — … isn't in the local
- * checkout yet." placeholder with no Open-file affordance, while the live hops
+ * fixture). The step must render an inline "Proposed — … isn't in the local
+ * checkout yet." placeholder with no Open-file affordance, while the live steps
  * around it still render their snippets — one bad step must not blank the flow.
  */
 const proposedComponents: SubsystemComponent[] = [
@@ -243,7 +243,7 @@ const proposedComponents: SubsystemComponent[] = [
   },
 ];
 
-const proposedWalkthroughs: SubsystemWalkthrough[] = [
+const proposedTrails: SubsystemTrail[] = [
   {
     id: 'tl-associate-run',
     title: 'Associate a finished run with its model (proposed)',
@@ -256,7 +256,7 @@ const proposedWalkthroughs: SubsystemWalkthrough[] = [
         line: 45,
         purl: stepPurl('src/hooks/useDrawingsHost.ts'),
         symbol: 'useDrawingsHost.openDrawing',
-        annotation: 'Live hop — its snippet still renders.',
+        annotation: 'Live step — its snippet still renders.',
       },
       {
         from: 'storage',
@@ -273,17 +273,17 @@ const proposedWalkthroughs: SubsystemWalkthrough[] = [
 ];
 
 function ProposedMissingStepDemo() {
-  const renderWalkthroughViewer = useCallback(
+  const renderTrailViewer = useCallback(
     ({
-      walkthrough,
+      trail,
       stepIndex,
       onOpenFile,
       proposedAliases,
       resolveSymbol,
       onSymbolClick,
-    }: WalkthroughViewerContext) => (
-      <PierreWalkthroughCodeView
-        walkthrough={walkthrough}
+    }: TrailViewerContext) => (
+      <PierreTrailCodeView
+        trail={trail}
         stepIndex={stepIndex}
         readFile={readStoryFile}
         contextLines={4}
@@ -300,10 +300,10 @@ function ProposedMissingStepDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={proposedComponents}
-        walkthroughs={proposedWalkthroughs}
+        trails={proposedTrails}
         title="proposed seam with a missing file"
-        description="Expand **Associate a finished run with its model** and click either step. The proposed hop has no file in the checkout, so its snippet shows an inline *Proposed — … isn't in the local checkout yet.* placeholder instead of failing the whole flow."
-        renderWalkthroughViewer={renderWalkthroughViewer}
+        description="Expand **Associate a finished run with its model** and click either step. The proposed step has no file in the checkout, so its snippet shows an inline *Proposed — … isn't in the local checkout yet.* placeholder instead of failing the whole flow."
+        renderTrailViewer={renderTrailViewer}
         renderFileViewer={(file) => (
           <div
             style={{
@@ -328,7 +328,7 @@ export const ProposedMissingStep: Story = {
 
 // --- Clickable constructs -------------------------------------------------
 //
-// A walkthrough step's line is an edge between two constructs. When the host
+// A trail step's line is an edge between two constructs. When the host
 // supplies `resolveSymbol`/`onSymbolClick` (the graph derives them from the
 // step's `from`/`to` components), a token in the snippet that names either
 // endpoint becomes clickable — clicking it opens that construct's file at its
@@ -440,7 +440,7 @@ function readClickableFile(path: string): Promise<string> {
   return Promise.resolve(content);
 }
 
-const clickableWalkthroughs: SubsystemWalkthrough[] = [
+const clickableTrails: SubsystemTrail[] = [
   {
     id: 'tl-load',
     title: 'Load drawings',
@@ -472,17 +472,17 @@ const clickableWalkthroughs: SubsystemWalkthrough[] = [
 
 function ClickableConstructsDemo() {
   const [opened, setOpened] = React.useState<string | null>(null);
-  const renderWalkthroughViewer = useCallback(
+  const renderTrailViewer = useCallback(
     ({
-      walkthrough,
+      trail,
       stepIndex,
       onOpenFile,
       proposedAliases,
       resolveSymbol,
       onSymbolClick,
-    }: WalkthroughViewerContext) => (
-      <PierreWalkthroughCodeView
-        walkthrough={walkthrough}
+    }: TrailViewerContext) => (
+      <PierreTrailCodeView
+        trail={trail}
         stepIndex={stepIndex}
         readFile={readClickableFile}
         contextLines={4}
@@ -516,11 +516,11 @@ function ClickableConstructsDemo() {
       <div style={{ flex: 1, minHeight: 0 }}>
         <SubsystemComponentGraph
           components={clickableComponents}
-          walkthroughs={clickableWalkthroughs}
-          initialWalkthroughId="tl-load"
+          trails={clickableTrails}
+          initialTrailId="tl-load"
           title="clickable constructs"
-          description="A walkthrough step's line is an edge to a construct. Tokens that name the step's `from`/`to` components are clickable and open that construct's declaration line in the file drawer — including a **method** endpoint (click `list` to jump to `DrawingStore.list`)."
-          renderWalkthroughViewer={renderWalkthroughViewer}
+          description="A trail step's line is an edge to a construct. Tokens that name the step's `from`/`to` components are clickable and open that construct's declaration line in the file drawer — including a **method** endpoint (click `list` to jump to `DrawingStore.list`)."
+          renderTrailViewer={renderTrailViewer}
           onFileSelect={setOpened}
           renderFileViewer={(file, opts) => (
             <div style={{ padding: 12, fontFamily: 'monospace', fontSize: 12, color: '#bbb' }}>

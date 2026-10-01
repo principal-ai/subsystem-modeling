@@ -24,7 +24,7 @@ function model(over: Partial<MaintenanceOverviewModel> & { graphId: string; titl
 			construct: "verified",
 			"static-topology": "partial",
 			"dynamic-topology": "verified",
-			walkthrough: "none",
+			trail: "none",
 		},
 		nextRoute: null,
 		...over,
@@ -68,7 +68,7 @@ const PAYMENTS = model({
 		construct: "issues",
 		"static-topology": "partial",
 		"dynamic-topology": "verified",
-		walkthrough: "none",
+		trail: "none",
 	},
 	nextRoute: { agent: "construct-fixer", layer: "construct", mode: "issues" },
 });
@@ -86,7 +86,7 @@ const AUTH = model({
 		construct: "verified",
 		"static-topology": "verified",
 		"dynamic-topology": "verified",
-		walkthrough: "verified",
+		trail: "verified",
 	},
 });
 
@@ -98,7 +98,7 @@ const NOTIFICATIONS = model({
 		construct: "verified",
 		"static-topology": "blocked",
 		"dynamic-topology": "partial",
-		walkthrough: "none",
+		trail: "none",
 	},
 	nextRoute: {
 		agent: "package-module-fixer",

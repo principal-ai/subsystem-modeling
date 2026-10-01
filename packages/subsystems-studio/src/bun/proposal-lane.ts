@@ -3,7 +3,7 @@
  *
  * Lanes are the four layers of the model: construct (L1), static topology
  * (L2, package/module containment), dynamic topology (L3, process runtime),
- * walkthrough (L4). A proposal's changes determine the lane; the linked finding
+ * trail (L4). A proposal's changes determine the lane; the linked finding
  * kind is a tie-breaker when changes span lanes.
  */
 
@@ -15,7 +15,7 @@ import type {
 export function laneForChange(
 	ch: SubsystemModelProposalChange,
 ): SubsystemVerificationLane {
-	if (ch.target === "walkthrough-step") return "walkthrough";
+	if (ch.target === "trail-step") return "trail";
 	// Authoring a declaration field (e.g. a store's `valueType`) is construct
 	// work: it fills the declaration the construct panel renders.
 	if (ch.target === "declaration") return "construct";
@@ -52,8 +52,8 @@ export function laneForFindingKind(
 			return "static-topology";
 		case "boundary_process_nest_disagree":
 			return "dynamic-topology";
-		case "walkthrough":
-			return "walkthrough";
+		case "trail":
+			return "trail";
 		default:
 			return null;
 	}

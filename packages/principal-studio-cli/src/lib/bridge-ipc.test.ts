@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { createServer, type Server } from 'node:http';
-import { handoffToBridge } from './bridge-ipc.js';
+import { handoffTopicToBridge } from './bridge-ipc.js';
 
 /**
  * Spin up a throwaway HTTP server standing in for the desktop app's MCP bridge,
@@ -39,63 +39,80 @@ afterEach(() => {
   delete process.env['PRINCIPAL_BRIDGE_HOST'];
 });
 
-describe('handoffToBridge', () => {
-  it('returns true when the app finds the trail and opens a window', async () => {
+const ACTIVATE = 'POST /api/topics/topic-123/activate';
+
+describe('handoffTopicToBridge', () => {
+  it('returns true when the app finds the topic and opens a window', async () => {
     await withBridge(
       {
         'GET /health': () => [200, { status: 'ok' }],
-        'POST /api/file-city/trail/activate': () => [
-          200,
-          { success: true, windowOpened: 'focused', broadcastTo: 1 },
-        ],
+        [ACTIVATE]: () => [200, { success: true, windowOpened: 'focused' }],
       },
       async () => {
-        expect(await handoffToBridge('trail-123')).toBe(true);
+        expect(await handoffTopicToBridge('topic-123')).toBe(true);
       },
     );
   });
 
-  it('returns true when no window opened but the payload was broadcast', async () => {
+  it('returns true when no window opened but the payload was delivered', async () => {
     await withBridge(
       {
         'GET /health': () => [200, { status: 'ok' }],
-        'POST /api/file-city/trail/activate': () => [
-          200,
-          { success: true, windowOpened: 'none', broadcastTo: 2 },
-        ],
+        [ACTIVATE]: () => [200, { success: true, windowOpened: 'none', delivered: 2 }],
       },
       async () => {
-        expect(await handoffToBridge('trail-123')).toBe(true);
+        expect(await handoffTopicToBridge('topic-123')).toBe(true);
       },
     );
   });
 
-  it('returns false when the app has no window to surface the trail', async () => {
+  it('returns false when the app has no window to surface the topic', async () => {
     await withBridge(
       {
         'GET /health': () => [200, { status: 'ok' }],
-        'POST /api/file-city/trail/activate': () => [
-          200,
-          { success: true, windowOpened: 'none', broadcastTo: 0 },
-        ],
+        [ACTIVATE]: () => [200, { success: true, windowOpened: 'none', delivered: 0 }],
       },
       async () => {
-        expect(await handoffToBridge('trail-123')).toBe(false);
+        expect(await handoffTopicToBridge('topic-123')).toBe(false);
       },
     );
   });
 
-  it('returns false on a 404 (app running but trail not in its store)', async () => {
+  it('returns false when the app reports failure', async () => {
     await withBridge(
       {
         'GET /health': () => [200, { status: 'ok' }],
-        'POST /api/file-city/trail/activate': () => [
-          404,
-          { success: false, error: 'unknown id' },
+        [ACTIVATE]: () => [200, { success: false, windowOpened: 'focused' }],
+      },
+      async () => {
+        expect(await handoffTopicToBridge('topic-123')).toBe(false);
+      },
+    );
+  });
+
+  it('returns false on a 404 (app running but topic not in its store)', async () => {
+    await withBridge(
+      {
+        'GET /health': () => [200, { status: 'ok' }],
+        [ACTIVATE]: () => [404, { success: false, error: 'unknown id' }],
+      },
+      async () => {
+        expect(await handoffTopicToBridge('topic-123')).toBe(false);
+      },
+    );
+  });
+
+  it('url-encodes ids that would otherwise change the route', async () => {
+    await withBridge(
+      {
+        'GET /health': () => [200, { status: 'ok' }],
+        'POST /api/topics/topic%2Fa%20b/activate': () => [
+          200,
+          { success: true, windowOpened: 'focused' },
         ],
       },
       async () => {
-        expect(await handoffToBridge('trail-missing')).toBe(false);
+        expect(await handoffTopicToBridge('topic/a b')).toBe(true);
       },
     );
   });
@@ -103,6 +120,6 @@ describe('handoffToBridge', () => {
   it('returns false when no bridge is listening', async () => {
     // Point at a port nothing is bound to; the health probe should fail fast.
     process.env['PRINCIPAL_BRIDGE_PORT'] = '1';
-    expect(await handoffToBridge('trail-123')).toBe(false);
+    expect(await handoffTopicToBridge('topic-123')).toBe(false);
   });
 });

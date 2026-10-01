@@ -44,7 +44,7 @@ export const LANE_LABEL: Record<SubsystemVerificationLane, string> = {
 	construct: "Construct",
 	"static-topology": "Static topology",
 	"dynamic-topology": "Dynamic topology",
-	walkthrough: "Walkthrough",
+	trail: "Trail",
 };
 
 /** Lane icons — mirrors MaintenancePanel's LANE_META (layer → mark). */
@@ -52,7 +52,7 @@ export const LANE_ICON: Record<SubsystemVerificationLane, LucideIcon> = {
 	construct: Component,
 	"static-topology": Network,
 	"dynamic-topology": Server,
-	walkthrough: Route,
+	trail: Route,
 };
 
 /** Display label for the agent that produced a proposal (its `author` tag).
@@ -215,9 +215,9 @@ export function buildAgentPrompt(
 				`Component: ${p.finding.componentName ?? p.finding.componentAlias}`,
 			);
 		}
-		if (p.finding.walkthroughId) {
+		if (p.finding.trailId) {
 			lines.push(
-				`Walkthrough: ${p.finding.walkthroughId}${
+				`Trail: ${p.finding.trailId}${
 					p.finding.step != null ? ` step ${p.finding.step}` : ""
 				}`,
 			);

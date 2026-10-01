@@ -203,16 +203,16 @@ function openedSortTime(graph: SubsystemModelSummary): number {
 }
 
 /**
- * Walkthroughs of a graph with a step site in the given file. Step files
+ * Trails of a graph with a step site in the given file. Step files
  * are in component-`file` form; repo attribution comes from the step
  * endpoint's purl (host-derived). Purl-less steps match any repo.
  */
-function walkthroughsUsingFile(
+function trailsUsingFile(
 	graph: SubsystemModelSummary,
 	repoKey: string | undefined,
 	displayPath: string,
-): NonNullable<SubsystemModelSummary["walkthroughs"]> {
-	return (graph.walkthroughs ?? []).filter((w) =>
+): NonNullable<SubsystemModelSummary["trails"]> {
+	return (graph.trails ?? []).filter((w) =>
 		w.files.some(
 			(f) =>
 				f.file === displayPath &&
@@ -225,7 +225,7 @@ function walkthroughsUsingFile(
 
 /**
  * Whether a graph references a file — via its component anchors or any
- * walkthrough step site. Same repo-aware matching as the expansion helpers:
+ * trail step site. Same repo-aware matching as the expansion helpers:
  * purl-less entries match any repo. Drives the open-file list filter.
  */
 function graphReferencesFile(
@@ -239,14 +239,14 @@ function graphReferencesFile(
 			(repoKey ?? "") === "" ||
 			purlRepoKey(purl) === repoKey);
 	if ((graph.files ?? []).some((f) => match(f.file, f.purl))) return true;
-	return (graph.walkthroughs ?? []).some((w) =>
+	return (graph.trails ?? []).some((w) =>
 		w.files.some((f) => match(f.file, f.purl)),
 	);
 }
 
 /**
  * Components declared in the given file (host-derived per file anchor).
- * This is the whole reason a walkthrough-less file is in the model.
+ * This is the whole reason a trail-less file is in the model.
  */
 function componentsInFile(
 	graph: SubsystemModelSummary,
@@ -265,7 +265,7 @@ function componentsInFile(
 
 /**
  * First 1-based line the graph references in the given file: the topmost of
- * its component declaration lines and walkthrough step lines. Drives preview
+ * its component declaration lines and trail step lines. Drives preview
  * focus when a row is clicked while a file is open. Null when the graph has
  * no line data for the file (or doesn't reference it at all).
  */
@@ -280,7 +280,7 @@ function firstReferencedLine(
 			lines.push(m.startLine);
 		}
 	}
-	for (const w of walkthroughsUsingFile(graph, repoKey, displayPath)) {
+	for (const w of trailsUsingFile(graph, repoKey, displayPath)) {
 		for (const f of w.files) {
 			if (f.file !== displayPath) continue;
 			for (const line of f.lines ?? []) lines.push(line);
@@ -290,11 +290,11 @@ function firstReferencedLine(
 	return Math.min(...lines);
 }
 
-type SummaryWalkthrough = NonNullable<
-	SubsystemModelSummary["walkthroughs"]
+type SummaryTrail = NonNullable<
+	SubsystemModelSummary["trails"]
 >[number];
 
-/** Whether one walkthrough step is sited in the open file (repo-aware). */
+/** Whether one trail step is sited in the open file (repo-aware). */
 function stepReferencesFile(
 	step: { file: string; purl?: string },
 	openFile: { repoKey: string | undefined; displayPath: string },
@@ -308,18 +308,18 @@ function stepReferencesFile(
 }
 
 /**
- * One walkthrough row: wrapping title plus a step-bar strip (one segment per
+ * One trail row: wrapping title plus a step-bar strip (one segment per
  * step) underneath. Segments sited in the open file light up in primary;
- * the rest stay muted. Clicking opens the graph with this walkthrough selected.
+ * the rest stay muted. Clicking opens the graph with this trail selected.
  */
-function WalkthroughButton({
+function TrailButton({
 	graphTitle,
-	walkthrough,
+	trail,
 	openFile,
 	onOpen,
 }: {
 	graphTitle: string;
-	walkthrough: SummaryWalkthrough;
+	trail: SummaryTrail;
 	openFile: { repoKey: string | undefined; displayPath: string } | null;
 	onOpen: () => void;
 }) {
@@ -335,7 +335,7 @@ function WalkthroughButton({
 			}}
 			onMouseEnter={() => setHover(true)}
 			onMouseLeave={() => setHover(false)}
-			aria-label={`Open ${graphTitle} · ${walkthrough.title}`}
+			aria-label={`Open ${graphTitle} · ${trail.title}`}
 			style={{
 				border: "none",
 				background: hover ? (theme.colors.border ?? "#333") : "transparent",
@@ -361,11 +361,11 @@ function WalkthroughButton({
 					wordBreak: "break-word",
 				}}
 			>
-				{walkthrough.title}
+				{trail.title}
 			</span>
-			{walkthrough.steps.length > 0 && (
+			{trail.steps.length > 0 && (
 				<span style={{ display: "flex", gap: 3 }} aria-hidden="true">
-					{walkthrough.steps.map((s, i) => {
+					{trail.steps.map((s, i) => {
 						const active = openFile != null && stepReferencesFile(s, openFile);
 						return (
 							<span
@@ -770,10 +770,10 @@ function SlideInPreview({
  * primitives the detail graph sidebar uses. Fed by `summary.files` (the host
  * already loads every full model per listing), so no detail fetches are
  * needed. Clicking a repo drills in (and narrows the list to its models);
- * clicking a file highlights its owning graph and expands the walkthroughs
+ * clicking a file highlights its owning graph and expands the trails
  * using that file; a shared file prefers the selected row's graph when it
  * owns it, else the topmost owner in list order. Clicking a file highlights
- * its graph, expands its walkthroughs, and opens it in the preview pane.
+ * its graph, expands its trails, and opens it in the preview pane.
  */
 function FilesPanel({
 	graphs,
@@ -935,7 +935,7 @@ export function SubsystemModelsView({
 	const [message, setMessage] = useState<string | null>(null);
 	/** Selected row highlight (file-tree clicks land here, no new tab). */
 	const [selectedId, setSelectedId] = useState<string | null>(null);
-	/** Rows expanded to list all their walkthroughs (row click toggles). */
+	/** Rows expanded to list all their trails (row click toggles). */
 	const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(
 		() => new Set(),
 	);
@@ -943,7 +943,7 @@ export function SubsystemModelsView({
 	const [descIds, setDescIds] = useState<ReadonlySet<string>>(
 		() => new Set(),
 	);
-	/** Clicked file driving row expansion (walkthroughs using it). */
+	/** Clicked file driving row expansion (trails using it). */
 	const [selectedFile, setSelectedFile] = useState<{
 		graphId: string;
 		repoKey: string | undefined;
@@ -1155,11 +1155,11 @@ export function SubsystemModelsView({
 	}, [refresh]);
 
 	const onOpen = useCallback(
-		async (graph: SubsystemModelSummary, walkthroughId?: string) => {
+		async (graph: SubsystemModelSummary, trailId?: string) => {
 			setSelectedId(graph.id);
 			await electrobun.rpc!.request.openSubsystemModel({
 				graphId: graph.id,
-				...(walkthroughId ? { walkthroughId } : {}),
+				...(trailId ? { trailId } : {}),
 			});
 		},
 		[],
@@ -1167,15 +1167,15 @@ export function SubsystemModelsView({
 
 	/** Map-mode opener: the repo map only knows model ids. */
 	const onOpenModelById = useCallback(
-		(graphId: string, walkthroughId?: string) => {
+		(graphId: string, trailId?: string) => {
 			const graph = graphs?.find((g) => g.id === graphId);
 			if (graph) {
-				void onOpen(graph, walkthroughId);
+				void onOpen(graph, trailId);
 				return;
 			}
 			void electrobun.rpc!.request.openSubsystemModel({
 				graphId,
-				...(walkthroughId ? { walkthroughId } : {}),
+				...(trailId ? { trailId } : {}),
 			});
 		},
 		[graphs, onOpen],
@@ -1206,7 +1206,7 @@ export function SubsystemModelsView({
 		[graphs],
 	);
 
-	/** Row click: expand/collapse its walkthrough list (no new tab). When a
+	/** Row click: expand/collapse its trail list (no new tab). When a
 	 *  file is open and the row is being expanded, focus the first line this
 	 *  graph references in the open file. */
 	const onToggleExpand = useCallback(
@@ -1266,7 +1266,7 @@ export function SubsystemModelsView({
 	);
 
 	/** File-tree click: highlight the owning row in place (no new tab),
-	 *  expand the walkthroughs using that file, and open the preview pane.
+	 *  expand the trails using that file, and open the preview pane.
 	 *  Re-clicking the same file collapses the expansion (preview stays). */
 	const onHighlightGraph = useCallback(
 		(
@@ -1549,16 +1549,16 @@ windowedGraphs.length === 0 ? (
 					const isExpanded = selectedFile?.graphId === graph.id;
 					const isRowExpanded = expandedIds.has(graph.id) && !isExpanded;
 					const isOpen = isExpanded || expandedIds.has(graph.id);
-					const fileWalkthroughs =
+					const fileTrails =
 						isExpanded && selectedFile
-							? walkthroughsUsingFile(
+							? trailsUsingFile(
 									graph,
 									selectedFile.repoKey,
 									selectedFile.displayPath,
 								)
 							: [];
 					const fileComponents =
-						isExpanded && selectedFile && fileWalkthroughs.length === 0
+						isExpanded && selectedFile && fileTrails.length === 0
 							? componentsInFile(
 									graph,
 									selectedFile.repoKey,
@@ -1791,28 +1791,28 @@ windowedGraphs.length === 0 ? (
 											color: muted,
 										}}
 									>
-										{fileWalkthroughs.length > 0 ? (
+										{fileTrails.length > 0 ? (
 											<RouteIcon size={12} style={{ flexShrink: 0 }} aria-hidden="true" />
 										) : (
 											<ComponentIcon size={12} style={{ flexShrink: 0 }} aria-hidden="true" />
 										)}
-										{fileWalkthroughs.length > 0 ? `Walkthroughs` : `Component`}
+										{fileTrails.length > 0 ? `Trails` : `Component`}
 									</div>
-									{fileWalkthroughs.length === 0 && fileComponents.length === 0 ? (
+									{fileTrails.length === 0 && fileComponents.length === 0 ? (
 										<div
 											style={{
 												fontSize: theme.fontSizes[1],
 												color: muted,
 											}}
 										>
-											No walkthroughs use this file.
+											No trails use this file.
 										</div>
-									) : fileWalkthroughs.length > 0 ? (
-										fileWalkthroughs.map((w) => (
-											<WalkthroughButton
+									) : fileTrails.length > 0 ? (
+										fileTrails.map((w) => (
+											<TrailButton
 												key={w.id}
 												graphTitle={graph.title}
-												walkthrough={w}
+												trail={w}
 												openFile={previewFile}
 												onOpen={() => void onOpen(graph, w.id)}
 											/>
@@ -1883,23 +1883,23 @@ windowedGraphs.length === 0 ? (
 										}}
 									>
 										<RouteIcon size={12} style={{ flexShrink: 0 }} aria-hidden="true" />
-										Walkthroughs
+										Trails
 									</div>
-									{(graph.walkthroughs ?? []).length === 0 ? (
+									{(graph.trails ?? []).length === 0 ? (
 										<div
 											style={{
 												fontSize: theme.fontSizes[1],
 												color: muted,
 											}}
 										>
-											No walkthroughs yet.
+											No trails yet.
 										</div>
 									) : (
-										(graph.walkthroughs ?? []).map((w) => (
-											<WalkthroughButton
+										(graph.trails ?? []).map((w) => (
+											<TrailButton
 												key={w.id}
 												graphTitle={graph.title}
-												walkthrough={w}
+												trail={w}
 												openFile={previewFile}
 												onOpen={() => void onOpen(graph, w.id)}
 											/>

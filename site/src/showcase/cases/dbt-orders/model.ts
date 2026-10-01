@@ -1,6 +1,6 @@
 import type {
   SubsystemComponent,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from '@principal-ai/subsystems-react';
 
 const PURL = 'pkg:github/you/dbt-orders';
@@ -89,7 +89,7 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const walkthroughs = [
+export const trails = [
   {
     "id": "tl-run",
     "title": "dbt run (build models)",
@@ -136,8 +136,8 @@ export const walkthroughs = [
       }
     ]
   }
-] as SubsystemWalkthrough[];
+] as SubsystemTrail[];
 
 export const title = 'dbt orders models';
 export const description =
-  'Data-eng subsystem: **raw source → stg_orders → fct_daily_orders** with schema tests. Not an app — a transform graph. Open **Walkthroughs** for `dbt run` and `dbt test`.';
+  'Data-eng subsystem: **raw source → stg_orders → fct_daily_orders** with schema tests. Not an app — a transform graph. Open **Trails** for `dbt run` and `dbt test`.';

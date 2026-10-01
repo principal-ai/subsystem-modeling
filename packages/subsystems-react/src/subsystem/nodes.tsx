@@ -660,7 +660,7 @@ export function flowElementVisibility(opts: {
 
 /**
  * Hide / dim a canvas node (or a boundary frame, via its members) while
- * walkthroughs are open, focused, or hovered.
+ * trails are open, focused, or hovered.
  *
  * Two signals sit on top of `flowElementVisibility`:
  *

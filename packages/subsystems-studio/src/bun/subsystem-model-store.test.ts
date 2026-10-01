@@ -22,7 +22,7 @@ import {
 	updateSubsystemModel,
 	verifyModelFiles,
 	type SubsystemComponent,
-	type SubsystemWalkthroughStep,
+	type SubsystemTrailStep,
 } from "./subsystem-model-store";
 import { registerProjectInAlexandria } from "./alexandria";
 
@@ -366,7 +366,7 @@ describe("edge mechanism sets", () => {
 	});
 });
 
-describe("walkthrough verify pass", () => {
+describe("trail verify pass", () => {
 	test("resolves steps to real site lines and flags stuck/blank/misfit sites", async () => {
 		// `src/seam.ts` lives in the registered repo-a checkout (see beforeAll).
 		const components: SubsystemComponent[] = [
@@ -375,7 +375,7 @@ describe("walkthrough verify pass", () => {
 		];
 		const result = await verifyModelFiles({
 			components,
-			walkthroughs: [
+			trails: [
 				{
 					id: "wt",
 					title: "save",
@@ -392,14 +392,14 @@ describe("walkthrough verify pass", () => {
 					id: "wt-legacy",
 					title: "legacy",
 					steps: [
-						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 3, symbol: "a" } as SubsystemWalkthroughStep,
+						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 3, symbol: "a" } as SubsystemTrailStep,
 					],
 				},
 			],
 		});
 
-		expect(result.walkthroughsChecked).toBe(2);
-		const reasons = result.walkthroughsFailed.map((f) => f.reason);
+		expect(result.trailsChecked).toBe(2);
+		const reasons = result.trailsFailed.map((f) => f.reason);
 		expect(reasons.some((r) => r.includes("out of range"))).toBe(true);
 		expect(reasons.some((r) => r.includes("not found"))).toBe(true);
 		expect(reasons.some((r) => r.includes("blank"))).toBe(true);

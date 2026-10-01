@@ -7,7 +7,7 @@
  * inside one labeled boundary frame; nodes without one sit outside every
  * boundary. Clicking a component invokes `onSelect`.
  *
- * When the model has components but no topology or walkthrough edges, the
+ * When the model has components but no topology or trail edges, the
  * canvas is a constructs catalog (list + signature) instead of a graph.
  *
  * This is a focused fork of the package's `GraphRenderer` pipeline (same ELK
@@ -39,11 +39,11 @@ import {
   deriveGraphEdges,
   isConstructsOnlyModel,
   moduleGroupNodeId,
-  isWalkthroughMechanism,
+  isTrailMechanism,
   edgeColor,
   MECHANISM_DESCRIPTIONS,
   subsystemGraphLayoutKey,
-  walkthroughStepGraphEdgeId,
+  trailStepGraphEdgeId,
   type SubsystemComponentEdge,
   type SubsystemComponent,
   type SubsystemEdgeProvenance,
@@ -51,7 +51,7 @@ import {
   type SubsystemGraphifyRelation,
   type SubsystemNodeIssue,
   type SubsystemRegionIssue,
-  type SubsystemWalkthrough,
+  type SubsystemTrail,
 } from './model';
 import { ConstructsCatalog } from './ConstructsCatalog';
 import type { SubsystemOpenFileOptions } from './declarationRef';
@@ -63,7 +63,7 @@ import {
   MaintainLivePanel,
   type MaintainLivePanelProps,
 } from '../components/maintain-events/MaintainLivePanel';
-import type { WalkthroughSymbolQuery } from '../pierre/PierreWalkthroughCodeView';
+import type { TrailSymbolQuery } from '../pierre/PierreTrailCodeView';
 import { SubsystemComponentNode, SubsystemGroupNode, SubsystemEdge, SUBSYSTEM_CALLBACKS, hexWithAlpha, EDGE_DIM_ALPHA, fileMatchForNode, flowElementVisibility, flowNodeVisibility } from './nodes';
 import { SubsystemDiagnosticToggle, type SubsystemDiagnostic } from './DiagnosticToggle';
 import {
@@ -84,7 +84,7 @@ import type { ComponentVerificationState } from './ComponentDeclaration';
 import type { DeclarationSymbolRef, SymbolInspection } from './symbolRefs';
 import { FileDrawer, FILE_DRAWER_HEIGHT_MS } from './FileDrawer';
 import { buildRepoGroups, repoAvatarUrl, type RepoGroup } from './paths';
-import { WalkthroughsPanel, WALKTHROUGH_PLAY_PAUSE_MS } from './WalkthroughsPanel';
+import { TrailsPanel, TRAIL_PLAY_PAUSE_MS } from './TrailsPanel';
 import {
   EDGE_LABEL_WIDTH,
   EDGE_LABEL_HEIGHT,
@@ -93,12 +93,12 @@ import {
   EDGE_LABEL_CLOUD_EXTRA_TOP,
 } from '../utils/edgeLabel';
 
-/** Context passed to `renderWalkthroughViewer` when a flow/step is focused. */
-export interface WalkthroughViewerContext {
-  walkthrough: SubsystemWalkthrough;
+/** Context passed to `renderTrailViewer` when a flow/step is focused. */
+export interface TrailViewerContext {
+  trail: SubsystemTrail;
   /** Focused step index; `null` means the whole flow (no specific step). */
   stepIndex: number | null;
-  /** Open a step's full source file over the walkthrough drawer (keeps snippets mounted). */
+  /** Open a step's full source file over the trail drawer (keeps snippets mounted). */
   onOpenFile: (path: string, opts?: SubsystemOpenFileOptions) => void;
   /**
    * Aliases of components marked `proposed`. A step whose file can't be read
@@ -111,9 +111,9 @@ export interface WalkthroughViewerContext {
    * token names no touched construct. Forward to the code view so constructs
    * read as clickable.
    */
-  resolveSymbol?: (query: WalkthroughSymbolQuery) => string | null;
+  resolveSymbol?: (query: TrailSymbolQuery) => string | null;
   /** A clicked construct token — open that construct's declaration line. */
-  onSymbolClick?: (symbol: string, query: WalkthroughSymbolQuery) => void;
+  onSymbolClick?: (symbol: string, query: TrailSymbolQuery) => void;
 }
 
 /** Identifiers a token could match to name this component as a construct. */
@@ -131,21 +131,21 @@ function constructIdentifiers(comp: SubsystemComponent): string[] {
 
 type DrawerTarget =
   | { kind: 'file'; file: string; startLine?: number }
-  | { kind: 'walkthrough'; walkthroughId: string; stepIndex: number | null };
+  | { kind: 'trail'; trailId: string; stepIndex: number | null };
 
 /**
  * Per-model UI state persisted to `localStorage`, keyed by `persistKey`.
- * Stores the walkthrough working set (which flows are expanded and which
+ * Stores the trail working set (which flows are expanded and which
  * flow/step is selected) and which sidebar/diagnostics tab is showing, so
  * tabbing away from a model and back lands you where you left off. Transient
  * things (hover, drag, camera) are not saved.
  */
 interface PersistedViewState {
-  expandedWalkthroughs?: string[];
-  focusedWalkthroughId?: string | null;
+  expandedTrails?: string[];
+  focusedTrailId?: string | null;
   focusedStepIndex?: number | null;
   sidebarWidth?: number;
-  sidebarView?: 'files' | 'walkthroughs';
+  sidebarView?: 'files' | 'trails';
   diagnosticsTab?: 'issues' | 'agents';
 }
 
@@ -181,15 +181,15 @@ function writeViewState(
 export interface SubsystemComponentGraphProps {
   components: SubsystemComponent[];
   /**
-   * Ordered runtime walkthroughs — one walkthrough per flow. When present the
-   * sidebar's bottom half offers a Files/Walkthroughs toggle:
-   * the flows panel lists each walkthrough's steps (`symbol` or `file:line`);
+   * Ordered runtime trails — one trail per flow. When present the
+   * sidebar's bottom half offers a Files/Trails toggle:
+   * the flows panel lists each trail's steps (`symbol` or `file:line`);
    * clicking a flow row toggles its steps; clicking a step focuses that
-   * step's edge and (when `renderWalkthroughViewer` is set) opens the bottom
+   * step's edge and (when `renderTrailViewer` is set) opens the bottom
    * drawer on that flow's snippets. Opened flows stay on the canvas
    * (unselected ones dimmed); everything else is hidden.
    */
-  walkthroughs?: SubsystemWalkthrough[];
+  trails?: SubsystemTrail[];
   /**
    * graphify-native relations (raw static-graph edges: `imports`, `contains`,
    * `re_exports`, …). Display-only, drawn with the separate
@@ -204,20 +204,20 @@ export interface SubsystemComponentGraphProps {
    */
   orderByLine?: boolean;
   /**
-   * Deep-link target: when set, the matching walkthrough is selected on mount
+   * Deep-link target: when set, the matching trail is selected on mount
    * — its steps expanded and its flow focused on the canvas. Hosts use this
-   * when opening the graph from a walkthrough row in a list. Re-applies on a
+   * when opening the graph from a trail row in a list. Re-applies on a
    * new id (or a remount); in-tab selection afterwards stays owned by the
    * graph.
    */
-  initialWalkthroughId?: string | null;
+  initialTrailId?: string | null;
   /**
-   * Called with the next walkthrough order after a drag in the sidebar's
+   * Called with the next trail order after a drag in the sidebar's
    * flows panel. When set, each row grows a drag grip and a drop emits the
    * reordered array — the host owns persisting it (the graph stays controlled
    * and never reorders its own prop).
    */
-  onReorderWalkthroughs?: (next: SubsystemWalkthrough[]) => void;
+  onReorderTrails?: (next: SubsystemTrail[]) => void;
   onSelect?: (componentAlias: string) => void;
   /** Called when an edge is clicked (relationship / mechanism + refs seam). */
   onEdgeSelect?: (edge: SubsystemComponentEdge) => void;
@@ -242,50 +242,50 @@ export interface SubsystemComponentGraphProps {
    */
   moduleNesting?: 'exact' | 'path';
   /**
-   * Which edge source the canvas draws. The graphify and walkthrough sources
+   * Which edge source the canvas draws. The graphify and trail sources
    * are disjoint, so a graph carrying both shows one or the other — never
    * both. Edges outside the view are hidden (labels go too).
    * - `graphify`: graphify-native static edges (`imports`, `contains`, …)
-   * - `walkthroughs`: walkthrough hop edges (`calls`, `feeds`, …), including
+   * - `trails`: trail step edges (`calls`, `feeds`, …), including
    *   step numbers when a flow is focused/hovered
-   * Leave unset to let the sidebar's Files / Walkthroughs tab drive it: Files
-   * draws graphify edges, Walkthroughs draws runtime hops. Without visible
-   * tabs, defaults to `walkthroughs`.
+   * Leave unset to let the sidebar's Files / Trails tab drive it: Files
+   * draws graphify edges, Trails draws runtime steps. Without visible
+   * tabs, defaults to `trails`.
    */
   edgeView?: SubsystemEdgeView;
   /** Subsystem title displayed in the sidebar. */
   title?: string;
   /**
    * Suppresses the sidebar entirely (title, description, file tree,
-   * walkthroughs) for graph-only embeds. Pair with `graphTitle` to keep the
+   * trails) for graph-only embeds. Pair with `graphTitle` to keep the
    * subsystem name visible as an overlay on the canvas.
    */
   hideSidebar?: boolean;
   /**
-   * How walkthrough step highlighting behaves on the canvas.
+   * How trail step highlighting behaves on the canvas.
    * - `focus` (default): zoom to the step, hide non-participants, open drawer
    * - `dim`: keep the full graph, dim non-participants (same as hovering a step)
    */
-  walkthroughStepMode?: 'focus' | 'dim';
+  trailStepMode?: 'focus' | 'dim';
   /**
-   * When true, cycles walkthrough steps automatically using `dim` highlighting
-   * (no zoom, no drawer). Loops across all walkthroughs that have steps.
+   * When true, cycles trail steps automatically using `dim` highlighting
+   * (no zoom, no drawer). Loops across all trails that have steps.
    * Useful for graph-only embeds (`hideSidebar`).
    */
-  autoPlayWalkthroughs?: boolean;
+  autoPlayTrails?: boolean;
   /** Pause between autoplay steps in ms. @default 2500 */
-  walkthroughAutoPlayIntervalMs?: number;
+  trailAutoPlayIntervalMs?: number;
   /**
-   * When false, focusing a walkthrough/step does not call `fitView`.
+   * When false, focusing a trail/step does not call `fitView`.
    * @default true
    */
-  zoomOnWalkthroughFocus?: boolean;
+  zoomOnTrailFocus?: boolean;
   /**
-   * Duration (ms) of the camera pan/zoom when a walkthrough step or flow is
+   * Duration (ms) of the camera pan/zoom when a trail step or flow is
    * focused. Higher = a slower, more legible flight between steps.
    * @default 300
    */
-  walkthroughFocusDurationMs?: number;
+  trailFocusDurationMs?: number;
   /**
    * Subsystem title rendered as a non-interactive overlay chip on the graph
    * canvas (top-center). Does not trigger the sidebar — for graph-only
@@ -293,11 +293,11 @@ export interface SubsystemComponentGraphProps {
    */
   graphTitle?: string;
   /**
-   * When true, shows the active walkthrough's title as a non-interactive
+   * When true, shows the active trail's title as a non-interactive
    * overlay chip on the canvas (under `graphTitle` when both are set).
-   * Uses the focused or hover-highlighted walkthrough.
+   * Uses the focused or hover-highlighted trail.
    */
-  showWalkthroughTitle?: boolean;
+  showTrailTitle?: boolean;
   /** Markdown description rendered in the sidebar. */
   description?: string;
   /**
@@ -327,13 +327,13 @@ export interface SubsystemComponentGraphProps {
    * Diagnostics status chip in the sidebar title row (beside the description
    * toggle). Shows the last verification pass's state as an icon color + count,
    * and toggles the sidebar between the diagnostics list and the normal
-   * files/walkthroughs view. Omit to hide the chip.
+   * files/trails view. Omit to hide the chip.
    */
   diagnostic?: SubsystemDiagnostic;
   /**
    * Verification issues for this graph (audit findings). When diagnostics are
    * active the sidebar's bottom panel becomes the issue list instead of the
-   * file tree / walkthroughs.
+   * file tree / trails.
    */
   issues?: SubsystemIssue[];
   /**
@@ -349,7 +349,7 @@ export interface SubsystemComponentGraphProps {
   focusIssueCategory?: SubsystemIssueCategory;
   /**
    * Click an issue. The graph first focuses the target on the canvas itself —
-   * a component target is selected and framed (any edge / walkthrough focus
+   * a component target is selected and framed (any edge / trail focus
    * that would hide it is cleared), and a
    * module target frames that boundary frame — then this fires so the host can
    * open its own detail. Collapsing the card again reverses that (deselect +
@@ -368,13 +368,13 @@ export interface SubsystemComponentGraphProps {
    */
   renderFileViewer?: (file: string, opts?: SubsystemOpenFileOptions) => ReactNode;
   /**
-   * Host-injected multi-snippet viewer for a focused walkthrough. When set,
+   * Host-injected multi-snippet viewer for a focused trail. When set,
    * clicking a flow step opens the bottom drawer with this content and
    * updates it as the focused step changes.
    */
-  renderWalkthroughViewer?: (ctx: WalkthroughViewerContext) => ReactNode;
+  renderTrailViewer?: (ctx: TrailViewerContext) => ReactNode;
   /**
-   * Suppress the bottom file/walkthrough drawer entirely. Focusing a step then
+   * Suppress the bottom file/trail drawer entirely. Focusing a step then
    * only frames it on the canvas (and dims the rest) without dropping a snippet
    * panel below — for embeds that want the camera to tell the story. Defaults
    * to false.
@@ -406,7 +406,7 @@ export interface SubsystemComponentGraphProps {
     ref: DeclarationSymbolRef;
   }) => Promise<SymbolInspection | null> | SymbolInspection | null;
   /**
-   * When set, the graph's walkthrough working set — expanded flows and the
+   * When set, the graph's trail working set — expanded flows and the
    * selected flow/step — is persisted to `localStorage` under this key and
    * restored on mount. Hosts key it by the model id so each model remembers
    * where the user left off. Omit to keep the state purely in-memory.
@@ -489,27 +489,27 @@ function FileOverlayCloseButton({ onClose }: { onClose: () => void }) {
   );
 }
 
-const WalkthroughDrawerContent = memo(function WalkthroughDrawerContent({
+const TrailDrawerContent = memo(function TrailDrawerContent({
   render,
-  walkthrough,
+  trail,
   stepIndex,
   onOpenFile,
   proposedAliases,
   resolveSymbol,
   onSymbolClick,
 }: {
-  render: (ctx: WalkthroughViewerContext) => ReactNode;
-  walkthrough: SubsystemWalkthrough;
+  render: (ctx: TrailViewerContext) => ReactNode;
+  trail: SubsystemTrail;
   stepIndex: number | null;
   onOpenFile: (path: string, opts?: SubsystemOpenFileOptions) => void;
   proposedAliases: ReadonlySet<string>;
-  resolveSymbol?: (query: WalkthroughSymbolQuery) => string | null;
-  onSymbolClick?: (symbol: string, query: WalkthroughSymbolQuery) => void;
+  resolveSymbol?: (query: TrailSymbolQuery) => string | null;
+  onSymbolClick?: (symbol: string, query: TrailSymbolQuery) => void;
 }) {
   return (
     <>
       {render({
-        walkthrough,
+        trail,
         stepIndex,
         onOpenFile,
         proposedAliases,
@@ -524,7 +524,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initialWalkthroughId, onReorderWalkthroughs, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, title, hideSidebar, walkthroughStepMode = 'focus', autoPlayWalkthroughs = false, walkthroughAutoPlayIntervalMs = WALKTHROUGH_PLAY_PAUSE_MS, zoomOnWalkthroughFocus = true, walkthroughFocusDurationMs = 300, graphTitle, showWalkthroughTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderWalkthroughViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
+function Inner({ components, trails, graphifyRelations, orderByLine, initialTrailId, onReorderTrails, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, title, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
   const { theme } = useTheme();
   const { fitView, fitBounds, screenToFlowPosition } = useReactFlow();
   const viewport = useViewport();
@@ -532,8 +532,8 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
   // graph is its own tab/mount, so `persistKey` is stable for a mount.
   const persisted = useMemo(() => readViewState(persistKey), [persistKey]);
   const graphEdges = useMemo(
-    () => deriveGraphEdges({ walkthroughs }),
-    [walkthroughs],
+    () => deriveGraphEdges({ trails }),
+    [trails],
   );
   const [built, setBuilt] = useState<{
     nodes: Node[];
@@ -546,9 +546,9 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
   });
   const [layoutReady, setLayoutReady] = useState(false);
   const [selected, setSelected] = useState<SubsystemComponent | null>(null);
-  /** Bottom drawer: single file or walkthrough multi-snippet mode. */
+  /** Bottom drawer: single file or trail multi-snippet mode. */
   const [drawerTarget, setDrawerTarget] = useState<DrawerTarget | null>(null);
-  /** Full-file layer over an open walkthrough drawer — walkthrough stays mounted. */
+  /** Full-file layer over an open trail drawer — trail stays mounted. */
   const [fileOverlay, setFileOverlay] = useState<{
     file: string;
     startLine?: number;
@@ -628,52 +628,58 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       if (raf) cancelAnimationFrame(raf);
     };
   }, [pathFrameRects, screenToFlowPosition]);
-  // Walkthrough focus — selected flow (or step) is full strength; other
+  // Trail focus — selected flow (or step) is full strength; other
   // opened-flow members stay visible but dimmed; everything else is hidden.
   // Restored from the persisted view state when a `persistKey` is set.
-  const [focusedWalkthroughId, setFocusedWalkthroughId] = useState<string | null>(
-    persisted.focusedWalkthroughId ?? null,
+  const [focusedTrailId, setFocusedTrailId] = useState<string | null>(
+    persisted.focusedTrailId ?? null,
   );
   // `null` = whole flow focused; a number = that single step's edge focused.
   const [focusedStepIndex, setFocusedStepIndex] = useState<number | null>(
     persisted.focusedStepIndex ?? null,
   );
-  // Hovered walkthrough in the flows panel: dims every canvas node/edge not
+  // Hovered trail in the flows panel: dims every canvas node/edge not
   // involved in the hover preview (or selected ∪ hovered when a step is
   // focused). `stepIndex: null` = whole flow (collapsed title hover);
   // a number = that step. Transient — no drawer. Camera only reframes when
   // a step is already selected.
-  const [hoveredWalkthroughStep, setHoveredWalkthroughStep] = useState<{
-    walkthroughId: string;
+  const [hoveredTrailStep, setHoveredTrailStep] = useState<{
+    trailId: string;
     stepIndex: number | null;
   } | null>(null);
-  // Sidebar bottom half: which panel is shown when walkthroughs exist.
-  const [sidebarView, setSidebarView] = useState<'files' | 'walkthroughs'>(() =>
-    persisted.sidebarView ?? (walkthroughs?.length ? 'walkthroughs' : 'files'),
-  );
+  // Sidebar bottom half: which panel is shown when trails exist.
+  // The persisted value is membership-checked rather than trusted: a stale
+  // localStorage entry from before the walkthrough->trail rename would match
+  // neither panel and render a blank sidebar with no selected tab.
+  const [sidebarView, setSidebarView] = useState<'files' | 'trails'>(() => {
+    const stored = persisted.sidebarView;
+    const restored: 'files' | 'trails' =
+      stored === 'files' || stored === 'trails' ? stored : 'trails';
+    return trails?.length ? restored : 'files';
+  });
   // Diagnostics area tab: issues list vs the Maintain agent pipeline.
   const [diagnosticsTab, setDiagnosticsTab] = useState<'issues' | 'agents'>(
     () => persisted.diagnosticsTab ?? 'issues',
   );
   // One edge source at a time. When the caller doesn't pick, the sidebar's
-  // Files / Walkthroughs tab picks: Files draws graphify static edges,
-  // Walkthroughs draws runtime hop edges. Without visible tabs (no walkthroughs,
-  // or a sidebar-less embed) fall back to walkthrough edges.
-  const sidebarTabsVisible = !hideSidebar && (walkthroughs?.length ?? 0) > 0;
+  // Files / Trails tab picks: Files draws graphify static edges,
+  // Trails draws runtime step edges. Without visible tabs (no trails,
+  // or a sidebar-less embed) fall back to trail edges.
+  const sidebarTabsVisible = !hideSidebar && (trails?.length ?? 0) > 0;
   const resolvedEdgeView: SubsystemEdgeView =
     edgeView ??
     (sidebarTabsVisible
-      ? (sidebarView === 'walkthroughs' ? 'walkthroughs' : 'graphify')
-      : (walkthroughs?.length ?? 0) > 0
-        ? 'walkthroughs'
+      ? (sidebarView === 'trails' ? 'trails' : 'graphify')
+      : (trails?.length ?? 0) > 0
+        ? 'trails'
         : (graphifyRelations?.length ?? 0) > 0
           ? 'graphify'
-          : 'walkthroughs');
-  // Walkthrough flows the user has expanded (via the title row). Closed by
+          : 'trails');
+  // Trail flows the user has expanded (via the title row). Closed by
   // default so a graph with several flows doesn't dump every step list at once.
   // Restored from the persisted view state when a `persistKey` is set.
-  const [expandedWalkthroughs, setExpandedWalkthroughs] = useState<Set<string>>(
-    () => new Set(persisted.expandedWalkthroughs ?? []),
+  const [expandedTrails, setExpandedTrails] = useState<Set<string>>(
+    () => new Set(persisted.expandedTrails ?? []),
   );
   // Sidebar description visibility. Hidden by default so the files/flows
   // panel gets the vertical room; the title-row toggle reveals it.
@@ -732,18 +738,18 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       document.removeEventListener('mouseup', onUp);
     };
   }, [sidebarDrag, sidebarMaxWidth, fitView, persistKey]);
-  // Persist the walkthrough working set per model. Each write merges into the
+  // Persist the trail working set per model. Each write merges into the
   // stored blob, so the three fields never clobber one another.
   useEffect(() => {
     if (!persistKey) return;
     writeViewState(persistKey, {
-      expandedWalkthroughs: Array.from(expandedWalkthroughs),
+      expandedTrails: Array.from(expandedTrails),
     });
-  }, [persistKey, expandedWalkthroughs]);
+  }, [persistKey, expandedTrails]);
   useEffect(() => {
     if (!persistKey) return;
-    writeViewState(persistKey, { focusedWalkthroughId });
-  }, [persistKey, focusedWalkthroughId]);
+    writeViewState(persistKey, { focusedTrailId });
+  }, [persistKey, focusedTrailId]);
   useEffect(() => {
     if (!persistKey) return;
     writeViewState(persistKey, { focusedStepIndex });
@@ -776,59 +782,59 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       ? { file: drawerTarget.file, startLine: drawerTarget.startLine }
       : null;
 
-  const focusedWalkthrough = useMemo(() => {
-    if (drawerTarget?.kind !== 'walkthrough' || !walkthroughs) return null;
-    return walkthroughs.find((t) => t.id === drawerTarget.walkthroughId) ?? null;
-  }, [drawerTarget, walkthroughs]);
+  const focusedTrail = useMemo(() => {
+    if (drawerTarget?.kind !== 'trail' || !trails) return null;
+    return trails.find((t) => t.id === drawerTarget.trailId) ?? null;
+  }, [drawerTarget, trails]);
   // Autoplay focus: a sidebar-less embed has no expanded flow to "open", so
   // branding every step as a selection would hide all other nodes. Instead the
-  // autoplay sets this (flow id + step) to frame the hop and dim the rest —
+  // autoplay sets this (flow id + step) to frame the step and dim the rest —
   // same treatment as hover — without hiding anything. Declared before the
   // overlay memos, which read it to title the canvas chip + step bar.
   const [autoPlayFocus, setAutoPlayFocus] = useState<
-    { walkthroughId: string; stepIndex: number } | null
+    { trailId: string; stepIndex: number } | null
   >(null);
-  // Ref mirror of the drawer's walkthrough id so the symbol resolver stays
+  // Ref mirror of the drawer's trail id so the symbol resolver stays
   // stable across graph re-renders (the drawer is memoized on callback identity).
-  const drawerWalkthroughIdRef = useRef<string | null>(null);
-  drawerWalkthroughIdRef.current = focusedWalkthrough?.id ?? null;
+  const drawerTrailIdRef = useRef<string | null>(null);
+  drawerTrailIdRef.current = focusedTrail?.id ?? null;
 
-  // Walkthrough shown on the canvas title chip (focus, hover highlight, or
+  // Trail shown on the canvas title chip (focus, hover highlight, or
   // autoplay focus).
-  const overlayWalkthroughTitle = useMemo(() => {
-    if (!showWalkthroughTitle || !walkthroughs?.length) return null;
+  const overlayTrailTitle = useMemo(() => {
+    if (!showTrailTitle || !trails?.length) return null;
     const id =
-      focusedWalkthroughId ??
-      autoPlayFocus?.walkthroughId ??
-      hoveredWalkthroughStep?.walkthroughId;
+      focusedTrailId ??
+      autoPlayFocus?.trailId ??
+      hoveredTrailStep?.trailId;
     if (!id) return null;
-    return walkthroughs.find((t) => t.id === id)?.title ?? null;
+    return trails.find((t) => t.id === id)?.title ?? null;
   }, [
-    showWalkthroughTitle,
-    walkthroughs,
-    focusedWalkthroughId,
+    showTrailTitle,
+    trails,
+    focusedTrailId,
     autoPlayFocus,
-    hoveredWalkthroughStep,
+    hoveredTrailStep,
   ]);
 
   // Active step for the bottom-of-title progress + annotation chip.
-  const overlayWalkthroughStep = useMemo(() => {
-    if (!showWalkthroughTitle || !walkthroughs?.length) return null;
+  const overlayTrailStep = useMemo(() => {
+    if (!showTrailTitle || !trails?.length) return null;
     const tlId =
-      focusedWalkthroughId ??
-      autoPlayFocus?.walkthroughId ??
-      hoveredWalkthroughStep?.walkthroughId ??
+      focusedTrailId ??
+      autoPlayFocus?.trailId ??
+      hoveredTrailStep?.trailId ??
       null;
     let stepIndex: number | null = null;
-    if (focusedWalkthroughId != null) {
+    if (focusedTrailId != null) {
       stepIndex = focusedStepIndex;
     } else if (autoPlayFocus != null) {
       stepIndex = autoPlayFocus.stepIndex;
-    } else if (hoveredWalkthroughStep != null) {
-      stepIndex = hoveredWalkthroughStep.stepIndex;
+    } else if (hoveredTrailStep != null) {
+      stepIndex = hoveredTrailStep.stepIndex;
     }
     if (tlId == null || stepIndex == null) return null;
-    const tl = walkthroughs.find((t) => t.id === tlId);
+    const tl = trails.find((t) => t.id === tlId);
     const step = tl?.steps[stepIndex];
     if (!step || !tl) return null;
     return {
@@ -837,25 +843,25 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       annotation: step.annotation,
     };
   }, [
-    showWalkthroughTitle,
-    walkthroughs,
-    focusedWalkthroughId,
+    showTrailTitle,
+    trails,
+    focusedTrailId,
     focusedStepIndex,
     autoPlayFocus,
-    hoveredWalkthroughStep,
+    hoveredTrailStep,
   ]);
 
   const drawerTitle = useMemo(() => {
     if (!drawerTarget) return null;
     if (drawerTarget.kind === 'file') return drawerTarget.file;
-    const tl = focusedWalkthrough;
+    const tl = focusedTrail;
     if (!tl) return null;
     if (drawerTarget.stepIndex == null) return tl.title;
     const step = tl.steps[drawerTarget.stepIndex];
     if (!step) return tl.title;
     const site = `${step.file.split('/').pop() ?? step.file}:${step.line}`;
     return `${tl.title} · ${site}`;
-  }, [drawerTarget, focusedWalkthrough]);
+  }, [drawerTarget, focusedTrail]);
 
   // Refresh selected component when the components list updates (e.g. verify
   // writes back declarationRef).
@@ -869,14 +875,14 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
   // The pane stays hidden until Pass 2 completes. Key off layout-affecting
   // fields only — declarationRef updates after verify must not re-run ELK.
   const layoutKey = useMemo(
-    () => subsystemGraphLayoutKey({ components, walkthroughs, graphifyRelations }),
-    [components, walkthroughs, graphifyRelations],
+    () => subsystemGraphLayoutKey({ components, trails, graphifyRelations }),
+    [components, trails, graphifyRelations],
   );
   const componentsRef = useRef(components);
-  const walkthroughsRef = useRef(walkthroughs);
+  const trailsRef = useRef(trails);
   const graphifyRelationsRef = useRef(graphifyRelations);
   componentsRef.current = components;
-  walkthroughsRef.current = walkthroughs;
+  trailsRef.current = trails;
   graphifyRelationsRef.current = graphifyRelations;
 
   // Track measured dimensions from React Flow's dimension changes.
@@ -896,7 +902,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
     pass2GenRef.current += 1;
     const doc = {
       components: componentsRef.current,
-      walkthroughs: walkthroughsRef.current,
+      trails: trailsRef.current,
     };
     void buildSubsystemGraph(doc, {
       maxNodeWidth,
@@ -953,7 +959,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
     const measuredHeights = new Map(leafNodes.map((n) => [n.id, dims.get(n.id)!.height]));
     const gen = ++pass2GenRef.current;
     void buildSubsystemGraph(
-      { components, walkthroughs },
+      { components, trails },
       { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights, showSingletonFrames, moduleNesting, graphifyRelations, orderByLine },
     )
       .then(({ nodes, edges: e, absoluteRects }) => {
@@ -967,7 +973,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
         // Reveal Pass 1 layout rather than leaving the cover up forever.
         setLayoutReady(true);
       });
-  }, [built.nodes, components, walkthroughs, graphifyRelations, orderByLine, maxNodeWidth, showEdgeLabels, moduleNesting]);
+  }, [built.nodes, components, trails, graphifyRelations, orderByLine, maxNodeWidth, showEdgeLabels, moduleNesting]);
 
   // After Pass 1 commits, try Pass 2 immediately with retained measurements.
   // Same-id live updates often get no new React Flow `dimensions` events, so
@@ -1008,8 +1014,8 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       }
       const src = edgeById.get(edgeId);
       setSelectedEdgeId(edgeId);
-      // A direct edge selection on the canvas supersedes any walkthrough focus.
-      setFocusedWalkthroughId(null);
+      // A direct edge selection on the canvas supersedes any trail focus.
+      setFocusedTrailId(null);
       setFocusedStepIndex(null);
       if (src) onEdgeSelect?.(src);
     },
@@ -1029,7 +1035,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
         }
         setSelected(comp);
         setSelectedEdgeId(null);
-        setFocusedWalkthroughId(null);
+        setFocusedTrailId(null);
         setFocusedStepIndex(null);
         onSelect?.(alias);
       }
@@ -1083,22 +1089,22 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
     [components],
   );
 
-  // A `step` issue target names ONE step of a walkthrough — the walkthrough id in
+  // A `step` issue target names ONE step of a trail — the trail id in
   // `id`, the 0-based step position in `stepIndex`. Validated against the loaded
-  // walkthroughs so a finding left over from an edited flow resolves to null
+  // trails so a finding left over from an edited flow resolves to null
   // rather than framing whatever now happens to sit at that index.
   const issueStep = useCallback(
     (
       issue: SubsystemIssue,
-    ): { walkthrough: SubsystemWalkthrough; stepIndex: number } | null => {
+    ): { trail: SubsystemTrail; stepIndex: number } | null => {
       const target = issue.target;
       if (target?.kind !== 'step') return null;
       if (target.id == null || target.stepIndex == null) return null;
-      const walkthrough = walkthroughs?.find((t) => t.id === target.id);
-      if (!walkthrough?.steps[target.stepIndex]) return null;
-      return { walkthrough, stepIndex: target.stepIndex };
+      const trail = trails?.find((t) => t.id === target.id);
+      if (!trail?.steps[target.stepIndex]) return null;
+      return { trail, stepIndex: target.stepIndex };
     },
-    [walkthroughs],
+    [trails],
   );
 
   // Per-node diagnostics badge: fold each component-targeted finding that maps
@@ -1194,7 +1200,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
   // target:
   //   component   → that node
   //   module      → every component in that module
-  //   walkthrough → the flow's nodes + its hop edges
+  //   trail → the flow's nodes + its step edges
   //   repo        → every component of that repo
   //   graph       → whole-graph finding; implicates nothing specific
   // Returns null when nothing is expanded, no expanded layer has findings, or
@@ -1225,15 +1231,15 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
             nodeIds.add(c.alias);
           }
         }
-      } else if (t.kind === 'walkthrough') {
-        const wt = (walkthroughs ?? []).find(
+      } else if (t.kind === 'trail') {
+        const wt = (trails ?? []).find(
           (w) => w.id === t.id || w.title === t.label,
         );
         if (wt) {
           for (const s of wt.steps) {
             nodeIds.add(s.from);
             nodeIds.add(s.to);
-            edgeIds.add(walkthroughStepGraphEdgeId(s));
+            edgeIds.add(trailStepGraphEdgeId(s));
           }
         }
       } else if (t.kind === 'repo') {
@@ -1250,7 +1256,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       if (nodeIds.has(e.source) && nodeIds.has(e.target)) edgeIds.add(e.id);
     }
     return { nodeIds, edgeIds };
-  }, [issues, expandedIssueCategories, components, walkthroughs, resolveAlias]);
+  }, [issues, expandedIssueCategories, components, trails, resolveAlias]);
   const issueFocusNodeIds = issueFocus?.nodeIds ?? null;
   const issueFocusEdgeIds = issueFocus?.edgeIds ?? null;
 
@@ -1262,58 +1268,58 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
   selectedEdgeIdRef.current = selectedEdgeId;
   // Ref mirrors of the focused step, so `unfocusIssueTarget` (a useCallback
   // over early deps) can tell a step focus it still owns from one the user has
-  // since moved elsewhere in the walkthrough panel.
-  const focusedStepRef = useRef<{ walkthroughId: string; stepIndex: number } | null>(
+  // since moved elsewhere in the trail panel.
+  const focusedStepRef = useRef<{ trailId: string; stepIndex: number } | null>(
     null,
   );
   focusedStepRef.current =
-    focusedWalkthroughId != null && focusedStepIndex != null
-      ? { walkthroughId: focusedWalkthroughId, stepIndex: focusedStepIndex }
+    focusedTrailId != null && focusedStepIndex != null
+      ? { trailId: focusedTrailId, stepIndex: focusedStepIndex }
       : null;
 
-  // Edge ids in walkthrough focus (an active flow's edge set, or a single
-  // step's edge). Used to frame the camera. `null` = no walkthrough focus.
+  // Edge ids in trail focus (an active flow's edge set, or a single
+  // step's edge). Used to frame the camera. `null` = no trail focus.
   const focusEdgeIds = useMemo(() => {    if (autoPlayFocus) {
-      const tl = walkthroughs?.find((t) => t.id === autoPlayFocus.walkthroughId);
+      const tl = trails?.find((t) => t.id === autoPlayFocus.trailId);
       const step = tl?.steps[autoPlayFocus.stepIndex];
-      return step ? new Set([walkthroughStepGraphEdgeId(step)]) : null;
+      return step ? new Set([trailStepGraphEdgeId(step)]) : null;
     }
-    if (focusedWalkthroughId == null || !walkthroughs) return null;
-    const tl = walkthroughs.find((t) => t.id === focusedWalkthroughId);
+    if (focusedTrailId == null || !trails) return null;
+    const tl = trails.find((t) => t.id === focusedTrailId);
     if (!tl) return null;
     if (focusedStepIndex != null) {
       const step = tl.steps[focusedStepIndex];
-      return step ? new Set([walkthroughStepGraphEdgeId(step)]) : null;
+      return step ? new Set([trailStepGraphEdgeId(step)]) : null;
     }
-    return new Set(tl.steps.map((s) => walkthroughStepGraphEdgeId(s)));
-  }, [walkthroughs, focusedWalkthroughId, focusedStepIndex, autoPlayFocus]);
+    return new Set(tl.steps.map((s) => trailStepGraphEdgeId(s)));
+  }, [trails, focusedTrailId, focusedStepIndex, autoPlayFocus]);
 
   // 1-based step numbers per edge of the active flow (focused or
   // hover/autoplay-highlighted). An edge can appear in more than one step.
   const selectedFlowStepNos = useMemo(() => {
-    const activeId = focusedWalkthroughId ?? hoveredWalkthroughStep?.walkthroughId;
-    if (activeId == null || !walkthroughs) return null;
-    const tl = walkthroughs.find((t) => t.id === activeId);
+    const activeId = focusedTrailId ?? hoveredTrailStep?.trailId;
+    if (activeId == null || !trails) return null;
+    const tl = trails.find((t) => t.id === activeId);
     if (!tl) return null;
     const map = new Map<string, number[]>();
     tl.steps.forEach((s, i) => {
-      const list = map.get(walkthroughStepGraphEdgeId(s)) ?? [];
+      const list = map.get(trailStepGraphEdgeId(s)) ?? [];
       list.push(i + 1);
-      map.set(walkthroughStepGraphEdgeId(s), list);
+      map.set(trailStepGraphEdgeId(s), list);
     });
     return map;
-  }, [walkthroughs, focusedWalkthroughId, hoveredWalkthroughStep]);
+  }, [trails, focusedTrailId, hoveredTrailStep]);
 
-  // Union of every expanded (opened) walkthrough's edges — the visible set.
+  // Union of every expanded (opened) trail's edges — the visible set.
   const openedEdgeIds = useMemo(() => {
-    if (!walkthroughs || expandedWalkthroughs.size === 0) return null;
+    if (!trails || expandedTrails.size === 0) return null;
     const ids = new Set<string>();
-    for (const tl of walkthroughs) {
-      if (!expandedWalkthroughs.has(tl.id)) continue;
-      for (const s of tl.steps) ids.add(walkthroughStepGraphEdgeId(s));
+    for (const tl of trails) {
+      if (!expandedTrails.has(tl.id)) continue;
+      for (const s of tl.steps) ids.add(trailStepGraphEdgeId(s));
     }
     return ids.size > 0 ? ids : null;
-  }, [walkthroughs, expandedWalkthroughs]);
+  }, [trails, expandedTrails]);
 
   const endpointsOf = (edgeIds: ReadonlySet<string> | null): Set<string> | null => {
     if (!edgeIds) return null;
@@ -1327,20 +1333,20 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
   };
   // Edge/nodes involved in the hovered step or whole flow.
   const hoverEdgeIds = useMemo(() => {
-    if (!hoveredWalkthroughStep || !walkthroughs) return null;
-    const tl = walkthroughs.find((t) => t.id === hoveredWalkthroughStep.walkthroughId);
+    if (!hoveredTrailStep || !trails) return null;
+    const tl = trails.find((t) => t.id === hoveredTrailStep.trailId);
     if (!tl) return null;
-    if (hoveredWalkthroughStep.stepIndex == null) {
-      return new Set(tl.steps.map((s) => walkthroughStepGraphEdgeId(s)));
+    if (hoveredTrailStep.stepIndex == null) {
+      return new Set(tl.steps.map((s) => trailStepGraphEdgeId(s)));
     }
-    const step = tl.steps[hoveredWalkthroughStep.stepIndex];
-    return step ? new Set([walkthroughStepGraphEdgeId(step)]) : null;
-  }, [walkthroughs, hoveredWalkthroughStep]);
+    const step = tl.steps[hoveredTrailStep.stepIndex];
+    return step ? new Set([trailStepGraphEdgeId(step)]) : null;
+  }, [trails, hoveredTrailStep]);
   // While hovering with a *step* already selected, brighten the union of
   // selected + hovered participants. Whole-flow focus (or no focus) keeps
   // the old hover-replace preview so a step hover still dims the rest.
   const previewEdgeIds = useMemo(() => {
-    // Autoplay drives focus without a hover, so its hop is the preview set.
+    // Autoplay drives focus without a hover, so its step is the preview set.
     if (autoPlayFocus) return focusEdgeIds;
     if (!hoverEdgeIds) return null;
     // While hovering with a *step* already selected, brighten the union of
@@ -1489,7 +1495,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
     };
     // Edges outside the selected view are hidden entirely (labels included).
     // graphify-native edges belong to the graphify view (they are static
-    // topology, not runtime hops) regardless of their verb.
+    // topology, not runtime steps) regardless of their verb.
     const edgeInView = (e: Edge): boolean => {
       const d = e.data as
         | { mechanism?: string; provenance?: SubsystemEdgeProvenance }
@@ -1498,7 +1504,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       if (resolvedEdgeView === 'graphify') {
         return d?.provenance === 'graphify';
       }
-      return isWalkthroughMechanism(mechanism);
+      return isTrailMechanism(mechanism);
     };
     if (openedEdgeIds || focusEdgeIds || previewEdgeIds || issueFocusEdgeIds) {
       return baseEdges.map((e) => {
@@ -1565,7 +1571,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
     (_e, node: Node) => {
       const comp = (node.data as { component?: SubsystemComponent } | undefined)?.component;
       setSelectedEdgeId(null);
-      setFocusedWalkthroughId(null);
+      setFocusedTrailId(null);
       setFocusedStepIndex(null);
       if (node.type === 'subsystem-component' && comp) {
         // Clicking the already-selected node unselects it (toggle off).
@@ -1593,7 +1599,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
   const onPaneClick = useCallback(() => {
     setSelected(null);
     setSelectedEdgeId(null);
-    setFocusedWalkthroughId(null);
+    setFocusedTrailId(null);
     setFocusedStepIndex(null);
     issueModuleFocusRef.current = null;
   }, []);
@@ -1601,8 +1607,8 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
   // Sidebar file trees — one per repo on multi-repo graphs, each under its
   // own owner-avatar header. Clicking a header collapses that repo's tree.
   const repoGroups = useMemo(() => buildRepoGroups(components), [components]);
-  const hasWalkthroughs = useMemo(() => (walkthroughs?.length ?? 0) > 0, [walkthroughs]);
-  // Aliases of proposed components — the flows panel tints walkthrough titles
+  const hasTrails = useMemo(() => (trails?.length ?? 0) > 0, [trails]);
+  // Aliases of proposed components — the flows panel tints trail titles
   // (and steps) that touch one.
   const proposedAliases = useMemo(
     () => new Set(components.filter((c) => c.proposed).map((c) => c.alias)),
@@ -1679,7 +1685,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
   const onNodeDoubleClick: NodeMouseHandler = useCallback(
     (_e, node: Node) => {
       // Boundary frame → frame its members on the canvas; double-click again to
-      // zoom back out. User-initiated, so it ignores the walkthrough zoom gate.
+      // zoom back out. User-initiated, so it ignores the trail zoom gate.
       if (node.type === 'subsystem-group') {
         const key =
           (node.data as { region?: { key?: string } } | undefined)?.region?.key;
@@ -1715,7 +1721,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
     [onOpenDeclarationFile, fitView, focusedBoundaryKey],
   );
 
-  const onOpenFileFromWalkthrough = useCallback(
+  const onOpenFileFromTrail = useCallback(
     (file: string, opts?: SubsystemOpenFileOptions) => {
       setFileOverlay({ file, startLine: opts?.startLine });
       onFileSelect?.(file);
@@ -1737,15 +1743,15 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
   const fileOverlayOpen = fileOverlay != null;
   const collapseCanvas = drawerFillHeight || fileOverlayOpen;
 
-  // Drop the full-file overlay when the underlying walkthrough drawer changes
+  // Drop the full-file overlay when the underlying trail drawer changes
   // or closes — open-file keeps the same drawerTarget so the snippets stay mounted.
-  const walkthroughDrawerKey =
-    drawerTarget?.kind === 'walkthrough'
-      ? `${drawerTarget.walkthroughId}:${drawerTarget.stepIndex}`
+  const trailDrawerKey =
+    drawerTarget?.kind === 'trail'
+      ? `${drawerTarget.trailId}:${drawerTarget.stepIndex}`
       : null;
   useEffect(() => {
     setFileOverlay(null);
-  }, [walkthroughDrawerKey]);
+  }, [trailDrawerKey]);
 
   useEffect(() => {
     if (!fileOverlayOpen) return;
@@ -1756,16 +1762,16 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
     return () => window.removeEventListener('keydown', onKey);
   }, [fileOverlayOpen, closeFileOverlay]);
 
-  // Camera helper shared by the walkthrough interactions. Fits the union of
+  // Camera helper shared by the trail interactions. Fits the union of
   // the focused edges' endpoint rects AND their routed waypoints — the edge
   // carries its full polyline (`elkPathPoints`, absolute flow coords), so the
-  // frame is the line the hop actually traces. That keeps a hop whose route
+  // frame is the line the step actually traces. That keeps a step whose route
   // bulges out around intervening nodes from being clipped at the viewport
   // edge, and it is the edge's own geometry doing the guiding, not fudge
   // padding.
   const fitFocusBounds = useCallback(
     (ids: ReadonlySet<string>) => {
-      if (!zoomOnWalkthroughFocus) return;
+      if (!zoomOnTrailFocus) return;
       const nodeIds = new Set<string>();
       const points: { x: number; y: number }[] = [];
       for (const e of baseEdges) {
@@ -1810,15 +1816,15 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       };
       fitBounds(bounds, {
         padding: 0.15,
-        duration: walkthroughFocusDurationMs,
+        duration: trailFocusDurationMs,
       });
     },
     [
       baseEdges,
       built.absoluteRects,
       fitBounds,
-      zoomOnWalkthroughFocus,
-      walkthroughFocusDurationMs,
+      zoomOnTrailFocus,
+      trailFocusDurationMs,
     ],
   );
 
@@ -1876,16 +1882,16 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
           width: Math.max(1, maxX - minX),
           height: Math.max(1, maxY - minY),
         },
-        { padding, duration: walkthroughFocusDurationMs },
+        { padding, duration: trailFocusDurationMs },
       );
     },
-    [rectForNode, fitBounds, walkthroughFocusDurationMs],
+    [rectForNode, fitBounds, trailFocusDurationMs],
   );
 
-  // Zoom back out to the full diagram after the last expanded walkthrough
+  // Zoom back out to the full diagram after the last expanded trail
   // closes (visibility restores non-flow nodes that were hidden).
   const fitOverview = useCallback(() => {
-    if (!zoomOnWalkthroughFocus) return;
+    if (!zoomOnTrailFocus) return;
     fitView({
       padding: 0.1,
       includeHiddenNodes: false,
@@ -1893,115 +1899,115 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       maxZoom: 2,
       duration: 300,
     });
-  }, [fitView, zoomOnWalkthroughFocus]);
+  }, [fitView, zoomOnTrailFocus]);
 
   // Focus an entire flow: hide everything but the flow's nodes and edges, and
   // frame the flow on the canvas. Selection state is cleared — the graph now
   // reads as the narrative. No drawer: the code view only opens on a step
-  // click. A stale walkthrough drawer (from a previously focused flow's step)
+  // click. A stale trail drawer (from a previously focused flow's step)
   // closes; an explicitly opened file drawer stays.
   // In `dim` mode: clear step highlight and leave the full graph visible
   // (no zoom / hide) — matching "step away from a hovered step".
-  const focusWalkthroughEdges = useCallback(
-    (tl: SubsystemWalkthrough) => {
+  const focusTrailEdges = useCallback(
+    (tl: SubsystemTrail) => {
       setSelected(null);
       setSelectedEdgeId(null);
-      setHoveredWalkthroughStep(null);
-      if (walkthroughStepMode === 'dim') {
+      setHoveredTrailStep(null);
+      if (trailStepMode === 'dim') {
         setFocusedStepIndex(null);
-        setFocusedWalkthroughId(null);
-        setDrawerTarget((prev) => (prev?.kind === 'walkthrough' ? null : prev));
+        setFocusedTrailId(null);
+        setDrawerTarget((prev) => (prev?.kind === 'trail' ? null : prev));
         return;
       }
       setFocusedStepIndex(null);
-      setFocusedWalkthroughId(tl.id);
-      fitFocusBounds(new Set(tl.steps.map((s) => walkthroughStepGraphEdgeId(s))));
-      setDrawerTarget((prev) => (prev?.kind === 'walkthrough' ? null : prev));
+      setFocusedTrailId(tl.id);
+      fitFocusBounds(new Set(tl.steps.map((s) => trailStepGraphEdgeId(s))));
+      setDrawerTarget((prev) => (prev?.kind === 'trail' ? null : prev));
     },
-    [fitFocusBounds, walkthroughStepMode],
+    [fitFocusBounds, trailStepMode],
   );
 
-  const clearWalkthroughFocus = useCallback(() => {
-    setFocusedWalkthroughId(null);
+  const clearTrailFocus = useCallback(() => {
+    setFocusedTrailId(null);
     setFocusedStepIndex(null);
-    setHoveredWalkthroughStep(null);
-    setDrawerTarget((prev) => (prev?.kind === 'walkthrough' ? null : prev));
+    setHoveredTrailStep(null);
+    setDrawerTarget((prev) => (prev?.kind === 'trail' ? null : prev));
   }, []);
 
-  // Host deep-link: opening the graph from a walkthrough row selects that
+  // Host deep-link: opening the graph from a trail row selects that
   // flow — expand its steps, focus its edges, and switch the sidebar to
-  // Walkthroughs. Guarded by a ref so a later in-tab selection isn't yanked
+  // Trails. Guarded by a ref so a later in-tab selection isn't yanked
   // back; a remount (or a new id) re-applies it.
-  const appliedInitialWalkthroughRef = useRef<string | null>(null);
+  const appliedInitialTrailRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!initialWalkthroughId) return;
-    if (appliedInitialWalkthroughRef.current === initialWalkthroughId) return;
-    if (!layoutReady || !walkthroughs?.length) return;
-    const tl = walkthroughs.find((t) => t.id === initialWalkthroughId);
+    if (!initialTrailId) return;
+    if (appliedInitialTrailRef.current === initialTrailId) return;
+    if (!layoutReady || !trails?.length) return;
+    const tl = trails.find((t) => t.id === initialTrailId);
     if (!tl) return;
-    appliedInitialWalkthroughRef.current = initialWalkthroughId;
-    setSidebarView('walkthroughs');
-    setExpandedWalkthroughs((prev) => new Set(prev).add(tl.id));
-    focusWalkthroughEdges(tl);
-  }, [initialWalkthroughId, layoutReady, walkthroughs, focusWalkthroughEdges]);
+    appliedInitialTrailRef.current = initialTrailId;
+    setSidebarView('trails');
+    setExpandedTrails((prev) => new Set(prev).add(tl.id));
+    focusTrailEdges(tl);
+  }, [initialTrailId, layoutReady, trails, focusTrailEdges]);
 
   // Switching sidebar panels also switches the edge vocabulary. Leaving the
-  // Walkthroughs panel drops its canvas state (focus, expanded flows, selected
+  // Trails panel drops its canvas state (focus, expanded flows, selected
   // edge) so the Files view's topology edges aren't gated by a flow the user
   // can no longer see or un-dim.
   const changeSidebarView = useCallback(
-    (view: 'files' | 'walkthroughs') => {
+    (view: 'files' | 'trails') => {
       setSidebarView(view);
-      if (view === 'walkthroughs') return;
-      clearWalkthroughFocus();
-      setExpandedWalkthroughs(new Set());
+      if (view === 'trails') return;
+      clearTrailFocus();
+      setExpandedTrails(new Set());
       setSelectedEdgeId(null);
     },
-    [clearWalkthroughFocus],
+    [clearTrailFocus],
   );
 
-  // Focus a single step's edge on the canvas and open/scroll the walkthrough
+  // Focus a single step's edge on the canvas and open/scroll the trail
   // drawer to that step's snippet. Clicking the already-focused step clears
   // step focus and returns to whole-flow (high-level) framing.
   // In `dim` mode: only dim non-participants (same as hovering a step) —
   // no camera move, no drawer, no hide.
-  const focusWalkthroughStep = useCallback(
-    (tl: SubsystemWalkthrough, stepIndex: number) => {
+  const focusTrailStep = useCallback(
+    (tl: SubsystemTrail, stepIndex: number) => {
       const step = tl.steps[stepIndex];
       if (!step) return;
       setSelected(null);
       setSelectedEdgeId(null);
-      if (walkthroughStepMode === 'dim') {
+      if (trailStepMode === 'dim') {
         setFocusedStepIndex(null);
-        setFocusedWalkthroughId(null);
-        setHoveredWalkthroughStep({ walkthroughId: tl.id, stepIndex });
-        setDrawerTarget((prev) => (prev?.kind === 'walkthrough' ? null : prev));
+        setFocusedTrailId(null);
+        setHoveredTrailStep({ trailId: tl.id, stepIndex });
+        setDrawerTarget((prev) => (prev?.kind === 'trail' ? null : prev));
         return;
       }
       // Toggle: clicking the selected step unselects it (back to whole flow).
-      if (focusedWalkthroughId === tl.id && focusedStepIndex === stepIndex) {
+      if (focusedTrailId === tl.id && focusedStepIndex === stepIndex) {
         setFocusedStepIndex(null);
         // Pointer is still over the row — keep hover preview so dimming doesn't
         // flash off until mouseleave.
-        setHoveredWalkthroughStep({ walkthroughId: tl.id, stepIndex });
-        setDrawerTarget((prev) => (prev?.kind === 'walkthrough' ? null : prev));
+        setHoveredTrailStep({ trailId: tl.id, stepIndex });
+        setDrawerTarget((prev) => (prev?.kind === 'trail' ? null : prev));
         if (pendingFocusFitRef.current != null) {
           window.clearTimeout(pendingFocusFitRef.current);
           pendingFocusFitRef.current = null;
         }
-        fitFocusBounds(new Set(tl.steps.map((s) => walkthroughStepGraphEdgeId(s))));
+        fitFocusBounds(new Set(tl.steps.map((s) => trailStepGraphEdgeId(s))));
         return;
       }
       setFocusedStepIndex(stepIndex);
-      setFocusedWalkthroughId(tl.id);
-      setHoveredWalkthroughStep(null);
+      setFocusedTrailId(tl.id);
+      setHoveredTrailStep(null);
       // Open the drawer before fitting. If it was closed, wait for its height
       // transition so fitView uses the reduced canvas — not full height.
       const drawerWasOpen = drawerOpenRef.current;
-      if (renderWalkthroughViewer) {
+      if (renderTrailViewer) {
         setDrawerTarget({
-          kind: 'walkthrough',
-          walkthroughId: tl.id,
+          kind: 'trail',
+          trailId: tl.id,
           stepIndex,
         });
       } else {
@@ -2011,7 +2017,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
           startLine: step.line,
         });
       }
-      const edgeIds = new Set([walkthroughStepGraphEdgeId(step)]);
+      const edgeIds = new Set([trailStepGraphEdgeId(step)]);
       if (pendingFocusFitRef.current != null) {
         window.clearTimeout(pendingFocusFitRef.current);
         pendingFocusFitRef.current = null;
@@ -2028,9 +2034,9 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
     [
       fitFocusBounds,
       focusedStepIndex,
-      focusedWalkthroughId,
-      renderWalkthroughViewer,
-      walkthroughStepMode,
+      focusedTrailId,
+      renderTrailViewer,
+      trailStepMode,
     ],
   );
 
@@ -2052,10 +2058,10 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
     const prev = prevPreviewEdgeIdsRef.current;
     prevPreviewEdgeIdsRef.current = previewEdgeIds;
 
-    if (!zoomOnWalkthroughFocus || walkthroughStepMode === 'dim') return;
+    if (!zoomOnTrailFocus || trailStepMode === 'dim') return;
     // Camera follows hover only when a specific step is already focused (or
     // autoplay is driving an auto-focus).
-    if (!autoPlayFocus && (focusedWalkthroughId == null || focusedStepIndex == null)) {
+    if (!autoPlayFocus && (focusedTrailId == null || focusedStepIndex == null)) {
       return;
     }
 
@@ -2069,26 +2075,26 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
   }, [
     previewEdgeIds,
     focusEdgeIds,
-    focusedWalkthroughId,
+    focusedTrailId,
     focusedStepIndex,
     autoPlayFocus,
     fitFocusBounds,
-    zoomOnWalkthroughFocus,
-    walkthroughStepMode,
+    zoomOnTrailFocus,
+    trailStepMode,
   ]);
 
-  // Graph-only embeds: cycle walkthrough steps. In `focus` mode each step is
-  // selected (camera frames it via fitFocusBounds) and, when a walkthrough
+  // Graph-only embeds: cycle trail steps. In `focus` mode each step is
+  // selected (camera frames it via fitFocusBounds) and, when a trail
   // viewer is supplied, its snippet drawer opens; in `dim` mode it only
   // dim-highlights the step (hover-style) with no camera move.
   useEffect(() => {
-    if (!autoPlayWalkthroughs || walkthroughs == null || walkthroughs.length === 0) return;
+    if (!autoPlayTrails || trails == null || trails.length === 0) return;
     if (!layoutReady) return;
-    const playable = walkthroughs.filter((tl) => tl.steps.length > 0);
+    const playable = trails.filter((tl) => tl.steps.length > 0);
     if (playable.length === 0) return;
     // Only run the cycles that can actually be shown in the current edge view.
     const inView = playable.filter((tl) =>
-      tl.steps.some((s) => isWalkthroughMechanism(s.mechanism)),
+      tl.steps.some((s) => isTrailMechanism(s.mechanism)),
     );
     if (inView.length === 0) return;
     const cyc = inView;
@@ -2097,8 +2103,8 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
     let tlIdx = 0;
     let stepIdx = 0;
     let timer: number | null = null;
-    const interval = Math.max(400, walkthroughAutoPlayIntervalMs);
-    const focusMode = walkthroughStepMode !== 'dim';
+    const interval = Math.max(400, trailAutoPlayIntervalMs);
+    const focusMode = trailStepMode !== 'dim';
     let cleanup = () => {};
 
     const tick = () => {
@@ -2107,15 +2113,15 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       setSelected(null);
       setSelectedEdgeId(null);
       if (focusMode) {
-        setHoveredWalkthroughStep(null);
-        setFocusedWalkthroughId(null);
+        setHoveredTrailStep(null);
+        setFocusedTrailId(null);
         setFocusedStepIndex(null);
-        setAutoPlayFocus({ walkthroughId: tl.id, stepIndex: stepIdx });
+        setAutoPlayFocus({ trailId: tl.id, stepIndex: stepIdx });
         if (!hideDrawer) {
           const step = tl.steps[stepIdx];
           if (step) {
-            if (renderWalkthroughViewer) {
-              setDrawerTarget({ kind: 'walkthrough', walkthroughId: tl.id, stepIndex: stepIdx });
+            if (renderTrailViewer) {
+              setDrawerTarget({ kind: 'trail', trailId: tl.id, stepIndex: stepIdx });
             } else {
               setDrawerTarget({ kind: 'file', file: step.file, startLine: step.line });
             }
@@ -2123,9 +2129,9 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
         }
       } else {
         setAutoPlayFocus(null);
-        setFocusedWalkthroughId(null);
+        setFocusedTrailId(null);
         setFocusedStepIndex(null);
-        setHoveredWalkthroughStep({ walkthroughId: tl.id, stepIndex: stepIdx });
+        setHoveredTrailStep({ trailId: tl.id, stepIndex: stepIdx });
       }
       stepIdx += 1;
       if (stepIdx >= tl.steps.length) {
@@ -2139,29 +2145,29 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
     cleanup = () => {
       cancelled = true;
       if (timer != null) window.clearTimeout(timer);
-      setHoveredWalkthroughStep(null);
-      setFocusedWalkthroughId(null);
+      setHoveredTrailStep(null);
+      setFocusedTrailId(null);
       setFocusedStepIndex(null);
       setAutoPlayFocus(null);
     };
     return cleanup;
   }, [
-    autoPlayWalkthroughs,
-    walkthroughs,
-    walkthroughAutoPlayIntervalMs,
+    autoPlayTrails,
+    trails,
+    trailAutoPlayIntervalMs,
     layoutReady,
-    walkthroughStepMode,
-    renderWalkthroughViewer,
+    trailStepMode,
+    renderTrailViewer,
     hideDrawer,
   ]);
 
-  // Arrow keys step through the focused walkthrough once a step is active
+  // Arrow keys step through the focused trail once a step is active
   // (sidebar click or drawer open). Ignores typing targets and chords.
   useEffect(() => {
-    if (focusedWalkthroughId == null || focusedStepIndex == null || !walkthroughs) {
+    if (focusedTrailId == null || focusedStepIndex == null || !trails) {
       return;
     }
-    const tl = walkthroughs.find((t) => t.id === focusedWalkthroughId);
+    const tl = trails.find((t) => t.id === focusedTrailId);
     if (!tl || tl.steps.length === 0) return;
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -2187,31 +2193,31 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       }
       if (next === focusedStepIndex) return;
       e.preventDefault();
-      focusWalkthroughStep(tl, next);
+      focusTrailStep(tl, next);
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
-    focusedWalkthroughId,
+    focusedTrailId,
     focusedStepIndex,
-    walkthroughs,
-    focusWalkthroughStep,
+    trails,
+    focusTrailStep,
   ]);
 
-  const toggleWalkthroughCollapsed = useCallback(
+  const toggleTrailCollapsed = useCallback(
     (tlId: string) => {
       const collapsingLast =
-        expandedWalkthroughs.has(tlId) && expandedWalkthroughs.size === 1;
+        expandedTrails.has(tlId) && expandedTrails.size === 1;
 
-      setExpandedWalkthroughs((prev) => {
+      setExpandedTrails((prev) => {
         const next = new Set(prev);
         if (next.has(tlId)) next.delete(tlId);
         else next.add(tlId);
         return next;
       });
 
-      if (!collapsingLast || !zoomOnWalkthroughFocus) return;
+      if (!collapsingLast || !zoomOnTrailFocus) return;
 
       // Cancel any pending focus fit so it doesn't fight the overview zoom.
       if (pendingFocusFitRef.current != null) {
@@ -2231,7 +2237,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
         drawerWasOpen ? FILE_DRAWER_HEIGHT_MS + 20 : 20,
       );
     },
-    [expandedWalkthroughs, fitOverview, zoomOnWalkthroughFocus],
+    [expandedTrails, fitOverview, zoomOnTrailFocus],
   );
 
   // Detail-panel links: related-name clicks select the matching component —
@@ -2249,7 +2255,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       if (!comp || comp.alias === selectedRef.current?.alias) return;
       setSelected(comp);
       setSelectedEdgeId(null);
-      setFocusedWalkthroughId(null);
+      setFocusedTrailId(null);
       setFocusedStepIndex(null);
       onSelect?.(comp.alias);
     },
@@ -2268,9 +2274,9 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       if (comp) {
         setSelected(comp);
         setSelectedEdgeId(null);
-        setFocusedWalkthroughId(null);
+        setFocusedTrailId(null);
         setFocusedStepIndex(null);
-        setHoveredWalkthroughStep(null);
+        setHoveredTrailStep(null);
         issueModuleFocusRef.current = null;
         onSelect?.(comp.alias);
         requestAnimationFrame(() => {
@@ -2284,11 +2290,11 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
         });
       } else if (step) {
         // A step finding focuses the step itself, through the same entry point
-        // the walkthrough panel uses — so the drawer, the step numbering, the
+        // the trail panel uses — so the drawer, the step numbering, the
         // dim-mode hover preview, and the camera all behave identically whether
         // the step was reached from the panel or from a diagnostics card.
         issueModuleFocusRef.current = null;
-        focusWalkthroughStep(step.walkthrough, step.stepIndex);
+        focusTrailStep(step.trail, step.stepIndex);
       } else {
         // Nothing selectable — but a module target names a boundary frame, so
         // frame that region.
@@ -2296,9 +2302,9 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
         if (moduleNodeId) {
           setSelected(null);
           setSelectedEdgeId(null);
-          setFocusedWalkthroughId(null);
+          setFocusedTrailId(null);
           setFocusedStepIndex(null);
-          setHoveredWalkthroughStep(null);
+          setHoveredTrailStep(null);
           issueModuleFocusRef.current = moduleNodeId;
           requestAnimationFrame(() => {
             fitNodeRects(new Set([moduleNodeId]), 0.4);
@@ -2311,7 +2317,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       issueComponent,
       issueStep,
       issueModuleNodeId,
-      focusWalkthroughStep,
+      focusTrailStep,
       onSelect,
       onSelectIssue,
       fitView,
@@ -2341,14 +2347,14 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
           // not the card), and correctly leaves that alone here.
           const owned = focusedStepRef.current;
           if (
-            owned?.walkthroughId !== step.walkthrough.id ||
+            owned?.trailId !== step.trail.id ||
             owned?.stepIndex !== step.stepIndex
           ) {
             return;
           }
-          setFocusedWalkthroughId(null);
+          setFocusedTrailId(null);
           setFocusedStepIndex(null);
-          setDrawerTarget((prev) => (prev?.kind === 'walkthrough' ? null : prev));
+          setDrawerTarget((prev) => (prev?.kind === 'trail' ? null : prev));
         } else if (moduleNodeId) {
           // Only unwind framing this card still owns.
           if (issueModuleFocusRef.current !== moduleNodeId) return;
@@ -2364,14 +2370,14 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
     [issueComponent, issueStep, issueModuleNodeId, fitView],
   );
 
-  // Construct tokens inside a walkthrough snippet. A step's line is an edge
+  // Construct tokens inside a trail snippet. A step's line is an edge
   // between its `from`/`to` components, so a token naming either of those
   // constructs should navigate to that construct's declaration. Index the
-  // matchable identifiers per step (`walkthroughId:index`).
-  const walkthroughSymbolIndex = useMemo(() => {
+  // matchable identifiers per step (`trailId:index`).
+  const trailSymbolIndex = useMemo(() => {
     const byAlias = new Map(components.map((c) => [c.alias, c]));
     const index = new Map<string, Map<string, string>>();
-    for (const wt of walkthroughs ?? []) {
+    for (const wt of trails ?? []) {
       wt.steps.forEach((step, i) => {
         const tokens = new Map<string, string>();
         for (const alias of [step.from, step.to]) {
@@ -2383,19 +2389,19 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       });
     }
     return index;
-  }, [components, walkthroughs]);
-  const walkthroughSymbolIndexRef = useRef(walkthroughSymbolIndex);
-  walkthroughSymbolIndexRef.current = walkthroughSymbolIndex;
+  }, [components, trails]);
+  const trailSymbolIndexRef = useRef(trailSymbolIndex);
+  trailSymbolIndexRef.current = trailSymbolIndex;
 
-  // Stable resolver: reads the live index + focused walkthrough from refs so
-  // the memoized walkthrough drawer isn't rebuilt on every graph render.
-  const resolveWalkthroughSymbol = useCallback(
-    (query: WalkthroughSymbolQuery): string | null => {
-      const walkthroughId = drawerWalkthroughIdRef.current;
-      if (walkthroughId == null) return null;
+  // Stable resolver: reads the live index + focused trail from refs so
+  // the memoized trail drawer isn't rebuilt on every graph render.
+  const resolveTrailSymbol = useCallback(
+    (query: TrailSymbolQuery): string | null => {
+      const trailId = drawerTrailIdRef.current;
+      if (trailId == null) return null;
       return (
-        walkthroughSymbolIndexRef.current
-          .get(`${walkthroughId}:${query.stepIndex}`)
+        trailSymbolIndexRef.current
+          .get(`${trailId}:${query.stepIndex}`)
           ?.get(query.tokenText) ?? null
       );
     },
@@ -2483,11 +2489,11 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
     [],
   );
 
-  const walkthroughViewerRef = useRef(renderWalkthroughViewer);
-  walkthroughViewerRef.current = renderWalkthroughViewer;
-  const renderWalkthroughDrawerContent = useCallback(
-    (ctx: WalkthroughViewerContext) =>
-      walkthroughViewerRef.current?.(ctx) ?? null,
+  const trailViewerRef = useRef(renderTrailViewer);
+  trailViewerRef.current = renderTrailViewer;
+  const renderTrailDrawerContent = useCallback(
+    (ctx: TrailViewerContext) =>
+      trailViewerRef.current?.(ctx) ?? null,
     [],
   );
 
@@ -2496,7 +2502,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       {/* Sidebar: scrollable title/description on top, files or flows pinned below.
           The description hides by default so files/flows get the room; the
           title-row toggle reveals it, and the lower panel yields back to 50%. */}
-      {!hideSidebar && (title || description || diagnostic || issuesActive || sidebarExtra || sidebarAfterDescription || treeFilePaths.length > 0 || hasWalkthroughs) && (
+      {!hideSidebar && (title || description || diagnostic || issuesActive || sidebarExtra || sidebarAfterDescription || treeFilePaths.length > 0 || hasTrails) && (
         <div
           style={{
             width: sidebarWidth,
@@ -2603,7 +2609,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
           )}
           {sidebarAfterDescription}
           </div>
-          {(treeFilePaths.length > 0 || hasWalkthroughs || issuesActive) && (
+          {(treeFilePaths.length > 0 || hasTrails || issuesActive) && (
             <div
               style={{
                 ...(showDesc ? { height: '50%' as const } : { flex: 1, minHeight: 0 }),
@@ -2682,7 +2688,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
                 )
               ) : (
                 <>
-              {hasWalkthroughs && (
+              {hasTrails && (
                 <div
                   role="tablist"
                   aria-label="Sidebar view"
@@ -2694,7 +2700,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
                     background: theme.colors.backgroundSecondary ?? theme.colors.background,
                   }}
                 >
-                  {(['walkthroughs', 'files'] as const).map((view) => (
+                  {(['trails', 'files'] as const).map((view) => (
                     <button
                       key={view}
                       type="button"
@@ -2718,30 +2724,30 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
                         cursor: 'pointer',
                       }}
                     >
-                      {view === 'walkthroughs' ? 'Walkthroughs' : 'Files'}
+                      {view === 'trails' ? 'Trails' : 'Files'}
                     </button>
                   ))}
                 </div>
               )}
-              {sidebarView === 'walkthroughs' && walkthroughs && walkthroughs.length > 0 ? (
-                <WalkthroughsPanel
-                  walkthroughs={walkthroughs}
-                  expandedWalkthroughs={expandedWalkthroughs}
-                  focusedWalkthroughId={focusedWalkthroughId}
+              {sidebarView === 'trails' && trails && trails.length > 0 ? (
+                <TrailsPanel
+                  trails={trails}
+                  expandedTrails={expandedTrails}
+                  focusedTrailId={focusedTrailId}
                   focusedStepIndex={focusedStepIndex}
-                  hoveredWalkthroughStep={hoveredWalkthroughStep}
-                  onToggleCollapsed={toggleWalkthroughCollapsed}
-                  onFocusFlow={focusWalkthroughEdges}
-                  onClearFocus={clearWalkthroughFocus}
-                  onFocusStep={focusWalkthroughStep}
+                  hoveredTrailStep={hoveredTrailStep}
+                  onToggleCollapsed={toggleTrailCollapsed}
+                  onFocusFlow={focusTrailEdges}
+                  onClearFocus={clearTrailFocus}
+                  onFocusStep={focusTrailStep}
                   onHoverStep={(tl, i) =>
-                    setHoveredWalkthroughStep({ walkthroughId: tl.id, stepIndex: i })
+                    setHoveredTrailStep({ trailId: tl.id, stepIndex: i })
                   }
                   onHoverFlow={(tl) =>
-                    setHoveredWalkthroughStep({ walkthroughId: tl.id, stepIndex: null })
+                    setHoveredTrailStep({ trailId: tl.id, stepIndex: null })
                   }
-                  onLeaveStep={() => setHoveredWalkthroughStep(null)}
-                  onReorder={onReorderWalkthroughs}
+                  onLeaveStep={() => setHoveredTrailStep(null)}
+                  onReorder={onReorderTrails}
                   proposedAliases={proposedAliases}
                 />
               ) : treeFilePaths.length > 0 ? (
@@ -2790,7 +2796,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       )}
       
       {/* Drag handle between sidebar and canvas — resize the left panel. */}
-      {!hideSidebar && (title || description || diagnostic || issuesActive || sidebarExtra || sidebarAfterDescription || treeFilePaths.length > 0 || hasWalkthroughs) && (
+      {!hideSidebar && (title || description || diagnostic || issuesActive || sidebarExtra || sidebarAfterDescription || treeFilePaths.length > 0 || hasTrails) && (
         <div
           onMouseDown={onSidebarResizeStart}
           aria-label="Resize sidebar"
@@ -2971,9 +2977,9 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       >
         <GraphChrome />
       </ReactFlow>
-      {/* Graph / walkthrough / step titles — non-interactive chips at the top
+      {/* Graph / trail / step titles — non-interactive chips at the top
           of the canvas. Graph-only embeds use these without opening the sidebar. */}
-      {(graphTitle || overlayWalkthroughTitle || overlayWalkthroughStep) && (
+      {(graphTitle || overlayTrailTitle || overlayTrailStep) && (
         <div
           style={{
             position: 'absolute',
@@ -3010,11 +3016,11 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
               {graphTitle}
             </div>
           )}
-          {overlayWalkthroughTitle && (
+          {overlayTrailTitle && (
             <div
               style={{
                 maxWidth: '100%',
-                minWidth: overlayWalkthroughStep ? 160 : undefined,
+                minWidth: overlayTrailStep ? 160 : undefined,
                 display: 'flex',
                 flexDirection: 'column',
                 background: theme.colors.backgroundSecondary ?? theme.colors.background,
@@ -3025,9 +3031,9 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
                 opacity: 0.95,
               }}
               aria-label={
-                overlayWalkthroughStep
-                  ? `${overlayWalkthroughTitle}, step ${overlayWalkthroughStep.index} of ${overlayWalkthroughStep.total}`
-                  : overlayWalkthroughTitle
+                overlayTrailStep
+                  ? `${overlayTrailTitle}, step ${overlayTrailStep.index} of ${overlayTrailStep.total}`
+                  : overlayTrailTitle
               }
             >
               <div
@@ -3043,9 +3049,9 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
                   textAlign: 'center',
                 }}
               >
-                {overlayWalkthroughTitle}
+                {overlayTrailTitle}
               </div>
-              {overlayWalkthroughStep && overlayWalkthroughStep.total > 0 && (
+              {overlayTrailStep && overlayTrailStep.total > 0 && (
                 <div
                   style={{
                     display: 'flex',
@@ -3054,10 +3060,10 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
                   }}
                   aria-hidden="true"
                 >
-                  {Array.from({ length: overlayWalkthroughStep.total }, (_, i) => {
+                  {Array.from({ length: overlayTrailStep.total }, (_, i) => {
                     const n = i + 1;
-                    const active = n === overlayWalkthroughStep.index;
-                    const done = n < overlayWalkthroughStep.index;
+                    const active = n === overlayTrailStep.index;
+                    const done = n < overlayTrailStep.index;
                     return (
                       <span
                         key={n}
@@ -3080,7 +3086,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
               )}
             </div>
           )}
-          {overlayWalkthroughStep?.annotation && (
+          {overlayTrailStep?.annotation && (
             <div
               style={{
                 maxWidth: '100%',
@@ -3096,7 +3102,7 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
                 lineHeight: 1.35,
               }}
             >
-              {overlayWalkthroughStep.annotation}
+              {overlayTrailStep.annotation}
             </div>
           )}
         </div>
@@ -3158,16 +3164,16 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
         suppressEscape={fileOverlayOpen}
         hidden={hideDrawer}
       >
-        {drawerTarget?.kind === 'walkthrough' &&
-        focusedWalkthrough &&
-        renderWalkthroughViewer ? (
-          <WalkthroughDrawerContent
-            render={renderWalkthroughDrawerContent}
-            walkthrough={focusedWalkthrough}
+        {drawerTarget?.kind === 'trail' &&
+        focusedTrail &&
+        renderTrailViewer ? (
+          <TrailDrawerContent
+            render={renderTrailDrawerContent}
+            trail={focusedTrail}
             stepIndex={drawerTarget.stepIndex}
-            onOpenFile={onOpenFileFromWalkthrough}
+            onOpenFile={onOpenFileFromTrail}
             proposedAliases={proposedAliases}
-            resolveSymbol={resolveWalkthroughSymbol}
+            resolveSymbol={resolveTrailSymbol}
             onSymbolClick={openConstructDeclaration}
           />
         ) : drawerTarget?.kind === 'file' ? (
@@ -3336,7 +3342,7 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
 
   const constructsOnly = isConstructsOnlyModel({
     components: props.components,
-    walkthroughs: props.walkthroughs,
+    trails: props.trails,
     graphifyRelations: props.graphifyRelations,
   });
 

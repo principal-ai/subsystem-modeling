@@ -2,7 +2,7 @@
  * Principal Studio host (bun process).
  *
  * Boot inputs:
- *   - Tour: argv[2] / TRAIL_FILE and TRAIL_REPO_ROOT (default cwd).
+ *   - Tour: argv[2] / TOUR_FILE and TOUR_REPO_ROOT (default cwd).
  *   - Subsystem model: SUBSYSTEM_MODEL_ID — opens a stored model tab on cold
  *     start (used by `principal-ai subsystem-model create/open`).
  *
@@ -28,7 +28,7 @@ import {
 	parsePurl,
 } from "@principal-ai/alexandria-core-library";
 import { parseTourOrThrow } from "@principal-ai/file-city-builder";
-import { handoffToRunning, startIpcServer, type LoadTrailMessage } from "./ipc";
+import { handoffToRunning, startIpcServer, type LoadTourMessage } from "./ipc";
 import { startHttpServer } from "./http-server";
 import { resolveSandboxed } from "./sandboxed-path";
 import { deleteSubsystemModel, getSubsystemModel, listSubsystemModels, purlRepoKey, resolveRepoRootForComponent, setSubsystemModelChangeListener, stampVerifiedCommits, startSubsystemModelDirWatcher, subsystemModelFilePath, touchSubsystemModelOpened, updateSubsystemModel } from "./subsystem-model-store";
@@ -127,7 +127,7 @@ import type {
 	MaintenanceOverviewModel,
 	MaintenanceOverviewProposal,
 	OpencodeV2Status,
-	PayloadKind,
+
 	RepoInfo,
 	ServerSessionRow,
 	SessionEventRow,
@@ -230,7 +230,7 @@ async function buildSessionEvents(
 // ---------------------------------------------------------------------------
 
 function warmupDays(): number {
-	const raw = (process.env as Record<string, string | undefined>)["TRAIL_WARMUP_DAYS"];
+	const raw = (process.env as Record<string, string | undefined>)["PRINCIPAL_STUDIO_WARMUP_DAYS"];
 	const n = raw ? parseInt(raw, 10) : NaN;
 	return Number.isFinite(n) && n > 0 ? n : 7;
 }
@@ -376,8 +376,8 @@ const PERMANENT_TAB_DEFS: Array<{
 	{
 		id: LIBRARY_TAB_ID,
 		kind: "library",
-		title: "Trails",
-		flag: "trails",
+		title: "Tours",
+		flag: "tours",
 	},
 ];
 
@@ -390,31 +390,31 @@ function isPermanentTabId(id: string): boolean {
 // ---------------------------------------------------------------------------
 
 function resolveMode(): ViewerMode {
-	const raw = process.env["TRAIL_MODE"];
+	const raw = process.env["TOUR_MODE"];
 	if (raw === "remote") return "remote";
 	if (raw === "local" || raw === undefined || raw === "") return "local";
 	console.warn(
-		`[principal-studio] unknown TRAIL_MODE='${raw}', falling back to 'local'`,
+		`[principal-studio] unknown TOUR_MODE='${raw}', falling back to 'local'`,
 	);
 	return "local";
 }
 
-function resolveTrailFilePath(): string | null {
+function resolveTourFilePath(): string | null {
 	const argPath = process.argv[2];
-	const envPath = process.env["TRAIL_FILE"];
+	const envPath = process.env["TOUR_FILE"];
 	const raw = argPath ?? envPath ?? null;
 	if (!raw) return null;
 	return isAbsolute(raw) ? raw : resolve(process.cwd(), raw);
 }
 
-function resolveRepoRoot(trailFilePath: string | null): string {
+function resolveRepoRoot(tourFilePath: string | null): string {
 	const argRoot = process.argv[3];
-	const envRoot = process.env["TRAIL_REPO_ROOT"];
+	const envRoot = process.env["TOUR_REPO_ROOT"];
 	const raw = argRoot ?? envRoot;
 	if (raw) return isAbsolute(raw) ? raw : resolve(process.cwd(), raw);
-	// Sensible default: parent dir of the trail file. Lets `principal-ai trail
-	// view` drop a json next to a repo and have things "just work".
-	if (trailFilePath) return dirname(trailFilePath);
+	// Sensible default: parent dir of the tour file, so a `*.tour.json` dropped
+	// next to a checkout has things "just work".
+	if (tourFilePath) return dirname(tourFilePath);
 	return process.cwd();
 }
 
@@ -437,21 +437,18 @@ function resolveStartTab(settings: ViewerSettings): string {
 	return firstEnabled?.id ?? SUBSYSTEMS_TAB_ID;
 }
 
-// Per-tab state. Trail tabs are fully self-contained views of one trail; the
-// library tab is a permanent first tab that lists cached trails. Tabs from
-// different repos do not share env vars, repoRoot, or sandboxing.
-interface TrailTabState {
+// Per-tab state. Tour tabs are fully self-contained views of one File City
+// introduction tour; the library tab is a permanent first tab that lists cached
+// tours. Tabs from different repos do not share env vars, repoRoot, or
+// sandboxing.
+interface TourTabState {
 	id: string;
-	kind: "trail";
+	kind: "tour";
 	title: string;
 	mode: ViewerMode;
-	/** Whether this tab holds a trail (`markers`/`views`) or a File City
-	 *  introduction tour (`steps` + `focusDirectory`). Both render in the same
-	 *  tab machinery; only the renderer's panel choice differs. */
-	payloadKind: PayloadKind;
-	trailFilePath: string;
+	tourFilePath: string;
 	repoRoot: string;
-	loaded: LoadedTrail;
+	loaded: LoadedTour;
 	repoOwner?: string;
 	repoName?: string;
 	repoPurl?: string;
@@ -461,7 +458,7 @@ interface TrailTabState {
 interface LibraryTabState {
 	id: typeof LIBRARY_TAB_ID;
 	kind: "library";
-	title: "Trails";
+	title: "Tours";
 }
 
 interface AgentSessionsTabState {
@@ -519,8 +516,8 @@ interface SubsystemModelTabState {
 	kind: "subsystem-model";
 	title: string;
 	graphId: string;
-	/** Walkthrough to select when the view mounts (opened from a row). */
-	focusWalkthroughId?: string;
+	/** Trail to select when the view mounts (opened from a row). */
+	focusTrailId?: string;
 	/** Open the sidebar's issues view on mount (opened from a row). */
 	showIssues?: boolean;
 	/** With `showIssues`, land focused on this verification layer. */
@@ -556,7 +553,7 @@ type TabState =
 	| SessionEventsTabState
 	| SubsystemModelTabState
 	| SubsystemShowcaseTabState
-	| TrailTabState;
+	| TourTabState;
 
 function permanentTabState(
 	def: (typeof PERMANENT_TAB_DEFS)[number],
@@ -598,12 +595,12 @@ function permanentTabState(
 	if (def.kind === "opencode-v2") {
 		return { id: OPENCODE_V2_TAB_ID, kind: "opencode-v2", title: "OpenCode V2" };
 	}
-	return { id: LIBRARY_TAB_ID, kind: "library", title: "Trails" };
+	return { id: LIBRARY_TAB_ID, kind: "library", title: "Tours" };
 }
 
 /**
  * Rebuild the permanent-tab prefix of `tabs` from settings. Transient tabs
- * (trails, models, …) are preserved after the permanent ones so strip order
+ * (tours, models, …) are preserved after the permanent ones so strip order
  * stays stable when flags flip.
  */
 function syncPermanentTabs(settings: ViewerSettings): void {
@@ -638,7 +635,7 @@ function ensurePermanentTab(id: string): void {
 			maintenanceSessions:
 				id === MAINTENANCE_SESSIONS_TAB_ID ||
 				viewerSettings.defaultTabs.maintenanceSessions,
-			trails: id === LIBRARY_TAB_ID || viewerSettings.defaultTabs.trails,
+			tours: id === LIBRARY_TAB_ID || viewerSettings.defaultTabs.tours,
 			graphify: id === GRAPHIFY_TAB_ID || viewerSettings.defaultTabs.graphify,
 			packageLayers:
 				id === PACKAGE_LAYERS_TAB_ID || viewerSettings.defaultTabs.packageLayers,
@@ -686,45 +683,9 @@ let nextTabId = 1;
 // Pre-load the payload so the renderer's first read is synchronous and any
 // parse error surfaces at boot rather than after the window is up.
 
-type LoadedTrail =
-	| { ok: true; payload: unknown; path: string; payloadKind: PayloadKind }
-	| { ok: false; error: string; payloadKind: PayloadKind };
-
-/**
- * Distinguish a File City introduction tour from a trail. The filename is the
- * canonical signal — the tours skill always writes `*.tour.json` — with a
- * payload-shape fallback (`steps[]` and no `markers`) for files that don't
- * carry the suffix.
- */
-function detectPayloadKind(path: string, payload: unknown): PayloadKind {
-	if (/\.tour\.json$/i.test(path)) return "tour";
-	if (typeof payload === "object" && payload !== null) {
-		const obj = payload as Record<string, unknown>;
-		if (Array.isArray(obj["steps"]) && !("markers" in obj)) return "tour";
-	}
-	return "trail";
-}
-
-/**
- * The by-id store returns a wrapper around the trail
- * payload: `{ entry, owner, repo, payload }`. Hand-authored / local files are
- * just the bare TrailPayload. Detect the wrapper and unwrap so the renderer
- * always sees `{ markers, views, ... }` directly. (Tours are handled separately
- * by `extractTourPayload`, which copes with their extra nesting.)
- */
-function unwrapPayload(raw: unknown): unknown {
-	if (typeof raw !== "object" || raw === null) return raw;
-	const obj = raw as Record<string, unknown>;
-	const inner = obj["payload"];
-	if (
-		typeof inner === "object" &&
-		inner !== null &&
-		"markers" in (inner as Record<string, unknown>)
-	) {
-		return inner;
-	}
-	return raw;
-}
+type LoadedTour =
+	| { ok: true; payload: unknown; path: string }
+	| { ok: false; error: string };
 
 /**
  * Locate the renderable tour inside a cached/loaded file, coping with every
@@ -737,7 +698,7 @@ function unwrapPayload(raw: unknown): unknown {
  * repaired from the wrapper's `owner`/`repo` so strict `parseTourOrThrow`
  * validation — and the panel's repo resolution — still has a repo to anchor to.
  *
- * Returns `null` when no tour is present (the file is a trail or unrecognized).
+ * Returns `null` when the payload carries no tour (wrong shape, or unrelated).
  */
 function extractTourPayload(raw: unknown): Record<string, unknown> | null {
 	if (typeof raw !== "object" || raw === null) return null;
@@ -779,53 +740,36 @@ function extractTourPayload(raw: unknown): Record<string, unknown> | null {
 	return tour;
 }
 
-function loadTrailFile(path: string | null): LoadedTrail {
+function loadTourFile(path: string | null): LoadedTour {
 	if (!path) {
 		return {
 			ok: false,
 			error:
-				"No trail file. Pass a path as the first arg or set TRAIL_FILE=<path>.",
-			payloadKind: "trail",
+				"No tour file. Pass a path as the first arg or set TOUR_FILE=<path>.",
 		};
 	}
-	// Determine the kind first, from the file contents, so that even a tour that
-	// fails to load is reported as a tour. Otherwise the renderer would fall back
-	// to the trail panel and crash dereferencing `views[0]` on a tour payload.
 	let json: unknown;
 	try {
 		json = JSON.parse(readFileSync(path, "utf8"));
 	} catch (err) {
-		return {
-			ok: false,
-			error: `Failed to load ${path}: ${(err as Error).message}`,
-			payloadKind: detectPayloadKind(path, null),
-		};
+		return { ok: false, error: `Failed to load ${path}: ${(err as Error).message}` };
 	}
 
 	const tour = extractTourPayload(json);
-	if (tour || /\.tour\.json$/i.test(path)) {
-		if (!tour) {
-			return {
-				ok: false,
-				error: `Failed to load ${path}: file has a .tour.json name but no tour steps`,
-				payloadKind: "tour",
-			};
-		}
-		// Validate up front so a malformed tour fails at load with a clear message
-		// rather than silently rendering an idle, empty city.
-		try {
-			parseTourOrThrow(JSON.stringify(tour));
-		} catch (err) {
-			return {
-				ok: false,
-				error: `Failed to load ${path}: ${(err as Error).message}`,
-				payloadKind: "tour",
-			};
-		}
-		return { ok: true, payload: tour, path, payloadKind: "tour" };
+	if (!tour) {
+		return {
+			ok: false,
+			error: `Failed to load ${path}: no tour found. Expected a tour payload with a \`steps[]\` array (a bare tour, the by-id wrapper, or the audio envelope).`,
+		};
 	}
-
-	return { ok: true, payload: unwrapPayload(json), path, payloadKind: "trail" };
+	// Validate up front so a malformed tour fails at load with a clear message
+	// rather than silently rendering an idle, empty city.
+	try {
+		parseTourOrThrow(JSON.stringify(tour));
+	} catch (err) {
+		return { ok: false, error: `Failed to load ${path}: ${(err as Error).message}` };
+	}
+	return { ok: true, payload: tour, path };
 }
 
 /**
@@ -838,7 +782,7 @@ function loadTrailFile(path: string | null): LoadedTrail {
  * for every shape we accept, so it's how a library-opened tour finds its repo.
  */
 function tourRepoIdentity(
-	loaded: LoadedTrail,
+	loaded: LoadedTour,
 ): { owner: string; name: string } | null {
 	if (!loaded.ok || typeof loaded.payload !== "object" || loaded.payload === null) {
 		return null;
@@ -853,7 +797,7 @@ function tourRepoIdentity(
 	return null;
 }
 
-function deriveTitle(loaded: LoadedTrail, fallbackPath: string): string {
+function deriveTitle(loaded: LoadedTour, fallbackPath: string): string {
 	if (loaded.ok && typeof loaded.payload === "object" && loaded.payload !== null) {
 		const t = (loaded.payload as { title?: unknown }).title;
 		if (typeof t === "string" && t) return t;
@@ -862,31 +806,30 @@ function deriveTitle(loaded: LoadedTrail, fallbackPath: string): string {
 	return base.replace(/\.json$/i, "");
 }
 
-function addTabFromMessage(msg: LoadTrailMessage): string {
-	const trailFilePath = msg.trailFile;
-	// Dedupe: re-firing the same trail (same on-disk path) focuses the existing
+function addTabFromMessage(msg: LoadTourMessage): string {
+	const tourFilePath = msg.tourFile;
+	// Dedupe: re-firing the same tour (same on-disk path) focuses the existing
 	// tab rather than spawning a duplicate. Closing and reopening a tab is the
-	// way to force a re-load with different mode/auth.
+	// way to force a re-load.
 	for (const existing of tabs.values()) {
-		if (existing.kind === "trail" && existing.trailFilePath === trailFilePath) {
+		if (existing.kind === "tour" && existing.tourFilePath === tourFilePath) {
 			suggestedTabId = existing.id;
-			console.log(`[principal-studio] tab ${existing.id} focused (already open): ${trailFilePath}`);
+			console.log(`[principal-studio] tab ${existing.id} focused (already open): ${tourFilePath}`);
 			return existing.id;
 		}
 	}
 
 	const id = String(nextTabId++);
-	let loaded = loadTrailFile(trailFilePath);
-	const payloadKind: PayloadKind = loaded.payloadKind;
+	let loaded = loadTourFile(tourFilePath);
 
-	// Tours render against a whole working tree, not a marker-derived remote file
-	// set, so they're always local. The CLI `tour view` passes the repoRoot
-	// (cwd); a tour opened from the library carries none, so we resolve it from
-	// the Alexandria registry by the GitHub owner/repo the tour was authored
-	// against. When the registry doesn't know that repo we can't render the city,
-	// so we fail the tab with a clear message rather than an empty/idle view.
+	// Tours render against a whole working tree, so they're always local. The CLI
+	// `tour view` passes the repoRoot (cwd); a tour opened from the library
+	// carries none, so we resolve it from the Alexandria registry by the GitHub
+	// owner/repo the tour was authored against. When the registry doesn't know
+	// that repo we can't render the city, so we fail the tab with a clear message
+	// rather than an empty/idle view.
 	let repoRoot: string;
-	if (payloadKind === "tour" && !msg.repoRoot) {
+	if (!msg.repoRoot) {
 		const identity = tourRepoIdentity(loaded);
 		const resolved = identity
 			? resolveRepoRootFromAlexandria(identity.owner, identity.name)
@@ -901,20 +844,18 @@ function addTabFromMessage(msg: LoadTrailMessage): string {
 			loaded = {
 				ok: false,
 				error: `We couldn't find a local checkout of ${repoLabel}. This tour renders against the repository's files, but it isn't in your Alexandria registry — open the repo once in the Principal desktop app (or clone it) and reopen the tour.`,
-				payloadKind: "tour",
 			};
 		}
 	} else {
-		repoRoot = msg.repoRoot ?? dirname(trailFilePath);
+		repoRoot = msg.repoRoot;
 	}
-	const mode: ViewerMode = payloadKind === "tour" ? "local" : msg.mode;
+	const mode: ViewerMode = "local";
 	const tab: TabState = {
 		id,
-		kind: "trail",
-		title: deriveTitle(loaded, trailFilePath),
+		kind: "tour",
+		title: deriveTitle(loaded, tourFilePath),
 		mode,
-		payloadKind,
-		trailFilePath,
+		tourFilePath,
 		repoRoot,
 		loaded,
 		repoOwner: msg.repoOwner,
@@ -924,7 +865,7 @@ function addTabFromMessage(msg: LoadTrailMessage): string {
 	};
 	tabs.set(id, tab);
 	suggestedTabId = id;
-	console.log(`[principal-studio] tab ${id} added: ${trailFilePath} (${payloadKind}, ${mode})`);
+	console.log(`[principal-studio] tab ${id} added: ${tourFilePath} (tour, ${mode})`);
 	return id;
 }
 
@@ -994,7 +935,7 @@ async function openMaintainLive(opts: {
 
 async function openSubsystemModelTab(
 	graphId: string,
-	walkthroughId?: string,
+	trailId?: string,
 	focus?: {
 		showIssues?: boolean;
 		focusIssueCategory?: string;
@@ -1006,9 +947,9 @@ async function openSubsystemModelTab(
 	// its Loading / not-found empty states and fills in via getSubsystemModel.
 	for (const existing of tabs.values()) {
 		if (existing.kind === "subsystem-model" && existing.graphId === graphId) {
-			// Keep the deep-link target current: reopening from a walkthrough
+			// Keep the deep-link target current: reopening from a trail
 			// row selects it; a plain open (row double-click) clears it.
-			existing.focusWalkthroughId = walkthroughId;
+			existing.focusTrailId = trailId;
 			// The issues focus is sticky-on-open only: a reopen that asks for it
 			// sets it, a reopen that doesn't clears it so stale focus doesn't
 			// linger on a tab the user is revisiting for something else. The
@@ -1060,7 +1001,7 @@ async function openSubsystemModelTab(
 		kind: "subsystem-model",
 		title,
 		graphId,
-		...(walkthroughId ? { focusWalkthroughId: walkthroughId } : {}),
+		...(trailId ? { focusTrailId: trailId } : {}),
 		...(focus?.showIssues ? { showIssues: true } : {}),
 		...(focus?.focusIssueCategory
 			? { focusIssueCategory: focus.focusIssueCategory }
@@ -1207,15 +1148,15 @@ function subsystemFilesFromComponents(
 }
 
 /**
- * Per-walkthrough step sites for the Subsystems tab file → walkthrough
+ * Per-trail step sites for the Subsystems tab file → trail
  * expansion. Step `file`s are repo-root-relative (same form as component
  * `file`); repo attribution is the step's own `purl`, falling back to the
  * step endpoint's purl (from ?? to) for older graphs, mirroring file
  * verification's resolution.
  */
-function subsystemWalkthroughsFromModel(
+function subsystemTrailsFromModel(
 	components: ReadonlyArray<{ alias: string; file?: string; purl?: string }>,
-	walkthroughs?: ReadonlyArray<{
+	trails?: ReadonlyArray<{
 		id: string;
 		title: string;
 		steps?: ReadonlyArray<{ file: string; line: number; from: string; to: string; purl?: string }>;
@@ -1235,7 +1176,7 @@ function subsystemWalkthroughsFromModel(
 		files: Array<{ file: string; purl?: string; lines?: number[] }>;
 		steps: Array<{ file: string; purl?: string; line?: number }>;
 	}> = [];
-	for (const w of walkthroughs ?? []) {
+	for (const w of trails ?? []) {
 		const steps = w.steps ?? [];
 		const files: Array<{ file: string; purl?: string; lines?: number[] }> = [];
 		const byKey = new Map<string, (typeof files)[number]>();
@@ -1316,7 +1257,7 @@ async function walkFiles(
 
 // The request/message schemas + all payload types (TabSummary, TabFullState,
 // SessionSummary, SessionGroup, SessionEventRow, RepoInfo, LibraryEntry,
-// UserIdentity, ViewerMode, PayloadKind) live in src/shared/contract.ts — the
+// UserIdentity, ViewerMode) live in src/shared/contract.ts — the
 // single cross-process contract both this host and the renderer import.
 type StudioRPC = {
 	bun: RPCSchema<{
@@ -1333,7 +1274,7 @@ function getTab(id: string): TabState | null {
 	return tabs.get(id) ?? null;
 }
 
-async function readFileLocal(tab: TrailTabState, path: string): Promise<{ ok: boolean; content?: string; error?: string }> {
+async function readFileLocal(tab: TourTabState, path: string): Promise<{ ok: boolean; content?: string; error?: string }> {
 	try {
 		const absolute = resolveSandboxed(tab.repoRoot, path);
 		const content = await fs.readFile(absolute, "utf8");
@@ -1344,9 +1285,9 @@ async function readFileLocal(tab: TrailTabState, path: string): Promise<{ ok: bo
 }
 
 /**
- * Permanent, non-trail tabs (library, agent sessions, subsystems).
- * They carry no trail payload and don't serve files or notes; several RPC
- * handlers use this to reject calls aimed at trail-only state.
+ * Permanent, non-tour tabs (library, agent sessions, subsystems).
+ * They carry no tour payload and don't serve files or notes; several RPC
+ * handlers use this to reject calls aimed at tour-only state.
  */
 function isStaticTab(
 	tab: TabState,
@@ -1371,9 +1312,9 @@ function isStaticTab(
 	);
 }
 
-/** Narrows to trail tabs — the only tabs that carry a trail payload. */
-function isTrailTab(tab: TabState): tab is TrailTabState {
-	return tab.kind === "trail";
+/** Narrows to tour tabs — the only tabs that carry a tour payload. */
+function isTourTab(tab: TabState): tab is TourTabState {
+	return tab.kind === "tour";
 }
 
 function summarize(tab: TabState): TabSummary {
@@ -1396,10 +1337,10 @@ function summarize(tab: TabState): TabSummary {
 	}
 	return {
 		id: tab.id,
-		kind: "trail",
+		kind: "tour",
 		title: tab.title,
 		mode: tab.mode,
-		payloadKind: tab.payloadKind,
+
 	};
 }
 
@@ -1420,7 +1361,7 @@ function fullState(tab: TabState): TabFullState {
 			kind: "subsystem-model",
 			title: tab.title,
 			graphId: tab.graphId,
-			focusWalkthroughId: tab.focusWalkthroughId,
+			focusTrailId: tab.focusTrailId,
 			showIssues: tab.showIssues,
 			focusIssueCategory: tab.focusIssueCategory,
 			liveSessionId: tab.liveSessionId,
@@ -1445,18 +1386,18 @@ function fullState(tab: TabState): TabFullState {
 			ok: false,
 			error: tab.loaded.error,
 			id: tab.id,
-			kind: "trail",
+			kind: "tour",
 			title: tab.title,
 			mode: tab.mode,
-			payloadKind: tab.payloadKind,
+
 			repoRoot: tab.repoRoot,
-			trailFilePath: tab.trailFilePath,
+			tourFilePath: tab.tourFilePath,
 		};
 	}
 	// Resolve repo identity the same way the library listing does: prefer an
-	// explicit owner/name carried by the open message (remote trails),
+	// explicit owner/name carried by the open message,
 	// otherwise recover it from the working tree's git origin. This is what lets
-	// the tab header show `owner/name` (+ GitHub link) for local trails instead
+	// the tab header show `owner/name` (+ GitHub link) for local tours instead
 	// of `local / <path>`.
 	const identity =
 		tab.repoOwner && tab.repoName
@@ -1465,12 +1406,12 @@ function fullState(tab: TabState): TabFullState {
 	return {
 		ok: true,
 		id: tab.id,
-		kind: "trail",
+		kind: "tour",
 		title: tab.title,
 		mode: tab.mode,
-		payloadKind: tab.payloadKind,
+
 		repoRoot: tab.repoRoot,
-		trailFilePath: tab.trailFilePath,
+		tourFilePath: tab.tourFilePath,
 		payload: tab.loaded.payload,
 		owner: identity.owner,
 		repo: identity.repo,
@@ -1512,7 +1453,7 @@ const requests: RequestHandlers = {
 						ok: false,
 						error: `unknown tab: ${id}`,
 						id,
-						kind: "trail",
+						kind: "tour",
 						title: "",
 					};
 				}
@@ -1526,7 +1467,7 @@ const requests: RequestHandlers = {
 				// the renderer already applied the change locally.
 				if (!tabs.has(id)) return { ok: false, error: `unknown tab: ${id}` };
 				suggestedTabId = id;
-				// Transient tabs (trails, models) don't survive a restart, so only
+				// Transient tabs (tours, models) do not survive a restart, so only
 				// permanent ones are worth restoring.
 				if (isPermanentTabId(id) && viewerSettings.lastActiveTabId !== id) {
 					viewerSettings = patchViewerSettings(viewerSettings, {
@@ -1592,7 +1533,7 @@ const requests: RequestHandlers = {
 				}
 				return { ok: false, error: `file not found in graph repos: ${path}` };
 			}
-				if (!isTrailTab(tab)) {
+				if (!isTourTab(tab)) {
 					return { ok: false, error: `${tab.kind} tab does not serve files` };
 				}
 				return readFileLocal(tab, path);
@@ -1601,7 +1542,7 @@ const requests: RequestHandlers = {
 				const walkPath = path ?? null;
 				if (!walkPath) {
 					const tab = getTab(tabId);
-					if (!tab || !isTrailTab(tab)) return { files: [] };
+					if (!tab || !isTourTab(tab)) return { files: [] };
 					return { files: await walkFiles(tab.repoRoot) };
 				}
 				return { files: await walkFiles(walkPath) };
@@ -1703,10 +1644,10 @@ const requests: RequestHandlers = {
 				// needs neither.
 				const active = getTab(suggestedTabId);
 				const tourTab =
-					active && active.kind === "trail"
+					active && active.kind === "tour"
 						? active
 						: (Array.from(tabs.values()).find(
-								(t): t is TrailTabState => t.kind === "trail",
+								(t): t is TourTabState => t.kind === "tour",
 						  ) ?? null);
 				return resolveUserIdentity(tourTab?.repoRoot, tourTab?.ghToken);
 			},
@@ -1733,9 +1674,9 @@ const requests: RequestHandlers = {
 					// Tours are always local-mode: they render against a working tree,
 					// never a marker-derived remote file set. The host resolves the
 					// tour's repo from Alexandria when the caller has no repoRoot.
-					const msg: LoadTrailMessage = {
-						kind: "LOAD_TRAIL",
-						trailFile: file,
+					const msg: LoadTourMessage = {
+						kind: "LOAD_TOUR",
+						tourFile: file,
 						mode: "local",
 					};
 					if (repoRoot) msg.repoRoot = repoRoot;
@@ -1926,7 +1867,7 @@ const requests: RequestHandlers = {
 							const summary = await getSubsystemModelAuditListSummary(
 								e.id,
 								fingerprint,
-								{ hasWalkthroughs: (full.walkthroughs?.length ?? 0) > 0 },
+								{ hasTrails: (full.trails?.length ?? 0) > 0 },
 							);
 							if (summary) {
 								lastAudit = {
@@ -1955,10 +1896,10 @@ const requests: RequestHandlers = {
 					files: full
 						? subsystemFilesFromComponents(full.components)
 						: undefined,
-					walkthroughs: full
-						? subsystemWalkthroughsFromModel(
+					trails: full
+						? subsystemTrailsFromModel(
 								full.components,
-								full.walkthroughs,
+								full.trails,
 							)
 						: undefined,
 						path: subsystemModelFilePath(e.id),
@@ -1990,7 +1931,7 @@ const requests: RequestHandlers = {
 							construct: "none",
 							"static-topology": "none",
 							"dynamic-topology": "none",
-							walkthrough: "none",
+							trail: "none",
 						};
 						let stale = false;
 						let checkedAt: string | undefined;
@@ -2007,7 +1948,7 @@ const requests: RequestHandlers = {
 							const summary = await getSubsystemModelAuditListSummary(
 								e.id,
 								fingerprint,
-								{ hasWalkthroughs: (full.walkthroughs?.length ?? 0) > 0 },
+								{ hasTrails: (full.trails?.length ?? 0) > 0 },
 							);
 							if (summary) {
 								verdict = summary.verdict;
@@ -2026,7 +1967,7 @@ const requests: RequestHandlers = {
 									createdAtCommits: full.createdAtCommits,
 									verifiedAtCommits: full.verifiedAtCommits,
 									components: full.components,
-									walkthroughs: full.walkthroughs,
+									trails: full.trails,
 								})
 							: undefined;
 						// Carry the pin forward when nothing anchored moved. The proof is
@@ -2086,11 +2027,11 @@ const requests: RequestHandlers = {
 			},
 			openSubsystemModel: async ({
 				graphId,
-				walkthroughId,
+				trailId,
 				showIssues,
 				focusIssueCategory,
 			}) => {
-				const tabId = await openSubsystemModelTab(graphId, walkthroughId, {
+				const tabId = await openSubsystemModelTab(graphId, trailId, {
 					showIssues,
 					focusIssueCategory,
 				});
@@ -2147,13 +2088,13 @@ const requests: RequestHandlers = {
 					createdAtCommits: full.createdAtCommits,
 					verifiedAtCommits: full.verifiedAtCommits,
 					components: full.components,
-					walkthroughs: full.walkthroughs,
+					trails: full.trails,
 				});
 				return await modelProvenanceDetail(id, {
 					createdAtCommits: full.createdAtCommits,
 					verifiedAtCommits: full.verifiedAtCommits,
 					components: full.components,
-					walkthroughs: full.walkthroughs,
+					trails: full.trails,
 				}, snapshot.anchorChanges);
 			},
 			getSubsystemModelAudit: async ({ graphId }) => {
@@ -3364,7 +3305,7 @@ async function applyAutoRePin(
 	snapshot: ModelProvenanceSnapshot,
 	full?: {
 		components: ReadonlyArray<{ alias: string; file?: string; purl?: string }>;
-		walkthroughs?: ReadonlyArray<{
+		trails?: ReadonlyArray<{
 			steps?: ReadonlyArray<{
 				file?: string;
 				purl?: string;
@@ -3380,7 +3321,7 @@ async function applyAutoRePin(
 			createdAtCommits: snapshot.createdAtCommits,
 			verifiedAtCommits: snapshot.verifiedAtCommits,
 			components: full.components,
-			walkthroughs: full.walkthroughs,
+			trails: full.trails,
 		},
 		snapshot.anchorChanges,
 	);
@@ -3447,24 +3388,24 @@ function broadcastTabsChanged(focusTabId?: string): void {
 // IPC handoff + server
 // ---------------------------------------------------------------------------
 
-function bootMessage(): LoadTrailMessage | null {
+function bootMessage(): LoadTourMessage | null {
 	const initialMode = resolveMode();
-	const initialTrailFile = resolveTrailFilePath();
-	if (!initialTrailFile) return null;
-	const initialRepoRoot = resolveRepoRoot(initialTrailFile);
-	const msg: LoadTrailMessage = {
-		kind: "LOAD_TRAIL",
-		trailFile: initialTrailFile,
+	const initialTourFile = resolveTourFilePath();
+	if (!initialTourFile) return null;
+	const initialRepoRoot = resolveRepoRoot(initialTourFile);
+	const msg: LoadTourMessage = {
+		kind: "LOAD_TOUR",
+		tourFile: initialTourFile,
 		mode: initialMode,
 	};
 	if (initialRepoRoot) msg.repoRoot = initialRepoRoot;
-	const ghToken = process.env["TRAIL_GH_TOKEN"];
+	const ghToken = process.env["TOUR_GH_TOKEN"];
 	if (ghToken) msg.ghToken = ghToken;
-	const repoOwner = process.env["TRAIL_REPO_OWNER"];
+	const repoOwner = process.env["TOUR_REPO_OWNER"];
 	if (repoOwner) msg.repoOwner = repoOwner;
-	const repoName = process.env["TRAIL_REPO_NAME"];
+	const repoName = process.env["TOUR_REPO_NAME"];
 	if (repoName) msg.repoName = repoName;
-	const repoPurl = process.env["TRAIL_REPO_PURL"];
+	const repoPurl = process.env["TOUR_REPO_PURL"];
 	if (repoPurl) msg.repoPurl = repoPurl;
 	return msg;
 }
@@ -3482,7 +3423,7 @@ if (initialMessage) {
 }
 
 // CLI `subsystem-model create/open` cold-start: open a stored model by id.
-// Same handoff pattern as TRAIL_FILE — if Studio is already up, open there and
+// Same handoff pattern as TOUR_FILE — if Studio is already up, open there and
 // exit; otherwise seed a subsystem-model tab before the window appears.
 const bootSubsystemModelId = (process.env["SUBSYSTEM_MODEL_ID"] ?? "").trim();
 if (bootSubsystemModelId) {

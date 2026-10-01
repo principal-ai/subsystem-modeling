@@ -77,12 +77,12 @@ function targetFor(
 	if (finding.moduleKey) {
 		return { kind: "module", id: finding.moduleKey, label: finding.moduleKey };
 	}
-	if (finding.walkthroughId) {
-		const wt = graph.walkthroughs?.find((w) => w.id === finding.walkthroughId);
+	if (finding.trailId) {
+		const wt = graph.trails?.find((w) => w.id === finding.trailId);
 		return {
-			kind: "walkthrough",
-			id: finding.walkthroughId,
-			label: wt?.title ?? finding.walkthroughId,
+			kind: "trail",
+			id: finding.trailId,
+			label: wt?.title ?? finding.trailId,
 			detail: finding.step != null ? `step ${finding.step}` : undefined,
 		};
 	}
@@ -106,7 +106,7 @@ export function auditReportToIssues(
 	const byId = new Map<string, SubsystemModelAuditFinding>();
 	if (!report) return { issues, byId };
 	report.findings.forEach((finding, i) => {
-		const id = `${finding.kind}:${finding.componentAlias ?? finding.moduleKey ?? finding.walkthroughId ?? finding.purl ?? "graph"}:${i}`;
+		const id = `${finding.kind}:${finding.componentAlias ?? finding.moduleKey ?? finding.trailId ?? finding.purl ?? "graph"}:${i}`;
 		byId.set(id, finding);
 		issues.push({
 			id,

@@ -1,6 +1,6 @@
 import type {
   SubsystemComponent,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from '@principal-ai/subsystems-react';
 
 const PURL = 'pkg:github/you/daily-digest';
@@ -97,7 +97,7 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const walkthroughs = [
+export const trails = [
   {
     "id": "tl-cron-run",
     "title": "Cron runs daily digest",
@@ -154,9 +154,9 @@ export const walkthroughs = [
       }
     ]
   }
-] as SubsystemWalkthrough[];
+] as SubsystemTrail[];
 
 export const title = 'Daily page digest';
 
 export const description =
-  'A beginner-friendly cron script: schedule fires, the entry fetches a public webpage, parses out headlines, and appends them to a local file. Open the **Walkthroughs** tab to walk one scheduled run.';
+  'A beginner-friendly cron script: schedule fires, the entry fetches a public webpage, parses out headlines, and appends them to a local file. Open the **Trails** tab to walk one scheduled run.';

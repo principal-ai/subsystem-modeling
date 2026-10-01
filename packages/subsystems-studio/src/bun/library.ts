@@ -141,7 +141,7 @@ export function resolveLocalRepoIdentity(repoRoot: string): { owner: string; rep
  * The identity of the person *using* the viewer (distinct from the repo owner
  * resolved above). Layered, best-effort:
  *   1. `gh api user`           — GitHub login + avatar, if the gh CLI is authed.
- *   2. `TRAIL_GH_TOKEN`        — same shape via api.github.com when a token was
+ *   2. `TOUR_GH_TOKEN`        — same shape via api.github.com when a token was
  *                                handed to the host but gh isn't installed.
  *   3. `git config user.*`     — the commit identity; always present in a repo
  *                                even with no GitHub auth. No avatar/login.

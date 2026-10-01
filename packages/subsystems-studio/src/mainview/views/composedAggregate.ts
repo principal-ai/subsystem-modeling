@@ -2,7 +2,7 @@
  * Frame-level rollup of a composed subsystem graph for the aggregate view.
  *
  * One node per process / module frame (+ a single ungrouped bucket), with
- * walkthrough steps rebased to frame ids and intra-frame hops dropped. The
+ * trail steps rebased to frame ids and intra-frame steps dropped. The
  * output document renders as-is in the shared `SubsystemComponentGraph` (with
  * edge labels off) — same implementation as the model views, coarser data.
  *
@@ -13,7 +13,7 @@
 import type {
 	MergeSidecar,
 	SubsystemModelDocument,
-	SubsystemWalkthrough,
+	SubsystemTrail,
 } from "../../shared/contract";
 
 export interface AggregateMember {
@@ -51,10 +51,10 @@ export interface AggregateEdge {
 	from: string;
 	to: string;
 	mechanisms: string[];
-	walkthroughIds: string[];
+	trailIds: string[];
 	steps: number;
 	/**
-	 * Hub routing: `source`/`target` name the real member frame the hop
+	 * Hub routing: `source`/`target` name the real member frame the step
 	 * started/ended at; `from`/`to` are the drawn endpoints. Hub-stub edges
 	 * carry one side only (member → outtake, intake → member); trunk edges
 	 * (outtake → intake) carry neither.
@@ -80,12 +80,12 @@ export interface AggregateGraph {
 	/** Intake/outtake hubs for boundaries with more than one frame. */
 	hubs: AggregateHub[];
 	/**
-	 * Renderable document: one `external` node per frame, walkthrough steps
-	 * rebased to frame ids, intra-frame and unresolvable hops dropped.
+	 * Renderable document: one `external` node per frame, trail steps
+	 * rebased to frame ids, intra-frame and unresolvable steps dropped.
 	 */
 	document: {
 		components: SubsystemModelDocument["components"];
-		walkthroughs: SubsystemWalkthrough[];
+		trails: SubsystemTrail[];
 	};
 }
 
@@ -97,12 +97,12 @@ function shortLabel(kind: AggregateFrame["kind"], key: string): string {
 }
 
 /**
- * Roll a composed document up to frames. Walkthrough steps map to their
+ * Roll a composed document up to frames. Trail steps map to their
  * endpoint frames; intra-frame steps are internal and skipped; parallel
  * steps collapse into one edge with a step count.
  */
 export function aggregateToFrames(
-	doc: Pick<SubsystemModelDocument, "components" | "walkthroughs">,
+	doc: Pick<SubsystemModelDocument, "components" | "trails">,
 	sidecar?: MergeSidecar | null,
 ): AggregateGraph {
 	const modelsByAlias = new Map<string, string[]>();
@@ -205,7 +205,7 @@ export function aggregateToFrames(
 	}
 
 	const edgeMap = new Map<string, AggregateEdge>();
-	for (const w of doc.walkthroughs ?? []) {
+	for (const w of doc.trails ?? []) {
 		for (const s of w.steps ?? []) {
 			const from = frameOf.get(s.from);
 			const to = frameOf.get(s.to);
@@ -213,19 +213,19 @@ export function aggregateToFrames(
 			const key = `${from}\0${to}`;
 			let e = edgeMap.get(key);
 			if (!e) {
-				e = { from, to, mechanisms: [], walkthroughIds: [], steps: 0 };
+				e = { from, to, mechanisms: [], trailIds: [], steps: 0 };
 				edgeMap.set(key, e);
 			}
 			e.steps += 1;
 			if (!e.mechanisms.includes(s.mechanism)) e.mechanisms.push(s.mechanism);
-			if (!e.walkthroughIds.includes(w.id)) e.walkthroughIds.push(w.id);
+			if (!e.trailIds.includes(w.id)) e.trailIds.push(w.id);
 		}
 	}
 
 	const orderedFrames = frameOrder.map((id) => frames.get(id)!);
 
 	// Boundaries with more than one frame get an intake/outtake hub pair;
-	// inter-boundary hops route member → source hub → target hub → member,
+	// inter-boundary steps route member → source hub → target hub → member,
 	// so crossings collapse to one trunk per boundary pair instead of one
 	// line per member pair. Single-frame boundaries connect directly.
 	const frameCountByGroup = new Map<string, number>();
@@ -269,7 +269,7 @@ export function aggregateToFrames(
 				from,
 				to,
 				mechanisms: [],
-				walkthroughIds: [],
+				trailIds: [],
 				steps: 0,
 				...ends,
 			};
@@ -279,8 +279,8 @@ export function aggregateToFrames(
 		// collapsed member-pair flow keeps its weight through the hub.
 		e.steps += src.steps;
 		for (const m of src.mechanisms) if (!e.mechanisms.includes(m)) e.mechanisms.push(m);
-		for (const w of src.walkthroughIds) {
-			if (!e.walkthroughIds.includes(w)) e.walkthroughIds.push(w);
+		for (const w of src.trailIds) {
+			if (!e.trailIds.includes(w)) e.trailIds.push(w);
 		}
 	};
 
@@ -289,7 +289,7 @@ export function aggregateToFrames(
 		const toGroup = groupKeyOf(e.to);
 		const fromHub = fromGroup ? hubByGroup.get(fromGroup) : undefined;
 		const toHub = toGroup ? hubByGroup.get(toGroup) : undefined;
-		// Only route when the hop actually leaves its boundary.
+		// Only route when the step actually leaves its boundary.
 		if (fromGroup === toGroup) {
 			addEdge(e.from, e.to, e, { source: e.from, target: e.to });
 			continue;
@@ -332,8 +332,8 @@ export function aggregateToFrames(
 		});
 	}
 
-	const walkthroughs: SubsystemWalkthrough[] = [];
-	for (const w of doc.walkthroughs ?? []) {
+	const trails: SubsystemTrail[] = [];
+	for (const w of doc.trails ?? []) {
 		const steps = (w.steps ?? []).flatMap((s) => {
 			const from = frameOf.get(s.from);
 			const to = frameOf.get(s.to);
@@ -341,7 +341,7 @@ export function aggregateToFrames(
 			return [{ ...s, from, to }];
 		});
 		if (steps.length === 0) continue;
-		walkthroughs.push({ ...w, steps });
+		trails.push({ ...w, steps });
 	}
 
 	return {
@@ -349,6 +349,6 @@ export function aggregateToFrames(
 		frames: orderedFrames,
 		edges,
 		hubs,
-		document: { components, walkthroughs },
+		document: { components, trails },
 	};
 }

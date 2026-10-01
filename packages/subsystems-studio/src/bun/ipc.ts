@@ -6,11 +6,11 @@
  * server replies with a single JSON line `{ ok: true } | { ok: false, error }`.
  *
  * Boot logic in the bun host:
- *   1. Try to connect — if a listener answers, send our trail and exit 0.
+ *   1. Try to connect — if a listener answers, send our tour and exit 0.
  *   2. If connect refuses, attempt to bind (unlinking a stale socket file
  *      first if it exists). On success, become the server.
  *
- * Message kinds: `LOAD_TRAIL`, `ACTIVATE_TAB`, `FOCUS`, `LOAD_SUBSYSTEM_GRAPH`.
+ * Message kinds: `LOAD_TOUR`, `ACTIVATE_TAB`, `FOCUS`, `LOAD_SUBSYSTEM_GRAPH`.
  */
 
 import { mkdirSync, unlinkSync, existsSync, statSync } from "node:fs";
@@ -24,9 +24,9 @@ export const SOCKET_PATH = join(homedir(), ".principal", "principal-studio.sock"
 /** Active IPC listener — closed by `releaseIpcForRelaunch` before self-update. */
 let ipcServer: Server | null = null;
 
-export interface LoadTrailMessage {
-	kind: "LOAD_TRAIL";
-	trailFile: string;
+export interface LoadTourMessage {
+	kind: "LOAD_TOUR";
+	tourFile: string;
 	mode: "local" | "remote";
 	repoRoot?: string;
 	ghToken?: string;
@@ -52,7 +52,7 @@ export interface LoadSubsystemModelMessage {
 }
 
 export type IpcMessage =
-	| LoadTrailMessage
+	| LoadTourMessage
 	| ActivateTabMessage
 	| FocusMessage
 	| LoadSubsystemModelMessage;

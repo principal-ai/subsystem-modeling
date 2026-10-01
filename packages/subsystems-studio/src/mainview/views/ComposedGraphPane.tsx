@@ -16,7 +16,7 @@ import type {
 	MergeSidecar,
 	SubsystemComponent,
 	SubsystemModelSummary,
-	SubsystemWalkthrough,
+	SubsystemTrail,
 } from "../../shared/contract";
 import { electrobun } from "../rpc";
 import { aggregateToFrames, type AggregateGraph } from "./composedAggregate";
@@ -25,7 +25,7 @@ interface ComposedDocument {
 	title: string;
 	description?: string;
 	components: SubsystemComponent[];
-	walkthroughs?: SubsystemWalkthrough[];
+	trails?: SubsystemTrail[];
 }
 
 export function ComposedGraphPane({

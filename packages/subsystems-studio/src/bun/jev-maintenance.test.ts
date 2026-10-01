@@ -72,19 +72,19 @@ describe("accuracyInstruction", () => {
 		expect(s).toContain("deployment-unit");
 		expect(s).not.toContain("containment");
 	});
-	test("walkthrough uses step wording", () => {
+	test("trail uses step wording", () => {
 		const s = accuracyInstruction(
-			proposal("walkthrough", [
+			proposal("trail", [
 				{
-					target: "walkthrough-step",
-					walkthroughId: "w",
+					target: "trail-step",
+					trailId: "w",
 					stepIndex: 0,
 					field: "line",
 					value: 1,
 				},
 			]),
 		);
-		expect(s).toContain("walkthrough step");
+		expect(s).toContain("trail step");
 	});
 });
 
@@ -150,9 +150,9 @@ describe("changeKindQuestion", () => {
 		expect(Object.keys(q.criteria)).toContain("process_fix");
 		expect(Object.keys(q.criteria)).not.toContain("module_fix");
 	});
-	test("walkthrough offers walkthrough_fix", () => {
-		const q = changeKindQuestion(proposal("walkthrough", []));
-		expect(Object.keys(q.criteria)).toContain("walkthrough_fix");
+	test("trail offers trail_fix", () => {
+		const q = changeKindQuestion(proposal("trail", []));
+		expect(Object.keys(q.criteria)).toContain("trail_fix");
 	});
 });
 

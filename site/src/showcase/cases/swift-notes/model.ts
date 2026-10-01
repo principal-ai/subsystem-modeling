@@ -1,6 +1,6 @@
 import type {
   SubsystemComponent,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from '@principal-ai/subsystems-react';
 
 const PURL = 'pkg:github/you/swift-notes';
@@ -119,7 +119,7 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const walkthroughs = [
+export const trails = [
   {
     "id": "tl-open",
     "title": "Open notes screen",
@@ -268,8 +268,8 @@ export const walkthroughs = [
       }
     ]
   }
-] as SubsystemWalkthrough[];
+] as SubsystemTrail[];
 
 export const title = 'SwiftUI notes screen';
 export const description =
-  'iOS twin to the Android case: **SwiftUI → ViewModel → Repository → Core Data/API**. Open **Walkthroughs** for open, add, and refresh.';
+  'iOS twin to the Android case: **SwiftUI → ViewModel → Repository → Core Data/API**. Open **Trails** for open, add, and refresh.';

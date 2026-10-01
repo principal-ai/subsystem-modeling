@@ -35,9 +35,9 @@ const issues: SubsystemIssue[] = [
   {
     id: 'wl',
     severity: 'info',
-    kind: 'walkthrough',
-    message: 'walkthrough finding',
-    target: { kind: 'walkthrough', id: 'w', label: 'Walkthrough' },
+    kind: 'trail',
+    message: 'trail finding',
+    target: { kind: 'trail', id: 'w', label: 'Trail' },
   },
 ];
 
@@ -87,7 +87,7 @@ describe('collapsing a category retracts the focus it established', () => {
     fireEvent.click(category('Constructs'));
     fireEvent.click(card('Alpha'));
 
-    fireEvent.click(category('Walkthrough'));
+    fireEvent.click(category('Trail'));
     expect(events).toEqual(['select:ct', 'deselect:ct']);
   });
 

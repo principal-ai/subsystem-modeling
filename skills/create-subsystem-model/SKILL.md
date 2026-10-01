@@ -1,6 +1,6 @@
 ---
 name: create-subsystem-model
-description: Author a subsystem model (named components + package/module containment + runtime walkthroughs describing one subsystem of a codebase) and create it with `npx -y @principal-ai/principal-studio-cli subsystem-model create`, which persists to disk and opens it in Subsystems Studio (launching Studio if it is not already running). Use when the user says "make a subsystem model", "make a subsystem graph", "diagram this subsystem", "post a component graph to the viewer", "visualize this architecture", "show the flows", or invokes /create-subsystem-model or /create-subsystem-graph. NOT for File City trails (use author-{investigation,informative}-trail), Excalidraw drawings (use excalidraw-drawings), or topics (use create-topic).
+description: Author a subsystem model (named components + package/module containment + runtime trails describing one subsystem of a codebase) and create it with `npx -y @principal-ai/principal-studio-cli subsystem-model create`, which persists to disk and opens it in Subsystems Studio (launching Studio if it is not already running). Use when the user says "make a subsystem model", "make a subsystem graph", "diagram this subsystem", "post a component graph to the viewer", "visualize this architecture", "show the flows", or invokes /create-subsystem-model or /create-subsystem-graph. NOT for File City authoring in the Principal desktop app (use the author-*/create-topic skills there), Excalidraw drawings (use excalidraw-drawings), or topics (use create-topic).
 ---
 
 # Create Subsystem Model
@@ -9,7 +9,7 @@ Create a subsystem model with the Principal AI CLI via **npx** (no global
 install). It validates the payload, persists to
 `~/.principal/subsystem-models/<id>.json`, and opens an interactive React Flow
 tab in Subsystems Studio — launching Studio when it is not already running.
-When the payload includes `walkthroughs`, the sidebar opens on a **Walkthroughs**
+When the payload includes `trails`, the sidebar opens on a **Trails**
 panel instead of Files.
 
 Studio does **not** need to be running first. Prefer the CLI over curling the
@@ -46,11 +46,11 @@ Analyze the target subsystem in the repo and produce:
 - **Boundaries** — package / `module` / `process` membership frames (see
   below). These are the model's topology: `module` is source-file containment,
   `process` is runtime deployment. There are no authored edge relations —
-  runtime seams (calls, feeds, writes, …) live on **walkthrough steps**.
-- **Walkthroughs** (required when the model explains *how something works*) —
-  ordered execution stories over components. The UI calls these Walkthroughs;
-  the wire field is `walkthroughs`. Graph edges for hops are **derived** —
-  do not author a parallel runtime edge list. One walkthrough per named
+  runtime seams (calls, feeds, writes, …) live on **trail steps**.
+- **Trails** (required when the model explains *how something works*) —
+  ordered execution stories over components. The UI calls these Trails;
+  the wire field is `trails`. Graph edges for steps are **derived** —
+  do not author a parallel runtime edge list. One trail per named
   story (open, save, refresh, …). Skip only for pure topology models
   with no runtime story.
 
@@ -95,7 +95,7 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
       "declarationProvenance": "authored"          // required when declaration is set by hand
     }
   ],
-  "walkthroughs": [                                // flows — see section below
+  "trails": [                                // flows — see section below
     {
       "id": "wt-list-sessions",
       "title": "List sessions",
@@ -107,7 +107,7 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
           "file": "packages/subsystems-studio/src/bun/server-sessions.ts",
           "line": 42,                              // 1-based site where the seam fires
           "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/server-sessions.ts",  // required: file-anchored purl of the seam site; readers resolve the checkout from this
-          "symbol": "probeOpencodeServer",         // optional frame label in Walkthroughs UI
+          "symbol": "probeOpencodeServer",         // optional frame label in Trails UI
           "annotation": "Probe the server before listing sessions."  // optional codeview note
         }
       ]
@@ -121,8 +121,8 @@ Rules:
 - `file` paths MUST be repo-root-relative (each file is resolved against its
   own repo's checkout); `purl` subpaths carry the same path after `#`.
 - Portable documents carry only `$schema` / `title` / `description` /
-  `components` / `walkthroughs`. Repo identity lives on each
-  component's `purl` and each walkthrough step's `purl` — there is no stored
+  `components` / `trails`. Repo identity lives on each
+  component's `purl` and each trail step's `purl` — there is no stored
   `repo` field. Local checkouts are
   resolved from the **Alexandria registry** (`~/.alexandria/projects.json`), so
   you normally pass nothing extra: registering the repo in Alexandria (opening
@@ -150,52 +150,52 @@ Rules:
   (process → module → export). Singleton modules (one export) stay unframed —
   same 2+ member rule as process.
 - Scope by story, not by node count: one subsystem / one coherent flow. Include
-  a component only when a walkthrough actually reaches it or it anchors a
-  boundary frame — a node no walkthrough reaches is a smell. Split only when
+  a component only when a trail actually reaches it or it anchors a
+  boundary frame — a node no trail reaches is a smell. Split only when
   the model spans genuinely unrelated stories or stops reading at a glance.
-- Component `alias`es are referenced by walkthrough `from`/`to`; they are model-local and stable across file moves (edges point at the alias, not the location), so never rename on update. Code identity for composed multi-model views lives on `purl` + `file` + `symbol`, not the alias.
-- Walkthrough steps carry their own `from`/`to`/`mechanism`; there is no separate relation id.
+- Component `alias`es are referenced by trail `from`/`to`; they are model-local and stable across file moves (edges point at the alias, not the location), so never rename on update. Code identity for composed multi-model views lives on `purl` + `file` + `symbol`, not the alias.
+- Trail steps carry their own `from`/`to`/`mechanism`; there is no separate relation id.
 
 Stdout is `{ ok: true, graph }` — capture `graph.id` (`sg-<ts>-<rand>`).
-Also read `verification.walkthroughsChecked` / `walkthroughsFailed` when walks
+Also read `verification.trailsChecked` / `trailsFailed` when walks
 were included and Studio verified them.
 
 Do **not** ask the user to start Studio first. The CLI opens or launches it.
 Do **not** curl the HTTP bridge unless the user explicitly asks for the raw API.
 
-## Walkthroughs (`walkthroughs`)
+## Trails (`trails`)
 
-Walkthroughs are the point of a "how this works" model. Components (with their
-package / `module` / `process` frames) are the topology map; walkthroughs are
-the runtime stories. Display edges for hops are **derived** from steps — you
+Trails are the point of a "how this works" model. Components (with their
+package / `module` / `process` frames) are the topology map; trails are
+the runtime stories. Display edges for steps are **derived** from steps — you
 never author an `edges` array.
 
 **When to author them**
 
 - Default **on** for any model that explains a request path, open/close loop,
-  save/load, refresh, or multi-hop interaction.
-- One walkthrough per distinct story (not one mega-walk of every hop).
+  save/load, refresh, or multi-step interaction.
+- One trail per distinct story (not one mega-walk of every step).
 - Prefer 2–8 steps, touching roughly 2–6 distinct components. A walk that spans
   most of the diagram is really several stories — split it. Reuse the same
-  `from`/`to`/`mechanism` hop in multiple walkthroughs when real (e.g. a shared
-  scan hop on open and save).
+  `from`/`to`/`mechanism` step in multiple trails when real (e.g. a shared
+  scan step on open and save).
 
 **Step contract**
 
 | Field | Required | Meaning |
 |---|---|---|
-| `from` | yes | Source component `alias` this hop starts from |
-| `to` | yes | Target component `alias` this hop lands on |
+| `from` | yes | Source component `alias` this step starts from |
+| `to` | yes | Target component `alias` this step lands on |
 | `mechanism` | yes | Runtime seam label (closed set below) |
 | `file` | yes | Repo-root-relative path of the seam site |
 | `line` | yes | 1-based line in `file` where that relationship fires |
 | `purl` | yes | File-anchored purl of the seam site (repo key + `#` + `file`, mirroring component `purl`). Readers resolve the checkout from this — the step must not rely on its endpoints' repos. The fragment after `#` must equal `file`. |
-| `symbol` | yes | Frame name shown in the Walkthroughs list — the function/method on the stack at the site. Required; there is no mechanism + filename fallback. |
-| `annotation` | no | Free-text note for this hop. Viewers show it in the codeview annotation column next to the highlighted line. Informative only — never verified against source. Prefer one short verb-first sentence (same voice as `purpose`). |
+| `symbol` | yes | Frame name shown in the Trails list — the function/method on the stack at the site. Required; there is no mechanism + filename fallback. |
+| `annotation` | no | Free-text note for this step. Viewers show it in the codeview annotation column next to the highlighted line. Informative only — never verified against source. Prefer one short verb-first sentence (same voice as `purpose`). |
 
 Do **not** point `file:line` at a random nearby line: pick the line where the
-seam actually fires (a reviewer checks the hop against it). Site verification
-(`verification.walkthroughsChecked` / `walkthroughsFailed`) confirms the file
+seam actually fires (a reviewer checks the step against it). Site verification
+(`verification.trailsChecked` / `trailsFailed`) confirms the file
 resolves under the step's `purl` and the line is in range and non-blank — it
 does not check text affinity, so a wrong-but-plausible line passes
 verification and misleads readers. Get the line right anyway.
@@ -203,15 +203,15 @@ verification and misleads readers. Get the line right anyway.
 **Authoring workflow**
 
 1. Lay components (+ optional `module` / `process` boundary frames).
-2. Name the walkthroughs the user cares about (titles humans will click).
-3. For each hop, open the real glue file, pick the call/emit/register line,
+2. Name the trails the user cares about (titles humans will click).
+3. For each step, open the real glue file, pick the call/emit/register line,
    and record `{ from, to, mechanism, file, line, purl, symbol?, annotation? }`
    where `purl` is the file-anchored purl of that glue file (`<repo-key>#<file>`).
    The seam file does NOT need an owning component — that is exactly what the
    step `purl` is for.
-   Default **on** for `annotation` when the hop needs a human-readable
+   Default **on** for `annotation` when the step needs a human-readable
    "what happens here" — the site line alone is often opaque without it.
-4. Create via CLI; if `walkthroughsFailed` is non-empty, correct the site lines
+4. Create via CLI; if `trailsFailed` is non-empty, correct the site lines
    and update (Studio HTTP PUT while Studio is running, or recreate).
 
 Reference shape: `packages/subsystems-react/src/stories/Subsystem/ComponentGraph/Flows.stories.tsx`.
@@ -240,7 +240,7 @@ repo purl). Tag the actor kind with `entityKind` (badge text, e.g. `Person`,
 `agent`, `queue`); optionally override the node color with `color` (hex) and
 hand-author `declaration` (`kind: "custom_entity"` + `attributes` as ordered
 `{ key, value }` pairs — e.g. `level: L1`, `approvalLimit: $500`). Entities
-group by `process` / `module` / `layer` and participate in walkthrough steps
+group by `process` / `module` / `layer` and participate in trail steps
 exactly like code nodes.
 
 ### `store` — a retained-state declaration
@@ -263,7 +263,7 @@ It is **not** for:
 **Anchor a store at the state declaration**, not at a function that returns it.
 `name`/`symbol` are the state's own name (`feeds`, `cartStore`); a function that
 reads or writes it is its own node, linked by `writes` / `reads` / `watches`
-hops. When the state is closure-local (created inside a factory), anchor it at
+steps. When the state is closure-local (created inside a factory), anchor it at
 the state location anyway — it is a real declaration even if a symbol-only
 index cannot see it.
 
@@ -338,7 +338,7 @@ systems.
   the module frame nests inside that process (process → module → export).
   Never use `construct: "module"` for this.
 
-**Walkthrough hop `mechanism`** (how `from` relates to `to` at a runtime
+**Trail step `mechanism`** (how `from` relates to `to` at a runtime
 site — request/response and pushed data both live here):
 
 | Style | Labels |
@@ -353,7 +353,7 @@ output; `writes`/`reads` = store access; `watches` = observes/subscribes;
 event-broadcast use the closest match (`calls` for request/response,
 `feeds` / `produces` for pushed data). Structural labels (`imports`, `extends`,
 …) are **not** valid step mechanisms — the model has no authored edge
-relations; keep wiring on walkthrough hops.
+relations; keep wiring on trail steps.
 
 **Declarations** (`component.declaration`) render params, return type, and
 members in the click panel — hand-author them when you want to highlight
@@ -386,7 +386,7 @@ npx -y @principal-ai/principal-studio-cli subsystem-model open <graph.id>
 Files are served only when the component's repo is registered locally: clicking
 a node then serves the file inline in the detail panel (sandboxed read —
 traversal is rejected). Without a registered checkout the model still renders,
-but node clicks show only metadata, and walkthrough site verification against
+but node clicks show only metadata, and trail site verification against
 real `file:line` contents is skipped.
 
 Repo → checkout binding is **not stored on the model**. It is resolved per
@@ -418,5 +418,5 @@ curl -s -X DELETE http://127.0.0.1:3045/api/subsystem-model/<id>
 ```
 
 Prefer PUT over delete-and-recreate so ids and timestamps stay stable. DELETE
-also closes any tabs rendering the model. To add walkthroughs to an existing model,
-PUT `{ "walkthroughs": [ ... ] }` (or updated `module` / `process` frames).
+also closes any tabs rendering the model. To add trails to an existing model,
+PUT `{ "trails": [ ... ] }` (or updated `module` / `process` frames).

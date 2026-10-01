@@ -1,6 +1,6 @@
 import type {
   SubsystemComponent,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from '@principal-ai/subsystems-react';
 
 const PURL = 'pkg:github/you/scheduling-app';
@@ -156,7 +156,7 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const walkthroughs = [
+export const trails = [
   {
     "id": "tl-book",
     "title": "Guest books a slot",
@@ -213,9 +213,9 @@ export const walkthroughs = [
       }
     ]
   }
-] as SubsystemWalkthrough[];
+] as SubsystemTrail[];
 
 export const title = 'Booking page';
 
 export const description =
-  'Calendly-style Next.js booking with a real **client / server** split: the browser calls server actions; only the server touches the database. **PostHog** captures product moments in the client. Open **Walkthroughs** to follow a booking.';
+  'Calendly-style Next.js booking with a real **client / server** split: the browser calls server actions; only the server touches the database. **PostHog** captures product moments in the client. Open **Trails** to follow a booking.';

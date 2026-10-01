@@ -24,7 +24,7 @@ const DOCUMENT_KEYS = [
   'title',
   'description',
   'components',
-  'walkthroughs',
+  'trails',
 ] as const;
 
 /** Project the portable document fields off a create/update payload. */

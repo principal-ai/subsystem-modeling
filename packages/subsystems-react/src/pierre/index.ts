@@ -2,8 +2,8 @@ export { PierreFileView } from './PierreFileView';
 export type { PierreFileViewProps } from './PierreFileView';
 export { PierreSnippetView } from './PierreSnippetView';
 export type { PierreSnippetViewProps } from './PierreSnippetView';
-export { PierreWalkthroughCodeView } from './PierreWalkthroughCodeView';
-export type { PierreWalkthroughCodeViewProps } from './PierreWalkthroughCodeView';
+export { PierreTrailCodeView } from './PierreTrailCodeView';
+export type { PierreTrailCodeViewProps } from './PierreTrailCodeView';
 export { remapSnippetLineNumbers, sliceSnippetWindow } from './sliceSnippet';
 export type { SnippetSlice } from './sliceSnippet';
 export {

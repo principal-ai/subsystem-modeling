@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import type { SubsystemComponent } from '../../../subsystem/model';
-import { walkthroughFromHops } from './fixtures';
+import { trailFromSteps } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/FrameworkStereotype',
@@ -117,8 +117,8 @@ const reactUiComponents: SubsystemComponent[] = [
   },
 ];
 
-const reactUiWalkthroughs = [
-  walkthroughFromHops('react-ui-hops', 'React UI hops', [
+const reactUiTrails = [
+  trailFromSteps('react-ui-steps', 'React UI steps', [
     ['http-entry', 'create-graph', 'calls', 'packages/subsystems-studio/src/bun/http-server.ts', 1],
     ['sessions-view', 'drawings-host', 'uses', 'packages/subsystems-studio/src/mainview/views/AgentSessions.tsx', 1],
     ['analysis-view', 'graph-doc-type', 'uses', 'packages/subsystems-studio/src/mainview/views/AnalysisView.tsx', 1],
@@ -133,7 +133,7 @@ export const ReactComponentsAndHooks: Story = {
         title="Framework + stereotype"
         description="construct stays language-shaped (function / type_alias). framework + stereotype label React units as component / hook without inventing a react_component construct. Empty fields mean language-only."
         components={reactUiComponents}
-        walkthroughs={reactUiWalkthroughs}
+        trails={reactUiTrails}
       />
     </div>
   ),
@@ -192,8 +192,8 @@ const nestComponents: SubsystemComponent[] = [
   },
 ];
 
-const nestWalkthroughs = [
-  walkthroughFromHops('nest-stack-hops', 'Nest controller stack hops', [
+const nestTrails = [
+  trailFromSteps('nest-stack-steps', 'Nest controller stack steps', [
     ['logging-mw', 'auth-guard', 'uses', 'src/logging/logging.middleware.ts', 1],
     ['auth-guard', 'graphs-controller', 'uses', 'src/auth/auth.guard.ts', 1],
     ['graphs-controller', 'graphs-service', 'calls', 'src/graphs/graphs.controller.ts', 1],
@@ -207,7 +207,7 @@ export const NestControllerStack: Story = {
         title="Nest framework stereotypes"
         description="Same optional fields work outside React: class/function constructs plus nestjs controller / guard / middleware / injectable stereotypes."
         components={nestComponents}
-        walkthroughs={nestWalkthroughs}
+        trails={nestTrails}
       />
     </div>
   ),

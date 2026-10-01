@@ -4,7 +4,7 @@
  * A compact button that lives in the sidebar title row (beside the description
  * toggle). It carries the *status* of the graph's last verification pass in its
  * icon color + count, and toggles the sidebar between the diagnostics list and
- * the normal files/walkthroughs view. The graph owns that view; this component
+ * the normal files/trails view. The graph owns that view; this component
  * only surfaces state and calls `onToggle`.
  *
  * Status → color (theme):

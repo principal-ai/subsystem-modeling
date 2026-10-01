@@ -5,7 +5,7 @@
  * models into `FileCityGuidePanel`'s repo-overview mode: with no repo selected
  * the cities fill the canvas and a repo picker floats top-left; selecting a
  * repo slides the map right and opens that repo's subsystem models +
- * walkthroughs in the left column (clicking one opens the model tab).
+ * trails in the left column (clicking one opens the model tab).
  *
  * Cities are built from each repo's own checkout, resolved from its purl via
  * the Alexandria registry (the host's `getRepoFileTree` RPC). Files referenced
@@ -64,15 +64,15 @@ interface RepoDescriptor {
 	avatarUrl?: string;
 	/** Repo-relative paths referenced by this repo's subsystem models. */
 	referencedFiles: string[];
-	/** Models touching this repo, with the walkthroughs sited in it. */
+	/** Models touching this repo, with the trails sited in it. */
 	models: RepoOverviewModel[];
 }
 
 /**
  * Group the listed graphs by purl repo key. A repo's referenced files come from
- * its component anchors (`summary.files`) plus every walkthrough step/file
+ * its component anchors (`summary.files`) plus every trail step/file
  * sited in it; its models are the graphs that touch it, each carrying only the
- * walkthroughs whose steps land in this repo.
+ * trails whose steps land in this repo.
  */
 function buildRepoDescriptors(
 	graphs: SubsystemModelSummary[],
@@ -94,7 +94,7 @@ function buildRepoDescriptors(
 			refsByRepo.set(key, arr);
 		};
 		for (const f of g.files ?? []) addFile(f.file, f.purl);
-		for (const w of g.walkthroughs ?? []) {
+		for (const w of g.trails ?? []) {
 			for (const f of w.files ?? []) addFile(f.file, f.purl);
 			for (const s of w.steps ?? []) addFile(s.file, s.purl);
 		}
@@ -133,12 +133,18 @@ function buildRepoDescriptors(
 					id: g.id,
 					title: g.title,
 					description: g.description,
+					// `walkthroughs` is the panel's own field name, not ours.
+					// `@industry-theme/file-city-panel` still models this concept
+					// as `RepoOverviewModel.walkthroughs` / `RepoOverviewWalkthrough`,
+					// so the boundary keeps its vocabulary while everything inside
+					// Studio says `trails`. Flip these two names together when the
+					// panel package is updated.
 					walkthroughs: [],
 				};
 				d.modelsById.set(g.id, model);
 				d.models.push(model);
 			}
-			for (const w of g.walkthroughs ?? []) {
+			for (const w of g.trails ?? []) {
 				const touches = [...(w.files ?? []), ...(w.steps ?? [])].some(
 					(f) => purlRepoKey(f.purl) === key,
 				);
@@ -190,8 +196,8 @@ export function SubsystemReposMap({
 	onOpenFile,
 }: {
 	graphs: SubsystemModelSummary[];
-	/** Open a model (optionally at a walkthrough) as a subsystem-model tab. */
-	onOpenModel: (graphId: string, walkthroughId?: string) => void;
+	/** Open a model (optionally at a trail) as a subsystem-model tab. */
+	onOpenModel: (graphId: string, trailId?: string) => void;
 	/**
 	 * Repo key → share of that repo's checkout referenced by subsystem models.
 	 * Reported as each city tree finishes loading, for the map's repo rows.
@@ -366,6 +372,8 @@ export function SubsystemReposMap({
 	const actions = useMemo<FileCityGuidePanelActions>(
 		() => ({
 			openFile: () => {},
+			// `walkthroughId` is the panel's arg name (see the note on the
+			// RepoOverviewModel construction above); Studio's own naming is `trailId`.
 			openRepoOverviewModel: ({ modelId, walkthroughId }) =>
 				onOpenModel(modelId, walkthroughId),
 			// A city-label click on the map routes back to the host's selection

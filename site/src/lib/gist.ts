@@ -165,6 +165,6 @@ function toPortableDocument(doc: SubsystemModelDocument): SubsystemModelDocument
   }
   if (doc.$schema) out.$schema = doc.$schema
   if (doc.description) out.description = doc.description
-  if (doc.walkthroughs) out.walkthroughs = doc.walkthroughs
+  if (doc.trails) out.trails = doc.trails
   return out
 }

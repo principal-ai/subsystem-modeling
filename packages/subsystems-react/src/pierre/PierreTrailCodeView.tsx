@@ -1,7 +1,7 @@
 /**
- * PierreWalkthroughCodeView — multi-file step snippets via `@pierre/diffs` CodeView.
+ * PierreTrailCodeView — multi-file step snippets via `@pierre/diffs` CodeView.
  *
- * Renders one sliced window per walkthrough step in a single virtualized
+ * Renders one sliced window per trail step in a single virtualized
  * scroll; when `stepIndex` changes, scrolls that step's site line into view
  * and highlights it via CodeView `selectedLines` (same mechanism as
  * `PierreSnippetView`).
@@ -31,12 +31,12 @@ type CodeViewLineSelection = {
   id: string;
   range: { start: number; end: number };
 };
-/** Metadata carried on a walkthrough step's line annotation. */
-type WalkthroughStepAnnotation = { text: string };
+/** Metadata carried on a trail step's line annotation. */
+type TrailStepAnnotation = { text: string };
 import { useTheme } from '@principal-ade/industry-theme';
 import type {
-  SubsystemWalkthrough,
-  SubsystemWalkthroughStep,
+  SubsystemTrail,
+  SubsystemTrailStep,
 } from '../subsystem/model';
 import type { SubsystemOpenFileOptions } from '../subsystem/declarationRef';
 import { buildPierreOptions, PIERRE_FILE_STYLE } from './pierreBackground';
@@ -51,15 +51,15 @@ import {
 
 /**
  * A token the user clicked or hovered inside a step's snippet. `stepIndex` is
- * the zero-based index of the walkthrough step whose snippet it sits in, so a
+ * the zero-based index of the trail step whose snippet it sits in, so a
  * host can resolve the token against that step's construct endpoints.
  */
-export interface WalkthroughSymbolQuery {
+export interface TrailSymbolQuery {
   stepIndex: number;
   tokenText: string;
 }
 
-/** Ctx item id → step index, for CodeView's `walkthroughId:index` item ids. */
+/** Ctx item id → step index, for CodeView's `trailId:index` item ids. */
 function stepIndexFromItemContext(context: unknown): number | null {
   const id = (context as { item?: { id?: string } } | undefined)?.item?.id;
   if (id == null) return null;
@@ -76,8 +76,8 @@ function paintSymbolToken(el: HTMLElement | undefined, active: boolean): void {
   el.style.textUnderlineOffset = active ? '2px' : '';
 }
 
-export interface PierreWalkthroughCodeViewProps {
-  walkthrough: SubsystemWalkthrough;
+export interface PierreTrailCodeViewProps {
+  trail: SubsystemTrail;
   /** Focused step; `null` shows all snippets without scrolling to a step. */
   stepIndex: number | null;
   /** Read a step site; `purl` names the seam site's repo for checkout resolution. */
@@ -99,9 +99,9 @@ export interface PierreWalkthroughCodeViewProps {
    * construct this flow touches. When both this and `onSymbolClick` are set,
    * matching tokens read as clickable (pointer + dotted underline).
    */
-  resolveSymbol?: (query: WalkthroughSymbolQuery) => string | null;
+  resolveSymbol?: (query: TrailSymbolQuery) => string | null;
   /** Fired when a token resolved by `resolveSymbol` is clicked. */
-  onSymbolClick?: (symbol: string, query: WalkthroughSymbolQuery) => void;
+  onSymbolClick?: (symbol: string, query: TrailSymbolQuery) => void;
 }
 
 type FileLoadState =
@@ -113,18 +113,18 @@ type FileLoadState =
       unavailable: Map<string, string>;
     };
 
-function stepItemId(walkthroughId: string, index: number): string {
-  return `${walkthroughId}:${index}`;
+function stepItemId(trailId: string, index: number): string {
+  return `${trailId}:${index}`;
 }
 
 /** Stable key for a step's file within a repo (mirrors `pathsKey`). */
-function siteKey(step: Pick<SubsystemWalkthroughStep, 'purl' | 'file'>): string {
+function siteKey(step: Pick<SubsystemTrailStep, 'purl' | 'file'>): string {
   return `${step.purl}\0${step.file}`;
 }
 
 /** Notice shown in place of a snippet whose file the host couldn't read. */
 function unavailableNotice(
-  step: SubsystemWalkthroughStep,
+  step: SubsystemTrailStep,
   error: string,
   proposed: boolean,
 ): string {
@@ -186,8 +186,8 @@ function OpenFileHeaderButton({
   );
 }
 
-export function PierreWalkthroughCodeView({
-  walkthrough,
+export function PierreTrailCodeView({
+  trail,
   stepIndex,
   readFile,
   contextLines = 8,
@@ -196,7 +196,7 @@ export function PierreWalkthroughCodeView({
   proposedAliases,
   resolveSymbol,
   onSymbolClick,
-}: PierreWalkthroughCodeViewProps) {
+}: PierreTrailCodeViewProps) {
   const { theme, mode } = useTheme();
   const viewRef = useRef<CodeViewHandle<undefined>>(null);
   const [load, setLoad] = useState<FileLoadState>({ status: 'loading' });
@@ -208,28 +208,28 @@ export function PierreWalkthroughCodeView({
   const onSymbolClickRef = useRef(onSymbolClick);
   onSymbolClickRef.current = onSymbolClick;
 
-  // A hop onto a proposed component is planned work; label its missing file
+  // A step onto a proposed component is planned work; label its missing file
   // accordingly instead of showing a bare "not found".
   const isProposedStep = useCallback(
-    (step: SubsystemWalkthroughStep): boolean =>
+    (step: SubsystemTrailStep): boolean =>
       proposedAliases != null &&
       (proposedAliases.has(step.from) || proposedAliases.has(step.to)),
     [proposedAliases],
   );
 
   const pathsKey = useMemo(() => {
-    const keys = [...new Set(walkthrough.steps.map((s) => siteKey(s)))];
+    const keys = [...new Set(trail.steps.map((s) => siteKey(s)))];
     keys.sort();
     return keys.join('\0');
-  }, [walkthrough.steps]);
+  }, [trail.steps]);
 
   // Load each site independently: one unreadable step (a proposed seam whose
-  // file isn't implemented yet) must not blank the whole walkthrough. Failures
+  // file isn't implemented yet) must not blank the whole trail. Failures
   // are kept per-path and rendered as inline placeholders below.
   useEffect(() => {
     let cancelled = false;
     setLoad({ status: 'loading' });
-    const sites = [...new Map(walkthrough.steps.map((s) => [siteKey(s), s])).values()];
+    const sites = [...new Map(trail.steps.map((s) => [siteKey(s), s])).values()];
     void Promise.all(
       sites.map(async (step) => {
         const key = siteKey(step);
@@ -257,11 +257,11 @@ export function PierreWalkthroughCodeView({
     return () => {
       cancelled = true;
     };
-  }, [walkthrough.id, pathsKey, readFile]);
+  }, [trail.id, pathsKey, readFile]);
 
   const slices = useMemo((): SnippetSlice[] => {
     if (load.status !== 'ready') return [];
-    return walkthrough.steps.map((step) => {
+    return trail.steps.map((step) => {
       const key = siteKey(step);
       const failure = load.unavailable.get(key);
       if (failure != null) {
@@ -278,11 +278,11 @@ export function PierreWalkthroughCodeView({
         step.line,
       );
     });
-  }, [load, walkthrough.steps, contextLines, isProposedStep]);
+  }, [load, trail.steps, contextLines, isProposedStep]);
 
-  const items = useMemo((): CodeViewItem<WalkthroughStepAnnotation>[] => {
+  const items = useMemo((): CodeViewItem<TrailStepAnnotation>[] => {
     if (load.status !== 'ready' || slices.length === 0) return [];
-    return walkthrough.steps.map((step, index) => {
+    return trail.steps.map((step, index) => {
       const slice = slices[index]!;
       const focus = slice.focusOffset;
       const key = siteKey(step);
@@ -290,7 +290,7 @@ export function PierreWalkthroughCodeView({
       // The placeholder line already carries the reason, so it replaces any
       // authored annotation rather than stacking with it.
       const annotations:
-        | LineAnnotation<WalkthroughStepAnnotation>[]
+        | LineAnnotation<TrailStepAnnotation>[]
         | undefined =
         failure == null &&
         step.annotation != null &&
@@ -304,7 +304,7 @@ export function PierreWalkthroughCodeView({
             ]
           : undefined;
       return {
-        id: stepItemId(walkthrough.id, index),
+        id: stepItemId(trail.id, index),
         type: 'file' as const,
         version: 1,
         annotations,
@@ -312,11 +312,11 @@ export function PierreWalkthroughCodeView({
           name: step.file,
           contents: slice.contents,
           lang: pierreLangForPath(step.file),
-          cacheKey: `${walkthrough.id}:${index}:${step.file}:${step.line}:${slice.sliceStart}-${slice.sliceEnd}${failure != null ? ':unavailable' : ''}`,
+          cacheKey: `${trail.id}:${index}:${step.file}:${step.line}:${slice.sliceStart}-${slice.sliceEnd}${failure != null ? ':unavailable' : ''}`,
         },
       };
     });
-  }, [load, slices, walkthrough.id, walkthrough.steps, isProposedStep]);
+  }, [load, slices, trail.id, trail.steps, isProposedStep]);
 
   const selectedLines = useMemo((): CodeViewLineSelection | null => {
     if (stepIndex == null || stepIndex < 0 || stepIndex >= slices.length) {
@@ -325,18 +325,18 @@ export function PierreWalkthroughCodeView({
     const focus = slices[stepIndex]?.focusOffset;
     if (focus == null) return null;
     return {
-      id: stepItemId(walkthrough.id, stepIndex),
+      id: stepItemId(trail.id, stepIndex),
       range: { start: focus, end: focus },
     };
-  }, [stepIndex, slices, walkthrough.id]);
+  }, [stepIndex, slices, trail.id]);
 
   const sliceStartByItemId = useMemo(() => {
     const map = new Map<string, number>();
     for (let i = 0; i < slices.length; i++) {
-      map.set(stepItemId(walkthrough.id, i), slices[i]!.sliceStart);
+      map.set(stepItemId(trail.id, i), slices[i]!.sliceStart);
     }
     return map;
-  }, [slices, walkthrough.id]);
+  }, [slices, trail.id]);
 
   const onPostRender = useCallback(
     (
@@ -357,7 +357,7 @@ export function PierreWalkthroughCodeView({
   const renderHeaderPrefix = useMemo(() => {
     return (item: CodeViewItem) => {
       const index = Number.parseInt(item.id.split(':').pop() ?? '', 10);
-      if (!walkthrough.steps[index]) return null;
+      if (!trail.steps[index]) return null;
       return (
         <span
           style={{
@@ -371,12 +371,12 @@ export function PierreWalkthroughCodeView({
         </span>
       );
     };
-  }, [walkthrough.steps, theme]);
+  }, [trail.steps, theme]);
 
   const renderHeaderMetadata = useMemo(() => {
     return (item: CodeViewItem) => {
       const index = Number.parseInt(item.id.split(':').pop() ?? '', 10);
-      const step = walkthrough.steps[index];
+      const step = trail.steps[index];
       if (!step) return null;
       // Unreadable sites have nothing to open — say so instead of offering a
       // button that would only fail again in the full-file overlay.
@@ -413,17 +413,17 @@ export function PierreWalkthroughCodeView({
         </span>
       );
     };
-  }, [walkthrough.steps, theme, onOpenFile, load]);
+  }, [trail.steps, theme, onOpenFile, load]);
 
   const renderAnnotation = useMemo(() => {
     return (
       annotation:
-        | LineAnnotation<WalkthroughStepAnnotation>
-        | DiffLineAnnotation<WalkthroughStepAnnotation>,
-      item: CodeViewItem<WalkthroughStepAnnotation>,
+        | LineAnnotation<TrailStepAnnotation>
+        | DiffLineAnnotation<TrailStepAnnotation>,
+      item: CodeViewItem<TrailStepAnnotation>,
     ) => {
       const index = Number.parseInt(item.id.split(':').pop() ?? '', 10);
-      const step = walkthrough.steps[index];
+      const step = trail.steps[index];
       const text = annotation.metadata?.text;
       if (!text || !step) return null;
       return (
@@ -441,7 +441,7 @@ export function PierreWalkthroughCodeView({
         </span>
       );
     };
-  }, [walkthrough.steps, theme]);
+  }, [trail.steps, theme]);
 
   const onLineClick = useCallback(
     (
@@ -453,12 +453,12 @@ export function PierreWalkthroughCodeView({
       const id = context?.item?.id;
       if (id == null) return;
       const index = Number.parseInt(id.split(':').pop() ?? '', 10);
-      const step = walkthrough.steps[index];
+      const step = trail.steps[index];
       if (!step) return;
       if (load.status === 'ready' && load.unavailable.has(siteKey(step))) return;
       onOpenFile(step.file, { startLine: step.line, fullFile: true });
     },
-    [onOpenFile, walkthrough.steps, load],
+    [onOpenFile, trail.steps, load],
   );
 
   // Per-token interactions for construct navigation. Only wired when the host
@@ -469,7 +469,7 @@ export function PierreWalkthroughCodeView({
     const resolveAt = (
       props: TokenEventBase,
       context: unknown,
-    ): { symbol: string; query: WalkthroughSymbolQuery } | null => {
+    ): { symbol: string; query: TrailSymbolQuery } | null => {
       const stepIndex = stepIndexFromItemContext(context);
       const tokenText = props?.tokenText;
       if (stepIndex == null || !tokenText) return null;
@@ -507,10 +507,10 @@ export function PierreWalkthroughCodeView({
 
   useEffect(() => {
     if (load.status !== 'ready' || stepIndex == null) return;
-    if (stepIndex < 0 || stepIndex >= walkthrough.steps.length) return;
+    if (stepIndex < 0 || stepIndex >= trail.steps.length) return;
     const focus = slices[stepIndex]?.focusOffset;
     if (focus == null) return;
-    const id = stepItemId(walkthrough.id, stepIndex);
+    const id = stepItemId(trail.id, stepIndex);
     const t = window.setTimeout(() => {
       viewRef.current?.scrollTo({
         type: 'line',
@@ -523,8 +523,8 @@ export function PierreWalkthroughCodeView({
   }, [
     load.status,
     stepIndex,
-    walkthrough.id,
-    walkthrough.steps.length,
+    trail.id,
+    trail.steps.length,
     slices,
     items.length,
   ]);
@@ -539,7 +539,7 @@ export function PierreWalkthroughCodeView({
   if (items.length === 0) {
     return (
       <div style={{ padding: 16, color: theme.colors.textSecondary }}>
-        No steps in this walkthrough.
+        No steps in this trail.
       </div>
     );
   }

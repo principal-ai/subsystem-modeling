@@ -28,7 +28,7 @@ const COPY_FEEDBACK_MS = 1500;
 
 const KIND_ICONS: Partial<Record<TabSummary["kind"], LucideIcon>> = {
 	library: Library,
-	trail: Route,
+	tour: Route,
 	"agent-sessions": Bot,
 	"maintenance-sessions": Wrench,
 	"session-events": Activity,

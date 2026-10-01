@@ -3,12 +3,12 @@
  *
  * Prototype test case: feed it a `C4Model` from `toC4()` and it draws the
  * system as a compound frame, its containers (or components) as boxes, and
- * externals/actors outside the system. `walkthrough` hops render as flow
+ * externals/actors outside the system. `trail` steps render as flow
  * edges. Click a box to list the source components it rolled up.
  *
  * Same interaction language as the other graphs: React Flow + ELK + the shared
  * `GRAPH_NAV_PROPS` chrome. Deliberately small — no measurement passes, no
- * drawers, no walkthrough playback.
+ * drawers, no trail playback.
  */
 
 import { useEffect, useMemo, useState } from 'react';

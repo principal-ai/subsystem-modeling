@@ -4,7 +4,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import type { SubsystemEdgeView, SubsystemGraphifyRelation } from '../../../subsystem/model';
-import { components, walkthroughFromHops } from './fixtures';
+import { components, trailFromSteps } from './fixtures';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/EdgeViews',
@@ -28,9 +28,9 @@ type Story = StoryObj<typeof meta>;
 // ---------------------------------------------------------------------------
 // A graph that carries BOTH edge sources between overlapping node pairs:
 //   svc --references--> reader  (graphify static edge)
-//   svc --calls--> reader       (runtime hop)
+//   svc --calls--> reader       (runtime step)
 //   store --references--> db    (graphify static edge)
-//   store --calls--> db         (runtime hop)
+//   store --calls--> db         (runtime step)
 // so switching the label view visibly changes which labels appear.
 // ---------------------------------------------------------------------------
 const labelViewComponents = components([
@@ -49,14 +49,14 @@ const labelViewGraphify: SubsystemGraphifyRelation[] = [
   { id: 'g-reader-event', from: 'reader', to: 'event', relation: 'references' },
 ];
 
-const labelViewWalkthroughs = [
-  walkthroughFromHops('tl-capture', 'Capture session', [
+const labelViewTrails = [
+  trailFromSteps('tl-capture', 'Capture session', [
     ['api', 'svc', 'calls', 'src/api/handler.ts', 42],
     ['svc', 'store', 'writes', 'src/session/SessionService.ts', 88],
     ['store', 'db', 'calls', 'src/session/SessionStore.ts', 120],
     ['svc', 'event', 'produces', 'src/session/SessionService.ts', 95],
   ]),
-  walkthroughFromHops('tl-normalize', 'Normalize records', [
+  trailFromSteps('tl-normalize', 'Normalize records', [
     ['svc', 'reader', 'calls', 'src/session/SessionService.ts', 61],
     ['reader', 'event', 'produces', 'src/session/SessionReader.ts', 77],
   ]),
@@ -64,7 +64,7 @@ const labelViewWalkthroughs = [
 
 const VIEWS: { value: SubsystemEdgeView; label: string }[] = [
   { value: 'graphify', label: 'Graphify' },
-  { value: 'walkthroughs', label: 'Walkthroughs' },
+  { value: 'trails', label: 'Trails' },
 ];
 
 function EdgeViewDemo() {
@@ -119,9 +119,9 @@ function EdgeViewDemo() {
         <SubsystemComponentGraph
           components={labelViewComponents}
           graphifyRelations={labelViewGraphify}
-          walkthroughs={labelViewWalkthroughs}
+          trails={labelViewTrails}
           title="edge views"
-          description="The graphify and walkthrough edge sources are disjoint and never shown together. Toggle the view: **Graphify** draws `svc --references--> reader`; **Walkthroughs** draws `svc --calls--> reader`. The model is the same either way."
+          description="The graphify and trail edge sources are disjoint and never shown together. Toggle the view: **Graphify** draws `svc --references--> reader`; **Trails** draws `svc --calls--> reader`. The model is the same either way."
           showEdgeLabels={showEdgeLabels}
           edgeView={view}
         />
@@ -130,7 +130,7 @@ function EdgeViewDemo() {
   );
 }
 
-/** Interactive toggle between the `graphify` and `walkthroughs` edge views. */
+/** Interactive toggle between the `graphify` and `trails` edge views. */
 export const ToggleEdgeView: Story = {
   render: () => <EdgeViewDemo />,
 };
@@ -142,7 +142,7 @@ export const ViewControl: Story = {
       <SubsystemComponentGraph
         components={labelViewComponents}
         graphifyRelations={labelViewGraphify}
-        walkthroughs={labelViewWalkthroughs}
+        trails={labelViewTrails}
         showEdgeLabels={args.showEdgeLabels}
         edgeView={args.edgeView}
       />
@@ -154,6 +154,6 @@ export const ViewControl: Story = {
   },
   argTypes: {
     showEdgeLabels: { control: 'boolean' },
-    edgeView: { control: 'inline-radio', options: ['graphify', 'walkthroughs'] },
+    edgeView: { control: 'inline-radio', options: ['graphify', 'trails'] },
   },
 };

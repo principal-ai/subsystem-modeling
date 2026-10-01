@@ -320,7 +320,7 @@ export const LANE_META: Array<{
 	{ lane: "construct", label: "Construct", Icon: Component },
 	{ lane: "static-topology", label: "Static topology", Icon: Network },
 	{ lane: "dynamic-topology", label: "Dynamic topology", Icon: Server },
-	{ lane: "walkthrough", label: "Walkthrough", Icon: Route },
+	{ lane: "trail", label: "Trail", Icon: Route },
 ];
 
 export function laneStatusColor(

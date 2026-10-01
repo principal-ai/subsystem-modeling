@@ -4,7 +4,7 @@ export type MaintainerSectionId =
   | 'construct'
   | 'static-topology'
   | 'dynamic-topology'
-  | 'walkthrough'
+  | 'trail'
   | 'reference'
   | 'gaps'
 
@@ -58,12 +58,12 @@ export const MAINTAINER_SECTIONS: MaintainerSection[] = [
     ],
   },
   {
-    id: 'walkthrough',
-    path: '/maintainer/walkthrough',
-    label: 'Walkthrough',
+    id: 'trail',
+    path: '/maintainer/trail',
+    label: 'Trail',
     children: [
-      { id: 'hop-mechanisms', label: 'Hop mechanisms' },
-      { id: 'walkthrough-mechanical-checks', label: 'Mechanical checks' },
+      { id: 'step-mechanisms', label: 'Step mechanisms' },
+      { id: 'trail-mechanical-checks', label: 'Mechanical checks' },
       { id: 'how-to-inspect', label: 'How to inspect' },
     ],
   },

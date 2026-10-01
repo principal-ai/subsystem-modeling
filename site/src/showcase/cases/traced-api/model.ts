@@ -1,6 +1,6 @@
 import type {
   SubsystemComponent,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from '@principal-ai/subsystems-react';
 
 const PURL = 'pkg:github/you/traced-api';
@@ -219,7 +219,7 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const walkthroughs = [
+export const trails = [
   {
     "id": "tl-read",
     "title": "GET /orders/{id} (traced)",
@@ -474,13 +474,13 @@ export const walkthroughs = [
         "line": 21,
         "purl": PURL,
         "symbol": "OTLPSpanExporter",
-        "annotation": "Exporter attached; request walkthroughs are what actually fill it."
+        "annotation": "Exporter attached; request trails are what actually fill it."
       }
     ]
   }
-] as SubsystemWalkthrough[];
+] as SubsystemTrail[];
 
 export const title = 'Traced HTTP API';
 
 export const description =
-  'Python FastAPI orders service with **OpenTelemetry on the request path**: handlers/services/DB open spans into an in-process TracerProvider; capture crosses into **payments-api** with W3C context; finished spans export to OTLP. Open **Walkthroughs** for read, create, and boot.';
+  'Python FastAPI orders service with **OpenTelemetry on the request path**: handlers/services/DB open spans into an in-process TracerProvider; capture crosses into **payments-api** with W3C context; finished spans export to OTLP. Open **Trails** for read, create, and boot.';

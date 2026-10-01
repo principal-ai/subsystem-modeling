@@ -29,7 +29,7 @@ const SUBSYSTEM_MODEL_JSON = `{
       "construct": "external", "purl": "external"
     }
   ],
-  "walkthroughs": [
+  "trails": [
     {
       "id": "wt-checkout",
       "title": "Checkout",

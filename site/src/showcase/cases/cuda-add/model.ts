@@ -1,6 +1,6 @@
 import type {
   SubsystemComponent,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from '@principal-ai/subsystems-react';
 
 const PURL = 'pkg:github/you/cuda-add';
@@ -56,7 +56,7 @@ export const components: SubsystemComponent[] = [
   },
 ];
 
-export const walkthroughs: SubsystemWalkthrough[] = [
+export const trails: SubsystemTrail[] = [
   {
     id: 'tl-launch',
     title: 'Host → kernel → host',
@@ -71,4 +71,4 @@ export const walkthroughs: SubsystemWalkthrough[] = [
 
 export const title = 'CUDA vector add';
 export const description =
-  'GPU compute path: **host** copies buffers to the **device**, launches `add_kernel`, then copies results back. Open **Walkthroughs** for the HtoD → launch → DtoH walkthrough.';
+  'GPU compute path: **host** copies buffers to the **device**, launches `add_kernel`, then copies results back. Open **Trails** for the HtoD → launch → DtoH trail.';

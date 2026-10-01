@@ -1,24 +1,23 @@
 /**
  * File-per-topic store under `~/.principal/topics/`.
  *
- * Layout (mirrors the trail store at `~/.principal/trails/`, so topics become
- * locally greppable and an agent can read one directly):
+ * Layout (file-per-entity, so topics become locally greppable and an agent can
+ * read one directly):
  *
  *   ~/.principal/topics/
  *     _index.json          private, rebuildable manifest (entries[])
  *     <id>.json            one pretty-printed DraftTopic per file
  *
- * Topics are the *least* repo-bound artifact (a bundle of trails spanning
- * repos), so — unlike trails, which bucket by repo Purl — they are stored flat
- * by id. No purl, no buckets, no `node:os`/Purl dependency beyond `homedir()`.
+ * Topics are the *least* repo-bound artifact (a bundle spanning many repos), so
+ * they are stored flat by id rather than bucketed by repo Purl. No purl, no
+ * buckets, no `node:os`/Purl dependency beyond `homedir()`.
  *
  * The `_index.json` manifest is store-private and rebuildable: it is rebuilt by
  * scanning the directory whenever it is missing or unparseable. It exists only
  * to make `getTopics()` / `list()` cheap (no per-file read for listing).
  *
- * There is intentionally NO eviction cap. The trail store caps trails per repo
- * (`PER_REPO_CAP`); topics are few, user-curated, and must never be silently
- * dropped, so the cap is deliberately not carried over.
+ * There is intentionally NO eviction cap. Topics are few, user-curated, and must
+ * never be silently dropped.
  *
  * Migration from the legacy single-blob `~/.alexandria/topics.json` is explicit
  * (`migrateFromLegacyBlob`) — it is never run automatically on load; the desktop
@@ -125,8 +124,9 @@ export interface MigrationResult {
 
 /**
  * Fields a caller may set when updating a topic. `id`, `createdAt`, and
- * `trailIds` are not updatable here — use the trail-membership methods for
- * `trailIds`, and `id`/`createdAt` are immutable.
+ * `trailIds` are immutable here — `id`/`createdAt` are set once at creation, and
+ * `trailIds` is foreign-keyed membership owned by the desktop's trail store, so
+ * a topic update here can never rewrite it.
  */
 export type TopicUpdate = Partial<
   Pick<DraftTopic, 'title' | 'description' | 'status' | 'createdBy' | 'assets' | 'repos'>
@@ -241,65 +241,13 @@ export class TopicStore {
     return true;
   }
 
-  // ===== Trail membership =====
-
-  async addTrailToTopic(topicId: string, trailId: string): Promise<DraftTopic> {
-    const idx = await this.getIndex();
-    const topic = await this.requireTopic(idx, topicId);
-    if (topic.trailIds.includes(trailId)) return topic;
-    const next: DraftTopic = {
-      ...topic,
-      trailIds: [...topic.trailIds, trailId],
-      updatedAt: nowIso(),
-    };
-    await this.writeTopic(next, idx);
-    return next;
-  }
-
-  async removeTrailFromTopic(topicId: string, trailId: string): Promise<DraftTopic> {
-    const idx = await this.getIndex();
-    const topic = await this.requireTopic(idx, topicId);
-    if (!topic.trailIds.includes(trailId)) return topic;
-    const next: DraftTopic = {
-      ...topic,
-      trailIds: topic.trailIds.filter((t) => t !== trailId),
-      updatedAt: nowIso(),
-    };
-    await this.writeTopic(next, idx);
-    return next;
-  }
-
-  async reorderTopicTrails(topicId: string, trailIds: string[]): Promise<DraftTopic> {
-    const idx = await this.getIndex();
-    const topic = await this.requireTopic(idx, topicId);
-    const current = new Set(topic.trailIds);
-    const next = new Set(trailIds);
-    if (current.size !== next.size || [...current].some((t) => !next.has(t))) {
-      throw new Error(
-        'reorderTopicTrails expects a permutation of the existing trail list',
-      );
-    }
-    const updated: DraftTopic = {
-      ...topic,
-      trailIds: [...trailIds],
-      updatedAt: nowIso(),
-    };
-    await this.writeTopic(updated, idx);
-    return updated;
-  }
-
-  async getTopicsForTrail(trailId: string): Promise<DraftTopic[]> {
-    const topics = await this.getTopics();
-    return topics.filter((t) => t.trailIds.includes(trailId));
-  }
-
   // ===== Migration =====
 
   /**
    * One-shot migration from the legacy single-blob `~/.alexandria/topics.json`
    * to file-per-topic. Reads the blob's `topics[]`, writes each as
    * `<id>.json`, rebuilds the index, then renames the blob to `<blob>.bak` so
-   * a re-run is a no-op (mirrors the trail store's `migrateLegacyIfPresent`).
+   * a re-run is a no-op.
    *
    * Explicit by design — the desktop calls this from a Settings action, never
    * on load. Idempotent: once the blob is `.bak`'d, subsequent calls report

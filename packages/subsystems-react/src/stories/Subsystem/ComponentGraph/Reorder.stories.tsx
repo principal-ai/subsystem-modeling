@@ -3,8 +3,8 @@ import '@xyflow/react/dist/style.css';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
-import { WalkthroughsPanel } from '../../../subsystem/WalkthroughsPanel';
-import type { SubsystemComponent, SubsystemWalkthrough } from '../../../subsystem/model';
+import { TrailsPanel } from '../../../subsystem/TrailsPanel';
+import type { SubsystemComponent, SubsystemTrail } from '../../../subsystem/model';
 
 const meta = {
   title: 'Subsystem/ComponentGraph/Reorder',
@@ -68,7 +68,7 @@ const components: SubsystemComponent[] = [
   },
 ];
 
-const initialWalkthroughs: SubsystemWalkthrough[] = [
+const initialTrails: SubsystemTrail[] = [
   {
     id: 'tl-open-drawing',
     title: 'Open drawing',
@@ -103,9 +103,9 @@ const initialWalkthroughs: SubsystemWalkthrough[] = [
   },
 ];
 
-const orderLabel = (list: SubsystemWalkthrough[]) => list.map((w) => w.title).join('  →  ');
+const orderLabel = (list: SubsystemTrail[]) => list.map((w) => w.title).join('  →  ');
 
-function OrderHeader({ list }: { list: SubsystemWalkthrough[] }) {
+function OrderHeader({ list }: { list: SubsystemTrail[] }) {
   return (
     <div
       style={{
@@ -125,22 +125,22 @@ function OrderHeader({ list }: { list: SubsystemWalkthrough[] }) {
 }
 
 function ReorderGraphDemo() {
-  const [walkthroughs, setWalkthroughs] = useState(initialWalkthroughs);
+  const [trails, setTrails] = useState(initialTrails);
   const onReorder = useCallback(
-    (next: SubsystemWalkthrough[]) => setWalkthroughs(next),
+    (next: SubsystemTrail[]) => setTrails(next),
     [],
   );
 
   return (
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <OrderHeader list={walkthroughs} />
+      <OrderHeader list={trails} />
       <div style={{ flex: 1, minHeight: 0 }}>
         <SubsystemComponentGraph
           components={components}
-          walkthroughs={walkthroughs}
-          onReorderWalkthroughs={onReorder}
+          trails={trails}
+          onReorderTrails={onReorder}
           title="drawing-files flows"
-          description="Drag the grip at the right of a walkthrough row to reorder it. Grips show only while every row is collapsed — expand one and they hide. The header above mirrors the array order; dropping a row calls `onReorderWalkthroughs` with the next array."
+          description="Drag the grip at the right of a trail row to reorder it. Grips show only while every row is collapsed — expand one and they hide. The header above mirrors the array order; dropping a row calls `onReorderTrails` with the next array."
         />
       </div>
     </div>
@@ -148,7 +148,7 @@ function ReorderGraphDemo() {
 }
 
 function PanelOnlyDemo() {
-  const [walkthroughs, setWalkthroughs] = useState(initialWalkthroughs);
+  const [trails, setTrails] = useState(initialTrails);
   // Start collapsed so the drag grips are visible; expanding any row hides them
   // (reordering is only offered when every row is collapsed).
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -163,7 +163,7 @@ function PanelOnlyDemo() {
 
   return (
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <OrderHeader list={walkthroughs} />
+      <OrderHeader list={trails} />
       <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
         <div
           style={{
@@ -173,12 +173,12 @@ function PanelOnlyDemo() {
             borderRight: '1px solid #2a2a2a',
           }}
         >
-          <WalkthroughsPanel
-            walkthroughs={walkthroughs}
-            expandedWalkthroughs={expanded}
-            focusedWalkthroughId={null}
+          <TrailsPanel
+            trails={trails}
+            expandedTrails={expanded}
+            focusedTrailId={null}
             focusedStepIndex={null}
-            hoveredWalkthroughStep={null}
+            hoveredTrailStep={null}
             onToggleCollapsed={onToggleCollapsed}
             onFocusFlow={() => {}}
             onClearFocus={() => {}}
@@ -186,7 +186,7 @@ function PanelOnlyDemo() {
             onHoverStep={() => {}}
             onHoverFlow={() => {}}
             onLeaveStep={() => {}}
-            onReorder={setWalkthroughs}
+            onReorder={setTrails}
           />
         </div>
       </div>

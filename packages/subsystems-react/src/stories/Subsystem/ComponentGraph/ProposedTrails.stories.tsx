@@ -3,10 +3,10 @@ import '@xyflow/react/dist/style.css';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
-import type { SubsystemComponent, SubsystemWalkthrough } from '../../../subsystem/model';
+import type { SubsystemComponent, SubsystemTrail } from '../../../subsystem/model';
 
 const meta = {
-  title: 'Subsystem/ComponentGraph/ProposedWalkthroughs',
+  title: 'Subsystem/ComponentGraph/ProposedTrails',
   component: SubsystemComponentGraph,
   parameters: {
     layout: 'fullscreen',
@@ -82,7 +82,7 @@ const components: SubsystemComponent[] = [
   },
 ];
 
-const walkthroughs: SubsystemWalkthrough[] = [
+const trails: SubsystemTrail[] = [
   {
     id: 'wt-audit',
     title: 'Audit a model',
@@ -94,7 +94,7 @@ const walkthroughs: SubsystemWalkthrough[] = [
         file: 'src/bun/verify-subsystem-component.ts',
         line: 1,
         symbol: 'auditSubsystemModel',
-        annotation: 'Live-only walkthrough — no proposed badge.',
+        annotation: 'Live-only trail — no proposed badge.',
       },
     ],
   },
@@ -117,7 +117,7 @@ const walkthroughs: SubsystemWalkthrough[] = [
         file: 'src/bun/maintain-model.ts',
         line: 1,
         symbol: 'runMaintainModel',
-        annotation: 'Hop onto the proposed lifecycle — step index is tinted.',
+        annotation: 'Step onto the proposed lifecycle — step index is tinted.',
       },
       {
         from: 'lifecycle',
@@ -146,19 +146,19 @@ const walkthroughs: SubsystemWalkthrough[] = [
   },
 ];
 
-function ProposedWalkthroughsDemo() {
+function ProposedTrailsDemo() {
   return (
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={components}
-        walkthroughs={walkthroughs}
+        trails={trails}
         title="proposed-work marker"
-        description="Walkthroughs that touch a **proposed** component get their title tinted darkgoldenrod in the flows panel; expand a row and each hop onto a proposed component is tinted too (index and title). Nodes for proposed components already draw dashed darkgoldenrod on the canvas."
+        description="Trails that touch a **proposed** component get their title tinted darkgoldenrod in the flows panel; expand a row and each step onto a proposed component is tinted too (index and title). Nodes for proposed components already draw dashed darkgoldenrod on the canvas."
       />
     </div>
   );
 }
 
 export const ProposedWorkflows: Story = {
-  render: () => <ProposedWalkthroughsDemo />,
+  render: () => <ProposedTrailsDemo />,
 };

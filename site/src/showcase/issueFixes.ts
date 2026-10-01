@@ -6,14 +6,14 @@
 import type {
   SubsystemComponent,
   SubsystemEdgeView,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from '@principal-ai/subsystems-react'
 import type { RemediationLane } from '../pages/maintainer/shared'
 
 export type IssueFixModel = {
   title: string
   components: SubsystemComponent[]
-  walkthroughs?: SubsystemWalkthrough[]
+  trails?: SubsystemTrail[]
 }
 
 export type IssueFixExample = {
@@ -29,7 +29,7 @@ export type IssueFixExample = {
   graph: {
     edgeView: SubsystemEdgeView
     showEdgeLabels: boolean
-    autoPlayWalkthroughs: boolean
+    autoPlayTrails: boolean
   }
   issue: {
     caption: string
@@ -163,7 +163,7 @@ const moduleFix: IssueFixModel = {
   ],
 }
 
-const hopIssue: IssueFixModel = {
+const stepIssue: IssueFixModel = {
   title: 'Checkout',
   components: [
     {
@@ -192,7 +192,7 @@ const hopIssue: IssueFixModel = {
       symbol: 'legacyCart',
       purl: CHECKOUT,
       file: 'src/checkout/legacyCart.ts',
-      purpose: 'Removed store — hop still names it.',
+      purpose: 'Removed store — step still names it.',
       proposed: true,
       layer: 3,
     },
@@ -216,7 +216,7 @@ const hopIssue: IssueFixModel = {
       layer: 4,
     },
   ],
-  walkthroughs: [
+  trails: [
     {
       id: 'wt-checkout',
       title: 'Checkout',
@@ -253,10 +253,10 @@ const hopIssue: IssueFixModel = {
   ],
 }
 
-const hopFix: IssueFixModel = {
+const stepFix: IssueFixModel = {
   title: 'Checkout',
-  components: hopIssue.components.filter((c) => c.alias !== 'old-cart'),
-  walkthroughs: [
+  components: stepIssue.components.filter((c) => c.alias !== 'old-cart'),
+  trails: [
     {
       id: 'wt-checkout',
       title: 'Checkout',
@@ -304,7 +304,7 @@ export const ISSUE_FIX_EXAMPLES: IssueFixExample[] = [
     graph: {
       edgeView: 'graphify',
       showEdgeLabels: true,
-      autoPlayWalkthroughs: false,
+      autoPlayTrails: false,
     },
     issue: {
       caption: 'NoteService is authored as a function.',
@@ -337,7 +337,7 @@ export const ISSUE_FIX_EXAMPLES: IssueFixExample[] = [
     graph: {
       edgeView: 'graphify',
       showEdgeLabels: true,
-      autoPlayWalkthroughs: false,
+      autoPlayTrails: false,
     },
     issue: {
       caption: 'SessionReader claims a module but has no file.',
@@ -363,19 +363,19 @@ export const ISSUE_FIX_EXAMPLES: IssueFixExample[] = [
     },
   },
   {
-    id: 'broken-hop',
-    check: 'broken hop endpoints',
-    layer: 'Walkthrough',
+    id: 'broken-step',
+    check: 'broken step endpoints',
+    layer: 'Trail',
     blurb:
-      'A hop still names a store that was replaced. Same family as a broken containment claim, but the edge is a walkthrough step. Walkthrough audit is next — this is the shape of the fix once hops can be retargeted.',
+      'A step still names a store that was replaced. Same family as a broken containment claim, but the edge is a trail step. Trail audit is next — this is the shape of the fix once steps can be retargeted.',
     remediation: 'none',
     graph: {
-      edgeView: 'walkthroughs',
+      edgeView: 'trails',
       showEdgeLabels: true,
-      autoPlayWalkthroughs: true,
+      autoPlayTrails: true,
     },
     issue: {
-      caption: 'writes hop still names legacyCart.',
+      caption: 'writes step still names legacyCart.',
       snippet: `{
   "from": "checkout-api",
   "to": "old-cart",     // ← store removed
@@ -383,10 +383,10 @@ export const ISSUE_FIX_EXAMPLES: IssueFixExample[] = [
   "file": "src/checkout/api.ts",
   "line": 12
 }`,
-      model: hopIssue,
+      model: stepIssue,
     },
     fix: {
-      caption: 'Hop retargeted to cartStore.',
+      caption: 'Step retargeted to cartStore.',
       snippet: `{
   "from": "checkout-api",
   "to": "cart-store",
@@ -394,7 +394,7 @@ export const ISSUE_FIX_EXAMPLES: IssueFixExample[] = [
   "file": "src/checkout/api.ts",
   "line": 12
 }`,
-      model: hopFix,
+      model: stepFix,
     },
   },
 ]

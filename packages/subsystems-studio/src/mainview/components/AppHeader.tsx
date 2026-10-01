@@ -359,7 +359,7 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 
 // ---------------------------------------------------------------------------
 // IdentityModal — explains where the header's user identity came from. Opened by
-// clicking the identity chip. Each source (gh CLI / TRAIL_GH_TOKEN / git config)
+// clicking the identity chip. Each source (gh CLI / TOUR_GH_TOKEN / git config)
 // gets a one-line provenance so people understand we read it locally and didn't
 // phone home for it.
 // ---------------------------------------------------------------------------
@@ -378,7 +378,7 @@ const GITHUB_SOURCE_COPY: Record<
 		label: "GitHub token",
 		command: "GET api.github.com/user",
 		detail:
-			"A GitHub token was provided to the viewer (TRAIL_GH_TOKEN). We used it to look up your account on GitHub for the login and avatar.",
+			"A GitHub token was provided to the viewer (TOUR_GH_TOKEN). We used it to look up your account on GitHub for the login and avatar.",
 	},
 };
 

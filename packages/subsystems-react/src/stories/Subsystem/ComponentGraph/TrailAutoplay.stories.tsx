@@ -3,20 +3,20 @@ import '@xyflow/react/dist/style.css';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
-import type { SubsystemComponent, SubsystemWalkthrough } from '../../../subsystem/model';
+import type { SubsystemComponent, SubsystemTrail } from '../../../subsystem/model';
 
 /**
- * Autoplay-through-steps harness. Drives `autoPlayWalkthroughs` with the
+ * Autoplay-through-steps harness. Drives `autoPlayTrails` with the
  * camera/focus knobs exposed as Storybook controls so the step-focus behavior
  * can be tuned live.
  *
  * Note on current behavior: the autoplay loop advances by setting the
  * *hovered* step (dim-highlight) — it does not camera-focus each step, so
- * `walkthroughStepMode` / `zoomOnWalkthroughFocus` don't change the autoplay
+ * `trailStepMode` / `zoomOnTrailFocus` don't change the autoplay
  * camera today. This story exists to expose that gap and iterate on it.
  */
 const meta = {
-  title: 'Subsystem/ComponentGraph/WalkthroughAutoplay',
+  title: 'Subsystem/ComponentGraph/TrailAutoplay',
   component: SubsystemComponentGraph,
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],
@@ -77,7 +77,7 @@ const components: SubsystemComponent[] = [
   },
 ];
 
-const walkthroughs: SubsystemWalkthrough[] = [
+const trails: SubsystemTrail[] = [
   {
     id: 'wt-book',
     title: 'Book a slot',
@@ -172,38 +172,38 @@ const readFile = (path: string): Promise<string> =>
 
 export const AutoplayFocus: Story = {
   args: {
-    autoPlayWalkthroughs: true,
-    walkthroughStepMode: 'focus',
-    zoomOnWalkthroughFocus: true,
-    walkthroughAutoPlayIntervalMs: 5000,
-    walkthroughFocusDurationMs: 800,
-    showWalkthroughTitle: true,
-    initialWalkthroughId: 'wt-book',
+    autoPlayTrails: true,
+    trailStepMode: 'focus',
+    zoomOnTrailFocus: true,
+    trailAutoPlayIntervalMs: 5000,
+    trailFocusDurationMs: 800,
+    showTrailTitle: true,
+    initialTrailId: 'wt-book',
   },
   argTypes: {
-    autoPlayWalkthroughs: { control: 'boolean' },
-    walkthroughStepMode: { control: 'inline-radio', options: ['focus', 'dim'] },
-    zoomOnWalkthroughFocus: { control: 'boolean' },
-    walkthroughAutoPlayIntervalMs: {
+    autoPlayTrails: { control: 'boolean' },
+    trailStepMode: { control: 'inline-radio', options: ['focus', 'dim'] },
+    zoomOnTrailFocus: { control: 'boolean' },
+    trailAutoPlayIntervalMs: {
       control: { type: 'range', min: 400, max: 8000, step: 100 },
     },
-    walkthroughFocusDurationMs: {
+    trailFocusDurationMs: {
       control: { type: 'range', min: 100, max: 2000, step: 50 },
     },
-    showWalkthroughTitle: { control: 'boolean' },
+    showTrailTitle: { control: 'boolean' },
   },
   render: (args) => (
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         {...args}
         components={components}
-        walkthroughs={walkthroughs}
+        trails={trails}
         hideSidebar
         hideDrawer
-        edgeView="walkthroughs"
-        initialWalkthroughId="wt-book"
+        edgeView="trails"
+        initialTrailId="wt-book"
         title="Autoplay through steps"
-        description="Autoplay cycles the walkthrough steps. **Goal to refine:** each advance should camera-focus the step (and optionally open its snippet), not just dim the rest of the graph. Use the controls to compare `focus` vs `dim` and the zoom gate."
+        description="Autoplay cycles the trail steps. **Goal to refine:** each advance should camera-focus the step (and optionally open its snippet), not just dim the rest of the graph. Use the controls to compare `focus` vs `dim` and the zoom gate."
         renderFileViewer={(file, opts) => (
           <div style={{ padding: 12, fontFamily: 'monospace', fontSize: 12, color: '#bbb', whiteSpace: 'pre' }}>
             {`// ${file}`}

@@ -28,7 +28,7 @@ describe('validateSubsystemModelCrossField', () => {
   test('accepts a consistent document', () => {
     const d = doc({
       components: [comp('a'), comp('b')],
-      walkthroughs: [
+      trails: [
         {
           id: 'w1',
           title: 'flow',
@@ -47,11 +47,11 @@ describe('validateSubsystemModelCrossField', () => {
     expect(problems[0]!.message).toContain('duplicate alias');
   });
 
-  test('flags walkthrough step endpoints that reference no component', () => {
+  test('flags trail step endpoints that reference no component', () => {
     const problems = validateSubsystemModelCrossField(
       doc({
         components: [comp('a')],
-        walkthroughs: [
+        trails: [
           {
             id: 'w1',
             title: 'flow',
@@ -61,14 +61,14 @@ describe('validateSubsystemModelCrossField', () => {
       }),
     );
     expect(problems).toHaveLength(1);
-    expect(problems[0]!.path).toBe('/walkthroughs/0/steps/0/from');
+    expect(problems[0]!.path).toBe('/trails/0/steps/0/from');
   });
 
-  test('flags walkthrough step purl fragments that mismatch the step file', () => {
+  test('flags trail step purl fragments that mismatch the step file', () => {
     const problems = validateSubsystemModelCrossField(
       doc({
         components: [comp('a')],
-        walkthroughs: [
+        trails: [
           {
             id: 'w1',
             title: 'flow',
@@ -78,7 +78,7 @@ describe('validateSubsystemModelCrossField', () => {
       }),
     );
     expect(problems).toHaveLength(1);
-    expect(problems[0]!.path).toBe('/walkthroughs/0/steps/0/purl');
+    expect(problems[0]!.path).toBe('/trails/0/steps/0/purl');
   });
 
   test('module implies file, exempting external/proposed', () => {
@@ -147,11 +147,11 @@ describe('validateSubsystemModelCrossField', () => {
     ).toEqual([]);
   });
 
-  test('flags a walkthrough step anchored in node_modules', () => {
+  test('flags a trail step anchored in node_modules', () => {
     const problems = validateSubsystemModelCrossField(
       doc({
         components: [comp('a')],
-        walkthroughs: [
+        trails: [
           {
             id: 'w1',
             title: 'flow',
@@ -171,6 +171,6 @@ describe('validateSubsystemModelCrossField', () => {
       }),
     );
     expect(problems).toHaveLength(1);
-    expect(problems[0]!.path).toBe('/walkthroughs/0/steps/0/file');
+    expect(problems[0]!.path).toBe('/trails/0/steps/0/file');
   });
 });

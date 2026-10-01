@@ -109,9 +109,9 @@ export interface SubsystemDeclToken {
 }
 
 /**
- * Walkthrough hop mechanism — runtime seams with a `file:line` site.
+ * Trail step mechanism — runtime seams with a `file:line` site.
  */
-export type SubsystemWalkthroughMechanism =
+export type SubsystemTrailMechanism =
   | 'calls'
   | 'uses'
   | 'feeds'
@@ -121,21 +121,21 @@ export type SubsystemWalkthroughMechanism =
   | 'watches'
   | 'registers-into';
 
-/** Union for derived graph-edge styling — the walkthrough hop mechanism. */
-export type SubsystemEdgeMechanism = SubsystemWalkthroughMechanism;
+/** Union for derived graph-edge styling — the trail step mechanism. */
+export type SubsystemEdgeMechanism = SubsystemTrailMechanism;
 
 /**
  * Which edge source the canvas draws. The two sources are disjoint; a view
  * shows only edges (and their labels) from the selected source.
  * - `graphify`: only graphify-native static edges (`imports`, `contains`, …)
- * - `walkthroughs`: only walkthrough hop edges (`calls`, `feeds`, …)
+ * - `trails`: only trail step edges (`calls`, `feeds`, …)
  */
-export type SubsystemEdgeView = 'graphify' | 'walkthroughs';
+export type SubsystemEdgeView = 'graphify' | 'trails';
 
 /**
  * Where a display edge came from.
  *
- * - `subsystem` (default): a walkthrough hop mechanism verb, colored from
+ * - `subsystem` (default): a trail step mechanism verb, colored from
  *   `MECHANISM_COLOR`.
  * - `graphify`: a raw relation read off graphify's static symbol graph
  *   (`imports`, `contains`, `re_exports`, …). These are DERIVED, never authored,
@@ -176,7 +176,7 @@ export interface SubsystemGraphifyRelation {
 /** A component node — the named unit, construct-tagged; `file` is its location. */
 export interface SubsystemComponent {
   /**
-   * Model-local stable alias, unique per model. Referenced by walkthrough
+   * Model-local stable alias, unique per model. Referenced by trail
    * `from` / `to`; edges point at the alias, not the location.
    * Code identity (for composed multi-model views) lives on
    * `purl` + `file` + `symbol`, not here.
@@ -315,7 +315,7 @@ export interface SubsystemComponent {
 }
 
 /**
- * Derived / display graph edge used by renderers. Built from walkthrough hops
+ * Derived / display graph edge used by renderers. Built from trail steps
  * (and graphify-native relations) — not authored as its own document field.
  */
 export interface SubsystemComponentEdge {
@@ -326,8 +326,8 @@ export interface SubsystemComponentEdge {
    * The edge verb. For `provenance: 'subsystem'` (the default) this is a
    * `SubsystemEdgeMechanism`; for `provenance: 'graphify'` it is the raw
    * graphify relation. Typed as `string` because the display edge is a derived
-   * structure and graphify's verb set is open — the walkthrough vocabulary
-   * (`SubsystemWalkthroughMechanism`) stays closed.
+   * structure and graphify's verb set is open — the trail vocabulary
+   * (`SubsystemTrailMechanism`) stays closed.
    */
   mechanism: string;
   /** Origin of the edge; absent means `'subsystem'`. */
@@ -347,13 +347,13 @@ export interface SubsystemComponentEdge {
 }
 
 /**
- * A single runtime hop — `from`/`to`/`mechanism` plus the exact `file:line`
- * where that seam fires for a walkthrough.
+ * A single runtime step — `from`/`to`/`mechanism` plus the exact `file:line`
+ * where that seam fires for a trail.
  */
-export interface SubsystemWalkthroughStep {
+export interface SubsystemTrailStep {
   from: string;
   to: string;
-  mechanism: SubsystemWalkthroughMechanism;
+  mechanism: SubsystemTrailMechanism;
   /** Repo-root-relative path of the file where the seam fires. */
   file: string;
   /** 1-based line of the site within `file`. */
@@ -366,33 +366,33 @@ export interface SubsystemWalkthroughStep {
    */
   purl: string;
   /**
-   * Frame name for this hop — the function/method on the stack at the site.
-   * Required; the Walkthroughs list shows this instead of a bare
+   * Frame name for this step — the function/method on the stack at the site.
+   * Required; the Trails list shows this instead of a bare
    * mechanism + filename fallback.
    */
   symbol: string;
   /**
-   * Free-text note anchored to this hop's site line. Optional — informative
-   * only, never verified against source; the Pierre walkthrough code view
+   * Free-text note anchored to this step's site line. Optional — informative
+   * only, never verified against source; the Pierre trail code view
    * surfaces it in the annotation column next to the highlighted line.
    */
   annotation?: string;
 }
 
-/** An ordered runtime walkthrough — one named behavior story. */
-export interface SubsystemWalkthrough {
+/** An ordered runtime trail — one named behavior story. */
+export interface SubsystemTrail {
   id: string;
   title: string;
-  steps: SubsystemWalkthroughStep[];
+  steps: SubsystemTrailStep[];
 }
 
 export interface SubsystemModelDocument {
   components: SubsystemComponent[];
-  /** Ordered runtime walkthroughs (one per named behavior). */
-  walkthroughs?: SubsystemWalkthrough[];
+  /** Ordered runtime trails (one per named behavior). */
+  trails?: SubsystemTrail[];
 }
 
-/** Stable id for a derived graph edge from a walkthrough hop. */
+/** Stable id for a derived graph edge from a trail step. */
 export function derivedGraphEdgeId(
   from: string,
   to: string,
@@ -401,25 +401,25 @@ export function derivedGraphEdgeId(
   return `${from}--${mechanism}-->${to}`;
 }
 
-/** React Flow / canvas edge id for a walkthrough hop. */
-export function walkthroughStepGraphEdgeId(
-  step: Pick<SubsystemWalkthroughStep, 'from' | 'to' | 'mechanism'>,
+/** React Flow / canvas edge id for a trail step. */
+export function trailStepGraphEdgeId(
+  step: Pick<SubsystemTrailStep, 'from' | 'to' | 'mechanism'>,
 ): string {
   return derivedGraphEdgeId(step.from, step.to, step.mechanism);
 }
 
 /**
- * Move one walkthrough from `from` to `to`, returning a new array. Used by the
- * flows panel's drag-to-reorder: the array order is the walkthroughs' display
+ * Move one trail from `from` to `to`, returning a new array. Used by the
+ * flows panel's drag-to-reorder: the array order is the trails' display
  * order, so a reorder is just an array splice. Out-of-range `from` returns a
  * shallow copy unchanged; `to` is clamped into range.
  */
-export function reorderWalkthroughs(
-  walkthroughs: readonly SubsystemWalkthrough[],
+export function reorderTrails(
+  trails: readonly SubsystemTrail[],
   from: number,
   to: number,
-): SubsystemWalkthrough[] {
-  const next = [...walkthroughs];
+): SubsystemTrail[] {
+  const next = [...trails];
   if (!Number.isInteger(from) || from < 0 || from >= next.length) return next;
   const target = Math.max(0, Math.min(to, next.length - 1));
   if (target === from) return next;
@@ -432,7 +432,7 @@ export function reorderWalkthroughs(
  * Final index for a drag-reorder given the insertion `boundary` (one of the
  * `n + 1` gaps between rows) and the dragged row's `from` index. Removing the
  * dragged row shifts every boundary after it down one, so a boundary past
- * `from` maps to `boundary - 1`. Feed the result to `reorderWalkthroughs` as
+ * `from` maps to `boundary - 1`. Feed the result to `reorderTrails` as
  * `to`; a result equal to `from` is a no-op.
  */
 export function reorderTargetIndex(boundary: number, from: number): number {
@@ -440,11 +440,11 @@ export function reorderTargetIndex(boundary: number, from: number): number {
 }
 
 export function deriveGraphEdges(doc: {
-  walkthroughs?: readonly SubsystemWalkthrough[];
+  trails?: readonly SubsystemTrail[];
   graphifyRelations?: readonly SubsystemGraphifyRelation[];
 }): SubsystemComponentEdge[] {
   const byId = new Map<string, SubsystemComponentEdge>();
-  for (const w of doc.walkthroughs ?? []) {
+  for (const w of doc.trails ?? []) {
     for (const step of w.steps) {
       const id = derivedGraphEdgeId(step.from, step.to, step.mechanism);
       if (!byId.has(id)) {
@@ -478,7 +478,7 @@ export function deriveGraphEdges(doc: {
 
 /**
  * True when the model has components but no graph structure at all: no
- * walkthrough/graphify edges AND no boundary containment (`module` / `process`)
+ * trail/graphify edges AND no boundary containment (`module` / `process`)
  * to frame. Those snapshots are a catalog of declarations, not a graph.
  *
  * A model that carries `module` / `process` membership still draws frames even
@@ -486,7 +486,7 @@ export function deriveGraphEdges(doc: {
  */
 export function isConstructsOnlyModel(doc: {
   components: readonly { alias: string; module?: string; process?: string }[];
-  walkthroughs?: readonly SubsystemWalkthrough[];
+  trails?: readonly SubsystemTrail[];
   graphifyRelations?: readonly SubsystemGraphifyRelation[];
 }): boolean {
   if (doc.components.length === 0) return false;
@@ -495,7 +495,7 @@ export function isConstructsOnlyModel(doc: {
   );
   if (hasBoundary) return false;
   return deriveGraphEdges({
-    walkthroughs: doc.walkthroughs,
+    trails: doc.trails,
     graphifyRelations: doc.graphifyRelations,
   }).length === 0;
 }
@@ -1396,7 +1396,7 @@ export interface SubsystemGraphEdgeData extends Record<string, unknown> {
   /**
    * ELK-computed route waypoints (absolute flow coords) for this edge. Kept so
    * the camera can include the whole routed line — not just the endpoint nodes
-   * — when framing a focused hop, which otherwise clips edges that bulge out
+   * — when framing a focused step, which otherwise clips edges that bulge out
    * around their endpoints.
    */
   elkPathPoints?: { x: number; y: number }[];
@@ -1404,8 +1404,8 @@ export interface SubsystemGraphEdgeData extends Record<string, unknown> {
 
 export type SubsystemGraphEdge = Edge<SubsystemGraphEdgeData>;
 
-/** Runtime vocabulary of walkthrough hop mechanisms — mirrors `SubsystemWalkthroughMechanism`. */
-export const SUBSYSTEM_WALKTHROUGH_MECHANISMS = [
+/** Runtime vocabulary of trail step mechanisms — mirrors `SubsystemTrailMechanism`. */
+export const SUBSYSTEM_TRAIL_MECHANISMS = [
   'calls',
   'uses',
   'feeds',
@@ -1414,17 +1414,17 @@ export const SUBSYSTEM_WALKTHROUGH_MECHANISMS = [
   'reads',
   'watches',
   'registers-into',
-] as const satisfies readonly SubsystemWalkthroughMechanism[];
+] as const satisfies readonly SubsystemTrailMechanism[];
 
-const WALKTHROUGH_MECHANISM_SET: ReadonlySet<string> = new Set(
-  SUBSYSTEM_WALKTHROUGH_MECHANISMS,
+const TRAIL_MECHANISM_SET: ReadonlySet<string> = new Set(
+  SUBSYSTEM_TRAIL_MECHANISMS,
 );
 
-/** True when a mechanism belongs to the walkthrough hop vocabulary. */
-export function isWalkthroughMechanism(
+/** True when a mechanism belongs to the trail step vocabulary. */
+export function isTrailMechanism(
   mechanism: string,
-): mechanism is SubsystemWalkthroughMechanism {
-  return WALKTHROUGH_MECHANISM_SET.has(mechanism);
+): mechanism is SubsystemTrailMechanism {
+  return TRAIL_MECHANISM_SET.has(mechanism);
 }
 
 export const MECHANISM_COLOR: Record<SubsystemEdgeMechanism, string> = {
@@ -1994,7 +1994,7 @@ export function convertSubsystemToEdges(
 
 /** Stable key for layout-affecting graph fields (ignores declarationRef, etc.). */
 export function subsystemGraphLayoutKey(
-  doc: Pick<SubsystemModelDocument, 'components' | 'walkthroughs'> & {
+  doc: Pick<SubsystemModelDocument, 'components' | 'trails'> & {
     graphifyRelations?: readonly SubsystemGraphifyRelation[];
   },
 ): string {

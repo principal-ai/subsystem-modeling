@@ -91,25 +91,6 @@ describe('CRUD', () => {
     expect(published.repos).toEqual(['pkg:github/acme/web']);
   });
 
-  test('trail membership add/remove/reorder', async () => {
-    const store = makeStore();
-    await store.createTopic({ id: 'topic-m', title: 'M', trailIds: [] });
-    await store.addTrailToTopic('topic-m', 'a');
-    await store.addTrailToTopic('topic-m', 'b');
-    await store.addTrailToTopic('topic-m', 'a'); // dup no-op
-    expect((await store.getTopic('topic-m'))?.trailIds).toEqual(['a', 'b']);
-
-    await store.reorderTopicTrails('topic-m', ['b', 'a']);
-    expect((await store.getTopic('topic-m'))?.trailIds).toEqual(['b', 'a']);
-
-    await expect(
-      store.reorderTopicTrails('topic-m', ['b', 'c']),
-    ).rejects.toThrow(/permutation/);
-
-    await store.removeTrailFromTopic('topic-m', 'b');
-    expect((await store.getTopic('topic-m'))?.trailIds).toEqual(['a']);
-  });
-
   test('delete removes the file and the index entry', async () => {
     const store = makeStore();
     await store.createTopic({ id: 'topic-d', title: 'D', trailIds: [] });

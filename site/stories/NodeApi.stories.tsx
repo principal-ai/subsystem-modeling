@@ -4,7 +4,7 @@ import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme
 import { SubsystemComponentGraph } from '@principal-ai/subsystems-react';
 import type {
   SubsystemComponent,
-  SubsystemWalkthrough,
+  SubsystemTrail,
 } from '@principal-ai/subsystems-react';
 import { makeShowcaseRenderers } from '../src/showcase/files.tsx';
 
@@ -69,7 +69,7 @@ const components: SubsystemComponent[] = [
   },
 ];
 
-const walkthroughs: SubsystemWalkthrough[] = [
+const trails: SubsystemTrail[] = [
   {
     id: 'tl-post-order',
     title: 'POST /orders',
@@ -130,11 +130,11 @@ function OrdersApiDemo() {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         components={components}
-        walkthroughs={walkthroughs}
+        trails={trails}
         title="Orders API"
-        description="A typical Express service: a router as the wire boundary, a service class with the business rules, a repository for persistence — and the retained state (Postgres, Redis) plus payment capture (Stripe) as external systems. Open the **Walkthroughs** tab to walk the `POST /orders` request path."
+        description="A typical Express service: a router as the wire boundary, a service class with the business rules, a repository for persistence — and the retained state (Postgres, Redis) plus payment capture (Stripe) as external systems. Open the **Trails** tab to walk the `POST /orders` request path."
         renderFileViewer={showcase.renderFileViewer}
-        renderWalkthroughViewer={showcase.renderWalkthroughViewer}
+        renderTrailViewer={showcase.renderTrailViewer}
       />
     </div>
   );

@@ -4,11 +4,11 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react/pure
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import {
   STEP_COPY_FEEDBACK_MS,
-  WalkthroughsPanel,
-  type WalkthroughsPanelProps,
-} from './WalkthroughsPanel';
-import type { SubsystemWalkthrough } from './model';
-import { buildStepBrief } from './walkthroughBrief';
+  TrailsPanel,
+  type TrailsPanelProps,
+} from './TrailsPanel';
+import type { SubsystemTrail } from './model';
+import { buildStepBrief } from './trailBrief';
 
 // Bun's happy-dom test environment needs `@happy-dom/global-registrator`, which
 // isn't installed here, so wire the DOM primitives React DOM + Testing Library
@@ -33,7 +33,7 @@ globals.sessionStorage = dom.sessionStorage;
 globals.matchMedia = dom.matchMedia.bind(dom);
 
 
-const walkthroughs: SubsystemWalkthrough[] = [
+const trails: SubsystemTrail[] = [
   {
     id: 'auth-flow',
     title: 'Auth flow',
@@ -63,13 +63,13 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-function renderPanel(overrides: Partial<WalkthroughsPanelProps> = {}) {
-  const props: WalkthroughsPanelProps = {
-    walkthroughs,
-    expandedWalkthroughs: new Set(['auth-flow']),
-    focusedWalkthroughId: null,
+function renderPanel(overrides: Partial<TrailsPanelProps> = {}) {
+  const props: TrailsPanelProps = {
+    trails,
+    expandedTrails: new Set(['auth-flow']),
+    focusedTrailId: null,
     focusedStepIndex: null,
-    hoveredWalkthroughStep: null,
+    hoveredTrailStep: null,
     onToggleCollapsed: () => {},
     onFocusFlow: () => {},
     onClearFocus: () => {},
@@ -81,14 +81,14 @@ function renderPanel(overrides: Partial<WalkthroughsPanelProps> = {}) {
   };
   return render(
     <ThemeProvider theme={defaultEditorTheme}>
-      <WalkthroughsPanel {...props} />
+      <TrailsPanel {...props} />
     </ThemeProvider>,
   );
 }
 
 const COPY_LABEL = 'Copy step 1 of Auth flow for an agent';
 
-describe('WalkthroughsPanel step copy', () => {
+describe('TrailsPanel step copy', () => {
   test('copy icon is hidden until the step row is hovered', () => {
     const { getByText, queryByLabelText } = renderPanel();
     expect(queryByLabelText(COPY_LABEL)).toBeNull();
@@ -111,7 +111,7 @@ describe('WalkthroughsPanel step copy', () => {
     fireEvent.mouseDown(copy);
     fireEvent.click(copy);
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-    expect(writeText).toHaveBeenCalledWith(buildStepBrief(walkthroughs[0]!, 0));
+    expect(writeText).toHaveBeenCalledWith(buildStepBrief(trails[0]!, 0));
     expect(copy.getAttribute('title')).toBe('Copied');
   });
 
@@ -121,7 +121,7 @@ describe('WalkthroughsPanel step copy', () => {
     const row = getByText('Login.submit').closest('button')!;
     fireEvent.mouseEnter(row);
     fireEvent.click(row);
-    expect(onFocusStep).toHaveBeenCalledWith(walkthroughs[0]!, 0);
+    expect(onFocusStep).toHaveBeenCalledWith(trails[0]!, 0);
   });
 
   test('the copied checkmark clears after the feedback window', async () => {
