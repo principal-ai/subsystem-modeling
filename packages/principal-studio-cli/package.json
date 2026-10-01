@@ -1,6 +1,6 @@
 {
   "name": "@principal-ai/principal-studio-cli",
-  "version": "0.43.0",
+  "version": "0.44.0",
   "description": "Principal AI CLI — subsystem models, Subsystems Studio, tours, and agent sessions",
   "main": "dist/index.cjs",
   "types": "dist/index.d.ts",

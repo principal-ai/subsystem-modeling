@@ -283,25 +283,28 @@ export interface ModelProvenanceData {
 	 */
 	remoteFreshness?: SubsystemModelPurlFreshness[];
 	/**
-	 * Per-purl anchor contact, split committed vs uncommitted. Aspirational —
-	 * nothing populates it.
-	 *
-	 * To make this real, add next to `purlCommitFreshness`:
-	 * `referencedFilesByPurl(components, trails)` for the pathspec
-	 * (`purl-commits.ts:80`), then per resolvable root
-	 *   - committed: `git diff --name-only <pin> <live> -- <paths>`
-	 *     via `gitStdout` (`git-repo.ts:23`)
-	 *   - uncommitted: the dirty paths `filesClean` already inspects
-	 *     (`git-repo.ts:64`) — it currently returns only a boolean, so it
-	 *     would need to surface which paths were dirty, not just that one was.
+	 * Per-purl anchor contact, split committed vs uncommitted. Populated by the
+	 * host's `modelProvenance` (`purl-commits.ts:274`) — a pathspec-scoped diff
+	 * plus a pathspec-scoped dirty check per resolvable repo — and it is what
+	 * separates "the repo moved" from "an anchored file moved".
 	 *
 	 * `[]` on both means the repo moved but nothing referenced did. `undefined`
-	 * means not computed, which is a different claim.
+	 * means not computed, which is a different claim: a repo the host could not
+	 * compare is omitted rather than reported clean (`purl-commits.ts:305-330`).
 	 */
 	anchorChanges?: Record<string, AnchorChanges>;
 	/**
-	 * Whether the pin was (or could be) auto-promoted to head because nothing
-	 * anchored moved. Aspirational — nothing populates it.
+	 * Whether the pin was (or could be) carried forward to head because nothing
+	 * anchored moved.
+	 *
+	 * The decision is real and lives on the host: `planAutoRePin`
+	 * (`purl-commits.ts:358`) decides per repo and `applyAutoRePin`
+	 * (`index.ts:3303`) persists the promotions on every overview pass. This
+	 * field is just not the channel it reports on — the overview snapshot
+	 * (`ModelProvenanceSnapshot`, `contract.ts:287`) carries no outcome, and the
+	 * detail tier's `autoRePin` (`contract.ts:306`) is a per-purl
+	 * `AutoRePinOutcome` map rather than this single shape. So a `dirty-tree`
+	 * refusal is currently observable only as a pin that did not move.
 	 */
 	autoRePin?: AutoRePin;
 	/** Per-purl commit at create, immutable. */
@@ -367,9 +370,9 @@ export function provenanceRows(
  * owes the reader a re-audit. A model that is both dirty somewhere and touched
  * elsewhere reports `touched`, and the strip shows both.
  *
- * When no host populates `anchorChanges`, every row reads `unknown` and the
- * badge falls back to the drift signal — which is exactly today's behavior,
- * honestly labelled as unverified rather than clean.
+ * A row whose `anchorChanges` never arrived still reads `unknown`, and the
+ * rollup falls back to the drift signal — honestly labelled as unmeasured
+ * rather than clean.
  */
 export function summarizeProvenance(rows: ProvenanceRow[]): {
 	status: ProvenanceStatus;
