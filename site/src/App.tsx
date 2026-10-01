@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { Link, Route, Routes, useLocation } from 'react-router-dom'
+import { DocsFallback, PageFallback } from './components/RouteFallback'
 import './App.css'
 
 const Schema = lazy(() =>
@@ -53,6 +54,14 @@ const HomeCategoryExplorer = lazy(() =>
 )
 
 const GALLERY_HREF = `${import.meta.env.BASE_URL}gallery/`
+
+function preloadDocs() {
+  void import('./pages/ModelMaintainer')
+}
+
+function preloadStart() {
+  void import('./pages/Start')
+}
 
 function Home() {
   return (
@@ -242,9 +251,17 @@ function App() {
           Subsystem Modeling
         </Link>
         <div className="nav-links">
-          <Link to="/start">Try it</Link>
+          <Link to="/start" onMouseEnter={preloadStart} onFocus={preloadStart}>
+            Try it
+          </Link>
           <Link to="/about">Mission</Link>
-          <Link to="/maintainer">Docs</Link>
+          <Link
+            to="/maintainer"
+            onMouseEnter={preloadDocs}
+            onFocus={preloadDocs}
+          >
+            Docs
+          </Link>
           <a href={GALLERY_HREF}>Gallery</a>
           <a
             href="https://github.com/principal-ai/subsystem-modeling"
@@ -284,7 +301,7 @@ function App() {
           <Route
             path="/start"
             element={
-              <Suspense fallback={<section className="start-page">Loading…</section>}>
+              <Suspense fallback={<PageFallback />}>
                 <Start />
               </Suspense>
             }
@@ -292,7 +309,7 @@ function App() {
           <Route
             path="/schema"
             element={
-              <Suspense fallback={<section className="schema-page">Loading schema…</section>}>
+              <Suspense fallback={<DocsFallback />}>
                 <Schema />
               </Suspense>
             }
@@ -300,7 +317,7 @@ function App() {
           <Route
             path="/gist"
             element={
-              <Suspense fallback={<section className="gist-page">Loading…</section>}>
+              <Suspense fallback={<PageFallback />}>
                 <Gist />
               </Suspense>
             }
@@ -308,7 +325,7 @@ function App() {
           <Route
             path="/maintainer"
             element={
-              <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
+              <Suspense fallback={<DocsFallback />}>
                 <ModelMaintainer />
               </Suspense>
             }
@@ -316,7 +333,7 @@ function App() {
             <Route
               index
               element={
-                <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
+                <Suspense fallback={<DocsFallback />}>
                   <MaintainerOverview />
                 </Suspense>
               }
@@ -324,7 +341,7 @@ function App() {
             <Route
               path="issues"
               element={
-                <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
+                <Suspense fallback={<DocsFallback />}>
                   <MaintainerIssues />
                 </Suspense>
               }
@@ -332,7 +349,7 @@ function App() {
             <Route
               path="construct"
               element={
-                <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
+                <Suspense fallback={<DocsFallback />}>
                   <MaintainerConstruct />
                 </Suspense>
               }
@@ -340,7 +357,7 @@ function App() {
             <Route
               path="static-topology"
               element={
-                <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
+                <Suspense fallback={<DocsFallback />}>
                   <MaintainerStaticTopology />
                 </Suspense>
               }
@@ -348,7 +365,7 @@ function App() {
             <Route
               path="dynamic-topology"
               element={
-                <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
+                <Suspense fallback={<DocsFallback />}>
                   <MaintainerDynamicTopology />
                 </Suspense>
               }
@@ -356,7 +373,7 @@ function App() {
             <Route
               path="trail"
               element={
-                <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
+                <Suspense fallback={<DocsFallback />}>
                   <MaintainerTrail />
                 </Suspense>
               }
@@ -364,7 +381,7 @@ function App() {
             <Route
               path="reference"
               element={
-                <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
+                <Suspense fallback={<DocsFallback />}>
                   <MaintainerReference />
                 </Suspense>
               }
@@ -372,7 +389,7 @@ function App() {
             <Route
               path="gaps"
               element={
-                <Suspense fallback={<section className="maintainer-page">Loading…</section>}>
+                <Suspense fallback={<DocsFallback />}>
                   <MaintainerCommonIssues />
                 </Suspense>
               }
