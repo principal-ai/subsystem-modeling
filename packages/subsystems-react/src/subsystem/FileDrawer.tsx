@@ -25,6 +25,7 @@ export function FileDrawer({
   fillHeight = false,
   suppressEscape = false,
   hidden = false,
+  progress = null,
   children,
 }: {
   /** Drawer chrome title; `null` closes the drawer. */
@@ -36,11 +37,18 @@ export function FileDrawer({
   suppressEscape?: boolean;
   /** Suppress the drawer entirely — no spacer, no panel (embeds). */
   hidden?: boolean;
+  /**
+   * Segmented progress readout for the drawer content, e.g. trail step 2 of 5.
+   * Rendered as one tick per step, filled through the current one. Omit for
+   * content with no position (a single file).
+   */
+  progress?: { index: number; total: number } | null;
   children?: ReactNode;
 }) {
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const open = title !== null && !hidden;
+  const showProgress = progress != null && progress.total > 1;
   const [closeHover, setCloseHover] = useState(false);
   const [maxHover, setMaxHover] = useState(false);
   // Full-height mode: the maximize button or double-clicking the header.
@@ -103,78 +111,119 @@ export function FileDrawer({
           onDoubleClick={() => setMaximized((v) => !v)}
           style={{
             display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "6px 10px",
-            borderBottom: `1px solid ${theme.colors.border}`,
+            flexDirection: "column",
             flexShrink: 0,
             cursor: "default",
             userSelect: "none",
           }}
         >
-          <span
-            title={title ?? undefined}
+          <div
             style={{
-              flex: 1,
-              minWidth: 0,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              fontFamily: theme.fonts.monospace,
-              fontSize: theme.fontSizes[0],
-              color: muted,
-            }}
-          >
-            {title}
-          </span>
-          <button
-            type="button"
-            onClick={() => setMaximized((v) => !v)}
-            onMouseEnter={() => setMaxHover(true)}
-            onMouseLeave={() => setMaxHover(false)}
-            aria-label={maximized ? "Minimize code view" : "Maximize code view"}
-            aria-pressed={maximized}
-            title={maximized ? "Minimize code view" : "Maximize code view"}
-            style={{
-              display: "inline-flex",
+              display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              width: 22,
-              height: 22,
-              padding: 0,
-              border: "none",
-              borderRadius: 4,
-              background: maxHover ? theme.colors.border : "transparent",
-              color: maxHover ? theme.colors.text : muted,
-              cursor: "pointer",
-              transition: "background 120ms ease, color 120ms ease",
+              gap: 8,
+              padding: "6px 10px",
+              // With segments present they form the header's bottom edge, so
+              // only draw the hairline when there is nothing to stand in for it.
+              borderBottom: showProgress
+                ? "none"
+                : `1px solid ${theme.colors.border}`,
             }}
           >
-            {maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            onMouseEnter={() => setCloseHover(true)}
-            onMouseLeave={() => setCloseHover(false)}
-            aria-label="Close file"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 22,
-              height: 22,
-              padding: 0,
-              border: "none",
-              borderRadius: 4,
-              background: closeHover ? theme.colors.border : "transparent",
-              color: closeHover ? theme.colors.text : muted,
-              cursor: "pointer",
-              transition: "background 120ms ease, color 120ms ease",
-            }}
-          >
-            <X size={14} />
-          </button>
+            <span
+              title={title ?? undefined}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                fontFamily: theme.fonts.monospace,
+                fontSize: theme.fontSizes[1],
+                fontWeight: 600,
+                color: theme.colors.text,
+              }}
+            >
+              {title}
+            </span>
+            <button
+              type="button"
+              onClick={() => setMaximized((v) => !v)}
+              onMouseEnter={() => setMaxHover(true)}
+              onMouseLeave={() => setMaxHover(false)}
+              aria-label={
+                maximized ? "Minimize code view" : "Maximize code view"
+              }
+              aria-pressed={maximized}
+              title={maximized ? "Minimize code view" : "Maximize code view"}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 22,
+                height: 22,
+                padding: 0,
+                border: "none",
+                borderRadius: 4,
+                background: maxHover ? theme.colors.border : "transparent",
+                color: maxHover ? theme.colors.text : muted,
+                cursor: "pointer",
+                transition: "background 120ms ease, color 120ms ease",
+              }}
+            >
+              {maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              onMouseEnter={() => setCloseHover(true)}
+              onMouseLeave={() => setCloseHover(false)}
+              aria-label="Close file"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 22,
+                height: 22,
+                padding: 0,
+                border: "none",
+                borderRadius: 4,
+                background: closeHover ? theme.colors.border : "transparent",
+                color: closeHover ? theme.colors.text : muted,
+                cursor: "pointer",
+                transition: "background 120ms ease, color 120ms ease",
+              }}
+            >
+              <X size={14} />
+            </button>
+          </div>
+          {showProgress && progress != null && (
+            <div
+              role="img"
+              aria-label={`Step ${progress.index + 1} of ${progress.total}`}
+              style={{
+                display: "flex",
+                gap: 2,
+                flexShrink: 0,
+                padding: "0 10px 6px",
+              }}
+            >
+              {Array.from({ length: progress.total }, (_, i) => (
+                <span
+                  key={i}
+                  style={{
+                    flex: 1,
+                    height: 2,
+                    borderRadius: 1,
+                    background:
+                      i <= progress.index
+                        ? theme.colors.primary
+                        : theme.colors.border,
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </div>
         <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
           {children}

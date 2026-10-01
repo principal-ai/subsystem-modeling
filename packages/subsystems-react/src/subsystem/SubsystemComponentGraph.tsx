@@ -114,6 +114,12 @@ export interface TrailViewerContext {
   resolveSymbol?: (query: TrailSymbolQuery) => string | null;
   /** A clicked construct token — open that construct's declaration line. */
   onSymbolClick?: (symbol: string, query: TrailSymbolQuery) => void;
+  /**
+   * Report which step scrolling has brought to the top of the code view, so the
+   * drawer can track the viewport instead of only the selected step. Forward
+   * the code view's scroll callback here.
+   */
+  onVisibleStepChange?: (index: number) => void;
 }
 
 /** Identifiers a token could match to name this component as a construct. */
@@ -491,6 +497,7 @@ const TrailDrawerContent = memo(function TrailDrawerContent({
   proposedAliases,
   resolveSymbol,
   onSymbolClick,
+  onVisibleStepChange,
 }: {
   render: (ctx: TrailViewerContext) => ReactNode;
   trail: SubsystemTrail;
@@ -499,6 +506,7 @@ const TrailDrawerContent = memo(function TrailDrawerContent({
   proposedAliases: ReadonlySet<string>;
   resolveSymbol?: (query: TrailSymbolQuery) => string | null;
   onSymbolClick?: (symbol: string, query: TrailSymbolQuery) => void;
+  onVisibleStepChange?: (index: number) => void;
 }) {
   return (
     <>
@@ -509,6 +517,7 @@ const TrailDrawerContent = memo(function TrailDrawerContent({
         proposedAliases,
         resolveSymbol,
         onSymbolClick,
+        onVisibleStepChange,
       })}
     </>
   );
@@ -848,14 +857,27 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
   const drawerTitle = useMemo(() => {
     if (!drawerTarget) return null;
     if (drawerTarget.kind === 'file') return drawerTarget.file;
+    // Trail steps already show their own file header per file, so the drawer
+    // title is just the trail name.
     const tl = focusedTrail;
     if (!tl) return null;
-    if (drawerTarget.stepIndex == null) return tl.title;
-    const step = tl.steps[drawerTarget.stepIndex];
-    if (!step) return tl.title;
-    const site = `${step.file.split('/').pop() ?? step.file}:${step.line}`;
-    return `${tl.title} · ${site}`;
+    return tl.title;
   }, [drawerTarget, focusedTrail]);
+
+  // Segmented step readout for trail drawers — a single file has no position.
+  // Follows the viewport once the code view reports a scroll, and falls back to
+  // the selected step until it does.
+  const [visibleStepIndex, setVisibleStepIndex] = useState<number | null>(null);
+  const drawerStepIndex = drawerTarget?.kind === 'trail' ? drawerTarget.stepIndex : null;
+  const drawerProgress = useMemo(() => {
+    if (drawerStepIndex == null || !focusedTrail) return null;
+    return { index: visibleStepIndex ?? drawerStepIndex, total: focusedTrail.steps.length };
+  }, [drawerStepIndex, focusedTrail, visibleStepIndex]);
+
+  // A new trail or step invalidates whatever the last scroll reported.
+  useEffect(() => {
+    setVisibleStepIndex(null);
+  }, [focusedTrail?.id, drawerStepIndex]);
 
   // Refresh selected component when the components list updates (e.g. verify
   // writes back declarationRef).
@@ -3145,6 +3167,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
         fillHeight={drawerFillHeight}
         suppressEscape={fileOverlayOpen}
         hidden={hideDrawer}
+        progress={drawerProgress}
       >
         {drawerTarget?.kind === 'trail' &&
         focusedTrail &&
@@ -3157,6 +3180,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
             proposedAliases={proposedAliases}
             resolveSymbol={resolveTrailSymbol}
             onSymbolClick={openConstructDeclaration}
+            onVisibleStepChange={setVisibleStepIndex}
           />
         ) : drawerTarget?.kind === 'file' ? (
           <FileDrawerContent

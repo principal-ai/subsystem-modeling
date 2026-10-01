@@ -173,6 +173,7 @@ function FlowsDemo() {
       proposedAliases,
       resolveSymbol,
       onSymbolClick,
+      onVisibleStepChange,
     }: TrailViewerContext) => (
       <PierreTrailCodeView
         trail={trail}
@@ -183,6 +184,7 @@ function FlowsDemo() {
         proposedAliases={proposedAliases}
         resolveSymbol={resolveSymbol}
         onSymbolClick={onSymbolClick}
+        onVisibleStepChange={onVisibleStepChange}
       />
     ),
     [],
@@ -281,6 +283,7 @@ function ProposedMissingStepDemo() {
       proposedAliases,
       resolveSymbol,
       onSymbolClick,
+      onVisibleStepChange,
     }: TrailViewerContext) => (
       <PierreTrailCodeView
         trail={trail}
@@ -291,6 +294,7 @@ function ProposedMissingStepDemo() {
         proposedAliases={proposedAliases}
         resolveSymbol={resolveSymbol}
         onSymbolClick={onSymbolClick}
+        onVisibleStepChange={onVisibleStepChange}
       />
     ),
     [],
@@ -480,6 +484,7 @@ function ClickableConstructsDemo() {
       proposedAliases,
       resolveSymbol,
       onSymbolClick,
+      onVisibleStepChange,
     }: TrailViewerContext) => (
       <PierreTrailCodeView
         trail={trail}
@@ -490,6 +495,7 @@ function ClickableConstructsDemo() {
         proposedAliases={proposedAliases}
         resolveSymbol={resolveSymbol}
         onSymbolClick={onSymbolClick}
+        onVisibleStepChange={onVisibleStepChange}
       />
     ),
     [],

@@ -33,10 +33,11 @@ export function PierreFileView({
   filePath,
   fileName,
   readFile,
-  background,
+  background: backgroundProp,
   focusLine,
 }: PierreFileViewProps) {
   const { theme } = useTheme();
+  const background = backgroundProp ?? theme.colors.background;
   const [contents, setContents] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Pierre highlights on the main thread with no worker pool: a cold first

@@ -47,9 +47,10 @@ export function PierreSnippetView({
   focusLine,
   contextLines = 2,
   readFile,
-  background,
+  background: backgroundProp,
 }: PierreSnippetViewProps) {
   const { theme } = useTheme();
+  const background = backgroundProp ?? theme.colors.background;
   const [contents, setContents] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Warm the shared highlighter before mounting <File>; a cold first render

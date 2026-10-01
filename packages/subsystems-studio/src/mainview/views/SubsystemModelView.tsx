@@ -396,6 +396,7 @@ export function SubsystemModelView({
 			proposedAliases,
 			resolveSymbol,
 			onSymbolClick,
+			onVisibleStepChange,
 		}: TrailViewerContext) => (
 			<PierreTrailCodeView
 				trail={trail}
@@ -406,6 +407,7 @@ export function SubsystemModelView({
 				proposedAliases={proposedAliases}
 				resolveSymbol={resolveSymbol}
 				onSymbolClick={onSymbolClick}
+				onVisibleStepChange={onVisibleStepChange}
 			/>
 		),
 		[readFile],
