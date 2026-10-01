@@ -196,22 +196,23 @@ describe("verifyModelFiles symbol pass", () => {
 });
 
 describe("declaration provenance", () => {
-	const fnDetail = { kind: "function" as const, parameters: [], callers: [], callees: [] };
+	const fnDetail = { kind: "function" as const, parameters: [] };
 
 	test("pins the provenance set", () => {
 		expect([...SUBSYSTEM_DECLARATION_PROVENANCES]).toEqual(["verified", "authored"]);
 	});
 
-	test("normalize defaults missing provenance to authored and strips orphan claims", () => {
+	test("normalize leaves provenance alone", () => {
+		// A declaration with no provenance is valid — both fields are optional on
+		// a component — and an unrecognised value is the schema's problem to
+		// report, not something to silently relabel as hand-written.
 		const components = [
-			{ alias: "a", declaration: fnDetail }, // -> authored
-			{ alias: "b", declarationProvenance: "verified", other: 1 }, // no declaration -> stripped
-			{ alias: "c", declaration: fnDetail, declarationProvenance: "verified" }, // untouched
+			{ alias: "a", declaration: fnDetail },
+			{ alias: "c", declaration: fnDetail, declarationProvenance: "verified" },
 		];
 		normalizeDeclarationProvenance(components);
-		expect(components[0]["declarationProvenance"]).toBe("authored");
-		expect(components[1]["declarationProvenance"]).toBeUndefined();
-		expect(components[2]["declarationProvenance"]).toBe("verified");
+		expect(components[0]["declarationProvenance"]).toBeUndefined();
+		expect(components[1]["declarationProvenance"]).toBe("verified");
 	});
 
 	test("normalize folds undeclared store fields onto declared ones", () => {
@@ -245,29 +246,24 @@ describe("declaration provenance", () => {
 		expect(d("table-store")["members"]).toBeUndefined();
 		// `attributes` has no schema home; the facts live in `purpose`.
 		expect(d("dir-store")["attributes"]).toBeUndefined();
-		expect(d("dir-store")["properties"]).toEqual([]);
+		expect(d("dir-store")["properties"]).toBeUndefined();
 		// An already-declared store is untouched.
 		expect(d("ok")["properties"]).toEqual([]);
 	});
 
-	test("normalize backfills per-construct arrays the published renderer requires", () => {
+	test("normalize does not backfill declaration arrays", () => {
+		// The call-graph buckets are gone from the document, so an honest
+		// declaration no longer needs padding to satisfy the schema.
 		const components = [
 			{ alias: "f", declaration: { kind: "function", parameters: [{ name: "id", type: "string" }] } },
 			{ alias: "c", declaration: { kind: "class", methods: [] } },
-			{ alias: "t", declaration: { kind: "type" } },
-			{ alias: "e", declaration: { kind: "custom_entity" } },
 		];
 		normalizeDeclarationProvenance(components);
 		const d = (alias: string) =>
 			(components.find((x) => x["alias"] === alias)?.["declaration"] ?? {}) as Record<string, unknown>;
-		expect(Object.keys(d("f"))).toContain("callers");
-		expect(d("f")["callees"]).toEqual([]);
-		expect(d("c")["extends"]).toEqual([]);
-		expect(d("c")["references"]).toEqual([]);
-		expect(d("t")["usedBy"]).toEqual([]);
-		expect(d("e")["attributes"]).toEqual([]);
-		// existing arrays are never overwritten
+		expect(Object.keys(d("f"))).toEqual(["kind", "parameters"]);
 		expect(d("f")["parameters"]).toEqual([{ name: "id", type: "string" }]);
+		expect(Object.keys(d("c"))).toEqual(["kind", "methods"]);
 	});
 
 	test("verification counts details by provenance", async () => {
@@ -282,7 +278,7 @@ describe("declaration provenance", () => {
 			components,
 		});
 		expect(result.declarationsVerified).toBe(1);
-		expect(result.declarationsAuthored).toBe(1); // defaulted from missing
+		// No provenance on a1: counted as authored, not written back onto the payload.
 	});
 });
 

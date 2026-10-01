@@ -22,15 +22,11 @@ describe('extractDeclarationSymbolRefs — function', () => {
         { name: 'options', type: 'Required<ProcessingOptions>' },
       ],
       returnType: 'SessionEvent[]',
-      callers: [{ nodeId: 'c1', name: 'capture-session', source_location: 'L120' }],
-      callees: [{ nodeId: 'c2', name: 'toUniversalEvents()', source_location: 'L64' }],
     };
     expect(names(declaration)).toEqual([
       'ProcessingOptions',
       'SessionEvent',
       'SessionRecord',
-      'capture-session',
-      'toUniversalEvents',
     ]);
   });
 
@@ -114,21 +110,17 @@ describe('extractDeclarationSymbolRefs — class', () => {
 });
 
 describe('extractDeclarationSymbolRefs — type', () => {
-  test('collects usedBy, implementors, alias and union members', () => {
+  test('collects property, alias and union members', () => {
     const declaration: GraphifyComponentDetail = {
       kind: 'type',
       properties: [{ name: 'id', type: 'BrandedId' }],
-      usedBy: [{ nodeId: 'u1', name: 'normalize', context: 'type' }],
-      implementors: ['HostInfo'],
       aliasOf: 'ServerSessionRow',
       unionOf: ["'started'", 'StoppedState'],
     };
     expect(names(declaration)).toEqual([
       'BrandedId',
-      'HostInfo',
       'ServerSessionRow',
       'StoppedState',
-      'normalize',
     ]);
   });
 

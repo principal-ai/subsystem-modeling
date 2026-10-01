@@ -30,7 +30,11 @@ import {
 	remoteRefSha,
 	revDistance,
 } from "./git-repo";
-import { purlRepoKey, resolveRepoRootForComponent } from "./subsystem-model-store";
+import {
+	isRepoPurl,
+	purlRepoKey,
+	resolveRepoRootForComponent,
+} from "./subsystem-model-store";
 
 export type { PurlCommit };
 
@@ -90,7 +94,22 @@ export interface ProvenanceProbes extends CommitOptions {
 	) => ReturnType<typeof revDistance>;
 }
 
-/** Unique repo keys referenced by the given purls, in first-seen order. */
+/**
+ * Unique *repo* keys referenced by the given purls, in first-seen order.
+ *
+ * Pseudo-purls (`external:opencode2-service`, `external:proposed`, …) are
+ * dropped, and the filter is `isRepoPurl` rather than a scheme test so it stays
+ * the single definition of "is this a repo we can resolve". `purlRepoKey` does
+ * no validation of its own — it only strips the fragment — so without this gate
+ * an external identity becomes a key in every repo-keyed structure downstream.
+ *
+ * That is not cosmetic. `modelProvenance` emits a freshness row per key, and a
+ * pseudo-purl has no checkout, so its row would read `unresolved` forever. The
+ * provenance rollup takes the worst status across rows, so one such row flips a
+ * model whose real repos are all pinned exactly at head from `current` to
+ * `unresolved` — a false "Unmeasured" badge, and an anchor verdict of `unknown`
+ * that no clean measurement can ever outrank.
+ */
 export function referencedPurlKeys(
 	purls: ReadonlyArray<string | undefined>,
 ): string[] {
@@ -98,7 +117,7 @@ export function referencedPurlKeys(
 	const seen = new Set<string>();
 	for (const purl of purls) {
 		const key = purlRepoKey(purl);
-		if (key && !seen.has(key)) {
+		if (key && isRepoPurl(key) && !seen.has(key)) {
 			seen.add(key);
 			keys.push(key);
 		}

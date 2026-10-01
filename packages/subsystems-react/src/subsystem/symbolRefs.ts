@@ -2,10 +2,14 @@
  * Referenced symbols inside a component's declaration.
  *
  * A declaration mentions other symbols — parameter/return types, property
- * types, `extends`/`implements`, and related callables (`callers`/`callees`,
- * `references`/`usedBy`). This module flattens the structured declaration into
- * a deduped, lookup-friendly list so the panel can offer a graphify inspection
- * per name, and defines the payload graphify returns for one.
+ * types, and `extends`/`implements`. This module flattens the structured
+ * declaration into a deduped, lookup-friendly list so the panel can offer a
+ * graphify inspection per name, and defines the payload graphify returns for one.
+ *
+ * Call-graph edges (`callers`/`callees`, and the class `references` / type
+ * `usedBy` + `implementors` buckets) were removed from the document: nothing
+ * ever populated them, and the inspection a click performs resolves against the
+ * host's graphify cache at call time rather than reading stored edges.
  *
  * Slice 1 is display-only: the inspection payload is produced by the host (or,
  * in stories, by a fixture). Nothing here reads the graph.
@@ -233,17 +237,6 @@ function extractNestedTypeNames(type: string): string[] {
 }
 
 /**
- * Normalize a callable/related label (`normalize()`, `.get`, `capture-session`)
- * to a name. Labels are freer than type expressions — kebab-case is common.
- */
-function normalizeRelatedName(raw: string | undefined): string | null {
-  if (!raw) return null;
-  const t = raw.trim().replace(/^\./, '').replace(/\(\)$/, '');
-  if (!/^[A-Za-z_$][\w$.-]*$/.test(t)) return null;
-  return PRIMITIVES.has(t) ? null : t;
-}
-
-/**
  * Flatten a declaration into the set of symbols it references, deduped by name.
  * Entries backed by a `nodeId` win over bare-name entries.
  */
@@ -287,23 +280,10 @@ export function extractDeclarationSymbolRefs(
     for (const name of extractNestedTypeNames(t)) add(name, { context });
   };
 
-  const addCall = (
-    call: { name?: string; source_location?: string } | undefined,
-    context: string,
-  ) => {
-    if (!call) return;
-    add(normalizeRelatedName(call.name), {
-      context,
-      sourceLocation: call.source_location,
-    });
-  };
-
   switch (declaration.kind) {
     case 'function':
       for (const p of declaration.parameters ?? []) addType(p.type, p.ref, 'parameter_type');
       addType(declaration.returnType, declaration.returnTypeRef, 'return_type');
-      for (const c of declaration.callers ?? []) addCall(c, 'caller');
-      for (const c of declaration.callees ?? []) addCall(c, 'callee');
       break;
     case 'method':
       for (const p of declaration.parameters ?? []) addType(p.type, p.ref, 'parameter_type');
@@ -319,18 +299,11 @@ export function extractDeclarationSymbolRefs(
       }
       for (const name of declaration.extends ?? []) addType(name, undefined, 'extends');
       for (const name of declaration.implements ?? []) addType(name, undefined, 'implements');
-      for (const r of declaration.references ?? []) {
-        add(normalizeRelatedName(r.name), { ref: r, context: r.context ?? 'references' });
-      }
       break;
     case 'type':
       for (const p of declaration.properties ?? []) {
         addType(p.type, p.typeRef, 'field');
       }
-      for (const r of declaration.usedBy ?? []) {
-        add(normalizeRelatedName(r.name), { ref: r, context: r.context ?? 'usedBy' });
-      }
-      for (const name of declaration.implementors ?? []) addType(name, undefined, 'implementor');
       addType(declaration.aliasOf, undefined, 'alias');
       for (const alt of declaration.unionOf ?? []) addType(alt, undefined, 'union');
       break;

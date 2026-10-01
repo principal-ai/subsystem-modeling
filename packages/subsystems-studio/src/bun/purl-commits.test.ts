@@ -70,6 +70,17 @@ describe("referencedPurlKeys", () => {
 			]),
 		).toEqual([KEY_A, KEY_B]);
 	});
+
+	test("drops external pseudo-purls — an identity is not a repo", () => {
+		expect(
+			referencedPurlKeys([
+				"external:opencode2-service",
+				"external:proposed",
+				"external:file:~/.principal/subsystem-models",
+				KEY_A,
+			]),
+		).toEqual([KEY_A]);
+	});
 });
 
 describe("referencedFilesByPurl", () => {
@@ -314,6 +325,33 @@ describe("modelProvenance", () => {
 			"unresolved",
 		);
 		expect(snap.anchorChanges?.[KEY_B]).toBeUndefined();
+	});
+
+	test("an external pseudo-purl yields no row, unlike an unresolvable repo", async () => {
+		const snap = await modelProvenance(
+			{
+				createdAtCommits: { [KEY_A]: PIN },
+				verifiedAtCommits: { [KEY_A]: PIN },
+				components: [
+					{ alias: "w", file: "src/w.ts", purl: `${KEY_A}#src/w.ts` },
+					// A file-less `external:` component — the opencode2 daemon.
+					{ alias: "daemon", purl: "external:opencode2-service" },
+				],
+			},
+			{
+				resolveRoot: (k) => ROOTS_BY_KEY[k],
+				head: async () => PIN,
+				diff: async () => [],
+				dirty: async () => [],
+			},
+		);
+		// Exactly one row, and it is the real repo at `match`. A pseudo-purl row
+		// would read `unresolved` forever, and the rollup takes the worst status
+		// across rows — so it would drag a fully-pinned model off `current`.
+		expect(snap.purlFreshness?.map((r) => r.purl)).toEqual([KEY_A]);
+		expect(snap.purlFreshness?.[0]?.status).toBe("match");
+		// Nothing unmeasured is left, so the anchor verdict can reach `clean`.
+		expect(snap.anchorChanges?.[KEY_A]?.committed).toEqual([]);
 	});
 
 	test("a failed diff is omitted rather than reported as clean", async () => {

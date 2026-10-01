@@ -171,6 +171,9 @@ function buildDeclarationFromAdoptedSignature(
 			returnType,
 		};
 	}
+	// This returns a Graphify detail, not a model declaration: Graphify's
+	// function shape requires its call-graph buckets even when the edges are
+	// absent. The document-level declaration no longer carries them.
 	const callers =
 		existing && existing.kind === "function" && Array.isArray(existing.callers)
 			? existing.callers

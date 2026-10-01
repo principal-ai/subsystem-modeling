@@ -63,7 +63,13 @@ export function generateDeclarationString(component: SubsystemComponent): string
       // bypass Prettier.
     {
       const kindLabel = component.entityKind ? ` — ${component.entityKind}` : '';
-      const attrs = declaration?.kind === 'custom_entity' ? declaration.attributes : [];
+      // `attributes` is schema-required on custom_entity, but a declaration can
+      // arrive from an older record or a direct hand-edit that predates it, so
+      // guard rather than trust. The store no longer backfills it.
+      const attrs =
+        declaration?.kind === 'custom_entity' && Array.isArray(declaration.attributes)
+          ? declaration.attributes
+          : [];
       const attrLines = attrs.map((a) => `  ${a.key}: ${a.value}`).join('\n');
       return attrLines
         ? `entity '${name}'${kindLabel}\n${attrLines}`

@@ -417,25 +417,6 @@
         }
       }
     },
-    "callInfo": {
-      "type": "object",
-      "required": [
-        "nodeId",
-        "name"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "nodeId": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "source_location": {
-          "type": "string"
-        }
-      }
-    },
     "referenceInfo": {
       "type": "object",
       "required": [
@@ -491,9 +472,7 @@
         "methods",
         "properties",
         "extends",
-        "implements",
-        "instantiations",
-        "references"
+        "implements"
       ],
       "additionalProperties": false,
       "properties": {
@@ -523,18 +502,6 @@
           "items": {
             "type": "string"
           }
-        },
-        "instantiations": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/callInfo"
-          }
-        },
-        "references": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/referenceInfo"
-          }
         }
       }
     },
@@ -542,9 +509,7 @@
       "type": "object",
       "required": [
         "kind",
-        "parameters",
-        "callers",
-        "callees"
+        "parameters"
       ],
       "additionalProperties": false,
       "properties": {
@@ -562,18 +527,6 @@
         },
         "returnTypeRef": {
           "$ref": "#/$defs/referenceInfo"
-        },
-        "callers": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/callInfo"
-          }
-        },
-        "callees": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/callInfo"
-          }
         }
       }
     },
@@ -605,11 +558,17 @@
     },
     "typeParamInfo": {
       "type": "object",
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string" },
-        "constraint": { "type": "string" }
+        "name": {
+          "type": "string"
+        },
+        "constraint": {
+          "type": "string"
+        }
       }
     },
     "callableTypeInfo": {
@@ -618,27 +577,35 @@
       "properties": {
         "parameters": {
           "type": "array",
-          "items": { "$ref": "#/$defs/paramInfo" }
+          "items": {
+            "$ref": "#/$defs/paramInfo"
+          }
         },
-        "returnType": { "type": "string" }
+        "returnType": {
+          "type": "string"
+        }
       }
     },
     "enumMemberInfo": {
       "type": "object",
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string" },
-        "value": { "type": "string" }
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
       }
     },
     "typeDeclaration": {
       "type": "object",
       "required": [
         "kind",
-        "properties",
-        "usedBy",
-        "implementors"
+        "properties"
       ],
       "additionalProperties": false,
       "description": "Type-family declaration (interface / type alias / enum). Prefer structured buckets; use `rhs` when none fit.",
@@ -652,31 +619,29 @@
             "$ref": "#/$defs/propertyInfo"
           }
         },
-        "usedBy": {
+        "generics": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/referenceInfo"
+            "$ref": "#/$defs/typeParamInfo"
           }
         },
-        "implementors": {
+        "signature": {
+          "$ref": "#/$defs/callableTypeInfo"
+        },
+        "enumMembers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/enumMemberInfo"
+          }
+        },
+        "aliasOf": {
+          "type": "string"
+        },
+        "unionOf": {
           "type": "array",
           "items": {
             "type": "string"
           }
-        },
-        "generics": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/typeParamInfo" }
-        },
-        "signature": { "$ref": "#/$defs/callableTypeInfo" },
-        "enumMembers": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/enumMemberInfo" }
-        },
-        "aliasOf": { "type": "string" },
-        "unionOf": {
-          "type": "array",
-          "items": { "type": "string" }
         },
         "rhs": {
           "type": "string",
@@ -721,7 +686,11 @@
         },
         "storage": {
           "type": "string",
-          "enum": ["memory", "disk", "external"],
+          "enum": [
+            "memory",
+            "disk",
+            "external"
+          ],
           "description": "Where the retained state physically lives / who mediates access. Authored — graphify cannot infer it: `memory` = process-lifetime RAM, `disk` = this process reads/writes the filesystem, `external` = mediated by another system (db/service)."
         },
         "valueType": {

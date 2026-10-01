@@ -121,34 +121,6 @@ async function ensureDir(): Promise<void> {
   await fs.mkdir(modelsRoot(), { recursive: true });
 }
 
-export function normalizeDeclarationProvenance(components: unknown): void {
-  if (!Array.isArray(components)) return;
-  for (const component of components) {
-    const c = component as Record<string, unknown> | null;
-    if (!c || typeof c !== 'object') continue;
-
-    const declaration = c['declaration'] as Record<string, unknown> | undefined;
-    if (!declaration || typeof declaration !== 'object') {
-      delete c['declarationProvenance'];
-      continue;
-    }
-    const p = c['declarationProvenance'];
-    if (p !== 'verified' && p !== 'authored') c['declarationProvenance'] = 'authored';
-    const kind = declaration['kind'];
-    const arrays: Record<string, string[]> = {
-      function: ['parameters', 'callers', 'callees'],
-      method: ['parameters'],
-      class: ['methods', 'properties', 'extends', 'implements', 'instantiations', 'references'],
-      type: ['properties', 'usedBy', 'implementors'],
-      custom_entity: ['attributes'],
-      store: ['properties'],
-    };
-    for (const key of arrays[String(kind)] ?? []) {
-      if (!Array.isArray(declaration[key])) declaration[key] = [];
-    }
-  }
-}
-
 /** Structural problems that would make Studio reject a POST (empty = valid). */
 function indexEntryFor(record: StoredSubsystemModel): SubsystemModelIndexEntry {
   return {
@@ -233,7 +205,6 @@ export async function createSubsystemModel(
   doc: CreateSubsystemModelInput,
 ): Promise<StoredSubsystemModel> {
   await ensureDir();
-  normalizeDeclarationProvenance(doc.components);
   const now = new Date().toISOString();
   const record: StoredSubsystemModel = {
     ...doc,
@@ -266,7 +237,6 @@ export async function updateSubsystemModel(
 ): Promise<StoredSubsystemModel | null> {
   const existing = await getSubsystemModel(id);
   if (!existing) return null;
-  if (patch.components !== undefined) normalizeDeclarationProvenance(patch.components);
   const updated: StoredSubsystemModel = {
     ...existing,
     ...patch,

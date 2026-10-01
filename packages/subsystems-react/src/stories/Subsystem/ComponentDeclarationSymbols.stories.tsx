@@ -47,8 +47,6 @@ const INSPECTIONS: Record<string, SymbolInspection> = {
         { name: 'at', type: 'number' },
         { name: 'payload', type: 'unknown' },
       ],
-      usedBy: [],
-      implementors: [],
     },
   },
   BaseProcessor: {
@@ -67,8 +65,6 @@ const INSPECTIONS: Record<string, SymbolInspection> = {
       properties: [],
       extends: [],
       implements: [],
-      instantiations: [],
-      references: [],
     },
   },
   // Limited: graphify resolved the location but couldn't reconstruct the
@@ -127,8 +123,6 @@ const INSPECTIONS: Record<string, SymbolInspection> = {
         { name: 'admittedSeq', type: 'number' },
         { name: 'events', type: 'SessionEvent[]' },
       ],
-      usedBy: [],
-      implementors: [],
     },
   },
   'capture-session': {
@@ -144,8 +138,6 @@ const INSPECTIONS: Record<string, SymbolInspection> = {
       kind: 'function',
       parameters: [{ name: 'session', type: 'SessionRecord' }],
       returnType: 'Promise<void>',
-      callers: [],
-      callees: [],
     },
   },
 };
@@ -235,7 +227,6 @@ const classComponent: SubsystemComponent = {
     ],
     extends: ['BaseProcessor'],
     implements: ['Disposable', 'EventEmitterLike'],
-    instantiations: [],
     references: [{ nodeId: 'n-emitter', name: 'EventEmitterLike', context: 'type' }],
   } satisfies GraphifyComponentDetail,
 };

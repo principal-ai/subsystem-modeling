@@ -126,12 +126,6 @@ export interface SubsystemMethodInfo {
   returnTypeRef?: SubsystemReferenceInfo;
 }
 
-export interface SubsystemCallInfo {
-  nodeId: string;
-  name: string;
-  source_location?: string;
-}
-
 export interface SubsystemReferenceInfo {
   nodeId: string;
   name: string;
@@ -145,8 +139,6 @@ export interface SubsystemClassDeclaration {
   properties: SubsystemPropertyInfo[];
   extends: string[];
   implements: string[];
-  instantiations: SubsystemCallInfo[];
-  references: SubsystemReferenceInfo[];
 }
 
 export interface SubsystemFunctionDeclaration {
@@ -154,8 +146,6 @@ export interface SubsystemFunctionDeclaration {
   parameters: SubsystemParamInfo[];
   returnType?: string;
   returnTypeRef?: SubsystemReferenceInfo;
-  callers: SubsystemCallInfo[];
-  callees: SubsystemCallInfo[];
 }
 
 export interface SubsystemMethodDeclaration {
@@ -191,8 +181,6 @@ export interface SubsystemEnumMemberInfo {
 export interface SubsystemTypeDeclaration {
   kind: 'type';
   properties: SubsystemPropertyInfo[];
-  usedBy: SubsystemReferenceInfo[];
-  implementors: string[];
   /** Generic type parameters, e.g. `<K extends keyof StudioMessages>`. */
   generics?: SubsystemTypeParamInfo[];
   /** Callable type — `(params) => returnType`. */

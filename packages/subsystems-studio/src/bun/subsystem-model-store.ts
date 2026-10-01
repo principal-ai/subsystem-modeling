@@ -357,8 +357,9 @@ export type ComponentConstruct = (typeof SUBSYSTEM_COMPONENT_CONSTRUCTS)[number]
 /**
  * Allowed provenance values for a component's structured `declaration`.
  * `verified` is reserved for tool-extracted data (graphify AST, signature
- * extraction); anything an authoring agent wrote by hand must be `authored`
- * — which is also the default when `declaration` is present without provenance.
+ * extraction); anything an authoring agent wrote by hand must be `authored`.
+ * A `declaration` with no provenance is valid — both fields are optional on a
+ * component — so absence means "unstated", not "authored".
  */
 export const SUBSYSTEM_DECLARATION_PROVENANCES = ["verified", "authored"] as const;
 
@@ -399,11 +400,28 @@ function foldLegacyStoreDeclarationFields(
 }
 
 /**
- * Fill safe defaults so stored declarations always satisfy the published
- * renderer's expectations:
- * - `declaration` without provenance becomes `authored`; orphan claims are dropped.
- * - Per-kind arrays are backfilled as empty so the panel can read `.length`.
- * - Undeclared store fields from early models are folded onto declared ones.
+ * Fold undeclared store-declaration fields from early models onto the fields the
+ * schema declares.
+ *
+ * This is the only thing it does now, and it is deliberately narrow. It used to
+ * also backfill per-kind declaration arrays to `[]` and coerce
+ * `declarationProvenance`; both are gone.
+ *
+ * The array backfill existed because the schema required
+ * `functionDeclaration.parameters/callers/callees`, seven arrays on
+ * `classDeclaration`, and so on. Those call-graph buckets
+ * (`callers`/`callees`, class `references` + `instantiations`, type `usedBy` +
+ * `implementors`) are now removed from the document entirely: nothing populated
+ * them, and a referenced-symbol click resolves against the host's graphify
+ * cache at inspection time rather than reading stored edges. So an honest
+ * declaration no longer has to pad itself to satisfy the schema, and the
+ * backfill had nothing left to do.
+ *
+ * Provenance is no longer coerced either. `declaration` and
+ * `declarationProvenance` are both optional on a component, so a declaration
+ * with no provenance is valid; the old `!== "verified" && !== "authored"` →
+ * `"authored"` fallback quietly relabelled a typo as hand-written, and would
+ * have absorbed any future third value instead of letting the schema reject it.
  *
  * Mutates the passed array — callers own the payload (fresh-parsed request
  * bodies or records about to be persisted).
@@ -415,28 +433,11 @@ export function normalizeDeclarationProvenance(components: unknown): void {
 		if (!c || typeof c !== "object") continue;
 
 		const declaration = c["declaration"] as Record<string, unknown> | undefined;
-		if (!declaration || typeof declaration !== "object") {
-			delete c["declarationProvenance"];
-			continue;
-		}
+		if (!declaration || typeof declaration !== "object") continue;
 		foldLegacyStoreDeclarationFields(
 			typeof c["alias"] === "string" ? c["alias"] : "(unnamed)",
 			declaration,
 		);
-		const p = c["declarationProvenance"];
-		if (p !== "verified" && p !== "authored") c["declarationProvenance"] = "authored";
-		const kind = declaration["kind"];
-		const arrays: Record<string, string[]> = {
-			function: ["parameters", "callers", "callees"],
-			method: ["parameters"],
-			class: ["methods", "properties", "extends", "implements", "instantiations", "references"],
-			type: ["properties", "usedBy", "implementors"],
-			custom_entity: ["attributes"],
-			store: ["properties"],
-		};
-		for (const key of arrays[String(kind)] ?? []) {
-			if (!Array.isArray(declaration[key])) declaration[key] = [];
-		}
 	}
 }
 
