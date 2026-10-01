@@ -20,11 +20,38 @@ import {
 import { computeElkLayout, calculatePathLength } from '../utils/elkLayout';
 import { EDGE_LABEL_SIDE_PADDING, EDGE_ARROW_INSET } from '../utils/edgeLabel';
 import type { GraphifyComponentDetail } from '../graphify';
+import type { SubsystemConstructDeclaration } from '@principal-ai/subsystems-core';
 import type { SubsystemDeclarationRef } from './declarationRef';
 import { purlOwnerName, purlRepoKey } from './paths';
 
-/** Structured declaration shape — same union as graphify drill-down payloads. */
-export type SubsystemConstructDeclaration = GraphifyComponentDetail;
+/**
+ * Structured declaration shape — the document's own contract, re-exported from
+ * `@principal-ai/subsystems-core`.
+ *
+ * This used to alias Graphify's `GraphifyComponentDetail`, but the two are not
+ * the same thing: a graphify detail is an extraction result and carries
+ * call-graph buckets (`callers`/`callees`, class `references` +
+ * `instantiations`, type `usedBy` + `implementors`), while a model declaration
+ * does not. Aliasing them made react's `SubsystemComponent.declaration` accept
+ * fields core never produces, so a core document stopped being assignable to a
+ * react component. Importing core's type keeps the two structurally identical
+ * by construction instead of by hand-mirroring.
+ *
+ * `GraphifyComponentDetail` remains the shape of an augmentation / inspection
+ * payload — see `declarationFromAugmentation`.
+ */
+export type { SubsystemConstructDeclaration } from '@principal-ai/subsystems-core';
+
+/**
+ * Either declaration contract: a model document's own, or a graphify detail
+ * (which an accepted signature augmentation produces). Badge/label helpers and
+ * the declaration renderers read only fields the two share, so they accept
+ * either. `SubsystemComponent.declaration` is always the document shape — this
+ * union exists for code that also handles augmentation-derived declarations.
+ */
+export type AnyComponentDetail =
+  | SubsystemConstructDeclaration
+  | GraphifyComponentDetail;
 export type SubsystemDeclarationProvenance = 'verified' | 'authored';
 
 /** One declared parameter in an agent-extracted (augmented) signature. */
@@ -1719,7 +1746,7 @@ export const STORAGE_COLOR: Record<string, string> = {
 };
 
 function storeStorage(component: {
-  declaration?: GraphifyComponentDetail;
+  declaration?: AnyComponentDetail;
 }): string | undefined {
   return component.declaration?.kind === 'store'
     ? component.declaration.storage
@@ -1731,7 +1758,7 @@ function storeStorage(component: {
  *  role/proposed badge (storage is orthogonal to topology). Null otherwise. */
 export function storageBadgeLabel(component: {
   construct: SubsystemComponentConstruct;
-  declaration?: GraphifyComponentDetail;
+  declaration?: AnyComponentDetail;
 }): string | null {
   if (component.construct !== 'store') return null;
   const storage = storeStorage(component);
@@ -1740,7 +1767,7 @@ export function storageBadgeLabel(component: {
 
 export function storageBadgeColor(component: {
   construct: SubsystemComponentConstruct;
-  declaration?: GraphifyComponentDetail;
+  declaration?: AnyComponentDetail;
 }): string | null {
   if (component.construct !== 'store') return null;
   const storage = storeStorage(component);
@@ -1825,7 +1852,7 @@ export function nodeMinWidthForBadges(component: {
   role?: SubsystemComponentRole;
   proposed?: boolean;
   entityKind?: string;
-  declaration?: GraphifyComponentDetail;
+  declaration?: AnyComponentDetail;
 }): number {
   const left = estimateBadgeLabelWidth(constructBadgeLabel(component));
   const rightBadges = [

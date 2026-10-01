@@ -16,6 +16,7 @@
  */
 
 import type { GraphifyComponentDetail, GraphifyReferenceInfo } from '../graphify';
+import type { AnyComponentDetail } from './model';
 
 /** One symbol a declaration references, normalized for lookup. */
 export interface DeclarationSymbolRef {
@@ -241,7 +242,7 @@ function extractNestedTypeNames(type: string): string[] {
  * Entries backed by a `nodeId` win over bare-name entries.
  */
 export function extractDeclarationSymbolRefs(
-  declaration: GraphifyComponentDetail | undefined,
+  declaration: AnyComponentDetail | undefined,
 ): DeclarationSymbolRef[] {
   if (!declaration) return [];
 

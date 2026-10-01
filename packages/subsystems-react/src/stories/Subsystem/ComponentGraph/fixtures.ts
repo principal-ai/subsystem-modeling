@@ -135,9 +135,7 @@ export const investigateOnlyComponents: SubsystemComponent[] = [
         { name: 'sessionId', type: 'string' },
         { name: 'description', type: 'string' },
       ],
-      usedBy: [{ nodeId: 'acc', name: 'accumulateToAgentSessionEvents', context: 'return_type' }],
-      implementors: [],
-    } satisfies GraphifyComponentDetail,
+    } satisfies SubsystemComponent['declaration'],
   },
 ];
 

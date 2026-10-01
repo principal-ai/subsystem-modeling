@@ -1,4 +1,11 @@
 /**
+ * Either declaration contract: a model document's own, or a graphify detail
+ * (which an accepted augmentation produces). The renderers below only read
+ * fields the two share.
+ */
+type AnyComponentDetail = GraphifyComponentDetail | SubsystemConstructDeclaration;
+
+/**
  * Generate a TypeScript declaration string from a SubsystemComponent's
  * structured `declaration`.
  *
@@ -8,7 +15,11 @@
  * handles all formatting.
  */
 
-import type { SubsystemComponent, SubsystemComponentConstruct } from './model';
+import type {
+  SubsystemComponent,
+  SubsystemComponentConstruct,
+  SubsystemConstructDeclaration,
+} from './model';
 import type { GraphifyComponentDetail } from '../graphify';
 
 const TYPE_FAMILY_CONSTRUCTS: ReadonlySet<string> = new Set([
@@ -23,9 +34,18 @@ const TYPE_FAMILY_CONSTRUCTS: ReadonlySet<string> = new Set([
  * distinguishing the source). Use this wherever the *rendered* declaration
  * matters — e.g. extracting the symbols it references.
  */
+/**
+ * The declaration a component renders: its own, else one derived from an
+ * accepted signature augmentation.
+ *
+ * Either source may be a graphify detail — an augmentation is graphify-shaped —
+ * so this is a union of the two contracts rather than one. They agree on every
+ * field the renderers below read (kind, parameters, returnType, the class
+ * buckets, the store's valueType), and only the call-graph buckets differ.
+ */
 export function resolveComponentDeclaration(
   component: SubsystemComponent,
-): GraphifyComponentDetail | undefined {
+): AnyComponentDetail | undefined {
   return component.declaration ?? declarationFromAugmentation(component);
 }
 
@@ -132,7 +152,7 @@ function formatParams(params: { name?: string; type: string }[]): string {
 // Per-construct generators
 // ---------------------------------------------------------------------------
 
-function generateClass(name: string, declaration?: GraphifyComponentDetail): string {
+function generateClass(name: string, declaration?: AnyComponentDetail): string {
   const cls = declaration?.kind === 'class' ? declaration : undefined;
   const parts: string[] = [`class ${name}`];
 
@@ -164,14 +184,14 @@ function generateClass(name: string, declaration?: GraphifyComponentDetail): str
   return parts.join(' ');
 }
 
-function generateFunction(name: string, declaration?: GraphifyComponentDetail): string {
+function generateFunction(name: string, declaration?: AnyComponentDetail): string {
   const fn = declaration?.kind === 'function' ? declaration : undefined;
   const params = formatParams(fn?.parameters ?? []);
   const ret = fn?.returnType ? `: ${fn.returnType}` : '';
   return `function ${name}(${params})${ret};`;
 }
 
-function generateMethod(name: string, declaration?: GraphifyComponentDetail): string {
+function generateMethod(name: string, declaration?: AnyComponentDetail): string {
   const m = declaration?.kind === 'method' ? declaration : undefined;
   const hostClass = m?.hostClass ?? 'Host';
   const params = formatParams(m?.parameters ?? []);
@@ -182,7 +202,7 @@ function generateMethod(name: string, declaration?: GraphifyComponentDetail): st
 function generateType(
   name: string,
   construct: SubsystemComponentConstruct,
-  declaration?: GraphifyComponentDetail,
+  declaration?: AnyComponentDetail,
 ): string {
   // The type-family constructs render their declaration keyword honestly —
   // the construct itself says interface / type (alias) / enum / variable.
@@ -238,7 +258,7 @@ function generateType(
  * remaining members. A store that declares neither says so explicitly rather
  * than rendering as an empty block.
  */
-function generateStore(name: string, declaration?: GraphifyComponentDetail): string {
+function generateStore(name: string, declaration?: AnyComponentDetail): string {
   const store = declaration?.kind === 'store' ? declaration : undefined;
   const backing = store?.storage ? `\n// backing: ${store.storage}` : '';
   const members = store?.properties ?? [];
