@@ -88,9 +88,7 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
       "declaration": {                             // optional — click-panel signature shape
         "kind": "function",                        // discriminator; match construct when possible
         "parameters": [{ "name": "root", "type": "string" }],
-        "returnType": "Promise<SessionSummary[]>",
-        "callers": [],                             // leave empty — edges carry interactions
-        "callees": []
+        "returnType": "Promise<SessionSummary[]>"    // no callers/callees — not in the schema
       },
       "declarationProvenance": "authored"          // required when declaration is set by hand
     }
@@ -214,7 +212,7 @@ verification and misleads readers. Get the line right anyway.
 4. Create via CLI; if `trailsFailed` is non-empty, correct the site lines
    and update (Studio HTTP PUT while Studio is running, or recreate).
 
-Reference shape: `packages/subsystems-react/src/stories/Subsystem/ComponentGraph/Flows.stories.tsx`.
+Reference shape: `packages/subsystems-react/src/stories/Subsystem/ComponentGraph/Trails.stories.tsx`.
 
 ## Closed vocabularies
 
@@ -360,12 +358,12 @@ members in the click panel — hand-author them when you want to highlight
 specific inputs/outputs. Discriminated by `declaration.kind` (`function`,
 `class`, `method`, `type`, `store`, `external`, `custom_entity`, …). Every
 declaration carries the shape that makes sense for its kind — for a `store`
-that is `storage` + `valueType` + `properties` (see above). Don't bother
-filling `callers`/`callees`: relationship comments are intentionally not
-rendered (the model's edges carry interactions). Only use the fields the schema
-declares for that `kind`: a store has `storage` / `valueType` / `valueTypeRef` /
-`properties`, and nothing else. Every hand-written `declaration` must carry
-provenance:
+that is `storage` + `valueType` + `properties` (see above). Declarations are
+`additionalProperties: false` — only use the fields the schema declares for
+that `kind`, or the model is rejected. There are **no** `callers` / `callees`
+fields (retired); interactions live on trail steps. A store has `storage` /
+`valueType` / `valueTypeRef` / `properties` and nothing else. Every hand-written
+`declaration` must carry provenance:
 
 - `"declarationProvenance": "authored"` — written by you from reading the
   code; informative but not checked against source (defaulted when omitted)

@@ -8,7 +8,7 @@ import { PierreTrailCodeView } from '../../../pierre';
 import type { TrailViewerContext } from '../../../subsystem/SubsystemComponentGraph';
 
 const meta = {
-  title: 'Subsystem/ComponentGraph/Flows',
+  title: 'Subsystem/ComponentGraph/Trails',
   component: SubsystemComponentGraph,
   parameters: {
     layout: 'fullscreen',
@@ -164,7 +164,7 @@ const drawingTrails: SubsystemTrail[] = [
   },
 ];
 
-function FlowsDemo() {
+function TrailsDemo() {
   const renderTrailViewer = useCallback(
     ({
       trail,
@@ -219,8 +219,8 @@ function FlowsDemo() {
   );
 }
 
-export const ThreeFlows: Story = {
-  render: () => <FlowsDemo />,
+export const ThreeTrails: Story = {
+  render: () => <TrailsDemo />,
 };
 
 /**
