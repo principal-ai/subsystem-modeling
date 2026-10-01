@@ -45,18 +45,6 @@ export function trailFromSteps(
   };
 }
 
-/** @deprecated story helper — prefer `graphSpecFromSteps` + `trailFromSteps`. */
-export function edges(
-  spec: Array<[from: string, to: string, mechanism: SubsystemComponentEdge['mechanism']]>,
-): SubsystemComponentEdge[] {
-  return spec.map(([from, to, mechanism], i) => ({
-    id: `e${i}`,
-    from,
-    to,
-    mechanism,
-  }));
-}
-
 /** Turn every spec entry into a trail step — the sole authored edge form. */
 export function graphSpecFromSteps(
   spec: Array<[from: string, to: string, mechanism: SubsystemComponentEdge['mechanism']]>,
@@ -161,11 +149,3 @@ const investigateSpec = graphSpecFromSteps([
 ]);
 
 export const investigateOnlyTrails = investigateSpec.trails;
-
-/** @deprecated use investigateOnlyTrails */
-export const investigateOnlyEdges: SubsystemComponentEdge[] = edges([
-  ['v1', 'input', 'produces'],
-  ['v2', 'input', 'produces'],
-  ['input', 'acc', 'feeds'],
-  ['acc', 'out', 'produces'],
-]);

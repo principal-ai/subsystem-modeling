@@ -277,11 +277,7 @@ export async function handleSubsystemModelRequest(
 	onOpenShowcase: OpenShowcaseTabHandler,
 ): Promise<Response> {
 	const url = new URL(req.url);
-	// Alias legacy /api/subsystem-graph* → /api/subsystem-model* (skills mid-flip).
-	const path = url.pathname.replace(
-		/^\/api\/subsystem-graph(?=\/|$)/,
-		"/api/subsystem-model",
-	);
+	const path = url.pathname;
 	const method = req.method;
 
 	// CORS preflight

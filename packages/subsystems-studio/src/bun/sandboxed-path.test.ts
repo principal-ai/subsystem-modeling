@@ -16,12 +16,6 @@ describe("resolveSandboxed", () => {
 		expect(resolveSandboxed(ROOT, "/src/a.ts")).toBe("/repo/checkout/src/a.ts");
 	});
 
-	test("strips the legacy GitHub/ prefix", () => {
-		expect(resolveSandboxed(ROOT, "GitHub/src/a.ts")).toBe(
-			"/repo/checkout/src/a.ts",
-		);
-	});
-
 	test("rejects parent references that escape the root", () => {
 		expect(() => resolveSandboxed(ROOT, "../etc/passwd")).toThrow(
 			"must not contain ..",

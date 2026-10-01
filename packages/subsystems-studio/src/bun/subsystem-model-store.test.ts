@@ -1,15 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import {
 	createSubsystemModel,
-	fileDeclaresSymbol,
 	getSubsystemModel,
 	graphIdFromWatchFilename,
 	isRepoPurl,
-	migrateLegacySubsystemGraphsDir,
 	normalizeDeclarationProvenance,
 	purlRepoKey,
 	resolveRepoRootForComponent,
@@ -128,39 +126,6 @@ describe("subsystemModelFilePath", () => {
 	});
 });
 
-describe("migrateLegacySubsystemGraphsDir", () => {
-	test("moves json files from legacy dir into empty target", async () => {
-		const base = mkdtempSync(join(tmpdir(), "sg-migrate-"));
-		const legacyRoot = join(base, "subsystem-graphs");
-		const root = join(base, "subsystem-models");
-		mkdirSync(legacyRoot, { recursive: true });
-		writeFileSync(join(legacyRoot, "sg-1.json"), '{"id":"sg-1"}', "utf8");
-		writeFileSync(join(legacyRoot, "_index.json"), '{"version":1,"entries":[]}', "utf8");
-
-		const moved = await migrateLegacySubsystemGraphsDir({ legacyRoot, root });
-		expect(moved).toBe(true);
-		expect(existsSync(join(root, "sg-1.json"))).toBe(true);
-		expect(existsSync(join(root, "_index.json"))).toBe(true);
-		expect(existsSync(legacyRoot)).toBe(false);
-		rmSync(base, { recursive: true, force: true });
-	});
-
-	test("leaves legacy alone when target already has models", async () => {
-		const base = mkdtempSync(join(tmpdir(), "sg-migrate-skip-"));
-		const legacyRoot = join(base, "subsystem-graphs");
-		const root = join(base, "subsystem-models");
-		mkdirSync(legacyRoot, { recursive: true });
-		mkdirSync(root, { recursive: true });
-		writeFileSync(join(legacyRoot, "sg-old.json"), "{}", "utf8");
-		writeFileSync(join(root, "sg-new.json"), "{}", "utf8");
-
-		const moved = await migrateLegacySubsystemGraphsDir({ legacyRoot, root });
-		expect(moved).toBe(false);
-		expect(existsSync(join(legacyRoot, "sg-old.json"))).toBe(true);
-		rmSync(base, { recursive: true, force: true });
-	});
-});
-
 describe("resolveRepoRootForComponent", () => {
 	test("resolves a component purl to its Alexandria checkout", () => {
 		expect(resolveRepoRootForComponent("pkg:github/a/repo-a#src/x.ts")).toBe(repoA);
@@ -211,35 +176,6 @@ describe("verifyModelFiles", () => {
 		expect(result.missing).toEqual([{ componentAlias: "m1", file: "nope.ts" }]);
 	});
 });
-
-describe("fileDeclaresSymbol", () => {
-	test("matches declarations across keyword forms", () => {
-		const src = "export async function exportedFn() {}\nfunction privateFn() {}\nconst STORE = 1;\nclass Widget {}\ninterface Shape {}\ntype Alias = string;";
-		for (const sym of ["exportedFn", "privateFn", "STORE", "Widget", "Shape", "Alias"]) {
-			expect(fileDeclaresSymbol(src, sym)).toBe(true);
-		}
-	});
-
-	test("does not count mentions, imports, or call sites", () => {
-		const src = "import { helper } from './h';\n// helper documented here\nrun(helper);";
-		expect(fileDeclaresSymbol(src, "helper")).toBe(false);
-	});
-
-	test("qualified symbols match on their last segment", () => {
-		expect(fileDeclaresSymbol("function openSessionEventsTab() {}", "host.openSessionEventsTab")).toBe(true);
-	});
-
-	test("empty or whitespace-only symbols never verify", () => {
-		expect(fileDeclaresSymbol("function f() {}", "")).toBe(false);
-		expect(fileDeclaresSymbol("function f() {}", "   ")).toBe(false);
-	});
-
-	test("regex metacharacters in symbol names are escaped", () => {
-		expect(fileDeclaresSymbol("const we$ird = 1;", "we$ird")).toBe(true);
-		expect(fileDeclaresSymbol("const plain = 1;", "we$ird")).toBe(false);
-	});
-});
-
 describe("verifyModelFiles symbol pass", () => {
 	test("no longer text-checks symbols (graphify owns that)", async () => {
 		const result = await verifyModelFiles({

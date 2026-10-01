@@ -242,9 +242,6 @@ export async function getCredentialedProviders(): Promise<Set<string> | null> {
  */
 export const FALLBACK_MAINTAINER_MODEL = "opencode-go/deepseek-v4-flash";
 
-/** @deprecated Use FALLBACK_MAINTAINER_MODEL. */
-export const FALLBACK_FREE_MAINTAINER_MODEL = FALLBACK_MAINTAINER_MODEL;
-
 export async function listOpenCodeModels(opts?: {
 	refresh?: boolean;
 }): Promise<OpenCodeModelInfo[]> {

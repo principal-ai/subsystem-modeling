@@ -5,14 +5,11 @@
  * mirrors the topic store conventions. Each file is a
  * `StoredSubsystemModel` record; the index is a lightweight cache for
  * listing without full-file parsing.
- *
- * One-time migrate: if `~/.principal/subsystem-graphs/` still has files and
- * the new dir is empty/missing, contents are moved on first ensureDir().
  */
 
-import { promises as fs, watch, type Dirent, type FSWatcher } from "node:fs";
+import { promises as fs, watch, type FSWatcher } from "node:fs";
 import { homedir } from "node:os";
-import { join, basename } from "node:path";
+import { join } from "node:path";
 import { deriveGraphEdges } from "@principal-ai/subsystems-core";
 import { resolveRepoRootFromAlexandria } from "./alexandria";
 import { capturePurlCommits } from "./purl-commits";
@@ -54,15 +51,9 @@ function modelsRoot(): string {
 	return join(storeHome(), ".principal", "subsystem-models");
 }
 
-function legacyModelsRoot(): string {
-	return join(storeHome(), ".principal", "subsystem-graphs");
-}
-
 function indexFilePath(): string {
 	return join(modelsRoot(), "_index.json");
 }
-
-let legacyMigrateAttempted = false;
 
 /** Payload pushed to the renderer when a stored graph changes. */
 export type SubsystemModelChange = StudioMessages["subsystemModelChanged"];
@@ -527,20 +518,6 @@ export function backfillStepPurls(doc: {
 }
 
 /**
- * @deprecated Prefer graphify exact-anchor checks. Kept only for older tests /
- * call sites; do not use for audit.
- */
-export function fileDeclaresSymbol(content: string, symbol: string): boolean {
-	const name = symbol.split(".").pop()?.trim() ?? "";
-	if (!name) return false;
-	const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	const decl = new RegExp(
-		`\\b(?:function|class|const|let|var|interface|type|enum)\\s+${escaped}\\b`,
-	);
-	return decl.test(content);
-}
-
-/**
  * Check every component's `file` against its repo's local root. When the graph
  * carries `trails`, each step's site is also resolved. Symbol presence is
  * intentionally not checked here (graphify audit owns that). Purely
@@ -665,100 +642,7 @@ export function subsystemModelFilePath(id: string): string {
 	return graphPath(id);
 }
 
-/**
- * Move legacy `subsystem-graphs` → `subsystem-models` once.
- * Runs when the new dir is missing/empty and the old dir has model JSON files.
- * `roots` is for tests; production uses the default ~/.principal paths.
- */
-export async function migrateLegacySubsystemGraphsDir(roots?: {
-	legacyRoot?: string;
-	root?: string;
-}): Promise<boolean> {
-	const legacyRoot = roots?.legacyRoot ?? legacyModelsRoot();
-	const root = roots?.root ?? modelsRoot();
-	const skipOnceGuard = roots != null;
-
-	if (!skipOnceGuard) {
-		if (legacyMigrateAttempted) return false;
-		legacyMigrateAttempted = true;
-	}
-
-	let legacyEntries: Dirent<string>[];
-	try {
-		legacyEntries = await fs.readdir(legacyRoot, { withFileTypes: true });
-	} catch {
-		return false;
-	}
-
-	const legacyFiles = legacyEntries.filter(
-		(e) => e.isFile() && e.name.endsWith(".json"),
-	);
-	if (legacyFiles.length === 0) {
-		try {
-			await fs.rmdir(legacyRoot);
-		} catch {
-			/* not empty or busy — leave it */
-		}
-		return false;
-	}
-
-	let newHasModels = false;
-	try {
-		const existing = await fs.readdir(root, { withFileTypes: true });
-		newHasModels = existing.some(
-			(e) => e.isFile() && e.name.endsWith(".json") && e.name !== "_index.json",
-		);
-	} catch {
-		/* new dir missing */
-	}
-
-	if (newHasModels) {
-		console.warn(
-			`[subsystem-model-store] both ${legacyRoot} and ${root} have model files; leaving legacy dir in place`,
-		);
-		return false;
-	}
-
-	await fs.mkdir(root, { recursive: true });
-	let moved = 0;
-	for (const entry of legacyFiles) {
-		const from = join(legacyRoot, entry.name);
-		const to = join(root, entry.name);
-		try {
-			await fs.rename(from, to);
-			moved++;
-		} catch (err) {
-			// Cross-device fallback
-			try {
-				await fs.copyFile(from, to);
-				await fs.unlink(from);
-				moved++;
-			} catch (err2) {
-				console.warn(
-					`[subsystem-model-store] failed to migrate ${basename(from)}: ${(err2 as Error).message ?? err}`,
-				);
-			}
-		}
-	}
-
-	try {
-		const leftover = await fs.readdir(legacyRoot);
-		if (leftover.length === 0) await fs.rmdir(legacyRoot);
-	} catch {
-		/* ignore */
-	}
-
-	if (moved > 0) {
-		console.log(
-			`[subsystem-model-store] migrated ${moved} file(s) from subsystem-graphs → subsystem-models`,
-		);
-		return true;
-	}
-	return false;
-}
-
 async function ensureDir(): Promise<void> {
-	await migrateLegacySubsystemGraphsDir();
 	await fs.mkdir(modelsRoot(), { recursive: true });
 }
 

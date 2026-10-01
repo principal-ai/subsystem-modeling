@@ -381,12 +381,6 @@ export interface SubsystemComponentGraphProps {
    */
   hideDrawer?: boolean;
   /**
-   * Legacy component-keyed variant, kept for backward compatibility. When
-   * `renderFileViewer` is absent, drawer content resolves via the first
-   * component whose `file` matches the opened path.
-   */
-  renderFileView?: (component: SubsystemComponent) => ReactNode;
-  /**
    * Called when a file in the sidebar file tree is clicked (repo-root-relative
    * path). The tree is derived from the components' `file` values.
    */
@@ -524,7 +518,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, trails, graphifyRelations, orderByLine, initialTrailId, onReorderTrails, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, title, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileView, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
+function Inner({ components, trails, graphifyRelations, orderByLine, initialTrailId, onReorderTrails, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, title, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
   const { theme } = useTheme();
   const { fitView, fitBounds, screenToFlowPosition } = useReactFlow();
   const viewport = useViewport();
@@ -2465,21 +2459,9 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
     return components.find((c) => c.alias === hoveredComponentAlias)?.file ?? null;
   }, [components, hoveredComponentAlias]);
 
-  // Drawer content renderer: prefer the path-keyed viewer; fall back to the
-  // legacy component-keyed one via a file → first-component lookup.
-  const fileViewer = useMemo(() => {
-    if (renderFileViewer) return renderFileViewer;
-    if (renderFileView) {
-      const byFile = new Map(
-        components.filter((c) => c.file).map((c) => [c.file, c] as const),
-      );
-      return (file: string, _opts?: SubsystemOpenFileOptions) => {
-        const comp = byFile.get(file);
-        return comp ? renderFileView(comp) : null;
-      };
-    }
-    return renderFileViewer;
-  }, [renderFileViewer, renderFileView, components]);
+  // Drawer content renderer. Path-keyed only — the component-keyed
+  // `renderFileView` variant was removed; nothing in-repo passed it.
+  const fileViewer = renderFileViewer;
 
   const fileViewerRef = useRef(fileViewer);
   fileViewerRef.current = fileViewer;
@@ -3372,7 +3354,6 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
             sidebarExtra={props.sidebarExtra}
             sidebarAfterDescription={props.sidebarAfterDescription}
             renderFileViewer={props.renderFileViewer}
-            renderFileView={props.renderFileView}
             onFileSelect={props.onFileSelect}
             componentVerification={props.componentVerification}
             onInspectSymbol={props.onInspectSymbol}

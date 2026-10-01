@@ -292,20 +292,6 @@ export async function nextMaintainRouteForModel(
 	return selectMaintainRoute(saved.report);
 }
 
-/** @deprecated Prefer selectMaintainRoute — coarse issues/gaps only. */
-export function maintainModeForVerdict(
-	verdict: SubsystemModelAuditVerdict,
-): MaintainMode | null {
-	if (verdict === "issues") return "issues";
-	if (verdict === "partially_verified") return "verify";
-	return null;
-}
-
-/** @deprecated Prefer selectMaintainRoute. */
-export function agentForMaintainMode(mode: MaintainMode): MaintainAgentId {
-	return mode === "issues" ? CONSTRUCT_FIXER_AGENT : CONSTRUCT_VERIFIER_AGENT;
-}
-
 export function maintainActionLabel(_mode: MaintainMode | null): string {
 	return "Run maintenance";
 }
@@ -378,20 +364,6 @@ export function ensureMaintainAgentsInstalled(): {
 	} catch (err) {
 		return { ok: false, paths: [], error: (err as Error).message };
 	}
-}
-
-/** @deprecated Use ensureMaintainAgentsInstalled. */
-export function ensureClaimAdjudicatorAgentInstalled(): {
-	ok: boolean;
-	path: string;
-	error?: string;
-} {
-	const r = ensureMaintainAgentsInstalled();
-	return {
-		ok: r.ok,
-		path: CONSTRUCT_FIXER_AGENT_PATH,
-		error: r.error,
-	};
 }
 
 function primaryRepoRoot(graph: StoredSubsystemModel): string | undefined {
@@ -910,26 +882,6 @@ export async function runMaintainAgent(opts: {
 	};
 }
 
-/** @deprecated Use runMaintainAgent. */
-export async function runClaimAdjudicator(opts: {
-	primaryRepoRoot?: string;
-	task: string;
-	model: string;
-}): Promise<{ ok: boolean; error?: string; summary?: string; model: string }> {
-	const run = await runMaintainAgent({
-		agent: CONSTRUCT_FIXER_AGENT,
-		primaryRepoRoot: opts.primaryRepoRoot,
-		task: opts.task,
-		model: opts.model,
-	});
-	return {
-		ok: run.ok,
-		error: run.error,
-		summary: run.summary,
-		model: run.model,
-	};
-}
-
 interface MaintainRunContext {
 	graph: StoredSubsystemModel;
 	/** Model resolved for this run (before any per-run fallback). */
@@ -1275,7 +1227,3 @@ export function readMaintainAgentSystemPrompt(agent: MaintainAgentId): string {
 	}
 }
 
-/** @deprecated Use readMaintainAgentSystemPrompt. */
-export function readClaimAdjudicatorSystemPrompt(): string {
-	return readMaintainAgentSystemPrompt(CONSTRUCT_FIXER_AGENT);
-}

@@ -60,7 +60,6 @@ export interface ConstructsCatalogProps {
   sidebarExtra?: ReactNode;
   sidebarAfterDescription?: ReactNode;
   renderFileViewer?: (file: string, opts?: SubsystemOpenFileOptions) => ReactNode;
-  renderFileView?: (component: SubsystemComponent) => ReactNode;
   onFileSelect?: (file: string) => void;
   componentVerification?: ComponentVerificationState | null;
   /** Referenced-symbol click → host graphify lookup (purl/file from the card). */
@@ -192,7 +191,6 @@ export function ConstructsCatalog({
   sidebarExtra,
   sidebarAfterDescription,
   renderFileViewer,
-  renderFileView,
   onFileSelect,
   componentVerification,
   onInspectSymbol,
@@ -537,19 +535,7 @@ export function ConstructsCatalog({
     [components, show, searchActive],
   );
 
-  const fileViewer = useMemo(() => {
-    if (renderFileViewer) return renderFileViewer;
-    if (renderFileView) {
-      const byFile = new Map(
-        components.filter((c) => c.file).map((c) => [c.file, c] as const),
-      );
-      return (file: string, _opts?: SubsystemOpenFileOptions) => {
-        const comp = byFile.get(file);
-        return comp ? renderFileView(comp) : null;
-      };
-    }
-    return undefined;
-  }, [renderFileViewer, renderFileView, components]);
+  const fileViewer = renderFileViewer;
 
   const fileViewerRef = useRef(fileViewer);
   fileViewerRef.current = fileViewer;
