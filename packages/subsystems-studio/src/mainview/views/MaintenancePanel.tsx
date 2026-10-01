@@ -13,6 +13,7 @@ import { useTheme } from "@principal-ade/industry-theme";
 import type {
 	MaintenanceOverview,
 	MaintenanceOverviewModel,
+	ModelProvenanceDetail,
 	MaintenanceOverviewProposal,
 	StudioMessages,
 	SubsystemModelProposal,
@@ -34,7 +35,7 @@ import { DeleteAllProposalsDialog } from "../components/DeleteAllProposalsDialog
 import { RunMaintenanceConfirm } from "../components/RunMaintenanceConfirm";
 import { AcceptConfidentDialog } from "../components/AcceptConfidentDialog";
 import { LaneHelpDialog } from "../components/LaneHelpDialog";
-import { MaintenanceHeader } from "../components/MaintenanceHeader";
+import { MaintenanceBatchActions, MaintenanceHeader } from "../components/MaintenanceHeader";
 import {
 	LANE_META,
 	laneStatusColor,
@@ -158,6 +159,15 @@ export function MaintenancePanel() {
 	);
 	// Every proposal (any status) per model, loaded lazily when a model's Runs
 	// section is expanded — so each run can show what it accomplished.
+	// Provenance strips expand lazily, and so does the data behind them: the
+	// cheap snapshot rides on the overview response, while the per-commit walk
+	// is a whole-log read per repo and only makes sense once a row is open.
+	const [expandedProvenanceIds, setExpandedProvenanceIds] = useState<
+		ReadonlySet<string>
+	>(new Set());
+	const [provenanceDetailByGraph, setProvenanceDetailByGraph] = useState<
+		ReadonlyMap<string, ModelProvenanceDetail>
+	>(new Map());
 	const [proposalsByGraph, setProposalsByGraph] = useState<
 		ReadonlyMap<string, SubsystemModelProposal[]>
 	>(() => new Map());
@@ -435,6 +445,38 @@ export function MaintenancePanel() {
 			if (expanding) void loadProposalsFor(graphId);
 		},
 		[expandedRunsIds, loadProposalsFor],
+	);
+
+	const loadProvenanceDetailFor = useCallback(async (graphId: string) => {
+		try {
+			const detail =
+				await electrobun.rpc!.request.getModelProvenanceDetail({ id: graphId });
+			setProvenanceDetailByGraph((prev) => {
+				const next = new Map(prev);
+				next.set(graphId, detail);
+				return next;
+			});
+		} catch {
+			// The strip degrades to the cheap snapshot; a failed walk should not
+			// surface as an error on a row the user only glanced at.
+		}
+	}, []);
+
+	const toggleProvenance = useCallback(
+		(graphId: string) => {
+			const expanding = !expandedProvenanceIds.has(graphId);
+			setExpandedProvenanceIds((prev) => {
+				const next = new Set(prev);
+				if (next.has(graphId)) next.delete(graphId);
+				else next.add(graphId);
+				return next;
+			});
+			// Fetch once per model; re-opening should not re-walk the log.
+			if (expanding && !provenanceDetailByGraph.has(graphId)) {
+				void loadProvenanceDetailFor(graphId);
+			}
+		},
+		[expandedProvenanceIds, provenanceDetailByGraph, loadProvenanceDetailFor],
 	);
 
 	// Clicking "Run maintenance" on a model with proposals asks to delete them
@@ -813,48 +855,10 @@ export function MaintenancePanel() {
 				}}
 			>
 				<MaintenanceHeader
-					modelCount={visibleModels.length}
-					auditAllActive={auditAllActive}
-					auditAllStarting={auditAllStarting}
-					auditAuditedCount={auditAuditedCount}
-					auditAuditTotal={auditAuditTotal}
-					repoBatchActive={repoBatchActive}
-					repoBatchStopping={repoBatchStopping}
-					repoBatchDone={repoBatchDone}
-					repoBatchSkipped={repoBatchSkipped}
-					repoBatchStopped={repoBatchStopped}
 					pendingCount={pending.length}
 					confidentPendingCount={confidentPending.length}
 					confidenceThreshold={confidenceThreshold}
-					onAuditAll={() => {
-						setAuditAllStarting(true);
-						void electrobun.rpc!.request
-							.auditSubsystemModels({
-								graphIds: visibleModels.map((m) => m.graphId),
-							})
-							.finally(() => setAuditAllStarting(false));
-					}}
-					onRunAll={() => {
-						const withProposals = visibleModels.filter(
-							(m) => m.pendingProposalCount > 0,
-						);
-						if (withProposals.length > 0) {
-							setRunConfirm({
-								kind: "batch",
-								count: withProposals.reduce(
-									(n, m) => n + m.pendingProposalCount,
-									0,
-								),
-							});
-							return;
-						}
-						void runRepoMaintenance();
-					}}
-					onStopAll={() => {
-						repoBatchCancel.current = true;
-						setRepoBatchStopping(true);
-					}}
-					onDeleteAll={() => {
+				onDeleteAll={() => {
 						setDeleteAllError(null);
 						setDeleteAllOpen(true);
 					}}
@@ -923,14 +927,59 @@ export function MaintenancePanel() {
 						proposalsByGraph={proposalsByGraph}
 						feeds={feeds}
 						expandedRuns={expandedRunsIds}
+						expandedProvenance={expandedProvenanceIds}
+						provenanceDetailByGraph={provenanceDetailByGraph}
 						briefCopiedId={briefCopiedId}
 						proposalCountsByGraph={proposalCountsByGraph}
+					headerActions={
+						<MaintenanceBatchActions
+							modelCount={visibleModels.length}
+							auditAllActive={auditAllActive}
+							auditAllStarting={auditAllStarting}
+							auditAuditedCount={auditAuditedCount}
+							auditAuditTotal={auditAuditTotal}
+							repoBatchActive={repoBatchActive}
+							repoBatchStopping={repoBatchStopping}
+							repoBatchDone={repoBatchDone}
+							repoBatchSkipped={repoBatchSkipped}
+							repoBatchStopped={repoBatchStopped}
+							onAuditAll={() => {
+								setAuditAllStarting(true);
+								void electrobun.rpc!.request
+									.auditSubsystemModels({
+										graphIds: visibleModels.map((m) => m.graphId),
+									})
+									.finally(() => setAuditAllStarting(false));
+							}}
+							onRunAll={() => {
+								const withProposals = visibleModels.filter(
+									(m) => m.pendingProposalCount > 0,
+								);
+								if (withProposals.length > 0) {
+									setRunConfirm({
+										kind: "batch",
+										count: withProposals.reduce(
+											(n, m) => n + m.pendingProposalCount,
+											0,
+										),
+									});
+									return;
+								}
+								void runRepoMaintenance();
+							}}
+							onStopAll={() => {
+								repoBatchCancel.current = true;
+								setRepoBatchStopping(true);
+							}}
+						/>
+					}
 						emptyMessage={
 							overview.models.length === 0
 								? "No subsystem models."
 								: "No models reference this repo."
 						}
 						onToggleRuns={toggleRuns}
+						onToggleProvenance={toggleProvenance}
 						onOpenModel={onModelOpen}
 						onRunMaintenance={onRunMaintenance}
 						onCopyBrief={copyBriefFor}

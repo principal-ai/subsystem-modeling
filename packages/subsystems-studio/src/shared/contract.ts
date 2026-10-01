@@ -47,7 +47,8 @@ export type PayloadKind = "trail" | "tour";
 /**
  * Which permanent tabs appear in the strip by default. Toggled from the
  * header Settings modal; persisted host-side under
- * `~/.principal/principal-studio-settings.json`. All default to true.
+ * `~/.principal/principal-studio-settings.json`. Subsystems and Maintainer
+ * start on; the rest start off.
  */
 export interface DefaultTabFlags {
 	/** Agent Sessions overview tab. */
@@ -67,6 +68,18 @@ export interface DefaultTabFlags {
 	/** OpenCode V2 debug / runtime tab. */
 	opencodeV2: boolean;
 }
+
+/** Tabs present on a fresh install and after Reset defaults. */
+export const DEFAULT_TAB_FLAGS: DefaultTabFlags = {
+	sessions: false,
+	maintenanceSessions: false,
+	trails: false,
+	graphify: false,
+	packageLayers: false,
+	subsystems: true,
+	maintenance: true,
+	opencodeV2: false,
+};
 
 export interface ViewerSettings {
 	defaultTabs: DefaultTabFlags;
@@ -107,6 +120,12 @@ export interface ViewerSettings {
 	 * filter, restored on the next mount. `null` = fall back to the first repo.
 	 */
 	maintenanceRepoKey: string | null;
+	/**
+	 * Permanent tab that was active when Studio last closed, restored on the
+	 * next launch. `null` = use the default start tab. Transient tabs (trails,
+	 * models) are not persisted — they don't survive a restart.
+	 */
+	lastActiveTabId: string | null;
 }
 
 /** Live status of the host regular-audit scheduler (for countdown UI). */
@@ -136,6 +155,8 @@ export interface PartialViewerSettings {
 	typesafeApiKey?: string | null;
 	/** Pass `null` to fall back to the first repo on the next mount. */
 	maintenanceRepoKey?: string | null;
+	/** Pass `null` to forget the restored start tab. */
+	lastActiveTabId?: string | null;
 }
 
 export interface RepoInfo {
@@ -199,6 +220,111 @@ export interface SubsystemModelPurlFreshness {
 	live?: string;
 	/** `match` | `moved` | `unresolved` (no pinned commit, or no local checkout). */
 	status: "match" | "moved" | "unresolved";
+}
+
+/**
+ * One commit in a pin→head range, flagged where it touched an anchored file.
+ *
+ * The net diff answers "did anything anchored change"; this answers *when*. A
+ * model 22 commits stale reads identically whether the damage is spread across
+ * the range or three commits old, and those call for opposite urgency.
+ */
+export interface CommitDot {
+	/** Full commit sha. */
+	sha: string;
+	/** True when this commit changed a file the model anchors to. */
+	touched: boolean;
+}
+
+/**
+ * Anchor-scoped contact between a pin and the current checkout, per purl.
+ *
+ * `committed` and `dirty` are separate because they are separate facts with
+ * separate consequences: a committed change to an anchored file owes a re-audit,
+ * while an uncommitted one does not — there is no commit to be behind of. `[]`
+ * means "measured, nothing found"; `undefined` means "not measured", which is a
+ * different claim and must never be read as clean.
+ */
+export interface AnchorChanges {
+	/** Anchored files that differ between the pin and head — committed. */
+	committed?: string[];
+	/** Anchored files with uncommitted edits — not yet a reproducible state. */
+	dirty?: string[];
+	/** Commits on the checkout the pin does not contain. */
+	commitsSincePin?: number;
+	/** Commits in the pin the checkout lacks. Non-zero means a rollback. */
+	pinOnlyCommits?: number;
+	/**
+	 * The pin is not an ancestor of head, so the counts above are measured from
+	 * a merge-base and overstate the real distance. Set instead of reporting a
+	 * number we cannot stand behind; the anchor diff still holds across a
+	 * rewrite, which is why this suppresses only the distance.
+	 */
+	historyRewritten?: boolean;
+	/**
+	 * Per-commit flags for the dot strip. Deliberately absent from the cheap
+	 * snapshot — this is a whole-log read per purl, so it is fetched separately
+	 * and only when a row is expanded.
+	 */
+	commits?: CommitDot[];
+	/**
+	 * Index into `commits` of the commit the remote ref points at. Commits after
+	 * it are unpushed. Requires a remote-ref lookup, which `git rev-parse HEAD`
+	 * cannot do.
+	 */
+	remoteIndex?: number;
+	/** Commits the remote has that this checkout lacks. */
+	remoteAhead?: number;
+}
+
+/**
+ * Everything a provenance surface needs about one model, in the cheap tier.
+ *
+ * Cost matters here: this rides along with a list or overview pass, so it may
+ * only contain probes that are a couple of `git` calls per referenced repo.
+ * Anything unbounded (the per-commit walk) belongs in
+ * {@link ModelProvenanceDetail} and is fetched on demand.
+ */
+export interface ModelProvenanceSnapshot {
+	/** Per-purl commit at create, immutable. */
+	createdAtCommits?: Record<string, PurlCommit>;
+	/** Per-purl commit the last fully-verified audit earned. */
+	verifiedAtCommits?: Record<string, PurlCommit>;
+	/** Per-purl pin vs local HEAD. */
+	purlFreshness?: SubsystemModelPurlFreshness[];
+	/** Per-purl anchor contact. */
+	anchorChanges?: Record<string, AnchorChanges>;
+}
+
+/**
+ * The expensive tier: the per-commit walk and remote position, fetched only when
+ * a provenance strip is actually expanded.
+ */
+export interface ModelProvenanceDetail {
+	id: string;
+	anchorChanges?: Record<string, AnchorChanges>;
+	/** Per-purl auto re-pin outcome, when the host could decide one. */
+	autoRePin?: Record<string, AutoRePinOutcome>;
+}
+
+/**
+ * Whether a model's verified pin can be carried forward, and why not when it
+ * cannot.
+ *
+ * When nothing anchored moved the promotion is a *proof* rather than a shortcut:
+ * git is content-addressed, so identical anchored files mean an audit at the
+ * old pin would return the same verdict. The refusals are conditions on *now*,
+ * not on whether the model is sound — the trust-shaped guards are already
+ * implied by `verifiedAtCommits` existing, since a stale `file` cannot reach
+ * `fully_verified` and a file-less component is `external`/`proposed` by design.
+ */
+export interface AutoRePinOutcome {
+	/** `applied` — pin advanced. `blocked` — a guard stopped it. */
+	status: "applied" | "blocked";
+	/** Why it was refused. Absent when `applied`. */
+	blockedBy?: "dirty-tree" | "history-rewritten";
+	/** The commit the pin now points at, when applied. */
+	commit?: string;
 }
 
 /** On-disk record for a persisted subsystem graph. */
@@ -476,6 +602,7 @@ export type SubsystemModelAuditFindingKind =
 	| "signature_unconfirmed"
 	| "repo_unresolved"
 	| "graphify_unavailable"
+	| "third_party_path"
 	| "boundary_module_file_mismatch"
 	| "boundary_process_nest_disagree";
 
@@ -696,6 +823,12 @@ export interface MaintenanceOverviewModel {
 	 * component purls. Drives the Maintain tab's repo filter.
 	 */
 	repos?: Array<{ owner: string; name: string }>;
+	/**
+	 * Commit provenance — when this model was verified, and what has changed
+	 * since. Absent until the host measures it, in which case the card renders
+	 * exactly as it did before.
+	 */
+	provenance?: ModelProvenanceSnapshot;
 	/**
 	 * The next stage a Maintain run would execute, in routing order — or `null`
 	 * when nothing is queued (fully verified). Drives the fix-cycle position.
@@ -1550,6 +1683,19 @@ export type StudioRequests = {
 	 * Load the last persisted audit report for a model.
 	 * `stale: true` when model/graphify inputs changed since the report was saved.
 	 */
+	/**
+	 * The expensive provenance tier — the per-commit walk and the remote's
+	 * position on it.
+	 *
+	 * Split from the cheap snapshot because it is a whole-log read per
+	 * referenced repo: unbounded in range size, and multiplied by every model on
+	 * a list pass if it were not lazy. Call it when a provenance strip is
+	 * actually expanded, and cache the result per model.
+	 */
+	getModelProvenanceDetail: {
+		params: { id: string };
+		response: ModelProvenanceDetail;
+	};
 	getSubsystemModelAudit: {
 		params: { graphId: string };
 		response: {

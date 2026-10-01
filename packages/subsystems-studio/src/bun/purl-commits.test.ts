@@ -7,6 +7,9 @@ import {
 	capturePurlCommits,
 	commitsFromDeclarationRefs,
 	commitStatus,
+	modelProvenance,
+	modelProvenanceDetail,
+	planAutoRePin,
 	purlCommitFreshness,
 	referencedFilesByPurl,
 	referencedFilesClean,
@@ -220,5 +223,264 @@ describe("purlCommitFreshness (injected)", () => {
 			status: "match",
 		});
 		expect(byPurl.get(KEY_B)?.status).toBe("unresolved");
+	});
+});
+
+/* ------------------------------------------------------------------ *
+ * modelProvenance — the cheap tier.
+ * ------------------------------------------------------------------ */
+
+const PIN = "a".repeat(40);
+const LIVE = "b".repeat(40);
+const ROOT_A = "/repos/widget";
+// Deliberately no root: KEY_B models a purl with no local checkout.
+const ROOT_B = "/repos/gadget";
+const ROOTS_BY_KEY: Record<string, string | undefined> = {
+	[KEY_A]: ROOT_A,
+	[KEY_B]: undefined,
+};
+
+/** A two-repo model, one resolvable checkout and one unresolvable. */
+const TWO_REPO_SOURCE = {
+	createdAtCommits: { [KEY_A]: PIN },
+	verifiedAtCommits: { [KEY_A]: PIN, [KEY_B]: PIN },
+	components: [
+		{ alias: "w", file: "src/w.ts", purl: `${KEY_A}#src/w.ts` },
+		{ alias: "g", file: "src/g.ts", purl: `${KEY_B}#src/g.ts` },
+	],
+};
+
+
+describe("modelProvenance", () => {
+	test("anchors nothing when the pin and head agree", async () => {
+		const snap = await modelProvenance(TWO_REPO_SOURCE, {
+			resolveRoot: (k) => ROOTS_BY_KEY[k],
+			head: async () => PIN,
+			diff: async () => [],
+			dirty: async () => [],
+		});
+		expect(snap.purlFreshness?.find((r) => r.purl === KEY_A)?.status).toBe(
+			"match",
+		);
+		// An empty diff is measured-and-clean, which is a real answer and must
+		// be recorded as `[]` rather than omitted.
+		expect(snap.anchorChanges?.[KEY_A]?.committed).toEqual([]);
+	});
+
+	test("records only the anchored files that changed", async () => {
+		const snap = await modelProvenance(TWO_REPO_SOURCE, {
+			resolveRoot: (k) => ROOTS_BY_KEY[k],
+			head: async () => LIVE,
+			diff: async (_root, _from, _to, paths) =>
+				paths.includes("src/w.ts") ? ["src/w.ts"] : [],
+			dirty: async () => [],
+			distance: async () => ({ commitsSincePin: 7, pinOnlyCommits: 0 }),
+		});
+		expect(snap.anchorChanges?.[KEY_A]).toMatchObject({
+			committed: ["src/w.ts"],
+			commitsSincePin: 7,
+			pinOnlyCommits: 0,
+		});
+		expect(snap.anchorChanges?.[KEY_A]?.historyRewritten).toBeUndefined();
+	});
+
+	test("carries a rewritten history without inventing a distance", async () => {
+		const snap = await modelProvenance(TWO_REPO_SOURCE, {
+			resolveRoot: (k) => ROOTS_BY_KEY[k],
+			head: async () => LIVE,
+			diff: async () => [],
+			dirty: async () => [],
+			distance: async () => ({ historyRewritten: true }),
+		});
+		expect(snap.anchorChanges?.[KEY_A]).toEqual({ committed: [], historyRewritten: true });
+		expect(snap.anchorChanges?.[KEY_A]?.commitsSincePin).toBeUndefined();
+	});
+
+	test("an unresolvable repo is unresolved and carries no anchor data", async () => {
+		const snap = await modelProvenance(TWO_REPO_SOURCE, {
+			resolveRoot: (k) => ROOTS_BY_KEY[k],
+			head: async () => LIVE,
+			// Only KEY_A resolves, so any call naming ROOT_B is a bug.
+			diff: async (root) => {
+				if (root === ROOT_B) throw new Error("diffed an unresolvable repo");
+				return [];
+			},
+			dirty: async (root) => {
+				if (root === ROOT_B) throw new Error("stat'd an unresolvable repo");
+				return [];
+			},
+		});
+		expect(snap.purlFreshness?.find((r) => r.purl === KEY_B)?.status).toBe(
+			"unresolved",
+		);
+		expect(snap.anchorChanges?.[KEY_B]).toBeUndefined();
+	});
+
+	test("a failed diff is omitted rather than reported as clean", async () => {
+		const snap = await modelProvenance(TWO_REPO_SOURCE, {
+			resolveRoot: (k) => ROOTS_BY_KEY[k],
+			head: async () => LIVE,
+			diff: async () => null,
+			dirty: async () => [],
+		});
+		// `committed` absent means "not measured", which the UI must not read as
+		// clean — hence no key at all rather than an empty list.
+		expect(snap.anchorChanges?.[KEY_A]?.committed).toBeUndefined();
+	});
+
+	test("only reports dirty paths that exist", async () => {
+		const snap = await modelProvenance(TWO_REPO_SOURCE, {
+			resolveRoot: (k) => ROOTS_BY_KEY[k],
+			head: async () => LIVE,
+			diff: async () => [],
+			dirty: async () => ["src/w.ts"],
+		});
+		expect(snap.anchorChanges?.[KEY_A]?.dirty).toEqual(["src/w.ts"]);
+	});
+
+	test("walkthrough step sites join the pathspec", async () => {
+		const seen: string[][] = [];
+		await modelProvenance(
+			{
+				createdAtCommits: { [KEY_A]: PIN },
+				components: [{ alias: "w", file: "src/w.ts", purl: `${KEY_A}#src/w.ts` }],
+				walkthroughs: [
+					{ steps: [{ file: "src/flow.ts", purl: `${KEY_A}#src/flow.ts` }] },
+				],
+			},
+			{
+				resolveRoot: () => ROOT_A,
+				head: async () => LIVE,
+				diff: async (_r, _f, _t, paths) => {
+					seen.push([...paths]);
+					return [];
+				},
+				dirty: async () => [],
+			},
+		);
+		expect(seen[0]?.sort()).toEqual(["src/flow.ts", "src/w.ts"]);
+	});
+});
+
+describe("planAutoRePin", () => {
+	const clean = {
+		resolveRoot: (k: string) => ROOTS_BY_KEY[k],
+		head: async () => LIVE,
+		diff: async () => [],
+		dirty: async () => [],
+		distance: async () => ({ commitsSincePin: 5, pinOnlyCommits: 0 }),
+	};
+
+	test("promotes when nothing anchored moved", async () => {
+		const plan = await planAutoRePin(
+			TWO_REPO_SOURCE,
+			{ [KEY_A]: { committed: [] } },
+			clean,
+		);
+		expect(plan[KEY_A]).toEqual({ status: "applied", commit: LIVE });
+	});
+
+	test("refuses when an anchored file changed", async () => {
+		const plan = await planAutoRePin(
+			TWO_REPO_SOURCE,
+			{ [KEY_A]: { committed: ["src/w.ts"] } },
+			clean,
+		);
+		expect(plan[KEY_A]).toBeUndefined();
+	});
+
+	test("refuses when the anchor set was never measured", async () => {
+		// `committed` absent is "unknown", not "clean" — the whole point of
+		// promoting on a proof is that the proof has to exist.
+		const plan = await planAutoRePin(TWO_REPO_SOURCE, { [KEY_A]: {} }, clean);
+		expect(plan[KEY_A]).toBeUndefined();
+	});
+
+	test("refuses a dirty tree", async () => {
+		const plan = await planAutoRePin(
+			TWO_REPO_SOURCE,
+			{ [KEY_A]: { committed: [], dirty: ["src/w.ts"] } },
+			clean,
+		);
+		expect(plan[KEY_A]).toEqual({ status: "blocked", blockedBy: "dirty-tree" });
+	});
+
+	test("refuses an orphaned pin", async () => {
+		const plan = await planAutoRePin(
+			TWO_REPO_SOURCE,
+			{ [KEY_A]: { committed: [], historyRewritten: true } },
+			clean,
+		);
+		expect(plan[KEY_A]).toEqual({
+			status: "blocked",
+			blockedBy: "history-rewritten",
+		});
+	});
+
+	test("does nothing when the pin already equals head", async () => {
+		const plan = await planAutoRePin(
+			TWO_REPO_SOURCE,
+			{ [KEY_A]: { committed: [] } },
+			{ ...clean, head: async () => PIN },
+		);
+		expect(plan[KEY_A]).toBeUndefined();
+	});
+});
+
+describe("modelProvenanceDetail", () => {
+	const three = (touched: number[]) =>
+		Array.from({ length: 3 }, (_, i) => ({
+			sha: String(i).padStart(40, "0"),
+			files: touched.includes(i) ? ["src/w.ts"] : [],
+		}));
+
+	test("flags only commits that touched an anchor", async () => {
+		const detail = await modelProvenanceDetail(
+			"g1",
+			TWO_REPO_SOURCE,
+			{ [KEY_A]: { committed: ["src/w.ts"] } },
+			{
+				resolveRoot: (k) => ROOTS_BY_KEY[k],
+				head: async () => LIVE,
+				commits: async () => three([1]),
+				remote: async () => null,
+			},
+		);
+		expect(detail.anchorChanges?.[KEY_A]?.commits?.map((c) => c.touched)).toEqual([
+			false,
+			true,
+			false,
+		]);
+	});
+
+	test("locates the remote on the walk", async () => {
+		const detail = await modelProvenanceDetail(
+			"g1",
+			TWO_REPO_SOURCE,
+			{ [KEY_A]: { committed: [] } },
+			{
+				resolveRoot: (k) => ROOTS_BY_KEY[k],
+				head: async () => LIVE,
+				commits: async () => three([]),
+				remote: async () => "0".repeat(40),
+			},
+		);
+		expect(detail.anchorChanges?.[KEY_A]?.remoteIndex).toBe(0);
+	});
+
+	test("a remote outside the window means everything shown is ahead of it", async () => {
+		const detail = await modelProvenanceDetail(
+			"g1",
+			TWO_REPO_SOURCE,
+			{ [KEY_A]: { committed: [] } },
+			{
+				resolveRoot: (k) => ROOTS_BY_KEY[k],
+				head: async () => LIVE,
+				commits: async () => three([]),
+				remote: async () => "f".repeat(40),
+			},
+		);
+		expect(detail.anchorChanges?.[KEY_A]?.remoteIndex).toBeUndefined();
+		expect(detail.anchorChanges?.[KEY_A]?.remoteAhead).toBe(3);
 	});
 });

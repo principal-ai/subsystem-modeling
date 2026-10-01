@@ -43,4 +43,40 @@ describe("findSubsystemModelProblems", () => {
     expect(problems).toHaveLength(1);
     expect(problems[0]!).toContain("file is empty");
   });
+
+  test("rejects a node_modules file (schema)", () => {
+    const problems = findSubsystemModelProblems(
+      payload({
+        components: [
+          {
+            alias: "dep",
+            name: "SharedHighlighter",
+            construct: "store",
+            file: "packages/subsystems-react/node_modules/@pierre/diffs/dist/highlighter/shared_highlighter.js",
+            purl: "external",
+          },
+        ],
+      }),
+    );
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!).toContain("pattern");
+  });
+
+  test("accepts a third-party dependency modeled as an external package", () => {
+    expect(
+      findSubsystemModelProblems(
+        payload({
+          components: [
+            {
+              alias: "dep",
+              name: "@pierre/diffs highlighter",
+              construct: "external",
+              file: "",
+              purl: "pkg:npm/@pierre/diffs",
+            },
+          ],
+        }),
+      ),
+    ).toEqual([]);
+  });
 });

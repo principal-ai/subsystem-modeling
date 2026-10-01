@@ -658,6 +658,44 @@ export function flowElementVisibility(opts: {
   return { hidden: false, dimmed: false };
 }
 
+/**
+ * Hide / dim a canvas node (or a boundary frame, via its members) while
+ * walkthroughs are open, focused, or hovered.
+ *
+ * Two signals sit on top of `flowElementVisibility`:
+ *
+ * - Hiding is the *opened-flow* gate only. With nothing expanded there is no
+ *   opened set to be outside of, so hover / autoplay must never hide — a
+ *   sidebar-less embed dims, it doesn't filter.
+ * - Dimming follows the *spotlight* (hover preview, focused step, or focused
+ *   issue), not the opened set: a node in the spotlight is never dimmed, and
+ *   every node outside it is.
+ *
+ * The order matters. Feeding the raw `vis.hidden` into `dimmed` reads a
+ * spotlight member as "outside every opened flow" and dims it along with the
+ * rest of the graph — the whole-canvas dim on hover. Collapse the hidden
+ * verdict first, then dim.
+ */
+export function flowNodeVisibility(opts: {
+  inOpened: boolean;
+  inSelected: boolean;
+  /** Member of the dim source: hover preview ∪ focused step ∪ focused issue. */
+  inSpotlight: boolean;
+  anyOpened: boolean;
+  anySelected: boolean;
+  anySpotlight: boolean;
+}): { hidden: boolean; dimmed: boolean } {
+  const vis = flowElementVisibility({
+    inOpened: opts.inOpened,
+    inSelected: opts.inSelected,
+    anyOpened: opts.anyOpened,
+    anySelected: opts.anySelected,
+  });
+  const hidden = opts.anyOpened ? vis.hidden : false;
+  const dimmed = opts.anySpotlight ? hidden || !opts.inSpotlight : vis.dimmed;
+  return { hidden, dimmed };
+}
+
 export const EDGE_DIM_ALPHA = 0.15;
 
 /** Subsystem edge — SVG path only. The mechanism label is rendered as an

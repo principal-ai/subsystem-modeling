@@ -14,10 +14,22 @@
  */
 
 import type {
+	AnchorChanges,
+	AutoRePinOutcome,
+	ModelProvenanceDetail,
+	ModelProvenanceSnapshot,
 	PurlCommit,
 	SubsystemModelPurlFreshness,
 } from "../shared/contract";
-import { filesClean, headSha } from "./git-repo";
+import {
+	commitTouches,
+	diffScopedFiles,
+	filesClean,
+	filesDirty,
+	headSha,
+	remoteRefSha,
+	revDistance,
+} from "./git-repo";
 import { purlRepoKey, resolveRepoRootForComponent } from "./subsystem-model-store";
 
 export type { PurlCommit };
@@ -54,6 +66,28 @@ interface CommitOptions {
 
 interface CleanOptions extends CommitOptions {
 	isClean?: (repoRoot: string, relPaths: ReadonlyArray<string>) => Promise<boolean>;
+}
+
+/**
+ * Injectable git probes, so the provenance composition can be tested without
+ * real checkouts. Each defaults to the corresponding `git-repo` probe.
+ */
+export interface ProvenanceProbes extends CommitOptions {
+	diff?: (
+		repoRoot: string,
+		from: string,
+		to: string,
+		paths: ReadonlyArray<string>,
+	) => Promise<string[] | null>;
+	dirty?: (
+		repoRoot: string,
+		paths: ReadonlyArray<string>,
+	) => Promise<string[]>;
+	distance?: (
+		repoRoot: string,
+		from: string,
+		to: string,
+	) => ReturnType<typeof revDistance>;
 }
 
 /** Unique repo keys referenced by the given purls, in first-seen order. */
@@ -215,4 +249,208 @@ export async function purlCommitFreshness(
 		});
 	}
 	return rows;
+}
+
+/** What `modelProvenance` needs off a stored record. */
+export interface ProvenanceSource {
+	createdAtCommits?: Record<string, PurlCommit>;
+	verifiedAtCommits?: Record<string, PurlCommit>;
+	components: ReadonlyArray<ComponentLike>;
+	walkthroughs?: ReadonlyArray<WalkthroughLike>;
+}
+
+/**
+ * The cheap provenance tier — everything a list or overview pass can afford.
+ *
+ * Per referenced repo this is three probes: HEAD (cached for 2s in `git-repo`),
+ * a pathspec-scoped diff between the pin and HEAD, and a pathspec-scoped dirty
+ * check. That is what makes the anchor question answerable: `headSha` alone can
+ * only say a repo moved, which in this repo's case is true across 216 files
+ * while a model anchoring a single declaration file sees one.
+ *
+ * The per-commit walk is deliberately absent — it is a whole-log read per repo
+ * and belongs in {@link modelProvenanceDetail}, fetched only when a row opens.
+ */
+export async function modelProvenance(
+	stored: ProvenanceSource,
+	probes?: ProvenanceProbes,
+): Promise<ModelProvenanceSnapshot> {
+	const resolveRoot = probes?.resolveRoot ?? resolveRepoRootForComponent;
+	const head = probes?.head ?? headSha;
+	const diff = probes?.diff ?? diffScopedFiles;
+	const dirty = probes?.dirty ?? filesDirty;
+
+	const byPurl = referencedFilesByPurl(stored.components, stored.walkthroughs);
+	const keys = referencedPurlKeys([
+		...Object.keys(stored.createdAtCommits ?? {}),
+		...Object.keys(stored.verifiedAtCommits ?? {}),
+		...stored.components.map((c) => c.purl),
+	]);
+
+	const purlFreshness: SubsystemModelPurlFreshness[] = [];
+	const anchorChanges: Record<string, AnchorChanges> = {};
+
+	for (const key of keys) {
+		const pinned =
+			stored.verifiedAtCommits?.[key] ?? stored.createdAtCommits?.[key];
+		const root = resolveRoot(key);
+		const live = root ? await head(root) : null;
+		purlFreshness.push({
+			purl: key,
+			pinned,
+			live: live ?? undefined,
+			status: commitStatus(pinned, live, Boolean(root)),
+		});
+
+		// No pin or no checkout: nothing to compare, and inventing an empty
+		// `committed` list here would claim "nothing changed" when the truth is
+		// "could not look".
+		if (!root || !pinned || !live) continue;
+
+		const files = byPurl.get(key) ?? [];
+		const changes: AnchorChanges = {};
+		const committed = await diff(root, pinned, live, files);
+		if (committed) changes.committed = committed;
+		const uncommitted = await dirty(root, files);
+		if (uncommitted.length > 0) changes.dirty = uncommitted;
+
+		const distance = probes?.distance
+			? await probes.distance(root, pinned, live)
+			: await revDistance(root, pinned, live);
+		if (distance.commitsSincePin !== undefined) {
+			changes.commitsSincePin = distance.commitsSincePin;
+		}
+		if (distance.pinOnlyCommits !== undefined) {
+			changes.pinOnlyCommits = distance.pinOnlyCommits;
+		}
+		if (distance.historyRewritten) changes.historyRewritten = true;
+
+		// Only record contact we actually measured. An empty object would read
+		// as "measured, clean" for a repo whose pathspec we never had.
+		if (Object.keys(changes).length > 0) anchorChanges[key] = changes;
+	}
+
+	return {
+		createdAtCommits: stored.createdAtCommits,
+		verifiedAtCommits: stored.verifiedAtCommits,
+		purlFreshness,
+		...(Object.keys(anchorChanges).length > 0 ? { anchorChanges } : {}),
+	};
+}
+
+/**
+ * Decide whether a pin can be carried forward to HEAD, per referenced repo.
+ *
+ * The promotion is justified by content identity rather than by re-running the
+ * audit: git is content-addressed, so byte-identical anchored files mean an
+ * audit at the old pin would have returned the same verdict. Every check in the
+ * audit either reads only the anchored files or compares the model's own fields
+ * against each other, so "nothing anchored moved" carries the verdict forward.
+ *
+ * The two refusals are about *now*, not about whether the model is sound:
+ * - `dirty-tree` — the tree was clean when the pin was stamped but has gone
+ *   dirty since, and there is no reproducible state to promote to.
+ * - `history-rewritten` — the pin is orphaned, so "unchanged" cannot be shown.
+ *
+ * Nothing here can make an unsound model look sound; it only decides whether
+ * there is a commit *right now* worth pinning to.
+ */
+export async function planAutoRePin(
+	stored: ProvenanceSource,
+	anchorChanges: Record<string, AnchorChanges> | undefined,
+	probes?: ProvenanceProbes,
+): Promise<Record<string, AutoRePinOutcome>> {
+	const resolveRoot = probes?.resolveRoot ?? resolveRepoRootForComponent;
+	const head = probes?.head ?? headSha;
+	const dirty = probes?.dirty ?? filesDirty;
+	const byPurl = referencedFilesByPurl(stored.components, stored.walkthroughs);
+	const out: Record<string, AutoRePinOutcome> = {};
+
+	for (const key of referencedPurlKeys(stored.components.map((c) => c.purl))) {
+		const pinned =
+			stored.verifiedAtCommits?.[key] ?? stored.createdAtCommits?.[key];
+		const root = resolveRoot(key);
+		if (!pinned || !root) continue;
+		const live = await head(root);
+		if (!live || live === pinned) continue;
+
+		const changes = anchorChanges?.[key];
+		// Promotion requires positive evidence that nothing anchored moved. An
+		// absent `committed` list means unmeasured, which is not the same thing
+		// and must not be read as clean.
+		if (!changes?.committed) continue;
+		if (changes.committed.length > 0) continue;
+		if (changes.historyRewritten) {
+			out[key] = { status: "blocked", blockedBy: "history-rewritten" };
+			continue;
+		}
+		const uncommitted = changes.dirty ?? (await dirty(root, byPurl.get(key) ?? []));
+		if (uncommitted.length > 0) {
+			out[key] = { status: "blocked", blockedBy: "dirty-tree" };
+			continue;
+		}
+		out[key] = { status: "applied", commit: live };
+	}
+	return out;
+}
+
+/**
+ * The expensive tier: the per-commit walk and the remote's position.
+ *
+ * Fetched only when a provenance strip is expanded, because it is a whole-log
+ * read per referenced repo — unbounded in range size, and multiplied by every
+ * model on a list pass if it were not lazy.
+ */
+export async function modelProvenanceDetail(
+	id: string,
+	stored: ProvenanceSource,
+	anchorChanges: Record<string, AnchorChanges> | undefined,
+	probes?: ProvenanceProbes & {
+		commits?: typeof commitTouches;
+		remote?: typeof remoteRefSha;
+		limit?: number;
+	},
+): Promise<ModelProvenanceDetail> {
+	const resolveRoot = probes?.resolveRoot ?? resolveRepoRootForComponent;
+	const head = probes?.head ?? headSha;
+	const walk = probes?.commits ?? commitTouches;
+	const remote = probes?.remote ?? remoteRefSha;
+	const byPurl = referencedFilesByPurl(stored.components, stored.walkthroughs);
+	const out: Record<string, AnchorChanges> = {};
+
+	for (const key of referencedPurlKeys(stored.components.map((c) => c.purl))) {
+		const pinned =
+			stored.verifiedAtCommits?.[key] ?? stored.createdAtCommits?.[key];
+		const root = resolveRoot(key);
+		if (!pinned || !root) continue;
+		const live = await head(root);
+		if (!live || live === pinned) continue;
+		const files = byPurl.get(key) ?? [];
+
+		const commits = await walk(root, pinned, live, files, probes?.limit ?? 40);
+		const remoteSha = await remote(root);
+		const entry: AnchorChanges = { ...(anchorChanges?.[key] ?? {}) };
+		if (commits) {
+			entry.commits = commits.map((c) => ({
+				sha: c.sha,
+				touched: c.files.length > 0,
+			}));
+		}
+		if (remoteSha) {
+			// Position the remote on the walk. A remote sha that is not in the
+			// window means every commit shown is unpushed; report it as
+			// absent rather than guessing an index.
+			const at = commits?.findIndex((c) => c.sha === remoteSha) ?? -1;
+			if (at >= 0) entry.remoteIndex = at;
+			else if (commits) entry.remoteAhead = commits.length;
+		}
+		out[key] = entry;
+	}
+
+	const autoRePin = await planAutoRePin(stored, anchorChanges, probes);
+	return {
+		id,
+		...(Object.keys(out).length > 0 ? { anchorChanges: out } : {}),
+		...(Object.keys(autoRePin).length > 0 ? { autoRePin } : {}),
+	};
 }

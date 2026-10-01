@@ -46,6 +46,7 @@ export function laneForFindingKind(
 		case "stale_declaration":
 		case "repo_unresolved":
 		case "graphify_unavailable":
+		case "third_party_path":
 			return "construct";
 		case "boundary_module_file_mismatch":
 			return "static-topology";

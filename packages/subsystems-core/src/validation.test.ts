@@ -100,4 +100,77 @@ describe('validateSubsystemModelCrossField', () => {
       ),
     ).toEqual([]);
   });
+
+  test('flags a component file pointing into node_modules', () => {
+    const problems = validateSubsystemModelCrossField(
+      doc({
+        components: [
+          comp('dep', {
+            construct: 'store',
+            file: 'packages/react/node_modules/@pierre/diffs/dist/highlighter/shared_highlighter.js',
+          }),
+          comp('bare', { file: 'node_modules/left-pad/index.js' }),
+          // An external may carry such a path too — the path is the defect
+          // whichever construct claims it.
+          comp('ext', {
+            construct: 'external',
+            file: 'packages/react/node_modules/@pierre/diffs/dist/components/CodeView.js',
+          }),
+        ],
+      }),
+    );
+    expect(problems).toHaveLength(3);
+    expect(problems[0]!.path).toBe('/components/0/file');
+    expect(problems[0]!.message).toContain('node_modules');
+    expect(problems[1]!.path).toBe('/components/1/file');
+    expect(problems[2]!.path).toBe('/components/2/file');
+  });
+
+  test('accepts node_modules only as an external/proposed component identity', () => {
+    expect(
+      validateSubsystemModelCrossField(
+        doc({
+          components: [
+            // A dependency modeled as a package: no file, npm purl.
+            comp('dep', {
+              construct: 'external',
+              file: '',
+              purl: 'pkg:npm/@pierre/diffs',
+            }),
+            // A planned in-repo component may sit where it will live.
+            comp('plan', { file: 'packages/x/node_modules/y/z.ts', proposed: true }),
+            // `node_modulesx` is an ordinary directory, not the install root.
+            comp('ok', { file: 'packages/node_modulesx/z.ts' }),
+          ],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  test('flags a walkthrough step anchored in node_modules', () => {
+    const problems = validateSubsystemModelCrossField(
+      doc({
+        components: [comp('a')],
+        walkthroughs: [
+          {
+            id: 'w1',
+            title: 'flow',
+            steps: [
+              {
+                from: 'a',
+                to: 'a',
+                mechanism: 'calls',
+                file: 'packages/react/node_modules/@pierre/diffs/dist/index.js',
+                line: 1,
+                purl: 'pkg:npm/@pierre/diffs#packages/react/node_modules/@pierre/diffs/dist/index.js',
+                symbol: 'a',
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!.path).toBe('/walkthroughs/0/steps/0/file');
+  });
 });

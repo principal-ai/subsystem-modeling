@@ -12,8 +12,10 @@
  * module's exports so any component that imports them still resolves.
  */
 import type {
+	PartialViewerSettings,
 	SubsystemComponent,
 	SubsystemModelProposal,
+	ViewerSettings,
 } from "../../src/shared/contract";
 
 type RpcRequest = Record<string, (params?: unknown) => Promise<unknown>>;
@@ -76,6 +78,27 @@ function proposalId(params: unknown): string {
   return (params as { proposalId?: string } | undefined)?.proposalId ?? "";
 }
 
+let viewerSettings: ViewerSettings = {
+  defaultTabs: {
+    sessions: true,
+    maintenanceSessions: true,
+    trails: true,
+    graphify: false,
+    packageLayers: false,
+    subsystems: true,
+    maintenance: true,
+    opencodeV2: false,
+  },
+  autoAcceptSubsystemModelProposals: false,
+  autoAcceptSubsystemModelConfidenceThreshold: 0.9,
+  subsystemMaintainerModel: "opencode-go/deepseek-v4-flash",
+  regularAuditEnabled: true,
+  regularAuditIntervalMinutes: 5,
+  typesafeApiKey: null,
+  maintenanceRepoKey: "principal-ai/subsystem-modeling",
+  lastActiveTabId: null,
+};
+
 const request: RpcRequest = {
   listSubsystemModelProposals: async () => ({
     ok: true,
@@ -106,26 +129,22 @@ const request: RpcRequest = {
     graph: { components: MODEL_COMPONENTS },
   }),
   // Settings — ViewerSettings shape the modal reads.
-  getSettings: async () => ({
-    defaultTabs: {
-      sessions: true,
-      maintenanceSessions: true,
-      trails: true,
-      graphify: false,
-      packageLayers: false,
-      subsystems: true,
-      maintenance: true,
-      opencodeV2: false,
-    },
-    autoAcceptSubsystemModelProposals: false,
-    autoAcceptSubsystemModelConfidenceThreshold: 0.9,
-    subsystemMaintainerModel: "opencode-go/deepseek-v4-flash",
-    regularAuditEnabled: true,
-    regularAuditIntervalMinutes: 5,
-    typesafeApiKey: null,
-    maintenanceRepoKey: "principal-ai/subsystem-modeling",
-  }),
-  setSettings: async () => ({ ok: true, settings: {} }),
+  getSettings: async () => viewerSettings,
+  setSettings: async (params) => {
+    const patch = (params as { settings?: PartialViewerSettings } | undefined)
+      ?.settings;
+    if (patch) {
+      viewerSettings = {
+        ...viewerSettings,
+        ...patch,
+        defaultTabs: {
+          ...viewerSettings.defaultTabs,
+          ...(patch.defaultTabs ?? {}),
+        },
+      };
+    }
+    return { ok: true, settings: viewerSettings };
+  },
   openPromptTab: async () => ({ ok: true }),
   // Maintainer model picker.
   getSubsystemMaintainerModels: async () => ({

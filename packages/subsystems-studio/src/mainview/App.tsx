@@ -379,6 +379,10 @@ export function App() {
 	// Once the user clicks a tab, the host's boot/resume suggestion must not
 	// override their own selection on a later listTabs.
 	const userChoseRef = useRef(false);
+	// False until the first listTabs lands. The seed above is a placeholder, so
+	// the first refresh takes the host's suggestion (restored last tab, CLI start
+	// tab, seeded trail) instead of the placeholder.
+	const bootedRef = useRef(false);
 	// Activation history (oldest → newest) for MRU fallback when the active
 	// tab is closed. The renderer owns the on-screen tab, so it owns the
 	// recency order — the host only keeps a single resume suggestion.
@@ -454,6 +458,8 @@ export function App() {
 				);
 				let next: string;
 				if (focusValid) next = focusTabId!;
+				else if (!bootedRef.current && suggestionValid)
+					next = result.suggestedActiveTabId;
 				else if (currentValid) next = current;
 				else {
 					let mru: string | undefined;
@@ -475,6 +481,7 @@ export function App() {
 					// keeps the host's resume suggestion in sync.
 					void electrobun.rpc!.request.setActiveTab({ id: next });
 				}
+				bootedRef.current = true;
 			} catch (err) {
 				console.error("[principal-studio] listTabs failed:", err);
 			}

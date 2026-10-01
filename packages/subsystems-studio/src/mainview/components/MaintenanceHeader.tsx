@@ -1,8 +1,11 @@
 /**
  * MaintenanceHeader — the Maintainer tab's header bar: the "Maintainer" title
- * with the per-lane help buttons, and the action cluster (Audit all, Run
- * maintenance on all / Stop, Delete all, Accept confident). Pure — every action
- * is forwarded to the panel via callbacks.
+ * with the per-lane help buttons, and the proposal actions (Delete all, Accept
+ * confident). Pure — every action is forwarded to the panel via callbacks.
+ *
+ * The batch controls (Audit all, Run maintenance on all) live in
+ * {@link MaintenanceBatchActions}, rendered on the models section's "Models"
+ * label row so they sit with the list they act on.
  *
  * Also exports `LaneIconButton`, the header's lane help button.
  */
@@ -91,7 +94,14 @@ function actionButtonStyle(
 	} as const;
 }
 
-export function MaintenanceHeader({
+/**
+ * Batch controls for the models currently listed: Audit all, Run maintenance on
+ * all, and — while a batch is in flight — Stop plus its counters. Rendered on the
+ * "Models" label row rather than in the header bar: both act on every model in
+ * the list, so they belong next to the list, and the header keeps the
+ * proposal-wide actions. Pure — every action is forwarded to the panel.
+ */
+export function MaintenanceBatchActions({
 	modelCount,
 	auditAllActive,
 	auditAllStarting,
@@ -102,15 +112,9 @@ export function MaintenanceHeader({
 	repoBatchDone,
 	repoBatchSkipped,
 	repoBatchStopped,
-	pendingCount,
-	confidentPendingCount,
-	confidenceThreshold,
 	onAuditAll,
 	onRunAll,
 	onStopAll,
-	onDeleteAll,
-	onAcceptConfident,
-	onOpenLane,
 }: {
 	/** Visible (repo-filtered) model count — gates the batch buttons. */
 	modelCount: number;
@@ -123,23 +127,97 @@ export function MaintenanceHeader({
 	repoBatchDone: number;
 	repoBatchSkipped: number;
 	repoBatchStopped: number;
-	/** Pending proposals across every model — shows Delete all. */
-	pendingCount: number;
-	/** Visible pending proposals clearing the auto-accept bar. */
-	confidentPendingCount: number;
-	confidenceThreshold: number;
 	onAuditAll: () => void;
 	onRunAll: () => void;
 	onStopAll: () => void;
-	onDeleteAll: () => void;
-	onAcceptConfident: () => void;
-	onOpenLane: (lane: SubsystemVerificationLane) => void;
 }) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textSecondary;
 	const idle = modelCount === 0;
 	const auditDisabled = auditAllActive || idle;
 	const runDisabled = repoBatchActive || idle;
+	return (
+		<div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+			<button
+				type="button"
+				disabled={auditDisabled}
+				onClick={onAuditAll}
+				title="Dry-run the deterministic audit on every visible model (no agent, no mutations). Progress shows on each row."
+				style={actionButtonStyle(theme, theme.colors.border ?? "#333", auditDisabled)}
+			>
+				{auditAllActive || auditAllStarting ? (
+					<Loader2 size={13} className="principal-studio-spin" />
+				) : (
+					<ScanSearch size={13} />
+				)}
+				{auditAllActive
+					? `Auditing ${auditAuditedCount}/${auditAuditTotal}…`
+					: "Audit all"}
+			</button>
+			<button
+				type="button"
+				disabled={runDisabled}
+				onClick={onRunAll}
+				title="Run maintenance on every visible model in this repo, one at a time. Existing proposals are deleted first."
+				style={actionButtonStyle(theme, theme.colors.primary, runDisabled)}
+			>
+				{repoBatchActive ? (
+					<Loader2 size={13} className="principal-studio-spin" />
+				) : (
+					<Wrench size={13} />
+				)}
+				{repoBatchActive
+					? `Running… ${repoBatchDone}/${modelCount}`
+					: "Run maintenance on all"}
+			</button>
+			{repoBatchActive && (
+				<button
+					type="button"
+					disabled={repoBatchStopping}
+					onClick={onStopAll}
+					title="Stop after the model currently running finishes."
+					style={actionButtonStyle(
+						theme,
+						theme.colors.error ?? "#e5534b",
+						repoBatchStopping,
+					)}
+				>
+					<Square size={13} />
+					{repoBatchStopping ? "Stopping…" : "Stop"}
+				</button>
+			)}
+			{!repoBatchActive && repoBatchSkipped > 0 && (
+				<span style={{ fontSize: theme.fontSizes[1], color: muted }}>
+					{repoBatchSkipped} skipped (pending proposals)
+				</span>
+			)}
+			{!repoBatchActive && repoBatchStopped > 0 && (
+				<span style={{ fontSize: theme.fontSizes[1], color: muted }}>
+					{repoBatchStopped} stopped
+				</span>
+			)}
+		</div>
+	);
+}
+
+export function MaintenanceHeader({
+	pendingCount,
+	confidentPendingCount,
+	confidenceThreshold,
+	onDeleteAll,
+	onAcceptConfident,
+	onOpenLane,
+}: {
+	/** Pending proposals across every model — shows Delete all. */
+	pendingCount: number;
+	/** Visible pending proposals clearing the auto-accept bar. */
+	confidentPendingCount: number;
+	confidenceThreshold: number;
+	onDeleteAll: () => void;
+	onAcceptConfident: () => void;
+	onOpenLane: (lane: SubsystemVerificationLane) => void;
+}) {
+	const { theme } = useTheme();
 	return (
 		<div
 			style={{
@@ -184,64 +262,6 @@ export function MaintenanceHeader({
 				</span>
 			</span>
 			<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-				<button
-					type="button"
-					disabled={auditDisabled}
-					onClick={onAuditAll}
-					title="Dry-run the deterministic audit on every visible model (no agent, no mutations). Progress shows on each row."
-					style={actionButtonStyle(theme, theme.colors.border ?? "#333", auditDisabled)}
-				>
-					{auditAllActive || auditAllStarting ? (
-						<Loader2 size={13} className="principal-studio-spin" />
-					) : (
-						<ScanSearch size={13} />
-					)}
-					{auditAllActive
-						? `Auditing ${auditAuditedCount}/${auditAuditTotal}…`
-						: "Audit all"}
-				</button>
-				<button
-					type="button"
-					disabled={runDisabled}
-					onClick={onRunAll}
-					title="Run maintenance on every visible model in this repo, one at a time. Existing proposals are deleted first."
-					style={actionButtonStyle(theme, theme.colors.primary, runDisabled)}
-				>
-					{repoBatchActive ? (
-						<Loader2 size={13} className="principal-studio-spin" />
-					) : (
-						<Wrench size={13} />
-					)}
-					{repoBatchActive
-						? `Running… ${repoBatchDone}/${modelCount}`
-						: "Run maintenance on all"}
-				</button>
-				{repoBatchActive && (
-					<button
-						type="button"
-						disabled={repoBatchStopping}
-						onClick={onStopAll}
-						title="Stop after the model currently running finishes."
-						style={actionButtonStyle(
-							theme,
-							theme.colors.error ?? "#e5534b",
-							repoBatchStopping,
-						)}
-					>
-						<Square size={13} />
-						{repoBatchStopping ? "Stopping…" : "Stop"}
-					</button>
-				)}
-				{!repoBatchActive && repoBatchSkipped > 0 && (
-					<span style={{ fontSize: theme.fontSizes[1], color: muted }}>
-						{repoBatchSkipped} skipped (pending proposals)
-					</span>
-				)}
-				{!repoBatchActive && repoBatchStopped > 0 && (
-					<span style={{ fontSize: theme.fontSizes[1], color: muted }}>
-						{repoBatchStopped} stopped
-					</span>
-				)}
 				{pendingCount > 0 && (
 					<button
 						type="button"

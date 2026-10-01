@@ -64,7 +64,7 @@ import {
   type MaintainLivePanelProps,
 } from '../components/maintain-events/MaintainLivePanel';
 import type { WalkthroughSymbolQuery } from '../pierre/PierreWalkthroughCodeView';
-import { SubsystemComponentNode, SubsystemGroupNode, SubsystemEdge, SUBSYSTEM_CALLBACKS, hexWithAlpha, EDGE_DIM_ALPHA, fileMatchForNode, flowElementVisibility } from './nodes';
+import { SubsystemComponentNode, SubsystemGroupNode, SubsystemEdge, SUBSYSTEM_CALLBACKS, hexWithAlpha, EDGE_DIM_ALPHA, fileMatchForNode, flowElementVisibility, flowNodeVisibility } from './nodes';
 import { SubsystemDiagnosticToggle, type SubsystemDiagnostic } from './DiagnosticToggle';
 import {
   SubsystemIssueList,
@@ -1389,36 +1389,29 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
   // `isSelected` rides in data because the node's stopPropagation() keeps
   // React Flow's own selection state from updating.
   const dispNodes = useMemo(() => {
-    // While a step/flow is hovered, selected + hovered participants stay
-    // bright; everything else among the currently-visible (opened-walkthrough)
-    // nodes is dimmed. Nodes outside the opened-walkthrough set stay hidden.
-    // Exception: with no expanded flow at all (a sidebar-less embed), there is
-    // nothing to hide toward — everything shows, and focus/hover only dims.
-    const noOpenedFlow = openedEdgeIds == null;
+    // While a step/flow is hovered, hovered participants stay bright; every
+    // other node is dimmed (and, when a flow is expanded, hidden). Exception:
+    // with no expanded flow at all (a sidebar-less embed) there is nothing to
+    // hide toward — everything shows, and focus/hover only dims.
     return xyflowNodesBase.map((n) => {
       // Boundary frames follow their members: hidden when no member is
       // visible, dimmed when members are dimmed. Never selectable.
       if (n.type === 'subsystem-group') {
         const region = (n.data as { region?: { key?: string; memberAliases?: string[] } } | undefined)?.region;
         const memberAliases = region?.memberAliases ?? [];
-        // Hover/autoplay dim-only: never hide a frame (see the node branch).
-        const vis = flowElementVisibility({
+        // `brightNodeIds` is the focused step's endpoints. It has to be a
+        // spotlight member as well as a bright set: without an expanded flow
+        // there is no opened set, so dimming has to be driven from the
+        // participants or nothing outside the focused step would dim.
+        const dimSource = previewNodeIds ?? brightNodeIds ?? issueFocusNodeIds;
+        const { hidden, dimmed } = flowNodeVisibility({
           inOpened: memberAliases.some((alias) => openedNodeIds?.has(alias) === true),
           inSelected: memberAliases.some((alias) => brightNodeIds?.has(alias) === true),
+          inSpotlight: memberAliases.some((alias) => dimSource?.has(alias) === true),
           anyOpened: openedNodeIds != null,
-          anySelected: brightNodeIds != null || previewNodeIds != null,
+          anySelected: brightNodeIds != null,
+          anySpotlight: dimSource != null,
         });
-        // `brightNodeIds` is the focused step's endpoints. It has to be a dim
-        // source, not just a bright set: without an expanded flow,
-        // `flowElementVisibility` reports non-participants as *hidden*, and the
-        // noOpenedFlow escape below discards that — leaving them neither hidden
-        // nor dimmed. Naming the participants as the dim source dims everything
-        // outside the focused step however the flow got focused.
-        const dimSource = previewNodeIds ?? brightNodeIds ?? issueFocusNodeIds;
-        const dimmed = dimSource
-          ? vis.hidden || !memberAliases.some((alias) => dimSource.has(alias))
-          : vis.dimmed;
-        const hidden = noOpenedFlow ? false : vis.hidden;
         // Host override wins over the library's derived frame color.
         const color = region?.key != null ? boundaryColors?.[region.key] : undefined;
         // Boundary findings badge the FRAME, not a member — a region's shape is
@@ -1438,22 +1431,20 @@ function Inner({ components, walkthroughs, graphifyRelations, orderByLine, initi
       }
       const comp = (n.data as { component?: SubsystemComponent } | undefined)?.component;
       const fileMatch = fileMatchForNode(comp?.file, openFile, focusNodeIds?.has(n.id) === true);
-      // Hover/autoplay is a dim-only signal: never hide non-participants (there
-      // may be no "opened" flow to reveal them, e.g. a sidebar-less autoplay
-      // embed), only dim them. Bases selection on the focused step, not the
-      // hover preview, so hovering doesn't strip the frame's `isSelected`.
+      // Bases selection on the focused step, not the hover preview, so
+      // hovering doesn't strip the frame's `isSelected`.
       const isSelected = selected?.alias !== undefined && comp?.alias === selected.alias;
-      const vis = flowElementVisibility({
+      // `brightNodeIds` (the focused step's endpoints) is a spotlight member as
+      // well as a bright set — see the group branch above.
+      const dimSource = previewNodeIds ?? brightNodeIds ?? issueFocusNodeIds;
+      const { hidden, dimmed } = flowNodeVisibility({
         inOpened: openedNodeIds?.has(n.id) === true,
         inSelected: brightNodeIds?.has(n.id) === true,
+        inSpotlight: dimSource?.has(n.id) === true,
         anyOpened: openedNodeIds != null,
-        anySelected: brightNodeIds != null || previewNodeIds != null,
+        anySelected: brightNodeIds != null,
+        anySpotlight: dimSource != null,
       });
-      // `brightNodeIds` (the focused step's endpoints) is a dim source as well
-      // as a bright set — see the group branch above.
-      const dimSource = previewNodeIds ?? brightNodeIds ?? issueFocusNodeIds;
-      const dimmed = dimSource ? (vis.hidden || !dimSource.has(n.id)) : vis.dimmed;
-      const hidden = noOpenedFlow ? false : vis.hidden;
       // Component findings key by alias, boundary findings by region node id.
       // The two id spaces are disjoint (`module:` / `process:` are prefixed), so
       // one lookup covers both node kinds.

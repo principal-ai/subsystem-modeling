@@ -290,6 +290,34 @@ export function storeTypeStale(
 	return storeValueTypeOf(declaration) != null;
 }
 
+/** The npm package a path is installed from, when it sits in an install root. */
+export interface InstalledDependency {
+	packageName: string;
+}
+
+/**
+ * The npm package an installed path belongs to — `…/node_modules/@pierre/diffs/dist/x.js`
+ * → `@pierre/diffs` — or null when the path is ordinary repo source.
+ *
+ * Mirrors the `node_modules` invariant in `validateSubsystemModelCrossField`
+ * (subsystems-core). That one owns rejection at write time; this one only
+ * names the dependency so the audit finding can say which package to re-anchor.
+ */
+export function installedDependencyPackage(
+	file: string | undefined,
+): InstalledDependency | null {
+	if (!file) return null;
+	const segments = file.split("/");
+	const at = segments.lastIndexOf("node_modules");
+	if (at < 0) return null;
+	const name = segments[at + 1];
+	if (!name) return null;
+	// Scoped names take two segments (`@scope/pkg`); unscoped names end at `.`.
+	const scoped = name.startsWith("@") ? segments[at + 2] : undefined;
+	if (name.startsWith("@") && !scoped) return null;
+	return { packageName: scoped ? `${name}/${scoped}` : name };
+}
+
 async function captureDeclaration(
 	graphId: string,
 	components: SubsystemComponent[],
@@ -1018,11 +1046,7 @@ export async function auditSubsystemModel(
 	const cacheUnavailablePurls = new Set<string>();
 
 	for (const c of graph.components) {
-		if (
-			c.proposed ||
-			c.construct === "external" ||
-			c.construct === "custom_entity"
-		) {
+		if (c.proposed) {
 			externalsSkipped++;
 			okComponents++;
 			checks.push({
@@ -1039,9 +1063,68 @@ export async function auditSubsystemModel(
 				anchor: "n/a",
 				graphify: "skipped",
 				verdict: "skipped",
-				note: c.proposed
-					? "proposed — no source declaration check until promoted"
-					: "external / custom entity — no source declaration check",
+				note: "proposed — no source declaration check until promoted",
+			});
+			continue;
+		}
+
+		// A claim anchored into an install root is a third-party dependency
+		// wearing a repo-relative path: `node_modules/` is gitignored and its
+		// layout depends on hoisting, so the file can never resolve against the
+		// checkout named by `purl`. There is nothing to verify here — count it as
+		// n/a and report the rewrite, rather than leaving it as an environment
+		// `blocked` claim no proposal can close. Checked before the external skip
+		// because an external may carry such a path too, and the path is the
+		// defect either way. `validateSubsystemModelCrossField` rejects new ones
+		// at write time; this pass is for models stored before it.
+		const dependency = installedDependencyPackage(c.file);
+		if (dependency) {
+			externalsSkipped++;
+			okComponents++;
+			findings.push({
+				kind: "third_party_path",
+				severity: "info",
+				componentAlias: c.alias,
+				componentName: c.name,
+				message: `File ${c.file} points into node_modules — installed artifacts are not part of the repo and cannot be verified. Model ${dependency.packageName} as construct "external" with purl "pkg:npm/${dependency.packageName}" and no file, or anchor the claim to the package's real source.`,
+			});
+			checks.push({
+				componentAlias: c.alias,
+				componentName: c.name,
+				construct: c.construct,
+				symbol: c.symbol,
+				file: c.file || undefined,
+				fileExists: null,
+				symbolDeclared: null,
+				declarationFreshness: "n/a",
+				constructMatch: null,
+				signature: "n/a",
+				anchor: "n/a",
+				graphify: "skipped",
+				verdict: "skipped",
+				note: `installed dependency (${dependency.packageName}) — no repo source declaration check`,
+			});
+			continue;
+		}
+
+		if (c.construct === "external" || c.construct === "custom_entity") {
+			externalsSkipped++;
+			okComponents++;
+			checks.push({
+				componentAlias: c.alias,
+				componentName: c.name,
+				construct: c.construct,
+				symbol: c.symbol,
+				file: c.file || undefined,
+				fileExists: null,
+				symbolDeclared: null,
+				declarationFreshness: "n/a",
+				constructMatch: null,
+				signature: "n/a",
+				anchor: "n/a",
+				graphify: "skipped",
+				verdict: "skipped",
+				note: "external / custom entity — no source declaration check",
 			});
 			continue;
 		}

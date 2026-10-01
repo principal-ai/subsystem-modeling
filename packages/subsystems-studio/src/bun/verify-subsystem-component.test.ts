@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { storeTypeStale, storeTypeUndeclared } from "./verify-subsystem-component";
+import { installedDependencyPackage, storeTypeStale, storeTypeUndeclared } from "./verify-subsystem-component";
 import type { SubsystemComponent } from "../shared/contract";
 
 /**
@@ -142,5 +142,32 @@ describe("storeTypeStale", () => {
 		const undeclared = typedStore("memory");
 		expect(storeTypeUndeclared(undeclared)).toBe(true);
 		expect(storeTypeStale(undeclared, "stale")).toBe(false);
+	});
+});
+
+describe("installedDependencyPackage", () => {
+	test("names the package a node_modules path is installed from", () => {
+		expect(
+			installedDependencyPackage(
+				"packages/subsystems-react/node_modules/@pierre/diffs/dist/highlighter/shared_highlighter.js",
+			),
+		).toEqual({ packageName: "@pierre/diffs" });
+		expect(installedDependencyPackage("node_modules/left-pad/index.js")).toEqual({
+			packageName: "left-pad",
+		});
+	});
+
+	test("ordinary repo source is not a dependency", () => {
+		expect(installedDependencyPackage("packages/subsystems-core/src/index.ts")).toBeNull();
+		expect(installedDependencyPackage(undefined)).toBeNull();
+		expect(installedDependencyPackage("")).toBeNull();
+		// A directory that merely starts with the same letters is not an install root.
+		expect(installedDependencyPackage("packages/node_modulesx/a.js")).toBeNull();
+	});
+
+	test("an unscoped package wins over a deeper path", () => {
+		expect(
+			installedDependencyPackage("a/node_modules/pkg/node_modules/dep/b.js"),
+		).toEqual({ packageName: "dep" });
 	});
 });

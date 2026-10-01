@@ -138,7 +138,8 @@
         },
         "file": {
           "type": "string",
-          "description": "Repo-root-relative path of the source location this component lives in. Resolved against the checkout of the repo named by this component's `purl` (via the Alexandria registry). Empty string allowed for pure externals."
+          "pattern": "^(?!.*(^|/)node_modules(/|$)).*$",
+          "description": "Repo-root-relative path of the source location this component lives in. Resolved against the checkout of the repo named by this component's `purl` (via the Alexandria registry). Empty string allowed for pure externals. `node_modules/` is rejected: installed artifacts are not part of the repo — model a third-party dependency as `construct: external` with `purl: pkg:npm/<package>` and no file."
         },
         "purl": {
           "type": "string",
@@ -234,6 +235,7 @@
         "file": {
           "type": "string",
           "minLength": 1,
+          "pattern": "^(?!.*(^|/)node_modules(/|$)).*$",
           "description": "Repo-root-relative path where the seam fires for this walkthrough."
         },
         "line": {

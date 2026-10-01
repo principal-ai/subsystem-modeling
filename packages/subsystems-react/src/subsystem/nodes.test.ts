@@ -3,7 +3,7 @@ import { createElement, type ComponentProps } from 'react';
 import { cleanup, fireEvent, render } from '@testing-library/react/pure';
 import { ThemeProvider } from '@principal-ade/industry-theme';
 import { Window } from 'happy-dom';
-import { EDGE_DIM_ALPHA, fileMatchForNode, flowElementVisibility, hexWithAlpha, SubsystemGroupNode } from './nodes';
+import { EDGE_DIM_ALPHA, fileMatchForNode, flowElementVisibility, flowNodeVisibility, hexWithAlpha, SubsystemGroupNode } from './nodes';
 
 describe('hexWithAlpha', () => {
   test('appends a two-digit alpha to #rrggbb', () => {
@@ -56,5 +56,46 @@ describe('flowElementVisibility', () => {
       .toEqual({ hidden: false, dimmed: true });
     expect(flowElementVisibility({ inOpened: false, inSelected: false, anyOpened: true, anySelected: true }))
       .toEqual({ hidden: true, dimmed: false });
+  });
+});
+
+describe('flowNodeVisibility', () => {
+  // Hover preview over a graph with nothing expanded: the hovered step's two
+  // endpoints stay bright, every other node dims, and nothing hides.
+  test('hover with nothing expanded dims only the non-participants', () => {
+    const hover = { anyOpened: false, anySelected: false, anySpotlight: true };
+    expect(flowNodeVisibility({ ...hover, inOpened: false, inSelected: false, inSpotlight: true }))
+      .toEqual({ hidden: false, dimmed: false });
+    expect(flowNodeVisibility({ ...hover, inOpened: false, inSelected: false, inSpotlight: false }))
+      .toEqual({ hidden: false, dimmed: true });
+  });
+
+  test('hover over an expanded flow dims outsiders and hides the rest', () => {
+    const hover = { anyOpened: true, anySelected: false, anySpotlight: true };
+    expect(flowNodeVisibility({ ...hover, inOpened: true, inSelected: false, inSpotlight: true }))
+      .toEqual({ hidden: false, dimmed: false });
+    expect(flowNodeVisibility({ ...hover, inOpened: true, inSelected: false, inSpotlight: false }))
+      .toEqual({ hidden: false, dimmed: true });
+    expect(flowNodeVisibility({ ...hover, inOpened: false, inSelected: false, inSpotlight: true }))
+      .toEqual({ hidden: true, dimmed: true });
+  });
+
+  test('a focused step spotlights its endpoints whether or not a flow is expanded', () => {
+    const focus = { inOpened: false, inSelected: true, inSpotlight: true, anySelected: true, anySpotlight: true };
+    expect(flowNodeVisibility({ ...focus, anyOpened: false })).toEqual({ hidden: false, dimmed: false });
+    expect(flowNodeVisibility({ ...focus, anyOpened: true })).toEqual({ hidden: false, dimmed: false });
+    expect(flowNodeVisibility({ ...focus, anyOpened: true, inOpened: true }))
+      .toEqual({ hidden: false, dimmed: false });
+  });
+
+  test('no spotlight and nothing opened → every node full', () => {
+    expect(flowNodeVisibility({
+      inOpened: false,
+      inSelected: false,
+      inSpotlight: false,
+      anyOpened: false,
+      anySelected: false,
+      anySpotlight: false,
+    })).toEqual({ hidden: false, dimmed: false });
   });
 });

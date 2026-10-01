@@ -12,7 +12,7 @@
  * them.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
 	Ban,
 	Boxes,
@@ -27,6 +27,12 @@ import {
 	type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
+import {
+	ProvenanceBadge,
+	ProvenanceDetail,
+	type ModelProvenanceData,
+} from "./ModelProvenance";
+import type { AnchorChanges, ModelProvenanceDetail } from "../../shared/contract";
 import type {
 	MaintenanceOverviewModel,
 	SubsystemModelProposal,
@@ -524,6 +530,9 @@ export function MaintenanceModelCard({
 	runsOpen,
 	briefCopied,
 	proposalCounts,
+	provenance,
+	provenanceOpen,
+	onToggleProvenance,
 	onToggleRuns,
 	onOpenModel,
 	onRunMaintenance,
@@ -547,6 +556,16 @@ export function MaintenanceModelCard({
 	/** The Brief-agent copy just landed for this model. */
 	briefCopied: boolean;
 	proposalCounts?: Partial<Record<SubsystemVerificationLane, number>>;
+	/**
+	 * Commit provenance for this model — "verified at X, and this has happened
+	 * since". Omitted when the host has not measured it, in which case the card
+	 * renders exactly as it did before.
+	 */
+	provenance?: ModelProvenanceData;
+	/** The provenance timeline strip is expanded. */
+	provenanceOpen?: boolean;
+	/** Expand / collapse the provenance strip. Omit to render the badge inert. */
+	onToggleProvenance?: (graphId: string) => void;
 	onToggleRuns: (graphId: string) => void;
 	onOpenModel: (model: MaintenanceOverviewModel) => void;
 	onRunMaintenance: (model: MaintenanceOverviewModel) => void;
@@ -665,111 +684,6 @@ export function MaintenanceModelCard({
 					{model.title}
 				</span>
 			</span>
-			{runLabel && (
-			<button
-				type="button"
-				disabled={runDisabled}
-				onClick={(e) => {
-					e.stopPropagation();
-					onRunMaintenance(model);
-				}}
-				title={
-					blocked
-						? "Some claims can't be verified until the repo is available locally / its graphify cache is built."
-						: "Run a background maintenance pass: audits this model and drafts a proposal for the first fixable finding (does not auto-accept)."
-				}
-				style={{
-					padding: "0 10px",
-					height: 26,
-					borderRadius: 6,
-					fontSize: theme.fontSizes[1],
-					fontFamily: theme.fonts.body,
-					background: "transparent",
-					color: runDisabled ? muted : theme.colors.primary,
-					border: `1px solid ${
-						runDisabled ? (theme.colors.border ?? "#333") : theme.colors.primary
-					}`,
-					cursor: runDisabled ? "default" : "pointer",
-					opacity: runDisabled ? 0.6 : 1,
-					display: "inline-flex",
-					alignItems: "center",
-					gap: 6,
-					flexShrink: 0,
-				}}
-			>
-				{rowBusy ? (
-					<Loader2 size={11} className="principal-studio-spin" />
-				) : (
-					<Wrench size={11} />
-				)}
-				{runLabel}
-			</button>
-			)}
-			<button
-				type="button"
-				onClick={(e) => {
-					e.stopPropagation();
-					onCopyBrief(model.graphId);
-				}}
-				title="Copy a verification brief for this model — paste it to an agent to ask questions about what is and isn't verified."
-				style={{
-					padding: "0 10px",
-					height: 26,
-					borderRadius: 6,
-					fontSize: theme.fontSizes[1],
-					fontFamily: theme.fonts.body,
-					background:
-						briefCopied
-							? (theme.colors.primary ?? "#2da44e")
-							: "transparent",
-					color:
-						briefCopied
-							? theme.colors.background
-							: muted,
-					border: `1px solid ${
-						briefCopied
-							? theme.colors.primary
-							: (theme.colors.border ?? "#333")
-					}`,
-					cursor: "pointer",
-					display: "inline-flex",
-					alignItems: "center",
-					gap: 6,
-					flexShrink: 0,
-				}}
-			>
-				{briefCopied ? (
-					<Check size={11} />
-				) : (
-					<Copy size={11} />
-				)}
-				{/* Both labels share one grid cell so the button
-				    keeps the wider label's width when it flips. */}
-				<span style={{ display: "inline-grid" }}>
-					<span
-						style={{
-							gridArea: "1 / 1",
-							visibility:
-								briefCopied
-									? "hidden"
-									: "visible",
-						}}
-					>
-						Brief agent
-					</span>
-					<span
-						style={{
-							gridArea: "1 / 1",
-							visibility:
-								briefCopied
-									? "visible"
-									: "hidden",
-						}}
-					>
-						Copied
-					</span>
-				</span>
-			</button>
 			<LaneBadges
 				lanes={model.lanes ?? {}}
 				colors={theme.colors}
@@ -779,6 +693,149 @@ export function MaintenanceModelCard({
 				onOpenProposals={(lane) => onOpenProposals(model, lane)}
 			/>
 			</div>
+			{/*
+			 * Second row: when the model was checked on the left, the action on
+			 * the right. Always rendered so Run keeps one consistent home —
+			 * otherwise it jumps between rows as provenance arrives, and a
+			 * button that moves is a button that gets misclicked.
+			 *
+			 * The badge reads as a note under the card rather than a fourth
+			 * verdict, because row 1 already answers "how much passes" and this
+			 * answers "when was it checked" — different axes.
+			 */}
+			<div
+				style={{
+					display: "flex",
+					alignItems: "center",
+					gap: 8,
+					padding: "2px 10px 8px",
+					minHeight: 34,
+				}}
+			>
+				{provenance && (
+					<ProvenanceBadge
+						provenance={provenance}
+						open={provenanceOpen}
+						onToggle={
+							onToggleProvenance
+								? () => onToggleProvenance(model.graphId)
+								: undefined
+						}
+					/>
+				)}
+				{provenanceOpen && provenance && (
+					<span
+						style={{
+							minWidth: 0,
+							fontSize: theme.fontSizes[0],
+							color: muted,
+						}}
+					>
+						since last verification
+					</span>
+				)}
+				<span style={{ flex: 1 }} />
+				<button
+					type="button"
+					onClick={(e) => {
+						e.stopPropagation();
+						onCopyBrief(model.graphId);
+					}}
+					title="Copy a verification brief for this model — paste it to an agent to ask questions about what is and isn't verified."
+					style={{
+						padding: "0 10px",
+						height: 26,
+						borderRadius: 6,
+						fontSize: theme.fontSizes[1],
+						fontFamily: theme.fonts.body,
+						background: briefCopied
+							? (theme.colors.primary ?? "#2da44e")
+							: "transparent",
+						color: briefCopied ? theme.colors.background : muted,
+						border: `1px solid ${
+							briefCopied
+								? theme.colors.primary
+								: (theme.colors.border ?? "#333")
+						}`,
+						cursor: "pointer",
+						display: "inline-flex",
+						alignItems: "center",
+						gap: 6,
+						flexShrink: 0,
+					}}
+				>
+					{briefCopied ? (
+						<Check size={11} />
+					) : (
+						<Copy size={11} />
+					)}
+					{/* Both labels share one grid cell so the button
+					    keeps the wider label's width when it flips. */}
+					<span style={{ display: "inline-grid" }}>
+						<span
+							style={{
+								gridArea: "1 / 1",
+								visibility: briefCopied ? "hidden" : "visible",
+							}}
+						>
+							Brief agent
+						</span>
+						<span
+							style={{
+								gridArea: "1 / 1",
+								visibility: briefCopied ? "visible" : "hidden",
+							}}
+						>
+							Copied
+						</span>
+					</span>
+				</button>
+				{runLabel && (
+					<button
+						type="button"
+						disabled={runDisabled}
+						onClick={(e) => {
+							e.stopPropagation();
+							onRunMaintenance(model);
+						}}
+						title={
+							blocked
+								? "Some claims can't be verified until the repo is available locally / its graphify cache is built."
+								: "Run a background maintenance pass: audits this model and drafts a proposal for the first fixable finding (does not auto-accept)."
+						}
+						style={{
+							padding: "0 10px",
+							height: 26,
+							borderRadius: 6,
+							fontSize: theme.fontSizes[1],
+							fontFamily: theme.fonts.body,
+							background: "transparent",
+							color: runDisabled ? muted : theme.colors.primary,
+							border: `1px solid ${
+								runDisabled ? (theme.colors.border ?? "#333") : theme.colors.primary
+							}`,
+							cursor: runDisabled ? "default" : "pointer",
+							opacity: runDisabled ? 0.6 : 1,
+							display: "inline-flex",
+							alignItems: "center",
+							gap: 6,
+							flexShrink: 0,
+						}}
+					>
+						{rowBusy ? (
+							<Loader2 size={11} className="principal-studio-spin" />
+						) : (
+							<Wrench size={11} />
+						)}
+						{runLabel}
+					</button>
+				)}
+			</div>
+			{provenanceOpen && provenance && (
+				<div style={{ padding: "0 10px 8px" }}>
+					<ProvenanceDetail provenance={provenance} />
+				</div>
+			)}
 			{model.blocked > 0 && (
 				<div
 					style={{
@@ -928,8 +985,35 @@ export function MaintenanceModelCard({
 }
 
 /**
- * The "Models" section: an uppercase label, an empty-state message, and one
- * card per model. Pure — every interaction is forwarded to the panel.
+ * Fold the lazily-fetched detail tier over the cheap snapshot.
+ *
+ * The two carry overlapping fields, so the merge is per-purl rather than a
+ * replacement: the snapshot measured contact and distance, the detail re-walks
+ * the log to add `commits` and the remote's position. Taking the snapshot's
+ * values would throw away the walk; replacing wholesale would throw away the
+ * measurement the walk never recomputes.
+ */
+function mergeProvenance(
+	snapshot: ModelProvenanceData | undefined,
+	detail: ModelProvenanceDetail | undefined,
+): ModelProvenanceData | undefined {
+	if (!snapshot) return undefined;
+	if (!detail) return snapshot;
+	const anchorChanges: Record<string, AnchorChanges> = {};
+	for (const [purl, base] of Object.entries(snapshot.anchorChanges ?? {})) {
+		anchorChanges[purl] = { ...base, ...(detail.anchorChanges?.[purl] ?? {}) };
+	}
+	return {
+		...snapshot,
+		anchorChanges:
+			Object.keys(anchorChanges).length > 0 ? anchorChanges : undefined,
+	};
+}
+
+/**
+ * The "Models" section: an uppercase label with an optional action slot, an
+ * empty-state message, and one card per model. Pure — every interaction is
+ * forwarded to the panel.
  */
 export function MaintenanceModelList({
 	models,
@@ -939,10 +1023,14 @@ export function MaintenanceModelList({
 	proposalsByGraph,
 	feeds,
 	expandedRuns,
+	expandedProvenance,
+	provenanceDetailByGraph,
 	briefCopiedId,
 	proposalCountsByGraph,
+	headerActions,
 	emptyMessage = "No subsystem models.",
 	onToggleRuns,
+	onToggleProvenance,
 	onOpenModel,
 	onRunMaintenance,
 	onCopyBrief,
@@ -960,6 +1048,10 @@ export function MaintenanceModelList({
 	proposalsByGraph: ReadonlyMap<string, SubsystemModelProposal[]>;
 	feeds: Record<string, FeedEntry>;
 	expandedRuns: ReadonlySet<string>;
+	/** Model ids whose provenance strip is expanded. */
+	expandedProvenance?: ReadonlySet<string>;
+	/** Lazily-fetched expensive provenance tier, keyed by model id. */
+	provenanceDetailByGraph?: ReadonlyMap<string, ModelProvenanceDetail>;
 	briefCopiedId: string | null;
 	proposalCountsByGraph: ReadonlyMap<
 		string,
@@ -967,7 +1059,14 @@ export function MaintenanceModelList({
 	>;
 	/** Shown when `models` is empty. */
 	emptyMessage?: string;
+	/**
+	 * Rendered at the right of the "Models" label — the list-wide batch controls
+	 * (Audit all, Run maintenance on all). Omitted renders the label alone.
+	 */
+	headerActions?: ReactNode;
 	onToggleRuns: (graphId: string) => void;
+	/** Expand/collapse a model's provenance strip. */
+	onToggleProvenance: (graphId: string) => void;
 	onOpenModel: (model: MaintenanceOverviewModel) => void;
 	onRunMaintenance: (model: MaintenanceOverviewModel) => void;
 	onCopyBrief: (graphId: string) => void;
@@ -1007,14 +1106,24 @@ export function MaintenanceModelList({
 		>
 			<div
 				style={{
-					fontSize: theme.fontSizes[1],
-					textTransform: "uppercase",
-					letterSpacing: 0.3,
-					color: muted,
+					display: "flex",
+					alignItems: "center",
+					justifyContent: "space-between",
+					gap: 12,
 					padding: "12px 12px 12px 0",
 				}}
 			>
-				Models
+				<span
+					style={{
+						fontSize: theme.fontSizes[1],
+						textTransform: "uppercase",
+						letterSpacing: 0.3,
+						color: muted,
+					}}
+				>
+					Models
+				</span>
+				{headerActions}
 			</div>
 			<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
 				{models.map((m) => (
@@ -1027,6 +1136,12 @@ export function MaintenanceModelList({
 						maintainRunning={running.includes(m.graphId)}
 						auditRunning={auditing.includes(m.graphId)}
 						runsOpen={expandedRuns.has(m.graphId)}
+						provenance={mergeProvenance(
+							m.provenance,
+							provenanceDetailByGraph?.get(m.graphId),
+						)}
+						provenanceOpen={expandedProvenance?.has(m.graphId) ?? false}
+						onToggleProvenance={onToggleProvenance}
 						briefCopied={briefCopiedId === m.graphId}
 						proposalCounts={proposalCountsByGraph.get(m.graphId)}
 						onToggleRuns={onToggleRuns}

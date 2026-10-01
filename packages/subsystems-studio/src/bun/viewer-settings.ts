@@ -3,33 +3,22 @@
  * permanent tabs appear by default, etc.).
  *
  * Single JSON file at `~/.principal/principal-studio-settings.json`. Missing or
- * corrupt files fall back to defaults (all default tabs on).
+ * corrupt files fall back to defaults (Subsystems and Maintainer on).
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type {
-	DefaultTabFlags,
-	PartialViewerSettings,
-	ViewerSettings,
+import {
+	DEFAULT_TAB_FLAGS,
+	type PartialViewerSettings,
+	type ViewerSettings,
 } from "../shared/contract";
 import { migrateLegacyStoreFile } from "./legacy-store-migrate";
 
 const STORE_PATH = join(homedir(), ".principal", "principal-studio-settings.json");
 
 migrateLegacyStoreFile("trail-viewer-settings.json", STORE_PATH);
-
-const DEFAULT_TAB_FLAGS: DefaultTabFlags = {
-	sessions: true,
-	maintenanceSessions: true,
-	trails: true,
-	graphify: true,
-	packageLayers: true,
-	subsystems: true,
-	maintenance: true,
-	opencodeV2: true,
-};
 
 /** Floor for regular audit interval (minutes). */
 export const REGULAR_AUDIT_INTERVAL_MIN_MINUTES = 5;
@@ -49,6 +38,7 @@ export function defaultViewerSettings(): ViewerSettings {
 		regularAuditIntervalMinutes: REGULAR_AUDIT_INTERVAL_DEFAULT_MINUTES,
 		typesafeApiKey: null,
 		maintenanceRepoKey: null,
+		lastActiveTabId: null,
 	};
 }
 
@@ -139,6 +129,10 @@ function normalize(raw: unknown): ViewerSettings {
 			"maintenanceRepoKey" in obj
 				? coerceModelRef(obj["maintenanceRepoKey"])
 				: defaults.maintenanceRepoKey,
+		lastActiveTabId:
+			"lastActiveTabId" in obj
+				? coerceModelRef(obj["lastActiveTabId"])
+				: defaults.lastActiveTabId,
 	};
 }
 
@@ -205,6 +199,10 @@ export function patchViewerSettings(
 			patch.maintenanceRepoKey !== undefined
 				? coerceModelRef(patch.maintenanceRepoKey)
 				: current.maintenanceRepoKey,
+		lastActiveTabId:
+			patch.lastActiveTabId !== undefined
+				? coerceModelRef(patch.lastActiveTabId)
+				: current.lastActiveTabId,
 	};
 	return saveViewerSettings(next);
 }

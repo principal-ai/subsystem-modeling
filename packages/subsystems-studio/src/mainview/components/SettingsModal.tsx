@@ -7,7 +7,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Gauge, KeyRound, SlidersHorizontal } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
-import type { DefaultTabFlags, ViewerSettings } from "../../shared/contract";
+import {
+	DEFAULT_TAB_FLAGS,
+	type DefaultTabFlags,
+	type ViewerSettings,
+} from "../../shared/contract";
 import { electrobun } from "../rpc";
 
 const TAB_TOGGLES: Array<{
@@ -68,16 +72,7 @@ const REGULAR_AUDIT_INTERVAL_OPTIONS = [
 ] as const;
 
 const FALLBACK_SETTINGS: ViewerSettings = {
-	defaultTabs: {
-		sessions: true,
-		maintenanceSessions: true,
-		trails: true,
-		graphify: true,
-		packageLayers: true,
-		subsystems: true,
-		maintenance: true,
-		opencodeV2: true,
-	},
+	defaultTabs: { ...DEFAULT_TAB_FLAGS },
 	autoAcceptSubsystemModelProposals: false,
 	autoAcceptSubsystemModelConfidenceThreshold: 0.85,
 	subsystemMaintainerModel: null,
@@ -85,10 +80,12 @@ const FALLBACK_SETTINGS: ViewerSettings = {
 	regularAuditIntervalMinutes: 5,
 	typesafeApiKey: null,
 	maintenanceRepoKey: null,
+	lastActiveTabId: null,
 };
 
 type SavingKey =
 	| keyof DefaultTabFlags
+	| "resetTabs"
 	| "autoAccept"
 	| "autoAcceptThreshold"
 	| "regularAudit"
@@ -144,8 +141,21 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 		freeCount: number;
 	} | null>(null);
 	const [activeTab, setActiveTab] = useState<SettingsTab>("tabs");
+	const [narrow, setNarrow] = useState(() =>
+		typeof window !== "undefined"
+			? window.matchMedia("(max-width: 720px)").matches
+			: false,
+	);
 	const activeTabMeta =
 		SETTINGS_TABS.find((tab) => tab.id === activeTab) ?? SETTINGS_TABS[0];
+
+	useEffect(() => {
+		const mq = window.matchMedia("(max-width: 720px)");
+		const onChange = () => setNarrow(mq.matches);
+		onChange();
+		mq.addEventListener("change", onChange);
+		return () => mq.removeEventListener("change", onChange);
+	}, []);
 
 	useEffect(() => {
 		let alive = true;
@@ -215,6 +225,34 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 			setSavingKey(null);
 		}
 	}, [settings]);
+
+	const resetDefaultTabs = useCallback(async () => {
+		if (!settings || savingKey !== null) return;
+		const defaults = FALLBACK_SETTINGS.defaultTabs;
+		const prev = settings.defaultTabs;
+		const alreadyDefault = TAB_TOGGLES.every(
+			(row) => prev[row.key] === defaults[row.key],
+		);
+		if (alreadyDefault) return;
+		setSavingKey("resetTabs");
+		setSettings({
+			...settings,
+			defaultTabs: { ...defaults },
+		});
+		try {
+			const res = await electrobun.rpc!.request.setSettings({
+				settings: { defaultTabs: { ...defaults } },
+			});
+			if (res.ok && res.settings?.defaultTabs) setSettings(res.settings);
+		} catch {
+			setSettings({
+				...settings,
+				defaultTabs: prev,
+			});
+		} finally {
+			setSavingKey(null);
+		}
+	}, [settings, savingKey]);
 
 	const toggleAutoAccept = useCallback(async () => {
 		if (!settings) return;
@@ -344,6 +382,16 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 	// can't see that here.)
 	const hasTypesafeKey = Boolean(settings?.typesafeApiKey);
 
+	const tabsAtDefaults =
+		!!settings &&
+		TAB_TOGGLES.every(
+			(row) =>
+				settings.defaultTabs[row.key] ===
+				FALLBACK_SETTINGS.defaultTabs[row.key],
+		);
+	const resetTabsEnabled =
+		!!settings && !tabsAtDefaults && savingKey === null;
+
 	const intervalOptions = (() => {
 		const current = settings?.regularAuditIntervalMinutes ?? 5;
 		if (REGULAR_AUDIT_INTERVAL_OPTIONS.some((o) => o.value === current)) {
@@ -414,6 +462,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 				<div
 					style={{
 						display: "flex",
+						flexDirection: narrow ? "column" : "row",
 						flex: 1,
 						minHeight: 0,
 						overflow: "hidden",
@@ -421,15 +470,21 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 				>
 					<nav
 						style={{
-							width: 184,
+							width: narrow ? "auto" : 184,
 							flexShrink: 0,
 							display: "flex",
-							flexDirection: "column",
+							flexDirection: narrow ? "row" : "column",
 							gap: 4,
 							padding: 12,
-							borderRight: `1px solid ${theme.colors.border}`,
+							borderRight: narrow
+								? "none"
+								: `1px solid ${theme.colors.border}`,
+							borderBottom: narrow
+								? `1px solid ${theme.colors.border}`
+								: "none",
 							background: theme.colors.background,
-							overflowY: "auto",
+							overflowX: narrow ? "auto" : undefined,
+							overflowY: narrow ? "hidden" : "auto",
 						}}
 					>
 						{SETTINGS_TABS.map((tab) => {
@@ -444,7 +499,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 										display: "flex",
 										alignItems: "center",
 										gap: 10,
-										width: "100%",
+										width: narrow ? "auto" : "100%",
+										flexShrink: narrow ? 0 : undefined,
+										whiteSpace: narrow ? "nowrap" : undefined,
 										padding: "8px 10px",
 										borderRadius: 8,
 										border: `1px solid ${active ? theme.colors.border : "transparent"}`,
@@ -477,14 +534,69 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 							flex: 1,
 							minWidth: 0,
 							overflowY: "auto",
-							padding: "20px 24px",
+							padding: narrow ? "16px 14px" : "20px 24px",
 						}}
 					>
 						{activeTab === "tabs" && (
 							<div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+								<div
+									style={{
+										display: "flex",
+										flexDirection: narrow ? "column" : "row",
+										alignItems: narrow ? "stretch" : "center",
+										justifyContent: "space-between",
+										gap: 12,
+										marginBottom: 4,
+									}}
+								>
+									<span
+										style={{
+											fontSize: theme.fontSizes[0],
+											color: muted,
+											lineHeight: 1.4,
+										}}
+									>
+										Subsystems and Maintainer start on. Reset restores that.
+									</span>
+									<button
+										type="button"
+										onClick={() => void resetDefaultTabs()}
+										disabled={!resetTabsEnabled}
+										title={
+											tabsAtDefaults
+												? "Subsystems and Maintainer are already the only tabs on"
+												: "Show only Subsystems and Maintainer"
+										}
+										style={{
+											flexShrink: 0,
+											padding: "0 14px",
+											height: 32,
+											borderRadius: 6,
+											fontSize: theme.fontSizes[1],
+											fontWeight: 500,
+											fontFamily: theme.fonts.body,
+											background: resetTabsEnabled
+												? theme.colors.surface
+												: theme.colors.background,
+											color: resetTabsEnabled
+												? theme.colors.text
+												: muted,
+											border: `1px solid ${theme.colors.border}`,
+											cursor: resetTabsEnabled ? "pointer" : "default",
+											opacity: resetTabsEnabled ? 1 : 0.7,
+										}}
+									>
+										{savingKey === "resetTabs"
+											? "Resetting…"
+											: "Reset defaults"}
+									</button>
+								</div>
 								{TAB_TOGGLES.map((row) => {
-									const on = settings?.defaultTabs[row.key] ?? true;
-									const busy = savingKey === row.key;
+									const on =
+										settings?.defaultTabs[row.key] ??
+										DEFAULT_TAB_FLAGS[row.key];
+									const busy =
+										savingKey === row.key || savingKey === "resetTabs";
 									return (
 										<label
 											key={row.key}

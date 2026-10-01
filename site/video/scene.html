@@ -1,0 +1,634 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg:      #0b0a12;
+    --ink:     #f3f4f6;
+    --dim:     #9ca3af;
+    --faint:   #5f5e6d;
+    --brand:      #4c6a91;
+    --brand-bright:#9bb4d4;
+    --gold:    #dab240;
+    --purple:  #a78bda;
+    --green:   #7ee787;
+    --amber:   #e8a33d;
+    --teal:    #6ba3b8;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --sans: -apple-system, system-ui, "Segoe UI", sans-serif;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:1920px; height:1080px; overflow:hidden; background:var(--bg); }
+  body { font-family:var(--sans); color:var(--ink); -webkit-font-smoothing:antialiased; }
+  #stage { position:relative; width:1920px; height:1080px; overflow:hidden; }
+
+  .bgwash { position:absolute; inset:0; opacity:0; }
+  .grid {
+    position:absolute; inset:0; opacity:0;
+    background-image:
+      linear-gradient(rgba(155,180,212,.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(155,180,212,.055) 1px, transparent 1px);
+    background-size: 64px 64px;
+  }
+  .vignette {
+    position:absolute; inset:0; pointer-events:none;
+    background: radial-gradient(ellipse 78% 68% at 50% 46%, transparent 40%, rgba(0,0,0,.55) 100%);
+  }
+
+  /* ---------- shared type ---------- */
+  .scene { position:absolute; inset:0; opacity:0; }
+  .center { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .h1 { font-size:76px; font-weight:600; letter-spacing:-.028em; line-height:1.06; text-align:center; }
+  .h2 { font-size:58px; font-weight:600; letter-spacing:-.024em; line-height:1.1; text-align:center; }
+  .lede { font-size:27px; font-weight:400; color:var(--dim); letter-spacing:-.005em; line-height:1.4; text-align:center; }
+  .mono { font-family:var(--mono); }
+  .w { display:inline-block; will-change:transform,opacity; }
+
+  /* ---------- persistent chrome ---------- */
+  .mark {
+    position:absolute; left:64px; top:56px; opacity:0;
+    display:flex; align-items:center; gap:13px;
+    font-family:var(--mono); font-size:15px; letter-spacing:.30em;
+    color:var(--brand-bright); text-transform:uppercase;
+  }
+  .marklogo { display:block; flex:0 0 auto; }
+  .progress { position:absolute; left:0; bottom:0; height:2px; background:var(--brand-bright); width:0; opacity:0; }
+
+  /* ---------- graph ---------- */
+  #graphlayer { position:absolute; inset:0; transform-origin:960px 540px; will-change:transform; }
+  #edges { position:absolute; inset:0; width:1920px; height:1080px; }
+  #nodes { position:absolute; inset:0; }
+  #edgelabels { position:absolute; inset:0; }
+  .node {
+    position:absolute; width:250px; height:64px; margin-left:-125px; margin-top:-32px;
+    border-radius:12px; border:1.5px solid var(--brand-bright);
+    background:linear-gradient(180deg, rgba(30,34,48,.96), rgba(20,22,33,.96));
+    padding:9px 13px; opacity:0; will-change:transform,opacity;
+    box-shadow: 0 10px 34px rgba(0,0,0,.45);
+  }
+  .node .nm { font-family:var(--mono); font-size:16px; font-weight:600; letter-spacing:-.01em; line-height:1.15; white-space:nowrap; }
+  .node .mt { display:flex; gap:6px; align-items:center; margin-top:6px; }
+  .tag {
+    font-family:var(--mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase;
+    padding:2px 6px; border-radius:4px; border:1px solid rgba(155,180,212,.34);
+    color:var(--brand-bright); background:rgba(155,180,212,.09); white-space:nowrap;
+  }
+  .tag.ext { color:var(--purple); border-color:rgba(167,139,218,.42); background:rgba(167,139,218,.11); }
+  .tag.cli { color:var(--green);  border-color:rgba(126,231,135,.34); background:rgba(126,231,135,.09); }
+  .tag.srv { color:var(--teal);   border-color:rgba(107,163,184,.40); background:rgba(107,163,184,.10); }
+  .node.ext { border-color:var(--purple); background:linear-gradient(180deg, rgba(38,30,52,.96), rgba(26,21,36,.96)); }
+  .node.lit { border-color:var(--gold); box-shadow:0 0 0 1px rgba(218,178,64,.30), 0 12px 40px rgba(218,178,64,.14); }
+  .node.lit .nm { color:var(--gold); }
+
+  .elabel {
+    position:absolute; transform:translate(-50%,-50%); opacity:0;
+    font-family:var(--mono); font-size:12.5px; letter-spacing:.05em;
+    padding:3.5px 9px; border-radius:20px; white-space:nowrap;
+    background:rgba(11,10,18,.90); border:1px solid rgba(155,180,212,.30); color:var(--brand-bright);
+  }
+  .elabel.wire { border-color:rgba(232,163,61,.62); color:var(--amber); }
+  .elabel.io   { border-color:rgba(167,139,218,.55); color:var(--purple); }
+
+  /* ---------- graph header ---------- */
+  .ghead { position:absolute; left:0; right:0; top:92px; text-align:center; opacity:0; }
+  .gtitle { font-family:var(--mono); font-size:23px; font-weight:600; letter-spacing:-.005em; }
+  .gsub { font-size:19px; color:var(--dim); margin-top:11px; letter-spacing:-.003em; }
+
+  /* ---------- code panel + walkthrough card ---------- */
+  .codewrap { position:absolute; left:60px; right:60px; top:628px; height:384px; display:flex; gap:20px; opacity:0; }
+
+  .codeview {
+    flex:1 1 auto; border:1px solid rgba(155,180,212,.24); border-radius:15px; overflow:hidden;
+    background:rgba(13,14,22,.95); display:flex; flex-direction:column;
+  }
+  .codehead {
+    flex:0 0 auto; display:flex; align-items:center; gap:12px;
+    padding:12px 18px; border-bottom:1px solid rgba(155,180,212,.16);
+    background:rgba(155,180,212,.05);
+  }
+  .codehead .path { font-family:var(--mono); font-size:14.5px; color:var(--brand-bright); }
+  .codehead .at { font-family:var(--mono); font-size:14.5px; color:var(--gold); }
+  .codehead .spacer { flex:1 1 auto; }
+  .codehead .badge {
+    font-family:var(--mono); font-size:10.5px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--green); border:1px solid rgba(126,231,135,.4); background:rgba(126,231,135,.09);
+    border-radius:999px; padding:3.5px 10px;
+  }
+  .codebody { flex:1 1 auto; padding:9px 0 0; overflow:hidden; }
+  .cl { display:flex; align-items:baseline; gap:14px; height:19px; opacity:0; }
+  .cl .ln {
+    flex:0 0 auto; width:52px; text-align:right; padding-right:2px;
+    font-family:var(--mono); font-size:12.5px; color:var(--faint);
+  }
+  .cl .tx { font-family:var(--mono); font-size:15px; color:var(--dim); white-space:pre; letter-spacing:-.01em; }
+  .cl.hl { background:rgba(218,178,64,.13); box-shadow:inset 3px 0 0 var(--gold); }
+  .cl.hl .ln { color:var(--gold); }
+  .cl.hl .tx { color:var(--ink); }
+  .cl .tx b { color:var(--gold); font-weight:600; }
+
+  .wtcard {
+    flex:0 0 520px; border:1px solid rgba(155,180,212,.24); border-radius:15px;
+    background:rgba(16,17,26,.95); padding:20px 22px; display:flex; flex-direction:column;
+  }
+  .wtcard .wt { font-family:var(--mono); font-size:11.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--gold); }
+  .wtcard .ws { font-family:var(--mono); font-size:11.5px; letter-spacing:.14em; color:var(--faint); margin-top:6px; }
+  .wtcard .hop { font-family:var(--mono); font-size:21px; margin-top:16px; line-height:1.35; letter-spacing:-.015em; }
+  .wtcard .hop .mech { color:var(--amber); }
+  .wtcard .ann { font-size:16.5px; color:var(--dim); margin-top:12px; line-height:1.4; }
+  .wtcard .sym { font-family:var(--mono); font-size:13px; color:var(--teal); margin-top:auto; word-break:break-all; line-height:1.4; }
+  .hopdots { display:flex; gap:8px; margin-top:14px; }
+  .hdot { width:30px; height:4px; border-radius:2px; background:rgba(155,180,212,.24); }
+  .hdot.on { background:var(--gold); }
+
+  /* ---------- audit ---------- */
+  .auditwrap { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; opacity:0; }
+
+
+  /* ---------- CTA ---------- */
+  .term {
+    font-family:var(--mono); font-size:30px; letter-spacing:-.012em;
+    border:1px solid rgba(155,180,212,.26); border-radius:14px; background:rgba(14,15,23,.95);
+    padding:26px 34px; text-align:left; white-space:pre; opacity:0;
+    width:1560px; box-sizing:border-box;
+    box-shadow:0 22px 60px rgba(0,0,0,.5);
+  }
+  .term .p { color:var(--green); }
+  .term .f { color:var(--ink); }
+  .term .c { color:var(--faint); }
+  .caret { display:inline-block; width:12px; height:32px; background:var(--brand-bright); vertical-align:-7px; margin-left:4px; }
+  .cmdline { display:flex; justify-content:center; opacity:0; font-family:var(--mono); font-size:22px; color:var(--dim); margin-top:34px; }
+
+  .endcard { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; opacity:0; }
+  .logotype { display:flex; align-items:center; gap:22px; }
+  .logomark { display:block; color:var(--brand-bright); }
+  .logotext { font-family:var(--mono); font-size:37px; font-weight:600; letter-spacing:.13em; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="bgwash" id="bgwash"></div>
+  <div class="grid" id="grid"></div>
+  <div id="graphlayer">
+    <svg id="edges"></svg>
+    <div id="nodes"></div>
+    <div id="edgelabels"></div>
+  </div>
+  <div id="scenes"></div>
+  <div class="vignette"></div>
+  <div class="mark" id="mark">Subsystem Modeling</div>
+  <div class="progress" id="progress"></div>
+</div>
+
+<script>
+'use strict';
+
+/* ============================================================
+   DATA — verbatim from site/src/showcase/cases/booking-page/model.ts
+   (components + walkthrough hops; graph edges are derived from hops)
+   ============================================================ */
+const NODES = [
+  { id:'booking-page',    nm:'BookingPage',   construct:'function', role:'entry', stereotype:'component',     process:'client',   file:'app/book/page.tsx',    x:250,  y:382 },
+  { id:'list-open-slots', nm:'listOpenSlots', construct:'function', role:'entry', stereotype:'server-action', process:'server',   file:'app/book/actions.ts',  x:610,  y:292 },
+  { id:'book-slot',       nm:'bookSlot',      construct:'function', role:'entry', stereotype:'server-action', process:'server',   file:'app/book/actions.ts',  x:610,  y:382 },
+  { id:'cancel-slot',     nm:'cancelSlot',    construct:'function', role:'entry', stereotype:'server-action', process:'server',   file:'app/book/actions.ts',  x:610,  y:472 },
+  { id:'capture-event',   nm:'captureEvent',  construct:'function',                          process:'client',   file:'lib/captureEvent.ts',  x:610,  y:562 },
+  { id:'list-slots',      nm:'listSlots',     construct:'function',                          process:'server',   file:'lib/listSlots.ts',     x:960,  y:292 },
+  { id:'create-booking',  nm:'createBooking', construct:'function',                          process:'server',   file:'lib/createBooking.ts',x:960,  y:382 },
+  { id:'cancel-booking',  nm:'cancelBooking', construct:'function',                          process:'server',   file:'lib/cancelBooking.ts',x:960,  y:472 },
+  { id:'Database',        nm:'Database',      construct:'external',role:'service',                                  x:1310, y:400 },
+  { id:'PostHog',         nm:'PostHog',       construct:'external',role:'service',                                  x:1310, y:562 },
+];
+const NODE = Object.fromEntries(NODES.map(n => [n.id, n]));
+
+/* unique relations, derived from the 15 walkthrough hops (11 unique) */
+const EDGES = [
+  { f:'booking-page',    t:'list-open-slots', mech:'calls',  kind:'wire' },
+  { f:'list-open-slots', t:'list-slots',      mech:'calls',  kind:'wire' },
+  { f:'list-slots',      t:'Database',         mech:'reads',  kind:'io'   },
+  { f:'booking-page',    t:'capture-event',   mech:'calls',  kind:'wire' },
+  { f:'capture-event',   t:'PostHog',         mech:'calls',  kind:'io'   },
+  { f:'booking-page',    t:'book-slot',       mech:'calls',  kind:'wire' },
+  { f:'book-slot',       t:'create-booking',  mech:'calls',  kind:'wire' },
+  { f:'create-booking',  t:'Database',         mech:'writes', kind:'io'   },
+  { f:'booking-page',    t:'cancel-slot',     mech:'calls',  kind:'wire' },
+  { f:'cancel-slot',     t:'cancel-booking',  mech:'calls',  kind:'wire' },
+  { f:'cancel-booking',  t:'Database',         mech:'writes', kind:'io'   },
+];
+
+/* the "Guest books" walkthrough, verbatim (5 hops) */
+const BOOK = [
+  { f:'booking-page',   t:'book-slot',      mech:'calls',  sym:'bookSlot',                   file:'app/book/page.tsx',    line:24, ann:'Confirm — client to server action wire boundary.' },
+  { f:'book-slot',      t:'create-booking', mech:'calls',  sym:'createBooking',              file:'app/book/actions.ts',  line:22, ann:'Server action delegates to the booking lib.' },
+  { f:'create-booking', t:'Database',       mech:'writes', sym:'insert',                     file:'lib/createBooking.ts', line:13, ann:'Persist on the server — source of truth.' },
+  { f:'booking-page',   t:'capture-event',  mech:'calls',  sym:"captureEvent('booking_created')", file:'app/book/page.tsx', line:26, ann:'Client records the product moment after success.' },
+  { f:'capture-event',  t:'PostHog',        mech:'calls',  sym:'captureEvent',               file:'lib/captureEvent.ts',  line:7,  ann:'PostHog booking_created — not the source of truth.' },
+];
+
+/* ============================================================ */
+const D = 45; // seconds
+const clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
+const seg  = (t,a,b) => clamp01((t-a)/(b-a));
+const sm   = x => { x = clamp01(x); return x*x*(3-2*x); };
+const es   = x => 1 - Math.pow(1 - clamp01(x), 3);
+const esi  = x => { x = clamp01(x); return x < .5 ? 4*x*x*x : 1 - Math.pow(-2*x+2,3)/2; };
+// fade in over [a,b], hold, fade out over [c,d]
+const win  = (t,a,b,c,d) => Math.min(sm(seg(t,a,b)), sm(seg(t,c,d)));
+
+const stage = document.getElementById('stage');
+const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+
+/* Stroke lengths for the draw-on animation, measured once. All subsequent
+   offsets are derived from t, so rendering stays deterministic. */
+const LOGOS = [];
+function primeLogo(svg) {
+  const strokes = [svg.querySelector('rect'), ...svg.querySelectorAll('g:last-of-type path')];
+  const paths = strokes.filter(Boolean);
+  const lens = paths.map(p => { try { return p.getTotalLength(); } catch { return 0; } });
+  LOGOS.push({ svg, paths, lens });
+}
+function drawLogoAt(rec, p) {
+  let acc = 0;
+  const total = rec.lens.reduce((a, b) => a + b, 0) || 1;
+  for (let i = 0; i < rec.paths.length; i++) {
+    const share = rec.lens[i] / total;
+    const local = clamp01((p - acc) / share);
+    const L = rec.lens[i];
+    rec.paths[i].style.strokeDasharray = L ? L.toFixed(1) : 'none';
+    rec.paths[i].style.strokeDashoffset = (L * (1 - es(local))).toFixed(2);
+    acc += share;
+  }
+}
+
+/* The site brand mark — verbatim geometry from site/src/App.tsx (nav logo)
+   and site/src/syncFaviconFromBrand.ts. Inherits --brand-bright via currentColor.
+   `boost` thickens strokes for small sizes, where 1.5/32 would render sub-pixel. */
+function logoSVG(size, boost) {
+  const b = boost || 1;
+  const thin = (1.5 * b).toFixed(2), thick = (2 * b).toFixed(2);
+  return `<svg class="${size <= 20 ? 'marklogo' : 'logomark'}" viewBox="0 0 32 32" fill="none" width="${size}" height="${size}" style="color:var(--brand-bright)">
+    <g stroke="currentColor" stroke-width="${thin}" opacity="0.15" stroke-linecap="butt">
+      <path d="M2 8 H30"/><path d="M2 16 H30"/><path d="M2 24 H30"/><path d="M8 2 V30"/><path d="M24 2 V30"/>
+    </g>
+    <rect x="1" y="1" width="30" height="30" rx="2" stroke="currentColor" stroke-width="${thick}" opacity="0.4"/>
+    <g stroke="currentColor" stroke-width="${thin}" stroke-linecap="square" stroke-linejoin="miter">
+      <path d="M8 8 H24"/><path d="M8 8 V16"/><path d="M8 16 H24"/><path d="M24 16 V24"/><path d="M24 24 H8"/>
+    </g>
+  </svg>`;
+}
+
+/* ---------------- build DOM once ---------------- */
+const scenes = document.getElementById('scenes');
+const S = {};
+document.getElementById('mark').insertAdjacentHTML('afterbegin', logoSVG(18, 1.7));
+primeLogo(document.querySelector('#mark .marklogo'));
+
+/* S.hook — cold open */
+S.hook = el('div','center');
+S.hook.appendChild(el('div','h1', `
+  <span class="w">Do</span> <span class="w">you</span> <span class="w">have</span> <span class="w">a</span> <span class="w" style="color:var(--brand-bright)">mental</span> <span class="w" style="color:var(--brand-bright)">model</span><br>
+  <span class="w">of</span> <span class="w">what</span> <span class="w">your</span> <span class="w">code</span> <span class="w">looks</span> <span class="w">like?</span>`));
+S.hookLead = el('div','lede','<span class="w" data-i="0">It</span> <span class="w" data-i="1">just</span> <span class="w" data-i="2">isn\'t</span> <span class="w" data-i="3">written</span> <span class="w" data-i="4">down</span> <span class="w" data-i="5">anywhere.</span>');
+S.hookLead.style.marginTop = '30px';
+S.hook.appendChild(S.hookLead);
+scenes.appendChild(S.hook);
+
+/* S.stale — the diagram that rots */
+S.stale = el('div','center');
+S.stale.appendChild(el('div','h2',`
+  <span class="w" data-i="0">Code</span> <span class="w" data-i="1">moves</span> <span class="w" data-i="2">fast.</span><br>
+  <span class="w" data-i="3" style="color:var(--faint)">Diagrams</span> <span class="w" data-i="4" style="color:var(--faint)">don't.</span>`));
+S.staleSub = el('div','lede','<span class="w" data-i="0">A</span> <span class="w" data-i="1">generated</span> <span class="w" data-i="2">diagram</span> <span class="w" data-i="3">is</span> <span class="w" data-i="4">right</span> <span class="w" data-i="5">for</span> <span class="w" data-i="6">about</span> <span class="w" data-i="7">a</span> <span class="w" data-i="8">day.</span>');
+S.staleSub.style.marginTop = '28px';
+S.stale.appendChild(S.staleSub);
+scenes.appendChild(S.stale);
+
+/* S.reveal — wordmark */
+S.reveal = el('div','center');
+const rv = el('div');
+rv.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:22px';
+rv.insertAdjacentHTML('afterbegin', logoSVG(46, 1));
+primeLogo(rv.querySelector('.logomark'));
+const rvw = el('div','mono','<span class="w" data-i="0">SUBSYSTEM</span> <span class="w" data-i="1" style="color:var(--brand-bright)">MODELING</span>');
+rvw.style.cssText = 'font-size:40px;font-weight:600;letter-spacing:.24em';
+rv.appendChild(rvw);
+S.reveal.appendChild(rv);
+S.revealSub = el('div','h1','<span class="w" data-i="0" style="color:var(--ink)">Verifiable</span> <span class="w" data-i="1" style="color:var(--brand-bright)">system</span> <span class="w" data-i="2" style="color:var(--brand-bright)">diagrams.</span>');
+S.revealSub.style.marginTop = '34px';
+S.reveal.appendChild(S.revealSub);
+S.revealLead = el('div','lede','<span class="w" data-i="0">The</span> <span class="w" data-i="1">building</span> <span class="w" data-i="2">block</span> <span class="w" data-i="3">of</span> <span class="w" data-i="4" style="color:var(--brand-bright)">codebase</span> <span class="w" data-i="5" style="color:var(--brand-bright)">understanding.</span>');
+S.revealLead.style.marginTop = '28px';
+S.reveal.appendChild(S.revealLead);
+scenes.appendChild(S.reveal);
+
+/* graph */
+const ghead = el('div','ghead');
+ghead.appendChild(el('div','gtitle','<span class="w">Booking page</span> <span class="w" style="color:var(--faint);font-weight:400">· TypeScript · Next.js</span>'));
+const gs = el('div','gsub','<span class="w">Understand</span> <span class="w">the</span> <span class="w" style="color:var(--ink)">high-level design</span> <span class="w">and access</span> <span class="w">the</span> <span class="w" style="color:var(--ink)">implementation details</span> <span class="w">quickly.</span>'); ghead.appendChild(gs);
+S.ghead = ghead; scenes.appendChild(ghead);
+
+
+S.hopcard = el('div','codewrap');
+S.wtcard = el('div','wtcard');
+S.wtcard.innerHTML =
+  '<div class="wt">Walkthrough · Guest books</div>' +
+  '<div class="ws"></div>' +
+  '<div class="hop"></div>' +
+  '<div class="ann"></div>' +
+  '<div class="sym"></div>' +
+  '<div class="hopdots">' + '<div class="hdot"></div>'.repeat(5) + '</div>';
+S.hopcard.appendChild(S.wtcard);
+S.codeview = el('div','codeview');
+S.codehead = el('div','codehead');
+S.codehead.innerHTML = '<span class="path"></span><span class="at"></span><span class="spacer"></span><span class="badge">on disk</span>';
+S.codebody = el('div','codebody');
+S.codeview.appendChild(S.codehead); S.codeview.appendChild(S.codebody);
+S.hopcard.appendChild(S.codeview);
+scenes.appendChild(S.hopcard);
+
+/* audit */
+S.auditwrap = el('div','auditwrap');
+S.auditHead = el('div','h2','<span class="w" style="color:var(--ink)">Are</span> <span class="w" style="color:var(--ink)">you</span> <span class="w" style="color:var(--ink)">ready</span> <span class="w" style="color:var(--ink)">to</span> <span class="w" style="color:var(--brand-bright)">understand</span><br> <span class="w" style="color:var(--brand-bright)">the</span> <span class="w" style="color:var(--brand-bright)">code</span> <span class="w" style="color:var(--brand-bright)">your</span> <span class="w" style="color:var(--brand-bright)">agents</span> <span class="w" style="color:var(--brand-bright)">write?</span>');
+S.auditHead.style.cssText = 'max-width:1400px;margin-bottom:10px';
+S.auditwrap.appendChild(S.auditHead);
+scenes.appendChild(S.auditwrap);
+
+
+/* CTA */
+S.cta = el('div','center');
+S.term = el('div','term');
+S.term.innerHTML = '<span class="p">$</span> <span class="f" id="cmdtext"></span><span class="caret" id="caret"></span>';
+S.cta.appendChild(S.term);
+S.cmdline = el('div','cmdline','<span class="w">subsystem-model</span> <span class="w" style="color:var(--faint)">·</span> <span class="w">create &nbsp;open &nbsp;list &nbsp;showcase &nbsp;audit</span>');
+S.cta.appendChild(S.cmdline);
+S.ctaFoot = el('div','lede','<span class="w">Creates</span> <span class="w">the</span> <span class="w">model,</span> <span class="w">persists</span> <span class="w">it,</span> <span class="w">and</span> <span class="w">opens</span> <span class="w">it</span> <span class="w">in</span> <span class="w">Subsystems</span> <span class="w">Studio.</span>');
+S.ctaFoot.style.marginTop = '30px';
+S.cta.appendChild(S.ctaFoot);
+scenes.appendChild(S.cta);
+
+/* end card */
+S.end = el('div','endcard');
+const lc = el('div','logotype');
+lc.insertAdjacentHTML('afterbegin', logoSVG(64, 1));
+primeLogo(lc.querySelector('.logomark'));
+lc.appendChild(el('div','logotext','SUBSYSTEM MODELING'));
+S.end.appendChild(lc);
+S.endSub = el('div','lede','Verifiable system diagrams.');
+S.endSub.style.marginTop = '26px';
+S.end.appendChild(S.endSub);
+S.endCmd = el('div','mono');
+S.endCmd.style.cssText = 'margin-top:34px;font-size:18px;color:var(--faint);letter-spacing:.04em';
+S.endCmd.innerHTML = 'npx -y @principal-ai/principal-studio-cli subsystem-model create';
+S.end.appendChild(S.endCmd);
+scenes.appendChild(S.end);
+
+/* ---------------- build graph DOM ---------------- */
+const nodesWrap = document.getElementById('nodes');
+const graphLayer = document.getElementById('graphlayer');
+const edgeLabels = document.getElementById('edgelabels');
+const nodeEls = {};
+NODES.forEach(n => {
+  const d = el('div','node' + (n.construct === 'external' ? ' ext' : ''));
+  d.style.left = n.x + 'px'; d.style.top = n.y + 'px';
+  d.appendChild(el('div','nm', n.nm));
+  const mt = el('div','mt');
+  if (n.construct === 'external') mt.appendChild(el('span','tag ext','external'));
+  else if (n.process === 'client') mt.appendChild(el('span','tag cli','client'));
+  else mt.appendChild(el('span','tag srv','server'));
+  if (n.role === 'entry') mt.appendChild(el('span','tag','entry'));
+  else if (n.stereotype === 'server-action') mt.appendChild(el('span','tag','action'));
+  d.appendChild(mt);
+  nodesWrap.appendChild(d);
+  nodeEls[n.id] = d;
+});
+
+const svg = document.getElementById('edges');
+const NS = 'http://www.w3.org/2000/svg';
+const edgeEls = [];
+EDGES.forEach((e, i) => {
+  const a = NODE[e.f], b = NODE[e.t];
+  const ax = a.x + 125, ay = a.y, bx = b.x - 125, by = b.y;
+  const dx = Math.max(40, (bx - ax) * 0.45);
+  const path = document.createElementNS(NS, 'path');
+  path.setAttribute('d', `M ${ax} ${ay} C ${ax+dx} ${ay}, ${bx-dx} ${by}, ${bx} ${by}`);
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke-width', '2');
+  path.setAttribute('stroke-linecap', 'round');
+  const col = e.kind === 'wire' ? '#e8a33d' : '#a78bda';
+  path.setAttribute('stroke', col);
+  path.setAttribute('opacity', '0');
+  svg.appendChild(path);
+  const len = path.getTotalLength ? 0 : 0;
+  const lab = el('div','elabel' + (e.kind === 'wire' ? ' wire' : ' io'), e.mech);
+  lab.style.left = ((ax + bx) / 2) + 'px';
+  lab.style.top = ((ay + by) / 2) + 'px';
+  edgelabels.appendChild(lab);
+  edgeEls.push({ e, path, lab, i, col });
+});
+
+/* ---------------- word reveal helper ---------------- */
+function reveal(node, t, t0, step, dur, rise, out0, out1) {
+  const ws = node.querySelectorAll('.w');
+  ws.forEach((w, i) => {
+    const s = t0 + i * step;
+    const p = seg(t, s, s + dur);
+    const o = p * (1 - seg(t, out0, out1));
+    w.style.opacity = o;
+    w.style.transform = 'translateY(' + ((1 - es(p)) * rise).toFixed(2) + 'px)';
+  });
+}
+function fadeTo(node, t, a, b, from, to) {
+  const o = from + (to - from) * sm(seg(t, a, b));
+  node.style.opacity = o;
+  return o;
+}
+
+/* Render the real file for one hop, windowed around the hop's line, with the
+   hop's symbol marked inline. Source comes from window.__FILES, read off disk
+   by the renderer — never a hand-copied copy. */
+function buildCode(h) {
+  S.codehead.querySelector('.path').textContent = h.file;
+  S.codehead.querySelector('.at').textContent = ':' + h.line;
+  S.codebody.innerHTML = '';
+  const src = (window.__FILES || {})[h.file];
+  if (!src) {
+    S.codebody.appendChild(el('div','cl','<span class="ln"></span><span class="tx">source not found</span>'));
+    return;
+  }
+  const total = src.length, LEAD = 6, VIS = 16;
+  let start = Math.max(1, h.line - LEAD);
+  if (start + VIS - 1 > total) start = Math.max(1, total - VIS + 1);
+  for (let i = start; i <= Math.min(total, start + VIS - 1); i++) {
+    let tx = src[i - 1];
+    if (i === h.line) {
+      const esc = h.sym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      tx = tx.replace(new RegExp(esc), m => '\u0001' + m + '\u0002');
+    }
+    tx = tx.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+           .replace(/\u0001([^\u0002]*)\u0002/g, '<b>$1</b>');
+    const row = el('div', 'cl' + (i === h.line ? ' hl' : ''));
+    row.innerHTML = '<span class="ln">' + i + '</span><span class="tx">' + tx + '</span>';
+    S.codebody.appendChild(row);
+  }
+}
+
+/* ---------------- render(t) ---------------- */
+const CMD = 'npx -y @principal-ai/principal-studio-cli subsystem-model create';
+const bgwash = document.getElementById('bgwash');
+const grid   = document.getElementById('grid');
+const mark   = document.getElementById('mark');
+const prog   = document.getElementById('progress');
+
+function render(t) {
+  /* ---- background ---- */
+  bgwash.style.opacity = sm(seg(t, 0.2, 2.2)) * 0.9;
+  bgwash.style.background =
+    'radial-gradient(1100px 620px at 22% 34%, rgba(76,106,145,.30), transparent 62%),' +
+    'radial-gradient(900px 560px at 82% 70%, rgba(138,108,178,.24), transparent 60%)';
+  grid.style.opacity = sm(seg(t, 2.0, 4.0)) * 0.9;
+  mark.style.opacity = sm(seg(t, 16.6, 18.2)) * (1 - sm(seg(t, 40.4, 41.2)));
+  drawLogoAt(LOGOS[0], seg(t, 16.7, 17.9));
+  prog.style.opacity = (t > 1.2 && t < 44.4) ? 0.55 : 0;
+  prog.style.width = (clamp01(t / D) * 1920) + 'px';
+
+  /* ---- reset ---- */
+  [S.hook,S.stale,S.reveal,S.auditwrap,S.cta,S.end].forEach(s => s.style.opacity = 0);
+
+  /* ===== BEAT 1 — hook (0.6 → 7.6) ===== */
+  fadeTo(S.hook, t, 0, 0.7, 0, 1);
+  S.hook.style.transform = 'translateY(' + (-sm(seg(t,6.4,7.6)) * 26) + 'px)';
+  reveal(S.hook.firstChild, t, 1.1, 0.20, 0.62, 22, 6.4, 7.6);
+  reveal(S.hookLead,        t, 5.1, 0.16, 0.55, 14, 6.4, 7.6);
+
+  /* ===== BEAT 2 — stale (7.9 → 13.4) ===== */
+  fadeTo(S.stale, t, 7.9, 8.7, 0, 1);
+  S.stale.style.transform = 'translateY(' + (sm(seg(t,12.4,13.4)) * -26) + 'px)';
+  reveal(S.stale.firstChild,  t, 8.35, 0.20, 0.60, 24, 12.4, 13.4);
+  reveal(S.staleSub,          t, 9.9,  0.13, 0.50, 16, 12.4, 13.4);
+
+  /* ===== BEAT 3 — reveal (13.6 → 17.4) ===== */
+  S.reveal.style.opacity = sm(seg(t, 13.6, 14.4)) * (1 - sm(seg(t, 16.9, 17.4)));
+  S.reveal.style.transform = 'scale(' + (0.97 + 0.03*sm(seg(t,13.6,15.6))) + ') translateY(' + (-sm(seg(t,16.2,17.2)) * 22) + 'px)';
+  drawLogoAt(LOGOS[1], seg(t, 13.95, 14.85));
+  reveal(S.reveal.firstChild, t, 14.0, 0.10, 0.45, 18, 16.2, 17.2);
+  reveal(S.revealSub,         t, 14.5, 0.13, 0.50, 20, 16.2, 17.2);
+  reveal(S.revealLead,        t, 14.9, 0.12, 0.42, 14, 16.3, 17.2);
+
+  /* ===== BEAT 4 — graph (17.4 → 30.4) ===== */
+  const gIn  = sm(seg(t, 17.4, 18.4));
+  const gOut = 1 - sm(seg(t, 30.4, 31.0));
+  const gWrapOp = gIn * gOut;
+  fadeTo(S.ghead, t, 17.4, 18.4, 0, 1);
+  reveal(S.ghead, t, 17.5, 0.10, 0.5, 16, 30.0, 30.4);
+  S.ghead.style.transform = 'translateY(' + ((1-gIn) * 14) + 'px)';
+
+  /* walkthrough hop state (computed first — nodes and edges both read it) */
+  const PER = 0.95, W0 = 22.4;
+  let active = -1;
+  if (t >= W0) active = Math.min(BOOK.length - 1, Math.floor((t - W0) / PER));
+  const hopStart = active >= 0 ? W0 + active * PER : 0;
+  const litSet = new Set();
+  for (let k = 0; active >= 0 && k <= active; k++) { litSet.add(BOOK[k].f); litSet.add(BOOK[k].t); }
+
+  /* nodes pop in and settle; the live hop is marked by the .lit border, not a bounce */
+  const order = ['booking-page','list-open-slots','book-slot','cancel-slot','capture-event','list-slots','create-booking','cancel-booking','Database','PostHog'];
+  order.forEach((id, i) => {
+    const s = 18.5 + i * 0.13;
+    const p = es(seg(t, s, s + 0.55));
+    const d = nodeEls[id];
+    d.style.opacity = p;
+    d.style.transform = 'scale(' + (0.86 + 0.14 * p) + ')';
+    d.classList.toggle('lit', litSet.has(id) && t >= 22.6);
+  });
+
+  /* slow push-in on the graph while it builds, easing back out as it holds */
+  const push = es(seg(t, 17.4, 25.0)) * (1 - sm(seg(t, 28.4, 30.4)));
+  graphLayer.style.transform =
+    'translate(' + (-6 * push).toFixed(2) + 'px,' + (7 * push).toFixed(2) + 'px) scale(' + (1 + 0.055 * push).toFixed(4) + ')';
+
+  /* edges: dim, lit, and a flowing dash along the hop currently being walked */
+  edgeEls.forEach((E, i) => {
+    const s = 19.9 + i * 0.055;
+    const draw = es(seg(t, s, s + 0.5));
+    const idx = BOOK.findIndex(h => h.f === E.e.f && h.t === E.e.t);
+    let op = 0.30, w = 2, flow = false;
+    if (active >= 0 && idx >= 0) {
+      if (idx <= active) { op = 0.95; w = 3.2; }
+      if (idx === active) { op = 1.0; w = 4.2; flow = true; }
+    }
+    E.path.setAttribute('opacity', (op * draw).toFixed(3));
+    E.path.setAttribute('stroke-width', String(w));
+    if (flow) {
+      E.path.setAttribute('stroke-dasharray', '13 11');
+      E.path.setAttribute('stroke-dashoffset', (-(t * 46) % 24).toFixed(2));
+    } else {
+      E.path.removeAttribute('stroke-dasharray');
+      E.path.removeAttribute('stroke-dashoffset');
+    }
+    E.lab.style.opacity = sm(seg(t, s + 0.28, s + 0.62)) * 0.9;
+  });
+
+  /* code panel — wipes in from the right, lines cascade, built from disk */
+  const cpOp = sm(seg(t, 22.0, 22.7)) * (1 - sm(seg(t, 29.9, 30.4)));
+  S.hopcard.style.opacity = cpOp;
+  S.hopcard.style.transform = 'translateY(' + ((1 - sm(seg(t, 22.0, 22.8))) * 20) + 'px)';
+  /* clip the right-hand file box open from its outer edge inward */
+  const wipe = sm(seg(t, 22.05, 22.95));
+  S.codeview.style.clipPath = 'inset(0 0 0 ' + (100 * (1 - wipe)).toFixed(2) + '%)';
+  if (active >= 0) {
+    const h = BOOK[active];
+    const key = h.file + ':' + h.line;
+    if (S._key !== key) { S._key = key; buildCode(h); }
+    const rows = S.codebody.children;
+    for (let i = 0; i < rows.length; i++) {
+      const rs = hopStart + 0.04 + i * 0.016;
+      rows[i].style.opacity = sm(seg(t, rs, rs + 0.28));
+      rows[i].style.transform = 'translateX(' + ((1 - es(seg(t, rs, rs + 0.28))) * 10).toFixed(2) + 'px)';
+    }
+    const hlRow = S.codebody.querySelector('.cl.hl');
+    if (hlRow) {
+      const fl = 1 - es(seg(t, hopStart + 0.10, hopStart + 0.80));
+      hlRow.style.background = 'rgba(218,178,64,' + (0.13 + 0.13 * fl).toFixed(3) + ')';
+      hlRow.style.boxShadow = 'inset 3px 0 0 var(--gold), 0 0 ' + (36 * fl).toFixed(0) + 'px rgba(218,178,64,' + (0.24 * fl).toFixed(3) + ')';
+    }
+    S.wtcard.querySelector('.ws').textContent = 'Step ' + (active + 1) + ' of ' + BOOK.length;
+    S.wtcard.querySelector('.hop').innerHTML =
+      NODE[h.f].nm + ' <span class="mech">' + h.mech + '</span> → ' + NODE[h.t].nm;
+    S.wtcard.querySelector('.ann').textContent = h.ann;
+    S.wtcard.querySelector('.sym').textContent = h.file + ':' + h.line + '   ' + h.sym;
+    S.wtcard.querySelectorAll('.hdot').forEach((d, i) => d.classList.toggle('on', i <= active));
+  }
+
+  /* graph exits */
+  graphLayer.style.opacity = gWrapOp;
+  S.ghead.style.opacity = sm(seg(t,17.4,18.4)) * gOut;
+
+  /* ===== BEAT 5 — the question (30.6 → 35.4) ===== */
+  const aIn = sm(seg(t, 30.6, 31.3));
+  S.auditwrap.style.opacity = aIn * (1 - sm(seg(t, 34.8, 35.4)));
+  S.auditwrap.style.transform = 'translateY(' + ((1-aIn) * 22) + 'px)';
+  reveal(S.auditHead, t, 30.85, 0.12, 0.5, 20, 34.8, 35.4);
+
+  /* ===== BEAT 6 — CTA (35.6 → 39.2) ===== */
+  const cIn = sm(seg(t, 35.6, 36.1));
+  S.cta.style.opacity = cIn * (1 - sm(seg(t, 38.6, 39.2)));
+  S.cta.style.transform = 'translateY(' + ((1 - cIn) * 18) + 'px)';
+  S.term.style.opacity = sm(seg(t, 35.75, 36.2));
+  const typed = Math.max(0, Math.min(CMD.length, Math.floor((t - 35.9) / 0.020)));
+  document.getElementById('cmdtext').textContent = CMD.slice(0, typed);
+  document.getElementById('caret').style.opacity = (Math.floor(t * 2.2) % 2) ? 0.15 : 1;
+  reveal(S.cmdline,  t, 37.3, 0.05, 0.32, 12, 38.6, 39.2);
+  reveal(S.ctaFoot,   t, 37.6, 0.055, 0.34, 12, 38.6, 39.2);
+
+  /* ===== BEAT 7 — end card (39.0 → 45) ===== */
+  const eIn = sm(seg(t, 39.0, 39.75)) * (1 - sm(seg(t, 44.6, 45.0)));
+  S.end.style.opacity = eIn;
+  S.end.style.transform = 'scale(' + (0.975 + 0.025 * sm(seg(t,39.0,39.75))) + ')';
+  drawLogoAt(LOGOS[2], seg(t, 39.15, 40.35));
+}
+
+window.__render = render;
+render(0);
+</script>
+</body>
+</html>

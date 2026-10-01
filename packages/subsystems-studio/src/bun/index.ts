@@ -31,9 +31,15 @@ import { parseTourOrThrow } from "@principal-ai/file-city-builder";
 import { handoffToRunning, startIpcServer, type LoadTrailMessage } from "./ipc";
 import { startHttpServer } from "./http-server";
 import { resolveSandboxed } from "./sandboxed-path";
-import { deleteSubsystemModel, getSubsystemModel, listSubsystemModels, purlRepoKey, resolveRepoRootForComponent, setSubsystemModelChangeListener, startSubsystemModelDirWatcher, subsystemModelFilePath, touchSubsystemModelOpened, updateSubsystemModel } from "./subsystem-model-store";
+import { deleteSubsystemModel, getSubsystemModel, listSubsystemModels, purlRepoKey, resolveRepoRootForComponent, setSubsystemModelChangeListener, stampVerifiedCommits, startSubsystemModelDirWatcher, subsystemModelFilePath, touchSubsystemModelOpened, updateSubsystemModel } from "./subsystem-model-store";
 import { mergeSubsystemModels, type MergeInputModel } from "./merge-submodel-models";
-import { purlCommitFreshness } from "./purl-commits";
+import type { ModelProvenanceSnapshot } from "../shared/contract";
+import {
+	modelProvenance,
+	modelProvenanceDetail,
+	planAutoRePin,
+	purlCommitFreshness,
+} from "./purl-commits";
 import { attachSignatureAugmentations } from "./augmentation-store";
 import { publishSubsystemModelGist } from "./gist-publish";
 import {
@@ -414,13 +420,16 @@ function resolveRepoRoot(trailFilePath: string | null): string {
 
 // Which permanent tab the window opens on. `principal-ai agent-sessions` spawns
 // with PRINCIPAL_STUDIO_START_TAB=agent-sessions so a bare launch lands straight on
-// the Agent Sessions overview. Bare launches prefer Subsystems when that tab is
-// enabled; otherwise the first enabled permanent tab.
+// the Agent Sessions overview. Otherwise resume the tab that was active when the
+// last session closed, if it's still enabled; falling back to Subsystems when
+// that tab is enabled, else the first enabled permanent tab.
 function resolveStartTab(settings: ViewerSettings): string {
 	const raw = process.env["PRINCIPAL_STUDIO_START_TAB"];
 	if (raw && isPermanentTabId(raw)) {
 		return raw;
 	}
+	const last = PERMANENT_TAB_DEFS.find((d) => d.id === settings.lastActiveTabId);
+	if (last && settings.defaultTabs[last.flag]) return last.id;
 	if (settings.defaultTabs.subsystems) return SUBSYSTEMS_TAB_ID;
 	const firstEnabled = PERMANENT_TAB_DEFS.find(
 		(d) => settings.defaultTabs[d.flag],
@@ -649,6 +658,7 @@ function ensurePermanentTab(id: string): void {
 		regularAuditIntervalMinutes: viewerSettings.regularAuditIntervalMinutes,
 		typesafeApiKey: viewerSettings.typesafeApiKey,
 		maintenanceRepoKey: viewerSettings.maintenanceRepoKey,
+		lastActiveTabId: viewerSettings.lastActiveTabId,
 	};
 	syncPermanentTabs(forced);
 }
@@ -1511,10 +1521,18 @@ const requests: RequestHandlers = {
 			setActiveTab: ({ id }) => {
 				// The renderer owns the on-screen tab and switches instantly; this
 				// just records the switch as the host's resume suggestion (served
-				// back through listTabs if the webview reloads). No broadcast — the
-				// renderer already applied the change locally.
+				// back through listTabs if the webview reloads) and, for permanent
+				// tabs, persists it so the next launch reopens on it. No broadcast —
+				// the renderer already applied the change locally.
 				if (!tabs.has(id)) return { ok: false, error: `unknown tab: ${id}` };
 				suggestedTabId = id;
+				// Transient tabs (trails, models) don't survive a restart, so only
+				// permanent ones are worth restoring.
+				if (isPermanentTabId(id) && viewerSettings.lastActiveTabId !== id) {
+					viewerSettings = patchViewerSettings(viewerSettings, {
+						lastActiveTabId: id,
+					});
+				}
 				return { ok: true };
 			},
 			closeTab: ({ id }) => closeTabById(id),
@@ -1999,11 +2017,28 @@ const requests: RequestHandlers = {
 								checkedAt = summary.checkedAt;
 							}
 						}
+						// Cheap provenance tier — a couple of git calls per referenced
+						// repo, reusing the record this handler already fetched. Runs
+						// per model on every overview pass, so it deliberately excludes
+						// the per-commit walk (see getModelProvenanceDetail).
+						const provenance = full
+							? await modelProvenance({
+									createdAtCommits: full.createdAtCommits,
+									verifiedAtCommits: full.verifiedAtCommits,
+									components: full.components,
+									walkthroughs: full.walkthroughs,
+								})
+							: undefined;
+						// Carry the pin forward when nothing anchored moved. The proof is
+						// content identity, not a re-audit — but it is a write, so it only
+						// fires when a repo actually needs a new pin.
+						if (provenance) await applyAutoRePin(e.id, provenance, full);
 						const pending = await listSubsystemModelProposals(e.id);
 						const lastRun = (
 							await listSubsystemModelRuns({ graphId: e.id, limit: 1 })
 						)[0];
 						const model: MaintenanceOverviewModel = {
+							provenance,
 							graphId: e.id,
 							title: e.title,
 							verdict,
@@ -2100,6 +2135,27 @@ const requests: RequestHandlers = {
 			},
 			applySubsystemModelAuditFix: async ({ graphId, fixId, componentAlias }) =>
 				applySubsystemModelAuditFix({ graphId, fixId, componentAlias }),
+			// Expensive provenance tier: the per-commit walk and the remote's
+			// position on it. Deliberately a separate call from the cheap
+			// snapshot that rides on list/overview passes — a whole-log read per
+			// referenced repo does not belong on a path that runs per model per
+			// refresh.
+			getModelProvenanceDetail: async ({ id }) => {
+				const full = await getSubsystemModel(id);
+				if (!full) return { id };
+				const snapshot = await modelProvenance({
+					createdAtCommits: full.createdAtCommits,
+					verifiedAtCommits: full.verifiedAtCommits,
+					components: full.components,
+					walkthroughs: full.walkthroughs,
+				});
+				return await modelProvenanceDetail(id, {
+					createdAtCommits: full.createdAtCommits,
+					verifiedAtCommits: full.verifiedAtCommits,
+					components: full.components,
+					walkthroughs: full.walkthroughs,
+				}, snapshot.anchorChanges);
+			},
 			getSubsystemModelAudit: async ({ graphId }) => {
 				const full = await getSubsystemModel(graphId);
 				if (!full) return { ok: false, error: `unknown graph: ${graphId}` };
@@ -3283,6 +3339,62 @@ async function startOpencodeV2CliJob(
 	})();
 
 	return { ok: true, started: true, status: busyStatus };
+}
+
+/**
+ * Carry a model's verified pin forward for repos whose anchored files did not
+ * move.
+ *
+ * This is a write on a read path, so it is deliberately narrow: it fires only
+ * for a repo whose measured `committed` list came back empty, and only when
+ * that list was actually measured. An absent list means "unknown", never
+ * "clean", and promoting on unknown would be the exact false claim this whole
+ * mechanism exists to avoid.
+ *
+ * `stampVerifiedCommits` preserves `updatedAt` (it spreads the existing record),
+ * which matters: bumping it would invalidate the saved audit fingerprint and
+ * make every stored audit read as stale.
+ *
+ * A failure here must not take down the overview pass — the snapshot the caller
+ * already holds stays correct either way, since the pin it reported was the
+ * pre-promotion one and the next refresh will show the new one.
+ */
+async function applyAutoRePin(
+	graphId: string,
+	snapshot: ModelProvenanceSnapshot,
+	full?: {
+		components: ReadonlyArray<{ alias: string; file?: string; purl?: string }>;
+		walkthroughs?: ReadonlyArray<{
+			steps?: ReadonlyArray<{
+				file?: string;
+				purl?: string;
+				from?: string;
+				to?: string;
+			}>;
+		}>;
+	} | null,
+): Promise<void> {
+	if (!full) return;
+	const plan = await planAutoRePin(
+		{
+			createdAtCommits: snapshot.createdAtCommits,
+			verifiedAtCommits: snapshot.verifiedAtCommits,
+			components: full.components,
+			walkthroughs: full.walkthroughs,
+		},
+		snapshot.anchorChanges,
+	);
+	const applied: Record<string, string> = {};
+	for (const [purl, outcome] of Object.entries(plan)) {
+		if (outcome.status === "applied" && outcome.commit) applied[purl] = outcome.commit;
+	}
+	// Nothing to do is the common case; do not rewrite the record for it.
+	if (Object.keys(applied).length === 0) return;
+	try {
+		await stampVerifiedCommits(graphId, applied);
+	} catch {
+		/* a stale pin is recoverable; failing the overview pass is not */
+	}
 }
 
 /** Normalize a purl subpath to a repo-root-relative path, rejecting anything

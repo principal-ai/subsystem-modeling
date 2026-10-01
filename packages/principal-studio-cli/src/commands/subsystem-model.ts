@@ -20,6 +20,11 @@ import {
   type StoredSubsystemModel,
 } from '../lib/subsystem-model-store.js';
 import { findSubsystemModelProblems } from '../lib/subsystem-model-validation.js';
+import {
+  analyzeComposeOverlap,
+  formatComposeOverlap,
+  type OverlapComponent,
+} from '../lib/compose-overlap.js';
 
 async function readPayloadFromStdin(): Promise<string> {
   const chunks: Buffer[] = [];
@@ -241,6 +246,37 @@ async function openAction(
   }
 }
 
+async function overlapAction(options: { json?: boolean; repo?: string }): Promise<void> {
+  const listed = await listSubsystemModels();
+  const models = [];
+  for (const entry of listed) {
+    const graph = await getSubsystemModel(entry.id);
+    if (!graph) continue;
+    models.push({
+      id: graph.id,
+      title: graph.title,
+      components: (Array.isArray(graph.components) ? graph.components : []) as OverlapComponent[],
+    });
+  }
+  let report = analyzeComposeOverlap(models);
+  const repo = options.repo?.trim();
+  if (repo) {
+    report = {
+      repos: report.repos.filter((r) => r.repoKey === repo),
+      unscoped: [],
+    };
+    if (report.repos.length === 0) {
+      process.stderr.write(`No code components for repo ${repo}\n`);
+      process.exit(2);
+    }
+  }
+  if (options.json) {
+    process.stdout.write(JSON.stringify({ ok: true, ...report }, null, 2) + '\n');
+    return;
+  }
+  process.stdout.write(formatComposeOverlap(report));
+}
+
 async function listAction(): Promise<void> {
   const graphs = await listSubsystemModels();
   process.stdout.write(
@@ -439,6 +475,15 @@ export function createSubsystemModelCommand(): Command {
     .command('list')
     .description('List stored subsystem models')
     .action(listAction);
+
+  cmd
+    .command('overlap')
+    .description(
+      'Show which local models share code components, and which fall into disjoint groups',
+    )
+    .option('--json', 'Print the analysis as JSON')
+    .option('--repo <purl>', 'Limit to one repo purl (fragment ignored)')
+    .action(overlapAction);
 
   cmd
     .command('get')

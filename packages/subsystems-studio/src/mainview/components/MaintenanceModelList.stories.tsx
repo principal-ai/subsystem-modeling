@@ -171,6 +171,7 @@ const meta = {
 			["g-payments", { construct: 1, "static-topology": 1 }],
 		]),
 		onToggleRuns: () => {},
+		onToggleProvenance: () => {},
 		onOpenModel: () => {},
 		onRunMaintenance: () => {},
 		onCopyBrief: () => {},

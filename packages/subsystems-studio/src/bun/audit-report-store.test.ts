@@ -330,6 +330,32 @@ describe("summarizeVerification", () => {
 		expect(v.coverage).toBe(1);
 	});
 
+	test("a node_modules anchor is n/a, not a blocked claim", () => {
+		// What the audit emits for an installed-dependency path: skipped, like an
+		// external. It must not read as an environment `blocked` claim — nothing
+		// about cloning a repo or building a cache closes it.
+		const v = summarizeVerification(
+			report({
+				checks: [
+					componentCheck({}),
+					componentCheck({
+						componentAlias: "highlighter-store",
+						graphify: "skipped",
+						verdict: "skipped",
+						fileExists: null,
+						constructMatch: null,
+						signature: "n/a",
+						anchor: "n/a",
+					}),
+				],
+			}),
+		);
+		expect(v.verified).toBe(1);
+		expect(v.na).toBe(1);
+		expect(v.blocked).toBe(0);
+		expect(v.open).toBe(0);
+	});
+
 	test("unresolved repo and unbuilt cache are blocked, not open", () => {
 		const v = summarizeVerification(
 			report({
