@@ -199,7 +199,13 @@ export interface GraphifyTypeDetail {
 export interface GraphifyExternalDetail {
   kind: 'external';
   /** Facet-only label; there is no backing graph data. */
-  label: string;
+  label?: string;
+  /**
+   * Authored key/value facts about the dependency (endpoints, install command,
+   * db path). Mirrors the model document's `external.attributes`; graphify never
+   * populates it, it is authored alongside the facet.
+   */
+  attributes?: GraphifyCustomEntityAttribute[];
 }
 
 /** A single authored attribute on a custom entity — free-form key/value. */

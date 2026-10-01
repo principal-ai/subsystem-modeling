@@ -366,79 +366,23 @@ export const SUBSYSTEM_DECLARATION_PROVENANCES = ["verified", "authored"] as con
 export type DeclarationProvenance = (typeof SUBSYSTEM_DECLARATION_PROVENANCES)[number];
 
 /**
- * Fold the undeclared store-declaration fields that early models authored onto
- * the fields the schema declares.
+ * No-op, kept so existing call sites and the exported name stay valid while the
+ * store stops reshaping caller payloads.
  *
- * A 23-store audit of the local models found four store declarations that the
- * published schema rejects (`additionalProperties: false`): three DB-table
- * stores wrote `members` for their columns, one directory store wrote
- * free-form `attributes`. `members` is the same shape as `properties`
- * (`{ name, type? }`) — a table column is a named member — so it folds across
- * losslessly. `attributes` is `{ key, value }` prose with no schema home, and
- * the same facts are already in the component's `purpose`; it is dropped with a
- * warning rather than silently reshaped into a property whose "type" would be a
- * value.
+ * This used to do three things, all now retired:
+ *   - fold undeclared store-declaration fields (`members` -> `properties`,
+ *     drop `attributes`). Both are gone: `backfill-store-members.ts` rewrote the
+ *     3 affected records on disk, and `external.attributes` is now a declared
+ *     field rather than something to strip.
+ *   - backfill per-kind declaration arrays to `[]`. The call-graph buckets that
+ *     forced it are no longer in the document, and every remaining array is
+ *     schema-required, so a record missing one is invalid and should say so.
+ *   - coerce `declarationProvenance` to `"authored"`, and delete provenance that
+ *     had no declaration. Both fields are optional on a component, so neither
+ *     repair was needed; the coercion also relabelled typos as hand-written.
  */
-function foldLegacyStoreDeclarationFields(
-	componentAlias: string,
-	declaration: Record<string, unknown>,
-): void {
-	if (declaration["kind"] !== "store") return;
-	if (Array.isArray(declaration["members"]) && !Array.isArray(declaration["properties"])) {
-		declaration["properties"] = declaration["members"];
-		console.warn(
-			`[principal-studio] ${componentAlias}: store declaration "members" → "properties" (undeclared field)`,
-		);
-	}
-	delete declaration["members"];
-	if (declaration["attributes"] !== undefined) {
-		delete declaration["attributes"];
-		console.warn(
-			`[principal-studio] ${componentAlias}: dropped store declaration "attributes" (undeclared field; the same facts belong in the component's purpose)`,
-		);
-	}
-}
-
-/**
- * Fold undeclared store-declaration fields from early models onto the fields the
- * schema declares.
- *
- * This is the only thing it does now, and it is deliberately narrow. It used to
- * also backfill per-kind declaration arrays to `[]` and coerce
- * `declarationProvenance`; both are gone.
- *
- * The array backfill existed because the schema required
- * `functionDeclaration.parameters/callers/callees`, seven arrays on
- * `classDeclaration`, and so on. Those call-graph buckets
- * (`callers`/`callees`, class `references` + `instantiations`, type `usedBy` +
- * `implementors`) are now removed from the document entirely: nothing populated
- * them, and a referenced-symbol click resolves against the host's graphify
- * cache at inspection time rather than reading stored edges. So an honest
- * declaration no longer has to pad itself to satisfy the schema, and the
- * backfill had nothing left to do.
- *
- * Provenance is no longer coerced either. `declaration` and
- * `declarationProvenance` are both optional on a component, so a declaration
- * with no provenance is valid; the old `!== "verified" && !== "authored"` →
- * `"authored"` fallback quietly relabelled a typo as hand-written, and would
- * have absorbed any future third value instead of letting the schema reject it.
- *
- * Mutates the passed array — callers own the payload (fresh-parsed request
- * bodies or records about to be persisted).
- */
-export function normalizeDeclarationProvenance(components: unknown): void {
-	if (!Array.isArray(components)) return;
-	for (const component of components) {
-		const c = component as Record<string, unknown> | null;
-		if (!c || typeof c !== "object") continue;
-
-		const declaration = c["declaration"] as Record<string, unknown> | undefined;
-		if (!declaration || typeof declaration !== "object") continue;
-		foldLegacyStoreDeclarationFields(
-			typeof c["alias"] === "string" ? c["alias"] : "(unnamed)",
-			declaration,
-		);
-	}
+export function normalizeDeclarationProvenance(_components: unknown): void {
+  // Intentionally empty — see the note above.
 }
 
 // ---------------------------------------------------------------------------

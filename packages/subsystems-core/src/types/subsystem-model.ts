@@ -198,9 +198,24 @@ export interface SubsystemTypeDeclaration {
   rhs?: string;
 }
 
+/**
+ * Declaration for `construct: external` — a named dependency with no backing
+ * source declaration (a remote API, a CLI, a third-party package). Authored,
+ * never extracted.
+ *
+ * `label` is the short name shown in the declaration block; it falls back to the
+ * component's `name` when absent, so a record may carry only `attributes`.
+ * `attributes` are authored key/value pairs (endpoints, install commands, a db
+ * path) rendered beneath the label, mirroring `custom_entity`.
+ *
+ * Both are optional because a bare "this depends on X" with nothing more to say
+ * is a legitimate model — requiring an empty `attributes: []` would be padding
+ * for its own sake.
+ */
 export interface SubsystemExternalDeclaration {
   kind: 'external';
-  label: string;
+  label?: string;
+  attributes?: SubsystemCustomEntityAttribute[];
 }
 
 export interface SubsystemStoreDeclaration {

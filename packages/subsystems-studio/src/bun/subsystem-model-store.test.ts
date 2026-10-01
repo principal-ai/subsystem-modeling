@@ -215,43 +215,7 @@ describe("declaration provenance", () => {
 		expect(components[1]["declarationProvenance"]).toBe("verified");
 	});
 
-	test("normalize folds undeclared store fields onto declared ones", () => {
-		const components = [
-			{
-				alias: "table-store",
-				declaration: {
-					kind: "store",
-					storage: "external",
-					members: [{ name: "id", type: "text" }, { name: "seq", type: "integer" }],
-				},
-			},
-			{
-				alias: "dir-store",
-				declaration: {
-					kind: "store",
-					attributes: [{ key: "root", value: "~/.principal/subsystem-models" }],
-				},
-			},
-			{ alias: "ok", declaration: { kind: "store", storage: "memory", properties: [] } },
-		];
-		normalizeDeclarationProvenance(components);
-		const d = (alias: string) =>
-			(components.find((x) => x["alias"] === alias)?.["declaration"] ?? {}) as Record<string, unknown>;
-
-		// `members` is the same shape as `properties` — a column is a member.
-		expect(d("table-store")["properties"]).toEqual([
-			{ name: "id", type: "text" },
-			{ name: "seq", type: "integer" },
-		]);
-		expect(d("table-store")["members"]).toBeUndefined();
-		// `attributes` has no schema home; the facts live in `purpose`.
-		expect(d("dir-store")["attributes"]).toBeUndefined();
-		expect(d("dir-store")["properties"]).toBeUndefined();
-		// An already-declared store is untouched.
-		expect(d("ok")["properties"]).toEqual([]);
-	});
-
-	test("normalize does not backfill declaration arrays", () => {
+	test("normalize is a no-op — no reshaping of caller payloads", () => {
 		// The call-graph buckets are gone from the document, so an honest
 		// declaration no longer needs padding to satisfy the schema.
 		const components = [

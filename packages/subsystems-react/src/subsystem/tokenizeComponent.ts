@@ -64,12 +64,12 @@ export async function tokenizeComponent(
 
   const lang = sourceLangForPath(component.file);
 
-  // External kind — not valid code, bypass Prettier; plain text.
+  // External kind — not valid code, bypass Prettier; plain text. `label` is
+  // optional (falls back to the component name) and authored `attributes`
+  // render beneath it, same as the custom_entity path via generateDeclarationString.
   const kind = component.declaration?.kind ?? component.construct;
   if (kind === 'external') {
-    const label = component.declaration?.kind === 'external' ? component.declaration.label : component.name;
-    const escaped = label.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    return tokenizeFormatted(`external '${escaped}'`, themeName, 'text');
+    return tokenizeFormatted(generateDeclarationString(component), themeName, 'text');
   }
 
   // Custom entity — an actor (Person/agent/queue), not code; plain text.

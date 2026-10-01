@@ -652,8 +652,7 @@
     "externalDeclaration": {
       "type": "object",
       "required": [
-        "kind",
-        "label"
+        "kind"
       ],
       "additionalProperties": false,
       "properties": {
@@ -662,9 +661,17 @@
         },
         "label": {
           "type": "string",
-          "description": "Facet-only label; no backing source declaration."
+          "description": "Short name for the dependency. Optional — renderers fall back to the component's `name`, so a record may carry only `attributes`."
+        },
+        "attributes": {
+          "type": "array",
+          "description": "Authored key/value pairs (e.g. endpoints, install command, db path, access mode).",
+          "items": {
+            "$ref": "#/$defs/customEntityAttribute"
+          }
         }
-      }
+      },
+      "description": "Declaration for `construct: external` (a named dependency with no backing source declaration — a remote API, CLI, or third-party package). Authored, never extracted. Rendered as `external 'label'` plus the key/value attribute lines; `label` falls back to the component name when absent."
     },
     "storeDeclaration": {
       "type": "object",

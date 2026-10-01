@@ -74,8 +74,16 @@ export function generateDeclarationString(component: SubsystemComponent): string
     case 'store':
       return generateStore(name, declaration);
     case 'external':
-      // Not valid TypeScript — caller should handle formatting.
-      return `external '${declaration?.kind === 'external' ? declaration.label : name}'`;
+      // Not valid TypeScript — caller should handle formatting. A named
+      // dependency with authored key/value facts beneath it, mirroring the
+      // custom_entity branch. `label` is optional; fall back to the name.
+      {
+        const ext = declaration?.kind === 'external' ? declaration : undefined;
+        const label = ext?.label ?? name;
+        const attrs = ext && Array.isArray(ext.attributes) ? ext.attributes : [];
+        const attrLines = attrs.map((a) => `  ${a.key}: ${a.value}`).join('\n');
+        return attrLines ? `external '${label}'\n${attrLines}` : `external '${label}'`;
+      }
     case 'custom_entity':
       // An actor, not code — no declaration to generate. Renders as a
       // non-TypeScript block: `entity 'Name' — kind` followed by the authored
