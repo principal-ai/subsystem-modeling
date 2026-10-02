@@ -242,7 +242,7 @@ export type {
 // --- C4 projection + the confirmed association layer ------------------
 export { C4Graph } from './subsystem/C4Graph';
 export type { C4GraphProps } from './subsystem/C4Graph';
-export { C4NodeCard, nodeStyle, nodeSubtitle, nodeTag, nodeMissing, NODE_W, NODE_H } from './subsystem/C4NodeCard';
+export { C4NodeCard, nodeStyle, nodeSubtitle, nodeTag, nodeStateTag, nodeShape, nodeMissing, NODE_W, NODE_H } from './subsystem/C4NodeCard';
 export type { C4NodeCardProps, NodeStyle } from './subsystem/C4NodeCard';
 export {
   toC4,

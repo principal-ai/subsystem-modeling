@@ -1,7 +1,16 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme, useTheme } from '@principal-ade/industry-theme';
-import { C4NodeCard, nodeStyle, nodeSubtitle, nodeTag, nodeMissing, NODE_W } from '../../../subsystem/C4NodeCard';
+import {
+  C4NodeCard,
+  nodeStyle,
+  nodeSubtitle,
+  nodeTag,
+  nodeStateTag,
+  nodeShape,
+  nodeMissing,
+  NODE_W,
+} from '../../../subsystem/C4NodeCard';
 import type { C4Node, C4ElementType } from '../../../subsystem/toC4';
 
 // ---------------------------------------------------------------------------
@@ -204,17 +213,35 @@ const VARIANTS: Array<{ group: string; note: string; node: C4Node }> = [
     }),
   },
 
-  // --- component level ---------------------------------------------------
+  // --- the pair that was confusing, side by side ------------------------
   {
-    group: 'Component level',
-    note: 'Same card, one level down. A component has no type requirement — it inherits from its container.',
+    group: 'Container vs component',
+    note: 'The case that started this. Same card, same border colour, no association on either — previously identical. Now: sharp + 2px + the word "container", versus rounded + 1px + "component".',
     node: node({
-      id: 'd1',
-      label: 'buildBoundaryLayoutGroups',
+      id: 'e1',
+      label: 'subsystems-studio/host',
+      key: 'subsystems-studio/host',
+      members: ['a', 'b', 'c'],
+      constructs: ['function', 'store'],
+      decoration: { id: 'container:host', label: 'subsystems-studio/host', type: 'application', technology: 'Bun + Electrobun', state: 'accepted', description: 'Runs the audit pipeline.' },
+    }),
+  },
+  {
+    group: '',
+    note: '',
+    node: node({
+      id: 'e2',
+      label: 'subsystems-studio/host',
       kind: 'component',
-      members: ['b1'],
+      members: ['h1'],
       constructs: ['function'],
-      component: { alias: 'b1', name: 'buildBoundaryLayoutGroups', construct: 'function', file: 'src/subsystem/model.ts', purl: 'pkg:x#src/subsystem/model.ts' },
+      component: {
+        alias: 'h1',
+        name: 'subsystems-studio/host',
+        construct: 'function',
+        file: 'src/bun/index.ts',
+        purl: 'pkg:x#src/bun/index.ts',
+      },
     }),
   },
 ];
@@ -277,13 +304,40 @@ function Gallery() {
         encoding.
       </p>
 
-      <div style={{ display: 'flex', gap: 16, fontFamily: 'monospace', fontSize: 11, marginBottom: 26 }}>
-        {legend.map(([name, color]) => (
-          <span key={name} style={{ display: 'flex', alignItems: 'center', gap: 6, color: muted }}>
-            <span style={{ width: 22, height: 0, borderTop: `3px solid ${color}`, display: 'inline-block' }} />
-            {name}
-          </span>
-        ))}
+      <div style={{ fontFamily: 'monospace', fontSize: 11, marginBottom: 26, lineHeight: 1.9 }}>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+          <span style={{ color: '#e8e8ea' }}>LEVEL — shape and border weight</span>
+        </div>
+        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 4 }}>
+          {(['container', 'component', 'external', 'actor'] as const).map((kind) => {
+            const s = nodeShape(node({ kind }));
+            return (
+              <span key={kind} style={{ display: 'flex', alignItems: 'center', gap: 6, color: muted }}>
+                <span
+                  style={{
+                    width: 20,
+                    height: 13,
+                    borderRadius: Math.min(s.radius, 6),
+                    border: `${kind === 'component' ? 1 : 2} ${s.dash} ${nodeStyle(node({ kind }), theme).color}`,
+                    display: 'inline-block',
+                  }}
+                />
+                {kind}
+              </span>
+            );
+          })}
+        </div>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 14 }}>
+          <span style={{ color: '#e8e8ea' }}>CONFIRMATION — colour and dash, never the shape</span>
+        </div>
+        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 4 }}>
+          {legend.map(([name, color]) => (
+            <span key={name} style={{ display: 'flex', alignItems: 'center', gap: 6, color: muted }}>
+              <span style={{ width: 22, height: 0, borderTop: `3px solid ${color}`, display: 'inline-block' }} />
+              {name}
+            </span>
+          ))}
+        </div>
       </div>
 
       <Row>
@@ -298,7 +352,7 @@ function Gallery() {
                 </div>
               )}
               <Case
-                caption={`${v.node.id} · tag "${nodeTag(v.node)}" · ${nodeSubtitle(v.node)}${
+                caption={`${v.node.id} · "${nodeTag(v.node)}" / ${nodeStateTag(v.node)} · r${nodeShape(v.node).radius} · ${nodeSubtitle(v.node)}${
                   nodeMissing(v.node).length ? ` · missing ${nodeMissing(v.node).join('+')}` : ''
                 }`}
               >

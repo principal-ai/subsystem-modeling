@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { nodeStyle, nodeSubtitle, nodeTag, nodeMissing, NODE_W, NODE_H } from './C4NodeCard';
+import {
+  nodeStyle,
+  nodeSubtitle,
+  nodeTag,
+  nodeStateTag,
+  nodeShape,
+  nodeMissing,
+  NODE_W,
+  NODE_H,
+} from './C4NodeCard';
 import type { C4Node, C4ElementType, C4AssociationState } from './toC4';
 
 const theme = {
@@ -53,9 +62,22 @@ describe('nodeStyle', () => {
     expect(nodeStyle(node({ kind: 'actor' }), theme).color).toBe('#e3b341');
   });
 
-  test('confirmation state wins over kind', () => {
+  test('confirmation state wins over kind for colour and dash', () => {
     const s = nodeStyle(decorated('accepted'), theme);
     expect(s.color).toBe('#4ec9b0');
+  });
+
+  test('border weight carries the level, not the state', () => {
+    // Otherwise a component and a container differ only by hue, which is
+    // invisible in grayscale and to a colourblind reader.
+    expect(nodeStyle(node({ kind: 'component' }), theme).width).toBe(1);
+    expect(nodeStyle(node(), theme).width).toBe(2);
+    expect(nodeStyle(decorated('accepted', { type: 'application' }), theme).width).toBe(2);
+  });
+
+  test('a component stays thinner when confirmed', () => {
+    const confirmed = decorated('accepted');
+    expect(nodeStyle({ ...confirmed, kind: 'component' }, theme).width).toBe(1);
   });
 
   test('falls back safely when the theme has no colour', () => {
@@ -65,17 +87,68 @@ describe('nodeStyle', () => {
   });
 });
 
-describe('nodeTag', () => {
-  test('names the confirmation state ahead of the C4 kind', () => {
-    expect(nodeTag(decorated('accepted'))).toBe('confirmed');
-    expect(nodeTag(decorated('proposed'))).toBe('proposed');
-    expect(nodeTag(decorated('rejected'))).toBe('rejected');
+describe('nodeTag — what the box IS', () => {
+  test('names the C4 level, never the confirmation state', () => {
+    expect(nodeTag(node())).toBe('container');
+    expect(nodeTag(decorated('accepted'))).toBe('container');
+    expect(nodeTag(decorated('proposed'))).toBe('container');
+    expect(nodeTag(decorated('rejected'))).toBe('container');
   });
 
-  test('falls back to the kind when there is no association', () => {
-    expect(nodeTag(node())).toBe('container');
+  test('keeps every level distinct', () => {
+    expect(nodeTag(node({ kind: 'component' }))).toBe('component');
     expect(nodeTag(node({ kind: 'external' }))).toBe('external');
     expect(nodeTag(node({ kind: 'actor' }))).toBe('actor');
+  });
+
+  test('a confirmed container is still a container', () => {
+    // This is the regression that made the two levels unreadable: state used
+    // to overwrite the level, so an accepted container stopped being one.
+    expect(nodeTag(decorated('accepted'))).not.toBe('confirmed');
+  });
+});
+
+describe('nodeStateTag — whether anyone vouched for it', () => {
+  test('names each confirmation state', () => {
+    expect(nodeStateTag(decorated('accepted'))).toBe('confirmed');
+    expect(nodeStateTag(decorated('proposed'))).toBe('proposed');
+    expect(nodeStateTag(decorated('rejected'))).toBe('rejected');
+  });
+
+  test('says unconfirmed rather than showing nothing', () => {
+    expect(nodeStateTag(node())).toBe('unconfirmed');
+    expect(nodeStateTag(node({ kind: 'component' }))).toBe('unconfirmed');
+  });
+
+  test('is a separate axis from the level', () => {
+    // Same level, different state — and vice versa.
+    expect(nodeTag(decorated('accepted'))).toBe(nodeTag(node()));
+    expect(nodeStateTag(node())).not.toBe(nodeStateTag(decorated('accepted')));
+    expect(nodeStateTag(node({ kind: 'component' }))).toBe(nodeStateTag(node()));
+  });
+});
+
+describe('nodeShape — level without relying on colour', () => {
+  test('a container is a sharp solid box', () => {
+    const s = nodeShape(node());
+    expect(s.radius).toBeLessThanOrEqual(4);
+    expect(s.dash).toBe('solid');
+  });
+
+  test('a component is a rounded box', () => {
+    expect(nodeShape(node({ kind: 'component' })).radius).toBeGreaterThan(nodeShape(node()).radius);
+  });
+
+  test('an external is dashed — there is nothing to confirm inside it', () => {
+    expect(nodeShape(node({ kind: 'external' })).dash).toBe('dashed');
+  });
+
+  test('an actor is a pill', () => {
+    expect(nodeShape(node({ kind: 'actor' })).radius).toBeGreaterThanOrEqual(NODE_H / 2);
+  });
+
+  test('shape does not depend on confirmation state', () => {
+    expect(nodeShape(decorated('proposed')).radius).toBe(nodeShape(decorated('accepted')).radius);
   });
 });
 

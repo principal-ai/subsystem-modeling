@@ -51,13 +51,17 @@ export function nodeStyle(node: C4Node, theme: Theme, selected = false): NodeSty
   const muted = theme.colors.border ?? '#555';
   if (selected) return { color: theme.colors.primary ?? '#5aa', dash: 'solid', width: 3 };
 
+  // Border width carries the C4 level, so a component stays a component even
+  // in grayscale or for a reader who cannot separate the hues.
+  const weight = node.kind === 'component' ? 1 : 2;
+
   switch (node.decoration?.state) {
     case 'accepted':
       // Solid and saturated — part of the architecture now.
-      return { color: theme.colors.primary ?? '#4ec9b0', dash: 'solid', width: 2 };
+      return { color: theme.colors.primary ?? '#4ec9b0', dash: 'solid', width: weight };
     case 'proposed':
       // Dashed — an agent asked; a human has not answered.
-      return { color: theme.colors.warning ?? '#e8a33a', dash: 'dashed', width: 2 };
+      return { color: theme.colors.warning ?? '#e8a33a', dash: 'dashed', width: weight };
     case 'rejected':
       // Should never be drawn (toC4 drops it); belt-and-braces.
       return { color: muted, dash: 'dotted', width: 1 };
@@ -69,11 +73,11 @@ export function nodeStyle(node: C4Node, theme: Theme, selected = false): NodeSty
   // read as the stronger signal.
   switch (node.kind) {
     case 'external':
-      return { color: theme.colors.warning ?? '#a78bfa', dash: 'solid', width: 2 };
+      return { color: theme.colors.warning ?? '#a78bfa', dash: 'solid', width: weight };
     case 'actor':
-      return { color: theme.colors.accent ?? theme.colors.info ?? '#e3b341', dash: 'solid', width: 2 };
+      return { color: theme.colors.accent ?? theme.colors.info ?? '#e3b341', dash: 'solid', width: weight };
     default:
-      return { color: muted, dash: 'solid', width: 2 };
+      return { color: muted, dash: 'solid', width: weight };
   }
 }
 
@@ -95,13 +99,58 @@ export function nodeSubtitle(node: C4Node): string {
   return `${describeConstructBreakdown(node.constructs)}${count > 0 ? ` · ${count} component${count === 1 ? '' : 's'}` : ''}`;
 }
 
-/** The uppercase tag above the label. */
+/**
+ * The C4 level — what the box IS.
+ *
+ * Deliberately independent of confirmation state. An accepted container is
+ * still a container, and a component is a component whether or not anyone has
+ * reviewed it; collapsing the two into one label is what made the two
+ * indistinguishable. Confirmation is a separate axis (`nodeStateTag`).
+ */
 export function nodeTag(node: C4Node): string {
-  const s = node.decoration?.state;
-  if (s === 'accepted') return 'confirmed';
-  if (s === 'proposed') return 'proposed';
-  if (s === 'rejected') return 'rejected';
   return node.kind;
+}
+
+/**
+ * Confirmation state, as its own short tag. Empty when nothing was proposed —
+ * which is itself the distinction from a reviewed element.
+ */
+export function nodeStateTag(node: C4Node): string {
+  switch (node.decoration?.state) {
+    case 'accepted':
+      return 'confirmed';
+    case 'proposed':
+      return 'proposed';
+    case 'rejected':
+      return 'rejected';
+    default:
+      return 'unconfirmed';
+  }
+}
+
+/**
+ * Shape cue for the C4 level, independent of colour and dash pattern.
+ *
+ * Colour alone is not enough: a container and a component with no association
+ * both fall back to the muted border, so they were identical in grayscale.
+ * The convention:
+ *
+ *   container   solid rectangle   — a runtime boundary, drawn to scale
+ *   component   rounded rectangle — a part inside one, drawn smaller
+ *   external    rounded rectangle + dashed (nothing to confirm inside)
+ *   actor       fully rounded      — a person, not a box
+ */
+export function nodeShape(node: C4Node): { radius: number; dash: 'solid' | 'dashed' } {
+  switch (node.kind) {
+    case 'actor':
+      return { radius: NODE_H / 2, dash: 'solid' };
+    case 'external':
+      return { radius: 14, dash: 'dashed' };
+    case 'component':
+      return { radius: 14, dash: 'solid' };
+    default:
+      return { radius: 4, dash: 'solid' };
+  }
 }
 
 /**
@@ -128,7 +177,9 @@ export function C4NodeCard({ node, selected = false, handles, onClick }: C4NodeC
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const style = nodeStyle(node, theme, selected);
+  const shape = nodeShape(node);
   const missing = nodeMissing(node);
+  const unconfirmed = !node.decoration?.state;
 
   return (
     <div
@@ -145,7 +196,7 @@ export function C4NodeCard({ node, selected = false, handles, onClick }: C4NodeC
         justifyContent: 'flex-start',
         gap: 3,
         padding: '10px 12px',
-        borderRadius: node.kind === 'actor' ? 20 : 8,
+        borderRadius: shape.radius,
         background: theme.colors.backgroundSecondary ?? theme.colors.background,
         border: `${style.width} ${style.dash} ${style.color}`,
         boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
@@ -153,21 +204,48 @@ export function C4NodeCard({ node, selected = false, handles, onClick }: C4NodeC
         fontFamily: theme.fonts.body,
       }}
     >
-      {/* Tag alone on its line: at this width, sharing the row with the
-          notation-gap marker truncates one of them. */}
+      {/* Level and state on one row, separately styled. The level is what the
+          box IS; the state is whether anyone has vouched for it. Merging them
+          into one label is what made containers and components unreadable. */}
       <span
         style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 6,
           fontFamily: theme.fonts.monospace,
           fontSize: theme.fontSizes[0],
           letterSpacing: 0.5,
           textTransform: 'uppercase',
-          color: style.color,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
         }}
       >
-        {nodeTag(node)}
+        <span
+          style={{
+            color: style.color,
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            minWidth: 0,
+          }}
+        >
+          {nodeTag(node)}
+        </span>
+        <span
+          title={unconfirmed ? 'Nobody has reviewed this element yet' : undefined}
+          style={{
+            color: unconfirmed ? muted : style.color,
+            // Unconfirmed is a quiet absence, not a loud claim.
+            opacity: unconfirmed ? 0.75 : 1,
+            letterSpacing: 0,
+            textTransform: 'none',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            minWidth: 0,
+          }}
+        >
+          {nodeStateTag(node)}
+        </span>
       </span>
       {/* Two lines rather than an ellipsis: a truncated label hides the very
           thing that distinguishes two containers from each other. The fixed
