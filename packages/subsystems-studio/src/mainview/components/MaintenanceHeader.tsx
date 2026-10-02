@@ -112,6 +112,8 @@ export function MaintenanceBatchActions({
 	repoBatchDone,
 	repoBatchSkipped,
 	repoBatchStopped,
+	repoBatchFailed,
+	repoBatchError,
 	onAuditAll,
 	onRunAll,
 	onStopAll,
@@ -127,6 +129,10 @@ export function MaintenanceBatchActions({
 	repoBatchDone: number;
 	repoBatchSkipped: number;
 	repoBatchStopped: number;
+	/** Models whose run failed. Rendered so a fully-failed batch isn't silent. */
+	repoBatchFailed: number;
+	/** First failure message, shown as the failed-count's tooltip. */
+	repoBatchError?: string;
 	onAuditAll: () => void;
 	onRunAll: () => void;
 	onStopAll: () => void;
@@ -194,6 +200,17 @@ export function MaintenanceBatchActions({
 			{!repoBatchActive && repoBatchStopped > 0 && (
 				<span style={{ fontSize: theme.fontSizes[1], color: muted }}>
 					{repoBatchStopped} stopped
+				</span>
+			)}
+			{!repoBatchActive && repoBatchFailed > 0 && (
+				<span
+					title={repoBatchError}
+					style={{
+						fontSize: theme.fontSizes[1],
+						color: theme.colors.error ?? "#e5534b",
+					}}
+				>
+					{repoBatchFailed} failed
 				</span>
 			)}
 		</div>

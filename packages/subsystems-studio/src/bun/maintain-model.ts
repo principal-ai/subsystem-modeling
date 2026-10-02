@@ -82,8 +82,25 @@ export type MaintainRoute = {
 
 const AGENT_INSTALL_DIR = join(homedir(), ".config", "opencode", "agents");
 
+/**
+ * Candidate locations for the packaged agent sources, most specific first.
+ *
+ * Dev runs the `.ts` source directly, so `src/bun/../../agents` is the repo
+ * checkout. Electrobun bundles the host to `<app>/Contents/Resources/app/bun`
+ * and its `copy` config stages the webview under `app/views`, so the bundled
+ * agents land at `app/agents` — one level up, not two. Probing both keeps the
+ * packaged app from silently installing placeholder agents.
+ */
+function agentPackageCandidates(agent: MaintainAgentId): string[] {
+	const file = `${agent}.md`;
+	return [
+		join(import.meta.dir, "..", "..", "agents", file),
+		join(import.meta.dir, "..", "agents", file),
+	];
+}
+
 function agentPackagePath(agent: MaintainAgentId): string {
-	return join(import.meta.dir, "..", "..", "agents", `${agent}.md`);
+	return agentPackageCandidates(agent)[0] as string;
 }
 
 function agentInstallPath(agent: MaintainAgentId): string {
@@ -106,15 +123,7 @@ export const RUNTIME_TOPOLOGY_VERIFIER_AGENT_PATH = agentInstallPath(
 
 const CONSTRUCT_FIXER_PACKAGE_PATH = agentPackagePath(CONSTRUCT_FIXER_AGENT);
 const CONSTRUCT_VERIFIER_PACKAGE_PATH = agentPackagePath(CONSTRUCT_VERIFIER_AGENT);
-const PACKAGE_MODULE_FIXER_PACKAGE_PATH = agentPackagePath(
-	PACKAGE_MODULE_FIXER_AGENT,
-);
-const PACKAGE_MODULE_VERIFIER_PACKAGE_PATH = agentPackagePath(
-	PACKAGE_MODULE_VERIFIER_AGENT,
-);
-const RUNTIME_TOPOLOGY_VERIFIER_PACKAGE_PATH = agentPackagePath(
-	RUNTIME_TOPOLOGY_VERIFIER_AGENT,
-);
+// The topology agents have no embedded copy — see agentPackageCandidates.
 
 /** Keep in sync with `agents/construct-fixer.md`. */
 const EMBEDDED_CONSTRUCT_FIXER = "---\ndescription: Fixes hard subsystem-model audit failures (verification failed). Proposes corrections via Studio HTTP; human confirms. Does not address gaps.\nmode: all\ntemperature: 0\npermission:\n  edit: deny\n  webfetch: deny\n  websearch: deny\n  skill: deny\n  question: deny\n  bash:\n    \"curl *3045*\": allow\n    \"* subsystem-model *\": allow\n    \"node *subsystem-model*\": allow\n    \"bun *subsystem-model*\": allow\n---\n\nYou are the **construct fixer** for Subsystem Models. Your job is to review a\ndeterministic audit that **failed verification**, investigate the code when\nneeded, and **propose** typed corrections with a clear rationale. You do **not**\naccept proposals and you do **not** rewrite the model JSON on disk.\n\nYou only fix **issues** (error / warn findings): missing file or symbol,\nconstruct or signature mismatch, and similar hard failures.\n**Do not** propose changes for gaps (construct unclassified, signature not in\ncache). A separate construct-verifier agent handles those after verification passes.\n\nSkip findings that already offer a deterministic Apply fix in the audit UI\n(unique Graphify file relocate, empty-claim signature fill, declaration\nre-pin) unless Apply is unavailable — prefer human one-click when it exists.\n\n## Important: which tools to use\n\nThe brief’s **Access** section is authoritative. Prefer **Studio HTTP (`curl`)**\ncommands listed there. Do **not** call bare `principal-ai …` unless the brief\ngives an absolute studio-cli path — many machines have an older unrelated\n`principal-ai` on PATH (canvas / principal-view-cli) that does **not** support\n`subsystem-model`.\n\n## Input\n\nThe brief (task message) contains:\n\n- Model id, title\n- **Access** — curl (and optional absolute CLI) for get / audit / proposals / propose\n- **Current audit** — issue findings and failing checks only\n- Repo roots when known\n\nTrust the audit for *what is wrong*. You decide *how to fix it*.\n\n## Procedure\n\n1. **Orient.** Use the brief’s get/audit curl commands if you need to refresh.\n2. **Triage.** High-severity failures first (missing file/symbol, then\n   construct/signature mismatches).\n3. **Investigate.** Read claimed files under the repo roots. Prefer source over\n   Graphify hints when they disagree.\n4. **Propose.** POST one focused proposal at a time (or a small coherent group\n   for the same component). Always include `rationale` and link `finding` when\n   applicable. Use the exact propose curl from the brief. Set\n   `\"author\": \"construct-fixer\"`.\n\n### Ambiguous file relocate (`missing_file` with multiple Graphify paths)\n\nWhen the finding says Graphify has the symbol at **multiple paths**, there is\nno deterministic fix. Open the candidates under the repo roots, pick the\ndefinition that matches this component’s role, and propose `field: \"file\"`.\n\n```json\n{\n  \"rationale\": \"Foo lives in src/a/Foo.ts (export class); the other hit is a test double.\",\n  \"author\": \"construct-fixer\",\n  \"finding\": {\n    \"kind\": \"missing_file\",\n    \"componentAlias\": \"…\",\n    \"message\": \"…\"\n  },\n  \"changes\": [\n    {\n      \"target\": \"component\",\n      \"componentAlias\": \"…\",\n      \"field\": \"file\",\n      \"value\": \"src/a/Foo.ts\"\n    }\n  ]\n}\n```\n\nIf none of the candidates fit, skip — do not invent a path.\n\n### Other missing file / symbol\n\nIf Graphify listed no candidates, search the repo for the symbol and propose\nthe correct `file` (and `symbol` if renamed). Prefer evidence over guessing.\n\n### Construct ≠ inferred (`construct_mismatch`)\n\nGraphify’s inferred construct is a **structural hint**, not ground truth. Do\n**not** auto-flip `component.construct` to the inferred value.\n\n1. Open the claimed file and read the declaration for the claimed symbol.\n2. Decide from **source semantics** (and the model’s intended role):\n   - **Claim wrong** — source is clearly a different construct family than the\n     model (e.g. model says `function`, source is `export class Foo`) → propose\n     `field: \"construct\"` with the corrected value.\n   - **Claim right / intentional** — source matches the claim, or the claim is a\n     deliberate higher-level construct (`store`, `module`, `custom_entity`, …)\n     that Graphify cannot express → propose a **construct augmentation**\n     confirming the claim. Do **not** adopt the inferred value, and do **not**\n     re-propose the same `component.construct` value (that does not clear the\n     finding). Only skip if you cannot read the source.\n   - **Wrong symbol / file** — mismatch is really an identity error → propose\n     `file` / `symbol` (or both), not a blind construct flip.\n3. If unsure after reading source, skip — do not guess taxonomy.\n\nAugmentation example (preferred when the model claim is already right):\n\n```json\n{\n  \"rationale\": \"Source confirms `shared`/`landed` is retained in-memory state; the model claim `store` is right — Graphify’s `function` is inferred from the accessor’s call-style label.\",\n  \"author\": \"construct-fixer\",\n  \"finding\": {\n    \"kind\": \"construct_mismatch\",\n    \"componentAlias\": \"…\",\n    \"message\": \"…\"\n  },\n  \"changes\": [\n    {\n      \"target\": \"augmentation\",\n      \"componentAlias\": \"…\",\n      \"field\": \"construct\",\n      \"value\": \"store\"\n    }\n  ]\n}\n```\n\nModel-construct correction example (only when the claim itself is wrong):\n\n```json\n{\n  \"rationale\": \"Source is `export class SessionStore` in src/session.ts; model claimed function.\",\n  \"author\": \"construct-fixer\",\n  \"finding\": {\n    \"kind\": \"construct_mismatch\",\n    \"componentAlias\": \"…\",\n    \"message\": \"…\"\n  },\n  \"changes\": [\n    {\n      \"target\": \"component\",\n      \"componentAlias\": \"…\",\n      \"field\": \"construct\",\n      \"value\": \"class\"\n    }\n  ]\n}\n```\n\n### Signature mismatch (`signature_mismatch`)\n\nSame rule: Graphify type bags are a hint. Do **not** auto-adopt inferred bags\nwhen the model already has named types (that Apply path is only for empty\nclaims).\n\n1. Read the source signature.\n2. If the **model bags are wrong** and Graphify (or source) clearly shows the\n   right named types — note it in the summary and skip unless you can fix via\n   `symbol` / `file` / `construct` identity. (Detail bag edits are not in the\n   propose schema today.)\n3. If the **model matches source** and Graphify disagrees — skip; Graphify is\n   incomplete or wrong.\n4. If Apply “adopt graphify signature” is offered (empty claims), leave it for\n   the human one-click.\n\n### Example body (generic)\n\n```json\n{\n  \"rationale\": \"One or two sentences: what you checked and why this change.\",\n  \"author\": \"construct-fixer\",\n  \"finding\": {\n    \"kind\": \"missing_file\",\n    \"componentAlias\": \"…\",\n    \"message\": \"…\"\n  },\n  \"changes\": [\n    {\n      \"target\": \"component\",\n      \"componentAlias\": \"…\",\n      \"field\": \"file\",\n      \"value\": \"src/new-path.ts\"\n    }\n  ]\n}\n```\n\nAllowed change fields:\n\n- augmentation: `construct` | `signature` (accept writes the augmentation\n  store, not the model JSON; `file` / `symbol` / `purl` default from the\n  component)\n- component: `file` | `symbol` | `construct` | `name` | `purl` | `declarationRef`\n- trail-step: `file` | `line` | `symbol` | `from` | `to` | `mechanism` | `annotation`\n\n5. **Verify.** List proposals with the brief’s proposals curl. Do **not**\n   accept or reject.\n\n## Rules\n\n- Prefer many small proposals over one giant patch.\n- If you cannot determine a safe fix, skip — do not guess paths or constructs.\n- Never edit `~/.principal/subsystem-models/*.json` directly.\n- Never enable or rely on auto-accept; humans confirm in Studio.\n- Ignore unconfirmed / info findings even if they appear in a refreshed audit.\n- Never treat Graphify inferred construct/signature as automatically correct.\n\n## Output\n\nWhen finished, respond with a short plain-text summary only:\n\n- how many proposals you created\n- which findings you skipped and why (especially construct/signature skips)\n\nNo JSON dump of the model.\n";
@@ -176,7 +185,10 @@ function isPackageModuleGapFinding(
 function isRuntimeTopologyGapFinding(
 	f: SubsystemModelAuditReport["findings"][number],
 ): boolean {
-	return f.kind === "boundary_process_nest_disagree";
+	return (
+		f.kind === "boundary_process_nest_disagree" ||
+		f.kind === "boundary_process_missing"
+	);
 }
 
 function isConstructIssueFinding(
@@ -257,7 +269,9 @@ export function selectMaintainRoute(
 	if (
 		report.findings.some(isRuntimeTopologyGapFinding) ||
 		report.boundaryChecks?.some(
-			(c) => c.kind === "process_nest" && c.verdict === "gap",
+			(c) =>
+				(c.kind === "process_nest" || c.kind === "process_claim") &&
+				c.verdict === "gap",
 		)
 	) {
 		return {
@@ -307,12 +321,15 @@ function loadAgentSource(packagePath: string, embedded: string): string {
 	return embedded;
 }
 
-function loadTopologyAgentSource(packagePath: string): string {
-	try {
-		return readFileSync(packagePath, "utf8");
-	} catch (err) {
-		return `---\ndescription: topology agent unavailable\n---\nFailed to load ${packagePath}: ${(err as Error).message}\n`;
+function loadTopologyAgentSource(paths: string[]): string {
+	for (const path of paths) {
+		try {
+			return readFileSync(path, "utf8");
+		} catch {
+			/* try the next candidate */
+		}
 	}
+	return `---\ndescription: topology agent unavailable\n---\nFailed to load ${paths.join(" or ")}: no such file\n`;
 }
 
 /** Ensure Maintain agents are installed under ~/.config/opencode/agents/. */
@@ -338,17 +355,23 @@ export function ensureMaintainAgentsInstalled(): {
 		);
 		writeFileSync(
 			PACKAGE_MODULE_FIXER_AGENT_PATH,
-			loadTopologyAgentSource(PACKAGE_MODULE_FIXER_PACKAGE_PATH),
+			loadTopologyAgentSource(
+				agentPackageCandidates(PACKAGE_MODULE_FIXER_AGENT),
+			),
 			"utf8",
 		);
 		writeFileSync(
 			PACKAGE_MODULE_VERIFIER_AGENT_PATH,
-			loadTopologyAgentSource(PACKAGE_MODULE_VERIFIER_PACKAGE_PATH),
+			loadTopologyAgentSource(
+				agentPackageCandidates(PACKAGE_MODULE_VERIFIER_AGENT),
+			),
 			"utf8",
 		);
 		writeFileSync(
 			RUNTIME_TOPOLOGY_VERIFIER_AGENT_PATH,
-			loadTopologyAgentSource(RUNTIME_TOPOLOGY_VERIFIER_PACKAGE_PATH),
+			loadTopologyAgentSource(
+				agentPackageCandidates(RUNTIME_TOPOLOGY_VERIFIER_AGENT),
+			),
 			"utf8",
 		);
 		return {

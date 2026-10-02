@@ -229,6 +229,9 @@ function report(
 			processNestsChecked: 0,
 			processNestOk: 0,
 			processNestDisagree: 0,
+			processRequired: 0,
+			processClaimed: 0,
+			processMissing: 0,
 		},
 		checks: [],
 		findings: [],
@@ -477,5 +480,60 @@ describe("summarizeLanes", () => {
 		);
 		expect(lanes.construct).toBe("partial");
 		expect(lanes["static-topology"]).toBe("none");
+	});
+
+	/*
+	 * Dynamic topology must distinguish "process stated, nothing wrong" from
+	 * "no process information at all". Both used to tally zero.
+	 */
+	test("a claimed process verifies dynamic topology with no module present", () => {
+		const lanes = summarizeLanes(
+			report({
+				checks: [componentCheck({})],
+				boundaryChecks: [
+					boundaryCheck({ componentAlias: "a", kind: "process_claim" }),
+					boundaryCheck({ componentAlias: "b", kind: "process_claim" }),
+				],
+			}),
+			{ hasTrails: true },
+		);
+		expect(lanes["dynamic-topology"]).toBe("verified");
+		// No module claims, so static topology still has nothing to check.
+		expect(lanes["static-topology"]).toBe("none");
+	});
+
+	test("no process information at all leaves dynamic topology none", () => {
+		const lanes = summarizeLanes(
+			report({
+				checks: [componentCheck({})],
+				boundaryChecks: [
+					boundaryCheck({
+						componentAlias: "a",
+						kind: "skipped",
+						verdict: "skipped",
+					}),
+				],
+			}),
+			{ hasTrails: true },
+		);
+		expect(lanes["dynamic-topology"]).toBe("none");
+	});
+
+	test("a missing process claim is partial, never a hard fail", () => {
+		const lanes = summarizeLanes(
+			report({
+				checks: [componentCheck({})],
+				boundaryChecks: [
+					boundaryCheck({ componentAlias: "a", kind: "process_claim" }),
+					boundaryCheck({
+						componentAlias: "b",
+						kind: "process_claim",
+						verdict: "gap",
+					}),
+				],
+			}),
+			{ hasTrails: true },
+		);
+		expect(lanes["dynamic-topology"]).toBe("partial");
 	});
 });

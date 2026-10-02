@@ -255,6 +255,12 @@ function laneStatus(t: VerificationTally): VerificationLaneStatus {
  * Coarse per-lane status mapped onto the four model layers: construct (L1),
  * static topology (L2 = package/module containment), dynamic topology
  * (L3 = process runtime), trail (L4).
+ *
+ * Dynamic topology tallies both `process_nest` (members of a multi-member
+ * module agree) and `process_claim` (a runtime-executing component states a
+ * deployment unit). The second is what lets the lane go green without a
+ * `module` claim, and what keeps "process stated, nothing wrong" distinct from
+ * "no process information at all" — the latter tallies zero and stays grey.
  */
 export function summarizeLanes(
 	report: SubsystemModelAuditReport,
@@ -267,7 +273,9 @@ export function summarizeLanes(
 	const dynamicTopology = emptyTally();
 	for (const c of report.boundaryChecks ?? []) {
 		if (c.kind === "module_file") classifyBoundaryCheck(c, staticTopology);
-		if (c.kind === "process_nest") classifyBoundaryCheck(c, dynamicTopology);
+		if (c.kind === "process_nest" || c.kind === "process_claim") {
+			classifyBoundaryCheck(c, dynamicTopology);
+		}
 	}
 
 	const trail: VerificationLaneStatus = !opts.hasTrails

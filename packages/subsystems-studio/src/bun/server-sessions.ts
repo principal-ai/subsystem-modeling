@@ -98,26 +98,48 @@ export function serverAuthHeaders(password: string): Record<string, string> {
 		: {};
 }
 
-/** Probe `/api/health` exactly like the server's own daemon. Missing
- *  registration, a failed fetch, or a non-healthy body means "not running". */
+/** Liveness probes, newest server first.
+ *
+ *  V2 (`/api/info`) answers with `{version, pid, urls, paths}` and is the
+ *  endpoint that actually exists on the v2 server — its route table has no
+ *  `/api/health` at all, so probing only that endpoint reports a perfectly
+ *  healthy server as down and every Maintain run dies before it can create a
+ *  session. `/api/health` (`{healthy: true}`) is kept as a fallback for older
+ *  servers that predate `/api/info`.
+ *
+ *  A 200 on either endpoint is enough: both are behind the same Basic auth as
+ *  the rest of the API, so a 200 also proves the password works. */
+const LIVENESS_PROBES = ["/api/info", "/api/health"] as const;
+
 export async function probeOpencodeServer(): Promise<OpencodeServerStatus> {
 	const connection = resolveOpencodeConnection();
 	if (!connection) return { running: false };
-	try {
-		const res = await fetch(`${connection.url}/api/health`, {
-			headers: serverAuthHeaders(connection.password),
-			signal: AbortSignal.timeout(2_000),
-		});
-		if (!res.ok) return { running: false, url: connection.url, version: connection.version };
-		const body = (await res.json().catch(() => null)) as { healthy?: unknown } | null;
-		return {
-			running: body?.["healthy"] === true,
-			url: connection.url,
-			version: connection.version,
-		};
-	} catch {
-		return { running: false, url: connection.url, version: connection.version };
+	const version = connection.version;
+	for (const path of LIVENESS_PROBES) {
+		try {
+			const res = await fetch(`${connection.url}${path}`, {
+				headers: serverAuthHeaders(connection.password),
+				signal: AbortSignal.timeout(2_000),
+			});
+			if (!res.ok) continue;
+			const body = (await res.json().catch(() => null)) as {
+				healthy?: unknown;
+				version?: unknown;
+			} | null;
+			// `/api/health` gates on its flag; `/api/info` has none — any JSON
+			// body from it means the server is up, and it names the version.
+			if (path === "/api/health" && body?.["healthy"] !== true) continue;
+			return {
+				running: true,
+				url: connection.url,
+				version: typeof body?.["version"] === "string" ? body["version"] : version,
+			};
+		} catch {
+			// Try the next probe — a refused connection fails them all anyway.
+			continue;
+		}
 	}
+	return { running: false, url: connection.url, version };
 }
 
 // ---------------------------------------------------------------------------

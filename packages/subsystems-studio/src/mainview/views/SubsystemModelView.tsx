@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PenTool, X } from "lucide-react";
+import { PenTool, Wrench, X } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
 	SubsystemComponentGraph,
@@ -30,6 +30,7 @@ import { electrobun, maintainLivePanelSubscribers, opencodeLiveFeedSubscribers, 
 import { CenteredMessage } from "../ui";
 import {
 	auditReportToIssues,
+	diagnosticFixableCount,
 	diagnosticIssueCount,
 	diagnosticStatus,
 } from "../subsystemIssues";
@@ -39,9 +40,17 @@ import type { ExcalidrawSelectionInfo } from "../excalidraw/excalidrawToSubsyste
 import type {
 	StoredSubsystemModel,
 	StudioMessages,
+	SubsystemModelAuditFixGroup,
 	SubsystemModelAuditReport,
 	SubsystemTrail,
 } from "../../shared/contract";
+
+/** Preview label per one-click fix kind — what Apply all would write. */
+const AUDIT_FIX_KIND_LABEL: Record<SubsystemModelAuditFixGroup["fixId"], string> = {
+	adopt_graphify_declaration_ref: "declaration re-pins",
+	adopt_graphify_signature: "signature fills",
+	adopt_graphify_file: "file relocates",
+};
 
 // Disabled for now — Excalidraw edits don't save back to the store yet
 // (excalidrawSceneToSubsystemModel exists but nothing wires it up), so the
@@ -171,6 +180,46 @@ export function SubsystemModelView({
 			.catch(() => setNextAgentId(null));
 	}, [graphId]);
 
+	/** One-click fixes the last audit staged, awaiting Apply all / Dismiss. */
+	const [fixPreview, setFixPreview] = useState<SubsystemModelAuditFixGroup[]>(
+		[],
+	);
+	const [fixPreviewBusy, setFixPreviewBusy] = useState(false);
+	const [fixPreviewError, setFixPreviewError] = useState<string | null>(null);
+
+	const loadFixPreview = useCallback(() => {
+		void electrobun.rpc!.request
+			.getPendingAuditFixes({ graphId })
+			.then((res) => setFixPreview(res.ok ? (res.groups ?? []) : []))
+			.catch(() => setFixPreview([]));
+	}, [graphId]);
+
+	const resolveFixPreview = useCallback(
+		(apply: boolean) => {
+			setFixPreviewBusy(true);
+			setFixPreviewError(null);
+			void electrobun.rpc!.request
+				.resolvePendingAuditFixes({ graphId, apply })
+				.then((res) => {
+					setFixPreview([]);
+					if (res.ok) {
+						if (res.report) setAuditReport(res.report);
+						loadGraph();
+						loadAudit();
+					} else {
+						setFixPreviewError(res.error ?? "could not apply fixes");
+					}
+				})
+				.catch((err: unknown) => {
+					setFixPreviewError(
+						err instanceof Error ? err.message : String(err),
+					);
+				})
+				.finally(() => setFixPreviewBusy(false));
+		},
+		[graphId, loadGraph, loadAudit],
+	);
+
 	/** Run the router's next Maintain stage for this model. */
 	const runNextAgent = useCallback(() => {
 		setRunBusy(true);
@@ -193,11 +242,12 @@ export function SubsystemModelView({
 		loadGraph();
 		loadAudit();
 		loadNextAgent();
+		loadFixPreview();
 		reloadSubscribers.add(loadGraph);
 		return () => {
 			reloadSubscribers.delete(loadGraph);
 		};
-	}, [loadGraph, loadAudit, loadNextAgent]);
+	}, [loadGraph, loadAudit, loadNextAgent, loadFixPreview]);
 
 	useEffect(() => {
 		const onPush = (payload: StudioMessages["subsystemModelChanged"]) => {
@@ -205,13 +255,14 @@ export function SubsystemModelView({
 				loadGraph();
 				loadAudit();
 				loadNextAgent();
+				loadFixPreview();
 			}
 		};
 		subsystemModelChangeSubscribers.add(onPush);
 		return () => {
 			subsystemModelChangeSubscribers.delete(onPush);
 		};
-	}, [graphId, loadGraph, loadAudit, loadNextAgent]);
+	}, [graphId, loadGraph, loadAudit, loadNextAgent, loadFixPreview]);
 
 	// Maintain run lifecycle: reflect busy state; when it finishes, the audit and
 	// the router's next stage change — refresh both.
@@ -428,6 +479,8 @@ export function SubsystemModelView({
 	const diagnostic: SubsystemDiagnostic = {
 		status: diagnosticStatus(auditReport),
 		issueCount: diagnosticIssueCount(auditReport),
+		// Badged so the one-click fixes announce themselves without expanding.
+		fixableCount: diagnosticFixableCount(auditReport),
 		stale: auditStale,
 		onToggle: onDiagnosticToggle,
 	};
@@ -445,12 +498,14 @@ export function SubsystemModelView({
 				})
 				.then((res) => {
 					if (res.ok && res.report) setAuditReport(res.report);
+					// A per-finding Apply invalidates the staged batch host-side.
+					loadFixPreview();
 				})
 				.catch(() => {
 					/* best-effort — the next audit refresh reconciles */
 				});
 		},
-		[auditFindingById, graphId],
+		[auditFindingById, graphId, loadFixPreview],
 	);
 
 	if (graph === undefined) {
@@ -461,15 +516,96 @@ export function SubsystemModelView({
 		return <CenteredMessage title="Graph not found" detail={graphId} />;
 	}
 
+	// Confirmation preview for the batch one-click fix. Sits above the graph so
+	// it's visible without scrolling into the (collapsed) issue list — the audit
+	// that staged it runs in the background, so this is where the user finds out.
+	const fixPreviewTotal = fixPreview.reduce((n, g) => n + g.count, 0);
+	const fixPreviewNode =
+		fixPreviewTotal > 0 ? (
+			<div
+				role="status"
+				style={{
+					display: "flex",
+					alignItems: "center",
+					gap: 10,
+					flexWrap: "wrap",
+					padding: "8px 12px",
+					borderBottom: `1px solid ${theme.colors.border}`,
+					background: theme.colors.background,
+					fontSize: theme.fontSizes[1],
+				}}
+			>
+				<Wrench size={13} style={{ color: theme.colors.success ?? "#2da44e" }} />
+				<span style={{ minWidth: 0, flex: 1 }}>
+					<span style={{ fontWeight: 600 }}>
+						{fixPreviewTotal} fixable finding{fixPreviewTotal === 1 ? "" : "s"}
+					</span>
+					<span style={{ color: theme.colors.textSecondary, marginLeft: 6 }}>
+						{fixPreview
+							.map(
+								(g) =>
+									`${g.count} ${AUDIT_FIX_KIND_LABEL[g.fixId] ?? g.fixId}`,
+							)
+							.join(" · ")}
+					</span>
+				</span>
+				<button
+					type="button"
+					disabled={fixPreviewBusy}
+					onClick={() => resolveFixPreview(true)}
+					style={{
+						padding: "4px 10px",
+						borderRadius: 5,
+						border: "none",
+						background: theme.colors.success ?? "#2da44e",
+						color: theme.colors.background,
+						fontFamily: theme.fonts.body,
+						fontSize: theme.fontSizes[1],
+						fontWeight: 600,
+						cursor: fixPreviewBusy ? "default" : "pointer",
+						opacity: fixPreviewBusy ? 0.6 : 1,
+					}}
+				>
+					{fixPreviewBusy ? "Applying…" : "Apply all"}
+				</button>
+				<button
+					type="button"
+					disabled={fixPreviewBusy}
+					onClick={() => resolveFixPreview(false)}
+					style={{
+						padding: "4px 10px",
+						borderRadius: 5,
+						border: `1px solid ${theme.colors.border}`,
+						background: "transparent",
+						color: theme.colors.textSecondary,
+						fontFamily: theme.fonts.body,
+						fontSize: theme.fontSizes[1],
+						cursor: fixPreviewBusy ? "default" : "pointer",
+					}}
+				>
+					Dismiss
+				</button>
+				{fixPreviewError && (
+					<span style={{ color: theme.colors.error ?? "#e5534b" }}>
+						{fixPreviewError}
+					</span>
+				)}
+			</div>
+		) : null;
+
 	return (
 		<div
 			style={{
 				position: "relative",
+				display: "flex",
+				flexDirection: "column",
 				width: "100%",
 				height: "100%",
 				background: theme.colors.background,
 			}}
 		>
+			{fixPreviewNode}
+			<div style={{ flex: 1, minHeight: 0, position: "relative" }}>
 			<SubsystemComponentGraph
 				components={graph.components}
 				trails={graph.trails}
@@ -574,6 +710,7 @@ export function SubsystemModelView({
 					</>
 				}
 			/>
+			</div>
 		</div>
 	);
 }

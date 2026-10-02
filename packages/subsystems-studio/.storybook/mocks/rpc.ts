@@ -94,6 +94,7 @@ let viewerSettings: ViewerSettings = {
   subsystemMaintainerModel: "opencode-go/deepseek-v4-flash",
   regularAuditEnabled: true,
   regularAuditIntervalMinutes: 5,
+  autoApplyAuditFixes: true,
   typesafeApiKey: null,
   maintenanceRepoKey: "principal-ai/subsystem-modeling",
   lastActiveTabId: null,
@@ -200,6 +201,8 @@ const request: RpcRequest = {
   analyzeSession: async () => ({ ok: true }),
   deleteAnalysis: async () => ({ ok: true }),
   auditSubsystemModel: async () => ({ ok: true }),
+  getPendingAuditFixes: async () => ({ ok: true, groups: [] }),
+  resolvePendingAuditFixes: async () => ({ ok: true, applied: 0 }),
   readFile: async () => ({ ok: true, content: "" }),
   // MaintenancePanel: aggregate overview + persisted runs.
   getMaintenanceOverview: async () => ({ ok: true, overview: mockOverview }),

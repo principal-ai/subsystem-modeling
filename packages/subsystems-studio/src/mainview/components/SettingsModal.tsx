@@ -78,6 +78,7 @@ const FALLBACK_SETTINGS: ViewerSettings = {
 	subsystemMaintainerModel: null,
 	regularAuditEnabled: true,
 	regularAuditIntervalMinutes: 5,
+	autoApplyAuditFixes: false,
 	typesafeApiKey: null,
 	maintenanceRepoKey: null,
 	lastActiveTabId: null,
@@ -88,6 +89,7 @@ type SavingKey =
 	| "resetTabs"
 	| "autoAccept"
 	| "autoAcceptThreshold"
+	| "autoApplyAuditFixes"
 	| "regularAudit"
 	| "regularAuditInterval"
 	| "typesafeApiKey";
@@ -272,6 +274,23 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 				...settings,
 				autoAcceptSubsystemModelProposals: !nextValue,
 			});
+		} finally {
+			setSavingKey(null);
+		}
+	}, [settings]);
+
+	const toggleAutoApplyAuditFixes = useCallback(async () => {
+		if (!settings) return;
+		const nextValue = !settings.autoApplyAuditFixes;
+		setSavingKey("autoApplyAuditFixes");
+		setSettings({ ...settings, autoApplyAuditFixes: nextValue });
+		try {
+			const res = await electrobun.rpc!.request.setSettings({
+				settings: { autoApplyAuditFixes: nextValue },
+			});
+			if (res.ok) setSettings(res.settings);
+		} catch {
+			setSettings({ ...settings, autoApplyAuditFixes: !nextValue });
 		} finally {
 			setSavingKey(null);
 		}
@@ -1061,6 +1080,67 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 										or above this confidence auto-accept. Others stay pending.
 									</span>
 								</div>
+
+								<label
+									style={{
+										display: "flex",
+										alignItems: "center",
+										gap: 12,
+										padding: "10px 12px",
+										marginTop: 8,
+										borderRadius: 8,
+										background: theme.colors.background,
+										border: `1px solid ${theme.colors.border}`,
+										cursor:
+											settings && savingKey !== "autoApplyAuditFixes"
+												? "pointer"
+												: "default",
+									}}
+								>
+									<input
+										type="checkbox"
+										checked={settings?.autoApplyAuditFixes ?? false}
+										disabled={!settings || savingKey === "autoApplyAuditFixes"}
+										onChange={() => void toggleAutoApplyAuditFixes()}
+										style={{
+											width: 16,
+											height: 16,
+											accentColor: theme.colors.success ?? "#2da44e",
+											cursor:
+												settings && savingKey !== "autoApplyAuditFixes"
+													? "pointer"
+													: "default",
+											flexShrink: 0,
+										}}
+									/>
+									<span style={{ minWidth: 0, flex: 1 }}>
+										<span
+											style={{
+												display: "block",
+												fontSize: theme.fontSizes[1],
+												fontWeight: 600,
+												lineHeight: 1.3,
+											}}
+										>
+											Surface one-click fixes during audit
+										</span>
+										<span
+											style={{
+												display: "block",
+												fontSize: theme.fontSizes[0],
+												color: muted,
+												lineHeight: 1.4,
+												marginTop: 2,
+											}}
+										>
+											When an audit finds deterministic fixes — declaration
+											re-pins, adoptable signature fills, unique Graphify file
+											relocates — show them as a confirmation bar on the model
+											with one Apply all. Nothing is written until you approve.
+											Findings an agent must judge are unaffected.
+										</span>
+									</span>
+								</label>
 							</>
 						)}
 					</div>

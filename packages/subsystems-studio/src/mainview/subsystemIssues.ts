@@ -55,6 +55,19 @@ export function diagnosticIssueCount(
 		: report.checks.filter((c) => c.verdict === "issue").length;
 }
 
+/**
+ * Findings that carry a deterministic one-click fix, badged on the diagnostic
+ * chip. These sit inside collapsed issue categories, so without the badge the
+ * only way to learn a finding was one click away was to expand the list and
+ * look — which is how the construct-fixer defers could go unnoticed.
+ */
+export function diagnosticFixableCount(
+	report: SubsystemModelAuditReport | null,
+): number {
+	if (!report) return 0;
+	return report.findings.filter((f) => f.fix != null).length;
+}
+
 function componentLabel(
 	graph: StoredSubsystemModel,
 	alias: string,

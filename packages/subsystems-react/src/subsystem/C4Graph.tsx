@@ -25,7 +25,8 @@ import {
 } from '@xyflow/react';
 import { useTheme } from '@principal-ade/industry-theme';
 import { computeElkLayout } from '../utils/elkLayout';
-import { describeConstructBreakdown, MECHANISM_COLOR } from './model';
+import { MECHANISM_COLOR } from './model';
+import { C4NodeCard, NODE_H, NODE_W, nodeStyle } from './C4NodeCard';
 import { GRAPH_CANVAS_CLASS, GRAPH_NAV_PROPS, GraphChrome, GraphLayerStyle } from './graphChrome';
 import type { C4Model, C4Node } from './toC4';
 
@@ -35,104 +36,24 @@ export interface C4GraphProps {
   onSelectNode?: (id: string | null) => void;
 }
 
-const NODE_W = 230;
-const NODE_H = 80;
-
-function baseName(path: string): string {
-  const parts = path.split('/').filter(Boolean);
-  return parts[parts.length - 1] ?? path;
-}
-
 function edgeColor(mechanism: string | undefined, fallback: string): string {
   if (!mechanism) return fallback;
   return (MECHANISM_COLOR as Record<string, string>)[mechanism] ?? fallback;
 }
 
 function C4NodeView(props: NodeProps<Node<{ node: C4Node; selected: boolean }>>) {
-  const { theme } = useTheme();
   const { node, selected } = props.data;
-  const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
-
-  const kindColor =
-    node.kind === 'external'
-      ? (theme.colors.warning ?? theme.colors.accent ?? theme.colors.info)
-      : node.kind === 'actor'
-        ? (theme.colors.accent ?? theme.colors.info)
-        : (theme.colors.border ?? '#333');
-
-  const tag = node.kind === 'container' ? 'container' : node.kind === 'external' ? 'external system' : node.kind === 'actor' ? 'actor' : 'component';
-
-  const subtitle =
-    node.kind === 'component'
-      ? `${node.component?.construct ?? 'code'}${node.component?.file ? ` · ${baseName(node.component.file)}` : ''}`
-      : `${describeConstructBreakdown(node.constructs)}${
-          node.members.length > 0 ? ` · ${node.members.length} component${node.members.length === 1 ? '' : 's'}` : ''
-        }`;
-
   return (
-    <div
-      style={{
-        width: NODE_W,
-        height: NODE_H,
-        boxSizing: 'border-box',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        gap: 2,
-        padding: '8px 12px',
-        borderRadius: node.kind === 'actor' ? 20 : 8,
-        background: theme.colors.backgroundSecondary ?? theme.colors.background,
-        border: `2px ${node.kind === 'component' ? 'solid' : node.kind === 'container' ? 'solid' : 'dashed'} ${
-          selected ? theme.colors.primary : kindColor
-        }`,
-        boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
-        cursor: 'pointer',
-        fontFamily: theme.fonts.body,
-      }}
-    >
-      <span
-        style={{
-          fontFamily: theme.fonts.monospace,
-          fontSize: theme.fontSizes[0],
-          letterSpacing: 0.5,
-          textTransform: 'uppercase',
-          color: kindColor,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}
-      >
-        {tag}
-      </span>
-      <span
-        style={{
-          fontWeight: 600,
-          fontSize: theme.fontSizes[2],
-          color: theme.colors.text,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}
-        title={node.label}
-      >
-        {node.label}
-      </span>
-      <span
-        style={{
-          fontFamily: theme.fonts.monospace,
-          fontSize: theme.fontSizes[0],
-          color: muted,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}
-        title={node.members.join(', ')}
-      >
-        {subtitle}
-      </span>
-      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
-      <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
-    </div>
+    <C4NodeCard
+      node={node}
+      selected={selected}
+      handles={
+        <>
+          <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
+          <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+        </>
+      }
+    />
   );
 }
 
@@ -212,7 +133,7 @@ function Inner({ model, title, onSelectNode }: C4GraphProps) {
     const rfNodes: Node[] = model.nodes.map((n, i) => ({
       id: n.id,
       type: 'c4-node',
-      position: { x: (i % 4) * (NODE_W + 60), y: Math.floor(i / 4) * (NODE_H + 40) },
+      position: { x: (i % 5) * (NODE_W + 44), y: Math.floor(i / 5) * (NODE_H + 44) },
       width: NODE_W,
       height: NODE_H,
       ...(n.parentId ? { parentId: n.parentId } : {}),
@@ -431,6 +352,44 @@ function Inner({ model, title, onSelectNode }: C4GraphProps) {
             {selected.kind} · {selected.members.length} component{selected.members.length === 1 ? '' : 's'}
             {selected.models && selected.models.length > 0 ? ` · ${selected.models.length} model${selected.models.length === 1 ? '' : 's'}` : ''}
           </div>
+
+          {/* Confirmation state, with what is still missing. */}
+          {selected.kind === 'container' && (
+            <div
+              style={{
+                fontFamily: theme.fonts.monospace,
+                fontSize: theme.fontSizes[0],
+                color: muted,
+                borderTop: `1px solid ${theme.colors.border ?? '#333'}`,
+                paddingTop: 6,
+                marginBottom: 8,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 3,
+              }}
+            >
+              <span style={{ color: nodeStyle(selected, theme).color }}>
+                {selected.decoration?.state ?? 'unconfirmed'} · {selected.decoration?.type ?? 'no type'}
+              </span>
+              {selected.decoration?.technology ? (
+                <span>technology: {selected.decoration.technology}</span>
+              ) : (
+                <span style={{ color: theme.colors.warning ?? '#e8a33a' }}>technology: not stated</span>
+              )}
+              {selected.decoration?.description ? (
+                <span style={{ whiteSpace: 'normal', lineHeight: 1.4 }}>{selected.decoration.description}</span>
+              ) : (
+                <span style={{ color: theme.colors.warning ?? '#e8a33a' }}>description: not stated</span>
+              )}
+              {/* A merge hides its inputs, so always show what it absorbed. */}
+              {selected.sourceKeys && selected.sourceKeys.length > 1 && (
+                <span style={{ whiteSpace: 'normal', lineHeight: 1.4 }}>
+                  merged from: {selected.sourceKeys.join(', ')}
+                </span>
+              )}
+            </div>
+          )}
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {selected.members.map((alias) => (
               <span

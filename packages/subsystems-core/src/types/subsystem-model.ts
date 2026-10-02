@@ -80,6 +80,18 @@ export type SubsystemEdgeMechanism = SubsystemTrailMechanism;
 
 export type SubsystemDeclarationProvenance = 'verified' | 'authored';
 
+/**
+ * Provenance for a deprecated component: which commit removed its source, and
+ * why. Captured at deprecation time so the model carries its own explanation —
+ * the badge that surfaces this must not need a git call to render.
+ */
+export interface SubsystemComponentRemoval {
+  /** Short commit hash of the removal. */
+  commit: string;
+  /** That commit's subject line, e.g. "Remove topology relations; …". */
+  reason?: string;
+}
+
 export type SubsystemDeclTokenKind =
   | 'keyword'
   | 'name'
@@ -293,6 +305,25 @@ export interface SubsystemComponent {
    * `construct` (intended shape) and `role` (topology).
    */
   proposed?: boolean;
+  /**
+   * The claim was real but its source is gone — deleted or renamed upstream.
+   * The inverse of `proposed`: instead of "not built yet", this is "built once,
+   * removed since". Verification skips source checks exactly as it does for
+   * `proposed`, so a model carrying deprecations is no longer wedged on
+   * unfixable `missing_file` findings.
+   *
+   * This is a transitional marker, not a resting state. A cleanup pass removes
+   * the component and repairs the trails that referenced it; the field exists so
+   * the evidence survives until then. `removedIn` carries the provenance that
+   * makes that judgment reviewable.
+   */
+  deprecated?: boolean;
+  /**
+   * Why and when this claim's source went away. `commit` is the short hash of
+   * the removal; `reason` is that commit's subject, captured at deprecation time
+   * so the model's JSON explains itself without a `git show`.
+   */
+  removedIn?: SubsystemComponentRemoval;
   /**
    * Framework that owns the stereotype (e.g. `react`, `nestjs`).
    * Orthogonal to `construct` — a React component is still `construct: function`.

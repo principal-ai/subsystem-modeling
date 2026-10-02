@@ -27,6 +27,16 @@ export default {
 			// esbuild-vendored Prettier, loaded as a plain script (see
 			// scripts/build-prettier-vendor.ts).
 			"src/mainview/vendor/prettier.js": "views/mainview/vendor/prettier.js",
+			// Maintain agent prompts the host installs into ~/.config/opencode/agents/.
+			// Without these they resolve to a placeholder in the packaged app
+			// (see agentPackageCandidates in bun/maintain-model.ts). Listed by
+			// file like the entries above — a bare directory key is not staged.
+			"agents/construct-fixer.md": "agents/construct-fixer.md",
+			"agents/construct-verifier.md": "agents/construct-verifier.md",
+			"agents/package-module-fixer.md": "agents/package-module-fixer.md",
+			"agents/package-module-verifier.md": "agents/package-module-verifier.md",
+			"agents/runtime-topology-verifier.md":
+				"agents/runtime-topology-verifier.md",
 		},
 		mac: {
 			bundleCEF: false,

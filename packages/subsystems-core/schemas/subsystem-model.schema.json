@@ -80,6 +80,29 @@
       "type": "boolean",
       "description": "Design / migration placeholder — not a live source declaration yet. Verification skips source checks until promoted. Keep a real construct for the intended shape."
     },
+    "deprecated": {
+      "type": "boolean",
+      "description": "The claim was real but its source is gone upstream — deleted or renamed. The inverse of `proposed`; verification skips source checks the same way, so the component stops blocking verification. Transitional: a cleanup pass removes it and repairs the trails that referenced it."
+    },
+    "removedIn": {
+      "type": "object",
+      "description": "Provenance for a deprecated component. Captured at deprecation time so the model explains itself without a git call.",
+      "required": [
+        "commit"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "commit": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Short commit hash of the removal."
+        },
+        "reason": {
+          "type": "string",
+          "description": "That commit's subject line, e.g. \"Remove topology relations; nest module boundaries by path\"."
+        }
+      }
+    },
     "framework": {
       "type": "string",
       "minLength": 1,
@@ -167,6 +190,12 @@
         },
         "proposed": {
           "$ref": "#/$defs/proposed"
+        },
+        "deprecated": {
+          "$ref": "#/$defs/deprecated"
+        },
+        "removedIn": {
+          "$ref": "#/$defs/removedIn"
         },
         "framework": {
           "$ref": "#/$defs/framework"

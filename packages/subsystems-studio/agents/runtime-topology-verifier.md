@@ -62,6 +62,38 @@ unit, or clear `process` on members that should sit outside.
 }
 ```
 
+### process missing (`boundary_process_missing`)
+
+A runtime-executing component states no `process`, so a reader cannot tell which
+deployment unit it runs in. Set the deployment unit from the source, or clear it
+if the component genuinely has no single runtime home.
+
+```json
+{
+  "rationale": "openSubsystemModelTab is called from the host process, not the renderer.",
+  "author": "runtime-topology-verifier",
+  "finding": {
+    "kind": "boundary_process_missing",
+    "componentAlias": "openSubsystemModelTab",
+    "message": "…"
+  },
+  "changes": [
+    {
+      "target": "component",
+      "componentAlias": "openSubsystemModelTab",
+      "field": "process",
+      "value": "subsystems-studio/host"
+    }
+  ]
+}
+```
+
+Required on `function`, `class`, and `custom_entity`. **Not** required, and
+never worth proposing for: `interface` and `type_alias` (erased at compile
+time, and a shared type is often legitimately reachable from several
+processes), `external` (third-party, no owner in this repo), and `store` (a
+state container, not a deployment unit). A proposed component is exempt too.
+
 Allowed changes:
 
 - `{ "target": "component", "componentAlias", "field": "process", "value": "<string>"|null }`
@@ -74,6 +106,8 @@ Allowed changes:
 - Never edit model JSON on disk directly.
 - Never auto-accept.
 - Do not propose construct / module changes.
+- Never propose a `process` on a type (`interface` / `type_alias`), an
+  `external`, or a `store` — those are exempt from the requirement.
 
 ## Output
 

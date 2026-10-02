@@ -429,6 +429,24 @@ export const PROCESS_BOUNDARY_CASES: AuditCase[] = [
 { "id": "create", "module": "src/host/main.ts", "process": "renderer" }
 // ← same module, two processes`,
   },
+  {
+    example: 'process stated, no module',
+    meaning:
+      'A runtime component states its process. Verified (process_claim) — the lane goes green without a module claim, which is what separates "process stated and nothing wrong" from "no process information at all" (grey).',
+    outcome: 'pass',
+    remediation: 'none',
+    snippet: `{ "id": "boot", "file": "src/host/main.ts", "process": "host" }
+// → dynamic topology verified`,
+  },
+  {
+    example: 'process missing',
+    meaning:
+      'A function / class / custom entity states no process. Unconfirmed (boundary_process_missing). Types (interface, type_alias), externals, stores and proposed components are exempt.',
+    outcome: 'gap',
+    remediation: 'dynamic-topology-verifier',
+    snippet: `{ "id": "boot", "file": "src/host/main.ts" }
+// ← runtime component, no deployment unit stated`,
+  },
 ]
 
 export const MODULE_MEMBERSHIP_AGENTS: MaintenanceAgent[] = [

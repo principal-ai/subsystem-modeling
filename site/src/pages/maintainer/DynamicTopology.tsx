@@ -14,7 +14,11 @@ export function MaintainerDynamicTopology() {
         <h1 id="dynamic-topology-verification">Dynamic topology</h1>
         <p className="maintainer-lede">
           How constructs are arranged at runtime: deployment-unit membership via{' '}
-          <em>process</em>. Unconfirmed claims never block publish. When a
+          <em>process</em>. Unconfirmed claims never block publish. A runtime
+          component (function, class, custom entity) must state its process; a
+          model that states it everywhere and disagrees nowhere is verified. Types
+          are exempt — erased at compile time, and a shared type is often
+          legitimately reachable from several processes at once. When a
           multi-member module nests under process, members must agree on process.
           Package and module containment live under static topology.
         </p>

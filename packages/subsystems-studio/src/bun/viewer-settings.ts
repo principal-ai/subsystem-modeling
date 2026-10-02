@@ -33,6 +33,7 @@ export function defaultViewerSettings(): ViewerSettings {
 		subsystemMaintainerModel: null,
 		regularAuditEnabled: true,
 		regularAuditIntervalMinutes: REGULAR_AUDIT_INTERVAL_DEFAULT_MINUTES,
+		autoApplyAuditFixes: false,
 		typesafeApiKey: null,
 		maintenanceRepoKey: null,
 		lastActiveTabId: null,
@@ -118,6 +119,10 @@ function normalize(raw: unknown): ViewerSettings {
 			obj["regularAuditIntervalMinutes"] ??
 				defaults.regularAuditIntervalMinutes,
 		),
+		autoApplyAuditFixes: coerceBool(
+			obj["autoApplyAuditFixes"],
+			defaults.autoApplyAuditFixes,
+		),
 		typesafeApiKey:
 			"typesafeApiKey" in obj
 				? coerceModelRef(obj["typesafeApiKey"])
@@ -188,6 +193,8 @@ export function patchViewerSettings(
 			patch.regularAuditIntervalMinutes !== undefined
 				? coerceRegularAuditIntervalMinutes(patch.regularAuditIntervalMinutes)
 				: current.regularAuditIntervalMinutes,
+		autoApplyAuditFixes:
+			patch.autoApplyAuditFixes ?? current.autoApplyAuditFixes,
 		typesafeApiKey:
 			patch.typesafeApiKey !== undefined
 				? coerceModelRef(patch.typesafeApiKey)

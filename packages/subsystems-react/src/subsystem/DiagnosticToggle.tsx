@@ -28,6 +28,13 @@ export interface SubsystemDiagnostic {
   status: SubsystemDiagnosticStatus;
   /** Count shown beside the icon (e.g. error + warn findings). Hidden when 0/undefined. */
   issueCount?: number;
+  /**
+   * How many of the open findings carry a one-click deterministic fix (a
+   * re-pin, an adoptable signature fill, a unique Graphify file relocate).
+   * Badged on the icon so it's visible without expanding the list — the fixes
+   * live inside collapsed categories, so the count was previously invisible.
+   */
+  fixableCount?: number;
   /** Inputs changed since the report was produced. */
   stale?: boolean;
   /** A verification pass is running right now. */
@@ -55,7 +62,7 @@ export function diagnosticStatusColor(
 /** Human tooltip for the current diagnostic state. */
 export function diagnosticTitle(diagnostic: SubsystemDiagnostic): string {
   if (diagnostic.title) return diagnostic.title;
-  const { status, issueCount, stale, busy } = diagnostic;
+  const { status, issueCount, fixableCount, stale, busy } = diagnostic;
   let head: string;
   if (status === 'ok') head = 'Diagnostics: no issues';
   else if (status === 'issues')
@@ -69,9 +76,15 @@ export function diagnosticTitle(diagnostic: SubsystemDiagnostic): string {
         ? `Diagnostics: ${issueCount} unconfirmed`
         : 'Diagnostics: unconfirmed claims';
   else head = 'Diagnostics: not checked yet';
+  // Name the one-click count first when there is work a click can close —
+  // that's the actionable part of the list.
+  const fixable =
+    fixableCount != null && fixableCount > 0
+      ? `${fixableCount} fixable with one click`
+      : '';
   if (busy) return `${head} — checking…`;
-  if (stale) return `${head} (stale) — toggle the list`;
-  return `${head} — toggle the list`;
+  if (stale) return `${head} (stale) — toggle the list${fixable ? `, ${fixable}` : ''}`;
+  return `${head} — toggle the list${fixable ? `, ${fixable}` : ''}`;
 }
 
 export interface SubsystemDiagnosticToggleProps extends SubsystemDiagnostic {
@@ -82,6 +95,7 @@ export interface SubsystemDiagnosticToggleProps extends SubsystemDiagnostic {
 export function SubsystemDiagnosticToggle({
   status,
   issueCount,
+  fixableCount = 0,
   stale = false,
   busy = false,
   active = false,
@@ -93,8 +107,20 @@ export function SubsystemDiagnosticToggle({
   const [hover, setHover] = useState(false);
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const color = diagnosticStatusColor(status, theme.colors, muted);
-  const label = diagnosticTitle({ status, issueCount, stale, busy, active, ...rest });
+  const label = diagnosticTitle({
+    status,
+    issueCount,
+    fixableCount,
+    stale,
+    busy,
+    active,
+    ...rest,
+  });
   const showCount = issueCount != null && issueCount > 0;
+  // Green regardless of status: this marks "a click fixes this", not severity,
+  // and green is the same accent the per-finding Apply button uses.
+  const showFixable = fixableCount > 0 && !busy;
+  const fixableColor = theme.colors.success ?? '#2da44e';
   const background = active
     ? hexWithAlpha(color, hover ? 0.24 : 0.16)
     : hover
@@ -150,6 +176,34 @@ export function SubsystemDiagnosticToggle({
                 background: theme.colors.backgroundSecondary ?? theme.colors.background,
               }}
             />
+          )}
+          {/* Fixable badge — superscript count on the icon's trailing edge.
+              Offset up-and-out from the `stale` dot so both read at once;
+              the badge is the call to action, the dot only a freshness note. */}
+          {showFixable && (
+            <span
+              aria-hidden
+              style={{
+                position: 'absolute',
+                top: -5,
+                right: -8,
+                minWidth: 12,
+                height: 12,
+                padding: '0 3px',
+                borderRadius: 6,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: fixableColor,
+                color: theme.colors.background,
+                fontFamily: theme.fonts.monospace,
+                fontSize: 9,
+                fontWeight: 700,
+                lineHeight: 1,
+              }}
+            >
+              {fixableCount > 99 ? '99+' : fixableCount}
+            </span>
           )}
         </span>
         {showCount && (

@@ -1058,6 +1058,34 @@ export async function auditSubsystemModel(
 			continue;
 		}
 
+		// A deprecated claim's source is gone upstream — deliberately, with a
+		// commit recorded. Verifying it would only re-derive the deletion the
+		// deprecation already states, as an unfixable `missing_file`. Skip it so
+		// the model converges and a cleanup pass can drain the marker instead.
+		if (c.deprecated) {
+			externalsSkipped++;
+			okComponents++;
+			checks.push({
+				componentAlias: c.alias,
+				componentName: c.name,
+				construct: c.construct,
+				symbol: c.symbol,
+				file: c.file || undefined,
+				fileExists: null,
+				symbolDeclared: null,
+				declarationFreshness: "n/a",
+				constructMatch: null,
+				signature: "n/a",
+				anchor: "n/a",
+				graphify: "skipped",
+				verdict: "skipped",
+				note: c.removedIn?.commit
+					? `deprecated — removed in ${c.removedIn.commit}`
+					: "deprecated — source removed upstream",
+			});
+			continue;
+		}
+
 		// A claim anchored into an install root is a third-party dependency
 		// wearing a repo-relative path: `node_modules/` is gitignored and its
 		// layout depends on hoisting, so the file can never resolve against the
@@ -1453,6 +1481,9 @@ export async function auditSubsystemModel(
 		processNestsChecked: boundary.summary.processNestsChecked,
 		processNestOk: boundary.summary.processNestOk,
 		processNestDisagree: boundary.summary.processNestDisagree,
+		processRequired: boundary.summary.processRequired,
+		processClaimed: boundary.summary.processClaimed,
+		processMissing: boundary.summary.processMissing,
 	};
 
 	const needsUpdate = findings.some((f) => f.severity === "error");

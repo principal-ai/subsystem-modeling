@@ -19,7 +19,10 @@ import { useTheme } from '@principal-ade/industry-theme';
 import {
   edgeColor,
   edgeStrokeStyle,
+  DEPRECATED_COLOR,
   PROPOSED_COLOR,
+  deprecatedBadgeColor,
+  deprecatedBadgeLabel,
   constructBadgeColor,
   constructBadgeLabel,
   rightBadgeLabel,
@@ -217,6 +220,13 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
   // Store retention backing badge — memory/disk/db, beside role (orthogonal).
   const storageLabel = storageBadgeLabel(c);
   const storageColor = storageBadgeColor(c);
+  // Deprecated badge — clickable, unlike every other badge here (they opt out
+  // of pointer events so clicks fall through to the node). Clicking opens the
+  // removal provenance, which is the whole reason the badge exists.
+  const deprecatedLabel = deprecatedBadgeLabel(c);
+  const deprecatedColor = deprecatedBadgeColor(c);
+  const removal = c.removedIn;
+  const [showRemoval, setShowRemoval] = useState(false);
   // Set while a file is open in the drawer: true → spotlight, false → dim,
   // absent (no file open) → neutral.
   const fileMatch = data.fileMatch as boolean | undefined;
@@ -225,13 +235,17 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
   const nodeBg = theme.colors.backgroundSecondary ?? theme.colors.background;
   const hoverBg =
     theme.colors.backgroundHover ?? theme.colors.backgroundTertiary ?? nodeBg;
-  // Border: proposed uses the goldenrod accent (dashed); construct color stays
-  // on the left badge. File-open spotlight still wins with primary.
+  // Border: proposed uses the goldenrod accent (dashed), deprecated the slate
+  // accent (dotted, same family as issue) since both mean "not a live claim";
+  // construct color stays on the left badge. File-open spotlight still wins
+  // with primary.
   const borderColor = fileMatch
     ? theme.colors.primary
     : c.proposed
       ? PROPOSED_COLOR
-      : color;
+      : c.deprecated
+        ? DEPRECATED_COLOR
+        : color;
   // Selection is stamped into data by the graph component — React Flow's own
   // `selected` never updates because the node stops click propagation.
   const isSelected = selected || (data.isSelected as boolean | undefined) === true;
@@ -252,7 +266,16 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
   // The border keeps its construct color; the severity rides on the chip.
   // Verification skips `proposed` nodes, so the two rarely stack — issue wins.
   const hasIssue = data.issue != null;
-  const borderStyle = hasIssue ? 'dotted' : c.proposed ? 'dashed' : 'solid';
+  // Deprecated is dotted like issue but slate rather than construct-colored:
+  // "this claim was retired" is closer to a diagnostic than to a placeholder,
+  // and verification skips deprecated nodes so the two never stack in practice.
+  const borderStyle = hasIssue
+    ? 'dotted'
+    : c.proposed
+      ? 'dashed'
+      : c.deprecated
+        ? 'dotted'
+        : 'solid';
 
   return (
     <div
@@ -326,7 +349,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
           orthogonal to topology. Persistent; pointer-events pass through.
           Sits astride the bottom edge, centered (mirroring the top construct
           badge's straddle), so the top edge stays free for the construct tag. */}
-      {(topRightLabel != null || storageLabel != null) && (
+      {(topRightLabel != null || storageLabel != null || deprecatedLabel != null) && (
         <div
           style={{
             position: 'absolute',
@@ -374,6 +397,102 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
             >
               {topRightLabel}
             </span>
+          )}
+          {deprecatedLabel != null && deprecatedColor != null && (
+            // Its own click target: stops propagation so opening the provenance
+            // doesn't also select the node, and toggles a popover rather than
+            // leaning on a title tooltip (which truncates the commit subject).
+            <span
+              role="button"
+              tabIndex={0}
+              aria-expanded={showRemoval}
+              aria-label={
+                removal
+                  ? `Deprecated — removed in ${removal.commit}. Show removal details.`
+                  : 'Deprecated — show removal details.'
+              }
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowRemoval((v) => !v);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setShowRemoval((v) => !v);
+                }
+              }}
+              style={{
+                position: 'relative',
+                fontFamily: theme.fonts.monospace,
+                fontSize: theme.fontSizes[1],
+                letterSpacing: 0.5,
+                textTransform: 'uppercase',
+                lineHeight: '17px',
+                color: deprecatedColor,
+                background: nodeBg,
+                border: `2px solid ${deprecatedColor}`,
+                borderRadius: badgeRadius,
+                padding: '2px 8px',
+                cursor: 'pointer',
+              }}
+            >
+              {deprecatedLabel}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Removal provenance popover — anchored above the deprecated badge, so it
+          opens away from the node body and stays inside the canvas. */}
+      {showRemoval && deprecatedLabel != null && (
+        <div
+          role="dialog"
+          aria-label="Removal provenance"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            marginBottom: 6,
+            zIndex: 20,
+            width: 260,
+            padding: '8px 10px',
+            borderRadius: 6,
+            background: nodeBg,
+            border: `1px solid ${DEPRECATED_COLOR}`,
+            boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
+            fontFamily: theme.fonts.body,
+            fontSize: theme.fontSizes[1],
+            color: theme.colors.text,
+            textAlign: 'left',
+            whiteSpace: 'normal',
+            cursor: 'default',
+          }}
+        >
+          <div
+            style={{
+              fontWeight: 600,
+              marginBottom: 4,
+              color: DEPRECATED_COLOR,
+            }}
+          >
+            Deprecated
+          </div>
+          {removal ? (
+            <>
+              <div style={{ fontFamily: theme.fonts.monospace, marginBottom: 4 }}>
+                removed in {removal.commit}
+              </div>
+              {removal.reason && (
+                <div style={{ color: theme.colors.textSecondary }}>{removal.reason}</div>
+              )}
+            </>
+          ) : (
+            <div style={{ color: theme.colors.textSecondary }}>
+              This claim's source was removed upstream.
+            </div>
           )}
         </div>
       )}

@@ -25,7 +25,19 @@ import {
 	type StoredSubsystemModel,
 } from "./subsystem-model-store";
 
-const ROOT = join(homedir(), ".principal", "subsystem-model-proposals");
+/**
+ * Root home for the store. `PRINCIPAL_SUBSYSTEM_MODELS_HOME` overrides
+ * `homedir()` for tests (mirrors the model store). Resolved lazily so an
+ * override set after module load still applies.
+ */
+function storeHome(): string {
+	const override = process.env["PRINCIPAL_SUBSYSTEM_MODELS_HOME"]?.trim();
+	return override ? override : homedir();
+}
+
+function proposalsRoot(): string {
+	return join(storeHome(), ".principal", "subsystem-model-proposals");
+}
 
 /** `declaration.storage` values, mirroring the store declaration's union. */
 const STORE_STORAGE_VALUES: readonly string[] = ["memory", "disk", "external"];
@@ -37,11 +49,11 @@ interface ProposalFile {
 }
 
 function proposalPath(graphId: string): string {
-	return join(ROOT, `${graphId}.json`);
+	return join(proposalsRoot(), `${graphId}.json`);
 }
 
 async function ensureDir(): Promise<void> {
-	await fs.mkdir(ROOT, { recursive: true });
+	await fs.mkdir(proposalsRoot(), { recursive: true });
 }
 
 function newProposalId(): string {
@@ -56,18 +68,37 @@ async function readFile(graphId: string): Promise<ProposalFile> {
 			return { version: 1, graphId, proposals: [] };
 		}
 		return { version: 1, graphId, proposals: parsed.proposals };
-	} catch {
+	} catch (err) {
+		// A missing file is the normal empty case. A parse failure is not:
+		// swallow it silently and the model reads as "no proposals", which is
+		// indistinguishable from a clean store and hides real pending work.
+		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+			console.error(
+				`[principal-studio] corrupt proposal store for ${graphId} at ${proposalPath(graphId)}: ${(err as Error).message}`,
+			);
+		}
 		return { version: 1, graphId, proposals: [] };
 	}
 }
 
+/**
+ * Persist atomically (tmp + rename), matching `writeCachedSessionEvents`. A
+ * plain `writeFile` truncates first, so a crash mid-write leaves a torn file
+ * that reads back as corrupt — and every proposal in the file is lost. Writing
+ * a sibling tmp and renaming over the target means the file on disk is always
+ * either the complete previous version or the complete new one.
+ */
 async function writeFile(doc: ProposalFile): Promise<void> {
 	await ensureDir();
-	await fs.writeFile(
-		proposalPath(doc.graphId),
-		`${JSON.stringify(doc, null, 2)}\n`,
-		"utf8",
-	);
+	const path = proposalPath(doc.graphId);
+	const tmp = join(proposalsRoot(), `.${doc.graphId}.${process.pid}.json.tmp`);
+	try {
+		await fs.writeFile(tmp, `${JSON.stringify(doc, null, 2)}\n`, "utf8");
+		await fs.rename(tmp, path);
+	} catch (err) {
+		await fs.unlink(tmp).catch(() => {});
+		throw err;
+	}
 }
 
 function componentFieldBefore(
@@ -638,7 +669,7 @@ export async function deleteAllPendingSubsystemModelProposals(): Promise<{
 	deleted: number;
 	graphIds: string[];
 }> {
-	const entries = await fs.readdir(ROOT).catch((): string[] => []);
+	const entries = await fs.readdir(proposalsRoot()).catch((): string[] => []);
 	let deleted = 0;
 	const graphIds: string[] = [];
 	for (const entry of entries) {

@@ -1,9 +1,9 @@
 /**
  * Pure aggregation behind the Maintain agent surface: fold per-model
- * verification rows into a single overview (models with pending proposals
- * first, then most-recently maintained, then farthest-from-verified, with
- * summed ledger totals). Kept IO-free so the host handler stays a thin
- * store/cache read and this is unit-testable.
+ * verification rows into a single overview, ordered most-recently-run first
+ * (never-run models last, then most open work and lowest coverage as
+ * tie-breakers), with summed ledger totals. Kept IO-free so the host handler
+ * stays a thin store/cache read and this is unit-testable.
  */
 
 import type {
@@ -19,11 +19,12 @@ export function buildMaintenanceOverview(opts: {
 	auditing?: string[];
 }): MaintenanceOverview {
 	const models = [...opts.models].sort((a, b) => {
-		// Actionable work first: models with pending proposals, then models with
-		// a more recent Maintain run, then farthest-from-verified.
-		const propA = a.pendingProposalCount > 0 ? 1 : 0;
-		const propB = b.pendingProposalCount > 0 ? 1 : 0;
-		if (propA !== propB) return propB - propA;
+		// Most recently run first, so the models just worked on stay at the top
+		// of the ledger. Pending proposals deliberately do NOT tier here — a
+		// proposal count is not a recency signal, and letting it lead pushed
+		// older runs above newer ones. Never-run models sink below every model
+		// that has run; within a tier, most open work then lowest coverage, so
+		// the list still breaks ties toward things that need attention.
 		const runA = a.recentRunAt ? Date.parse(a.recentRunAt) : Number.NaN;
 		const runB = b.recentRunAt ? Date.parse(b.recentRunAt) : Number.NaN;
 		const hasRunA = Number.isFinite(runA) ? 1 : 0;

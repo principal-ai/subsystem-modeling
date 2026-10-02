@@ -1,10 +1,10 @@
 /**
  * MaintenancePanel — the ambient Maintain agent surface: the aggregate
  * verification ledger across every stored subsystem model, the models sorted
- * with pending proposals and recent Maintain runs first (then
- * farthest-from-verified), pending correction proposals inline with
- * accept/reject, and a repo filter like the Subsystems tab's drilldown. Mounts
- * as the full-bleed Maintenance tab view.
+ * most-recently-run first (ordered host-side by buildMaintenanceOverview), with
+ * pending correction proposals inline with accept/reject, and a repo filter
+ * like the Subsystems tab's drilldown. Mounts as the full-bleed Maintenance
+ * tab view.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -75,7 +75,7 @@ const LANE_HELP: Record<SubsystemVerificationLane, { name: string; blurb: string
 		"dynamic-topology": {
 			name: "Dynamic topology",
 			blurb:
-				"Layer 3 — runtime arrangement: deployment-unit membership via the process each construct runs in.",
+				"Layer 3 — runtime arrangement: deployment-unit membership via the process each construct runs in. Runtime components must state a process; types, externals and stores are exempt.",
 		},
 		trail: {
 			name: "Trail verification",
@@ -830,6 +830,14 @@ export function MaintenancePanel() {
 	const repoBatchStopped = Object.values(repoBatch).filter(
 		(e) => e.status === "stopped",
 	).length;
+	// Failures get their own count + the first message: without them a batch
+	// where every model errors ends with no done/skipped/stopped rows at all,
+	// so the run reads as though it never happened.
+	const repoBatchErrors = Object.values(repoBatch).filter(
+		(e) => e.status === "error",
+	);
+	const repoBatchFailed = repoBatchErrors.length;
+	const repoBatchError = repoBatchErrors.find((e) => e.error)?.error;
 
 	return (
 		<div
@@ -943,6 +951,8 @@ export function MaintenancePanel() {
 							repoBatchDone={repoBatchDone}
 							repoBatchSkipped={repoBatchSkipped}
 							repoBatchStopped={repoBatchStopped}
+							repoBatchFailed={repoBatchFailed}
+							repoBatchError={repoBatchError}
 							onAuditAll={() => {
 								setAuditAllStarting(true);
 								void electrobun.rpc!.request

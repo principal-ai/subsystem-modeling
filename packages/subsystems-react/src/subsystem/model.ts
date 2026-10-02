@@ -20,7 +20,10 @@ import {
 import { computeElkLayout, calculatePathLength } from '../utils/elkLayout';
 import { EDGE_LABEL_SIDE_PADDING, EDGE_ARROW_INSET } from '../utils/edgeLabel';
 import type { GraphifyComponentDetail } from '../graphify';
-import type { SubsystemConstructDeclaration } from '@principal-ai/subsystems-core';
+import type {
+  SubsystemConstructDeclaration,
+  SubsystemComponentRemoval,
+} from '@principal-ai/subsystems-core';
 import type { SubsystemDeclarationRef } from './declarationRef';
 import { purlOwnerName, purlRepoKey } from './paths';
 
@@ -242,6 +245,15 @@ export interface SubsystemComponent {
    * `construct` (intended shape) and `role` (topology).
    */
   proposed?: boolean;
+  /**
+   * The claim was real but its source is gone upstream — deleted or renamed.
+   * The inverse of `proposed`; verification skips source checks the same way.
+   * Renders with a slate border and a `deprecated` badge that opens the removal
+   * provenance. Transitional — a cleanup pass removes the node.
+   */
+  deprecated?: boolean;
+  /** Which commit removed this claim's source, and why. Present when deprecated. */
+  removedIn?: SubsystemComponentRemoval;
   /**
    * Semantic role — where the node sits in the topology (boundary element,
    * external system), orthogonal to `construct` (what it is). Drives the
@@ -1707,6 +1719,25 @@ export const ROLE_LABEL: Record<SubsystemComponentRole, string> = {
 export const PROPOSED_COLOR = '#b8860b'; // darkgoldenrod — not-yet-in-source
 
 /**
+ * Border accent for `deprecated: true` — the claim was real, its source is gone.
+ * A desaturated slate rather than true silver: role badges already own silver
+ * (`ROLE_COLOR.entry`), and a retired claim should not read as a boundary
+ * element. Transitional state — a cleanup pass removes the node.
+ */
+export const DEPRECATED_COLOR = '#6b7280'; // slate — retired, awaiting removal
+
+/** Right-badge label + accent for `deprecated: true`; null when not deprecated. */
+export function deprecatedBadgeLabel(component: { deprecated?: boolean }): string | null {
+  return component.deprecated === true ? 'deprecated' : null;
+}
+
+export function deprecatedBadgeColor(component: {
+  deprecated?: boolean;
+}): string | null {
+  return component.deprecated === true ? DEPRECATED_COLOR : null;
+}
+
+/**
  * Top-right badge label: proposed wins over role when both are set
  * (proposed is the temporary exception to scan for; role stays on the model).
  * Returns null when neither applies.
@@ -1851,6 +1882,7 @@ export function nodeMinWidthForBadges(component: {
   stereotype?: string;
   role?: SubsystemComponentRole;
   proposed?: boolean;
+  deprecated?: boolean;
   entityKind?: string;
   declaration?: AnyComponentDetail;
 }): number {
@@ -1858,6 +1890,7 @@ export function nodeMinWidthForBadges(component: {
   const rightBadges = [
     storageBadgeLabel(component),
     rightBadgeLabel(component),
+    deprecatedBadgeLabel(component),
   ].filter((l): l is string => l != null);
   if (rightBadges.length === 0) {
     return Math.max(

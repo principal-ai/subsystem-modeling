@@ -16,6 +16,7 @@ const meta = {
 		repoBatchDone: 0,
 		repoBatchSkipped: 0,
 		repoBatchStopped: 0,
+		repoBatchFailed: 0,
 		onAuditAll: () => {},
 		onRunAll: () => {},
 		onStopAll: () => {},
@@ -60,6 +61,15 @@ export const BatchSkippedStopped: Story = {
 		repoBatchActive: false,
 		repoBatchSkipped: 1,
 		repoBatchStopped: 1,
+	},
+};
+
+/** Every model failed — the failure tally carries the first error. */
+export const BatchFailed: Story = {
+	args: {
+		repoBatchActive: false,
+		repoBatchFailed: 4,
+		repoBatchError: "service started but Studio could not connect yet",
 	},
 };
 

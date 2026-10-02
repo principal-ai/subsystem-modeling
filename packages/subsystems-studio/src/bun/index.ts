@@ -137,6 +137,8 @@ import type {
 	StudioMessages,
 	StudioRequests,
 	StudioVersionStatus,
+	SubsystemModelAuditFixGroup,
+	SubsystemModelAuditReport,
 	SubsystemModelVerification,
 	ViewerMode,
 	ViewerSettings,
@@ -653,6 +655,7 @@ function ensurePermanentTab(id: string): void {
 		subsystemMaintainerModel: viewerSettings.subsystemMaintainerModel,
 		regularAuditEnabled: viewerSettings.regularAuditEnabled,
 		regularAuditIntervalMinutes: viewerSettings.regularAuditIntervalMinutes,
+		autoApplyAuditFixes: viewerSettings.autoApplyAuditFixes,
 		typesafeApiKey: viewerSettings.typesafeApiKey,
 		maintenanceRepoKey: viewerSettings.maintenanceRepoKey,
 		lastActiveTabId: viewerSettings.lastActiveTabId,
@@ -2064,13 +2067,66 @@ const requests: RequestHandlers = {
 				verifySubsystemComponent(graphId, componentAlias),
 			inspectSubsystemSymbol: async ({ purl, file, symbol, nodeId }) =>
 				inspectSubsystemSymbol({ purl, file, symbol, nodeId }),
-			auditSubsystemModel: async ({ graphId }) => auditSubsystemModel(graphId),
+			auditSubsystemModel: async ({ graphId }) =>
+				auditAndStageOneClickFixes(graphId),
 			auditSubsystemModels: async ({ graphIds }) => {
 				auditSubsystemModelsInBackground(graphIds);
 				return { ok: true, started: true };
 			},
-			applySubsystemModelAuditFix: async ({ graphId, fixId, componentAlias }) =>
-				applySubsystemModelAuditFix({ graphId, fixId, componentAlias }),
+			applySubsystemModelAuditFix: async ({ graphId, fixId, componentAlias }) => {
+				const applied = await applySubsystemModelAuditFix({
+					graphId,
+					fixId,
+					componentAlias,
+				});
+				// A per-finding Apply closes that finding, so the staged batch no
+				// longer describes reality — drop it rather than offer stale work.
+				if (applied.ok) pendingAuditFixPreviews.delete(graphId);
+				return applied;
+			},
+			getPendingAuditFixes: async ({ graphId }) => ({
+				ok: true,
+				groups: pendingAuditFixPreviews.get(graphId) ?? [],
+			}),
+			resolvePendingAuditFixes: async ({ graphId, apply }) => {
+				const groups = pendingAuditFixPreviews.get(graphId) ?? [];
+				pendingAuditFixPreviews.delete(graphId);
+				if (!apply) return { ok: true, applied: 0 };
+				// Each kind is one unscoped call, which re-verifies every
+				// component for that fix before writing — so a kind with no
+				// adoptable instance fails softly rather than aborting the rest.
+				let applied = 0;
+				let lastReport: SubsystemModelAuditReport | undefined;
+				let lastFingerprint: string | undefined;
+				let lastError: string | undefined;
+				for (const group of groups) {
+					const res = await applySubsystemModelAuditFix({
+						graphId,
+						fixId: group.fixId,
+					});
+					if (!res.ok) {
+						lastError = res.error;
+						continue;
+					}
+					applied += res.applied ?? 0;
+					lastReport = res.report;
+					lastFingerprint = res.fingerprint;
+				}
+				if (applied === 0 && lastError) {
+					return { ok: false, error: lastError };
+				}
+				broadcastSubsystemModelChanged({ graphId, reason: "updated" });
+				broadcastSubsystemModelProposalsChanged({
+					graphId,
+					pendingCount: await pendingProposalCount(graphId),
+				});
+				return {
+					ok: true,
+					applied,
+					report: lastReport,
+					fingerprint: lastFingerprint,
+				};
+			},
 			// Expensive provenance tier: the per-commit walk and the remote's
 			// position on it. Deliberately a separate call from the cheap
 			// snapshot that rides on list/overview passes — a whole-log read per
@@ -2820,6 +2876,62 @@ const maintainingGraphIds = new Set<string>();
  */
 const auditingGraphIds = new Set<string>();
 
+
+
+/**
+ * Group a report's one-click fixes by `fix.id` so the confirmation preview can
+ * offer one action per kind. Every fix of a kind shares the same RPC and the
+ * same write path, so a group is applied by a single unscoped call; scoped
+ * calls stay reserved for the per-finding Apply buttons.
+ */
+function pendingAuditFixesByKind(
+	report: SubsystemModelAuditReport,
+): SubsystemModelAuditFixGroup[] {
+	const byFix = new Map<string, number>();
+	for (const finding of report.findings) {
+		if (!finding.fix) continue;
+		byFix.set(finding.fix.id, (byFix.get(finding.fix.id) ?? 0) + 1);
+	}
+	return [...byFix.entries()].map(([fixId, count]) => ({
+		fixId: fixId as SubsystemModelAuditFixGroup["fixId"],
+		count,
+	}));
+}
+
+/**
+ * One-click fixes an audit found, waiting on the user's confirmation.
+ * In-memory and single-slot per model: the preview is a transient offer, and
+ * the next audit for that model replaces it. Nothing is written to the model
+ * until the user resolves it.
+ */
+const pendingAuditFixPreviews = new Map<
+	string,
+	SubsystemModelAuditFixGroup[]
+>();
+
+function setPendingAuditFixPreview(
+	graphId: string,
+	groups: SubsystemModelAuditFixGroup[],
+): void {
+	pendingAuditFixPreviews.set(graphId, groups);
+}
+
+/** Audit, then stage any one-click fixes it found for confirmation. */
+async function auditAndStageOneClickFixes(
+	graphId: string,
+): Promise<
+	| { ok: true; report: SubsystemModelAuditReport; fingerprint: string }
+	| { ok: false; error: string }
+> {
+	const audited = await auditSubsystemModel(graphId);
+	if (!audited.ok) return audited;
+	if (viewerSettings.autoApplyAuditFixes) {
+		const groups = pendingAuditFixesByKind(audited.report);
+		if (groups.length > 0) setPendingAuditFixPreview(graphId, groups);
+	}
+	return audited;
+}
+
 /**
  * Re-run deterministic audit after model mutations so list badges aren't stale.
  *
@@ -2839,7 +2951,7 @@ async function reauditSubsystemModelQuietly(
 		broadcastSubsystemModelChanged({ graphId, reason: "updated" });
 	}
 	try {
-		const audited = await auditSubsystemModel(graphId);
+		const audited = await auditAndStageOneClickFixes(graphId);
 		if (!audited.ok) {
 			console.warn(
 				`[principal-studio] re-audit after model change failed for ${graphId}: ${audited.error}`,

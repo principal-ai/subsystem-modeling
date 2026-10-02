@@ -47,15 +47,16 @@ describe("buildMaintenanceOverview", () => {
 		]);
 	});
 
-	test("sorts proposals, then recent runs, ahead of work", () => {
+	test("sorts by most recent run, ignoring pending proposals", () => {
 		const overview = buildMaintenanceOverview({
 			models: [
 				model({ title: "most-work-no-run", open: 5, coverage: 0.1 }),
 				model({
-					title: "with-proposal",
+					title: "oldest-run-with-proposal",
 					open: 1,
 					coverage: 0.5,
-					pendingProposalCount: 2,
+					pendingProposalCount: 9,
+					recentRunAt: "2025-01-01T00:00:00.000Z",
 				}),
 				model({
 					title: "older-run",
@@ -64,28 +65,35 @@ describe("buildMaintenanceOverview", () => {
 					recentRunAt: "2026-01-01T00:00:00.000Z",
 				}),
 				model({
-					title: "newer-run",
+					title: "newest-run",
 					open: 2,
 					coverage: 0.5,
 					recentRunAt: "2026-06-01T00:00:00.000Z",
 				}),
 				model({
-					title: "with-proposal-and-run",
+					title: "mid-run-with-proposal",
 					open: 4,
 					coverage: 0.2,
 					pendingProposalCount: 1,
 					recentRunAt: "2026-03-01T00:00:00.000Z",
 				}),
+				model({
+					title: "proposals-but-never-ran",
+					pendingProposalCount: 4,
+				}),
 			],
 			pendingProposals: [],
 			running: [],
 		});
+		// Pure recency: a big proposal count never lifts an old run above a
+		// newer one, and never lifts a never-run model above any that has run.
 		expect(overview.models.map((m) => m.title)).toEqual([
-			"with-proposal-and-run",
-			"with-proposal",
-			"newer-run",
+			"newest-run",
+			"mid-run-with-proposal",
 			"older-run",
+			"oldest-run-with-proposal",
 			"most-work-no-run",
+			"proposals-but-never-ran",
 		]);
 	});
 

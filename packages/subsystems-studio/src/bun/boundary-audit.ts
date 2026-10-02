@@ -11,6 +11,7 @@ import type { SubsystemComponent } from "@principal-ai/subsystems-core";
 export type BoundaryCheckKind =
 	| "module_file"
 	| "process_nest"
+	| "process_claim"
 	| "skipped";
 
 export type BoundaryCheckVerdict = "ok" | "issue" | "gap" | "skipped";
@@ -29,7 +30,8 @@ export interface BoundaryComponentCheck {
 export interface BoundaryAuditFinding {
 	kind:
 		| "boundary_module_file_mismatch"
-		| "boundary_process_nest_disagree";
+		| "boundary_process_nest_disagree"
+		| "boundary_process_missing";
 	severity: "error" | "info";
 	componentAlias?: string;
 	componentName?: string;
@@ -50,6 +52,10 @@ export interface BoundaryAuditResult {
 		processNestsChecked: number;
 		processNestOk: number;
 		processNestDisagree: number;
+		/** Runtime-executing components that must state a deployment unit. */
+		processRequired: number;
+		processClaimed: number;
+		processMissing: number;
 	};
 }
 
@@ -76,6 +82,39 @@ function isUngrounded(c: SubsystemComponent): boolean {
 }
 
 /**
+ * Constructs that must state a deployment unit (`process`).
+ *
+ * Required — runtime-executing declarations. A reader needs `process` to know
+ * where the code actually runs:
+ *   function, class, custom_entity
+ *
+ * Allowed but not required — type-only declarations are erased at compile
+ * time, and a shared type is often legitimately reachable from several
+ * processes at once, so pinning it to one would be wrong:
+ *   interface, type_alias
+ *
+ * Not enforced — we do not yet have enough information for these to be useful.
+ * `external` is third-party (no owner in this repo); `store` is a state
+ * container rather than a deployment unit:
+ *   external, store
+ *
+ * Enumerated rather than inferred so a future construct under-enforces (grey /
+ * no finding) instead of over-enforcing against something that legitimately
+ * cannot have a process.
+ */
+const PROCESS_REQUIRED_CONSTRUCTS: ReadonlySet<string> = new Set([
+	"function",
+	"class",
+	"custom_entity",
+]);
+
+/** True when this component must carry a `process` claim. */
+export function requiresProcess(c: SubsystemComponent): boolean {
+	if (isUngrounded(c)) return false;
+	return PROCESS_REQUIRED_CONSTRUCTS.has(c.construct ?? "");
+}
+
+/**
  * Audit process/module membership fields on components.
  *
  * `augmentedModuleAliases` — component aliases with an accepted
@@ -96,6 +135,9 @@ export function auditBoundaryFields(
 	let processNestsChecked = 0;
 	let processNestOk = 0;
 	let processNestDisagree = 0;
+	let processRequired = 0;
+	let processClaimed = 0;
+	let processMissing = 0;
 
 	const byModule = new Map<string, SubsystemComponent[]>();
 
@@ -104,18 +146,47 @@ export function auditBoundaryFields(
 		const fileRaw = c.file?.trim() ?? "";
 		const processRaw = c.process?.trim() ?? "";
 
-		if (!moduleRaw) {
-			if (!processRaw) continue;
-			checks.push({
-				componentAlias: c.alias,
-				componentName: c.name,
-				kind: "skipped",
-				process: processRaw,
-				verdict: "skipped",
-				note: "process set without module — no module/file check",
-			});
-			continue;
+		/*
+		 * Dynamic topology, independent of module. A runtime-executing
+		 * component must name its deployment unit whether or not it sits in a
+		 * module group — otherwise "process present and nothing wrong" and
+		 * "no process information at all" both produce zero checks, and the
+		 * lane cannot tell them apart. Types are exempt (erased at compile
+		 * time, often shared across processes) but may still claim one.
+		 */
+		if (requiresProcess(c)) {
+			processRequired++;
+			if (processRaw) {
+				processClaimed++;
+				checks.push({
+					componentAlias: c.alias,
+					componentName: c.name,
+					kind: "process_claim",
+					process: processRaw,
+					verdict: "ok",
+					note: `process claimed (${processRaw})`,
+				});
+			} else {
+				processMissing++;
+				const note = `${c.construct ?? "component"} claims no process — no deployment unit stated`;
+				checks.push({
+					componentAlias: c.alias,
+					componentName: c.name,
+					kind: "process_claim",
+					verdict: "gap",
+					note,
+				});
+				findings.push({
+					kind: "boundary_process_missing",
+					severity: "info",
+					componentAlias: c.alias,
+					componentName: c.name,
+					message: note,
+				});
+			}
 		}
+
+		if (!moduleRaw) continue;
 
 		modulesClaimed++;
 		const modNorm = normalizeBoundaryPath(moduleRaw);
@@ -257,6 +328,9 @@ export function auditBoundaryFields(
 			processNestsChecked,
 			processNestOk,
 			processNestDisagree,
+			processRequired,
+			processClaimed,
+			processMissing,
 		},
 	};
 }

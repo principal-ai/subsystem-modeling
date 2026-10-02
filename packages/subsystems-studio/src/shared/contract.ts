@@ -110,6 +110,14 @@ export interface ViewerSettings {
 	 */
 	regularAuditIntervalMinutes: number;
 	/**
+	 * When true, an audit pass that finds deterministic one-click fixes
+	 * (declaration re-pins, adoptable signature fills, unique Graphify file
+	 * relocates) surfaces them as a confirmation preview instead of leaving
+	 * them buried in collapsed issue categories. Default false — the human
+	 * approves the batch before anything is written to the model.
+	 */
+	autoApplyAuditFixes: boolean;
+	/**
 	 * Jev API key for TypeSafe AI (`api.typesafe.ai`), used for proposal
 	 * second opinions. `null` = fall back to the `TYPESAFE_API_KEY` env var.
 	 */
@@ -150,6 +158,8 @@ export interface PartialViewerSettings {
 	subsystemMaintainerModel?: string | null;
 	regularAuditEnabled?: boolean;
 	regularAuditIntervalMinutes?: number;
+	/** Surface a confirmation preview of one-click fixes found by an audit. */
+	autoApplyAuditFixes?: boolean;
 	/** Pass `null` to clear the stored Jev API key. */
 	typesafeApiKey?: string | null;
 	/** Pass `null` to fall back to the first repo on the next mount. */
@@ -603,7 +613,8 @@ export type SubsystemModelAuditFindingKind =
 	| "graphify_unavailable"
 	| "third_party_path"
 	| "boundary_module_file_mismatch"
-	| "boundary_process_nest_disagree";
+	| "boundary_process_nest_disagree"
+	| "boundary_process_missing";
 
 export type SubsystemModelAuditSeverity = "error" | "info";
 
@@ -631,6 +642,17 @@ export type SubsystemModelAuditFix =
 			declarationRef: SubsystemDeclarationRef;
 			previousStartLine?: number;
 	  };
+
+/**
+ * One kind of one-click fix found by an audit, with how many findings it would
+ * close. Grouped by `fix.id` so the confirmation preview can offer a single
+ * action per kind instead of one button per finding.
+ */
+export interface SubsystemModelAuditFixGroup {
+	fixId: SubsystemModelAuditFix["id"];
+	/** Findings of this kind carrying the fix. */
+	count: number;
+}
 
 export interface SubsystemModelAuditFinding {
 	kind: SubsystemModelAuditFindingKind;
@@ -693,11 +715,22 @@ export interface SubsystemModelAuditCheck {
 	note?: string;
 }
 
-/** Per-component / per-module boundary membership check (process / module). */
+/**
+ * Per-component / per-module boundary membership check (process / module).
+ *
+ * - `module_file`  — static topology: a component's module vs its source file
+ * - `process_nest` — dynamic topology: members of a multi-member module agree on process
+ * - `process_claim`— dynamic topology: a component that requires a process has one
+ * - `skipped`      — not applicable to this component (exempt construct, etc.)
+ */
 export interface SubsystemModelAuditBoundaryCheck {
 	componentAlias: string;
 	componentName?: string;
-	kind: "module_file" | "process_nest" | "skipped";
+	kind:
+		| "module_file"
+		| "process_nest"
+		| "process_claim"
+		| "skipped";
 	module?: string;
 	file?: string;
 	process?: string;
@@ -738,6 +771,10 @@ export interface SubsystemModelAuditReport {
 		processNestsChecked: number;
 		processNestOk: number;
 		processNestDisagree: number;
+		/** Runtime-executing components that must state a deployment unit. */
+		processRequired: number;
+		processClaimed: number;
+		processMissing: number;
 	};
 	/** What was inspected, one row per component — shown even when clean. */
 	checks: SubsystemModelAuditCheck[];
@@ -1324,10 +1361,12 @@ export interface UserIdentity {
 }
 
 /** Status of the opencode v2 server, probed host-side the same way opencode's
- *  own daemon does it: read the registration (`server.json` in the opencode
- *  state dir) for the URL, read the `password` file for Basic auth, then GET
- *  `/api/health`. `running: false` also covers "no registration on disk" (the
- *  server was never started / has exited). */
+ *  own daemon does it: read the registration (`service.json` / `server.json` in
+ *  the opencode state dir) for the URL, read the `password` file for Basic
+ *  auth, then GET `/api/info` (v2's liveness endpoint, which reports the
+ *  version too; `/api/health` is the fallback for older servers).
+ *  `running: false` also covers "no registration on disk" (the server was
+ *  never started / has exited). */
 export interface OpencodeServerStatus {
 	running: boolean;
 	/** The server's URL when running, e.g. `http://127.0.0.1:4096`. */
@@ -1668,6 +1707,29 @@ export type StudioRequests = {
 			/** One component, or omit to apply every adoptable instance of this fix. */
 			componentAlias?: string;
 		};
+		response: {
+			ok: boolean;
+			error?: string;
+			applied?: number;
+			report?: SubsystemModelAuditReport;
+			fingerprint?: string;
+		};
+	};
+	/**
+	 * One-click fixes staged by the last audit, grouped by kind, awaiting the
+	 * user's confirmation. `null` when the setting is off or nothing was found.
+	 */
+	getPendingAuditFixes: {
+		params: { graphId: string };
+		response: {
+			ok: boolean;
+			error?: string;
+			groups: SubsystemModelAuditFixGroup[];
+		};
+	};
+	/** Apply (or dismiss) a staged batch of one-click fixes for one model. */
+	resolvePendingAuditFixes: {
+		params: { graphId: string; apply: boolean };
 		response: {
 			ok: boolean;
 			error?: string;

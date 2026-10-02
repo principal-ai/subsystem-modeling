@@ -239,6 +239,45 @@ export type {
   SubsystemSignatureClaim,
   SubsystemSignatureParameter,
 } from './subsystem/model';
+// --- C4 projection + the confirmed association layer ------------------
+export { C4Graph } from './subsystem/C4Graph';
+export type { C4GraphProps } from './subsystem/C4Graph';
+export { C4NodeCard, nodeStyle, nodeSubtitle, nodeTag, nodeMissing, NODE_W, NODE_H } from './subsystem/C4NodeCard';
+export type { C4NodeCardProps, NodeStyle } from './subsystem/C4NodeCard';
+export {
+  toC4,
+  isGroundedComponent,
+  labelFromPurl,
+  deriveRepoKey,
+  indexAssociations,
+} from './subsystem/toC4';
+export type {
+  C4Kind,
+  C4View,
+  C4Node,
+  C4Group,
+  C4Edge,
+  C4Model,
+  C4Decoration,
+  C4ElementType,
+  C4Association,
+  C4AssociationState,
+  ToC4Options,
+} from './subsystem/toC4';
+export {
+  deriveConcerns,
+  suggestMerges,
+  buildAssociations,
+  mergeAssociations,
+  associationWeight,
+  summarizeAssociations,
+} from './subsystem/c4Associations';
+export type {
+  C4AssociationSet,
+  C4AssociationReason,
+  C4ConcernKind,
+  C4MemberView,
+} from './subsystem/c4Associations';
 export {
   constructBadgeLabel,
   constructBadgeColor,

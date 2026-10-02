@@ -51,6 +51,7 @@ export function laneForFindingKind(
 		case "boundary_module_file_mismatch":
 			return "static-topology";
 		case "boundary_process_nest_disagree":
+		case "boundary_process_missing":
 			return "dynamic-topology";
 		case "trail":
 			return "trail";

@@ -24,7 +24,14 @@ export interface SubsystemValidationProblem {
 }
 
 function isUngrounded(c: SubsystemComponent): boolean {
-  return c.construct === 'external' || c.proposed === true;
+  // Deprecated components are exempt for the same reason proposed ones are: the
+  // file is a historical pointer to source that is gone, so it cannot resolve
+  // and its absence is not an inconsistency.
+  return (
+    c.construct === 'external' ||
+    c.proposed === true ||
+    c.deprecated === true
+  );
 }
 
 /**
@@ -79,7 +86,12 @@ export function validateSubsystemModelCrossField(
         message: `component ${JSON.stringify(c.alias)}: module ${JSON.stringify(module)} is set but file is empty — a module frame needs a file to ground it (mark the component proposed if it is not placed yet).`,
       });
     }
-    if (file && c.proposed !== true && mentionsNodeModules(file)) {
+    if (
+      file &&
+      c.proposed !== true &&
+      c.deprecated !== true &&
+      mentionsNodeModules(file)
+    ) {
       problems.push({
         path: `/components/${i}/file`,
         message: `component ${JSON.stringify(c.alias)}: file ${JSON.stringify(file)} points into node_modules — installed artifacts are not part of the repo and cannot be verified. Model the dependency as construct "external" with purl "pkg:npm/<package>" and no file, or anchor the claim to the package's real source.`,
