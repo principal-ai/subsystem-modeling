@@ -28,6 +28,7 @@ import type {
 	SubsystemTrailStep,
 	SymbolInspection,
 } from "@principal-ai/subsystems-react";
+import type { SubsystemComponentRemoval } from "@principal-ai/subsystems-core";
 
 /** Canonical subsystem-model types, re-shared with both processes. */
 export type { MergeSidecar } from "../bun/merge-submodel-models";
@@ -303,6 +304,18 @@ export interface ModelProvenanceSnapshot {
 	purlFreshness?: SubsystemModelPurlFreshness[];
 	/** Per-purl anchor contact. */
 	anchorChanges?: Record<string, AnchorChanges>;
+	/**
+	 * How much of the model's grounded surface the drift reaches, model-wide.
+	 *
+	 * `referenced` counts components that have a repo `file` in a repo we could
+	 * actually compare; `affected` counts those whose file changed between the
+	 * pin and head. This is the severity input — a proportion is comparable
+	 * across models of different sizes where a raw file count is not.
+	 *
+	 * Absent when no repo could be measured: a percentage over an unmeasured
+	 * set would be a claim we cannot stand behind.
+	 */
+	componentContact?: { referenced: number; affected: number };
 }
 
 /**
@@ -641,6 +654,16 @@ export type SubsystemModelAuditFix =
 			/** Re-pin from Graphify `source_location` + current line hash. */
 			declarationRef: SubsystemDeclarationRef;
 			previousStartLine?: number;
+	  }
+	| {
+			id: "deprecate_component";
+			label: string;
+			/**
+			 * Provenance for the removal. `commit` is the creating/removing
+			 * commit whose subject names the change; the model stores it on
+			 * `component.removedIn` so the audit explains itself without git.
+			 */
+			removal: SubsystemComponentRemoval;
 	  };
 
 /**
@@ -1703,7 +1726,8 @@ export type StudioRequests = {
 			fixId:
 				| "adopt_graphify_signature"
 				| "adopt_graphify_file"
-				| "adopt_graphify_declaration_ref";
+				| "adopt_graphify_declaration_ref"
+				| "deprecate_component";
 			/** One component, or omit to apply every adoptable instance of this fix. */
 			componentAlias?: string;
 		};

@@ -4,11 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import {
+	commitInfo,
+	commitSubject,
 	commitTouches,
 	diffScopedFiles,
 	filesClean,
 	filesDirty,
 	headSha,
+	lastCommitTouching,
 	remoteRefSha,
 	revDistance,
 } from "./git-repo";
@@ -191,6 +194,49 @@ describe("commitTouches", () => {
 		const capped = await commitTouches(dir, base, sha(dir), ["a.ts"], 2);
 		expect(capped?.length).toBe(2);
 		expect(capped?.[capped.length - 1].sha).toBe(sha(dir));
+	});
+});
+
+describe("lastCommitTouching", () => {
+	test("dates the deletion of a file that git tracked", async () => {
+		const dir = initRepo();
+		spawnSync("git", ["-C", dir, "rm", "-q", "a.ts"], { encoding: "utf8" });
+		commit(dir, "remove a");
+		const removing = sha(dir);
+
+		expect(await lastCommitTouching(dir, "a.ts")).toBe(removing);
+		expect(await commitSubject(dir, removing)).toBe("remove a");
+	});
+
+	test("follows a rename to the rename commit", async () => {
+		const dir = initRepo();
+		git(dir, ["mv", "a.ts", "renamed.ts"]);
+		commit(dir, "rename a");
+		const renamed = sha(dir);
+
+		expect(await lastCommitTouching(dir, "a.ts")).toBe(renamed);
+		expect(await lastCommitTouching(dir, "renamed.ts")).toBe(renamed);
+	});
+
+	test("is null for a path git never tracked", async () => {
+		const dir = initRepo();
+		expect(await lastCommitTouching(dir, "never-existed.ts")).toBeNull();
+		expect(await commitSubject(dir, "deadbeef")).toBeNull();
+	});
+});
+
+describe("commitInfo", () => {
+	test("returns the short sha and subject", async () => {
+		const dir = initRepo();
+		const info = await commitInfo(dir, sha(dir));
+		expect(info?.shortSha).toBe(sha(dir).slice(0, 7));
+		expect(info?.subject).toBe("base");
+	});
+
+	test("rejects anything that is not a full sha", async () => {
+		const dir = initRepo();
+		expect(await commitInfo(dir, "not-a-sha")).toBeNull();
+		expect(await commitInfo(dir, "")).toBeNull();
 	});
 });
 

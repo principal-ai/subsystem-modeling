@@ -50,6 +50,7 @@ const AUDIT_FIX_KIND_LABEL: Record<SubsystemModelAuditFixGroup["fixId"], string>
 	adopt_graphify_declaration_ref: "declaration re-pins",
 	adopt_graphify_signature: "signature fills",
 	adopt_graphify_file: "file relocates",
+	deprecate_component: "deprecations",
 };
 
 // Disabled for now — Excalidraw edits don't save back to the store yet

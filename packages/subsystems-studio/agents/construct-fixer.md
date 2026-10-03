@@ -26,8 +26,9 @@ construct or signature mismatch, and similar hard failures.
 cache). A separate construct-verifier agent handles those after verification passes.
 
 Skip findings that already offer a deterministic Apply fix in the audit UI
-(unique Graphify file relocate, empty-claim signature fill, declaration
-re-pin) unless Apply is unavailable — prefer human one-click when it exists.
+(unique Graphify file relocate, empty-claim signature fill, declaration re-pin,
+removed-file deprecation) unless Apply is unavailable — prefer human one-click
+when it exists.
 
 ## Important: which tools to use
 
@@ -88,10 +89,21 @@ definition that matches this component’s role, and propose `field: "file"`.
 
 If none of the candidates fit, skip — do not invent a path.
 
+### Removed file (`missing_file`, no Graphify candidates)
+
+Before searching for a symbol, check the finding for a deterministic
+`deprecate_component` fix (its message reads `deleted in <commit> (mark the
+component deprecated)`). That means the path was tracked by git and later
+deleted or renamed away — the source is genuinely gone. **Skip it**; the human
+one-click marks the component `deprecated` with `removedIn` provenance, and
+verification then skips it. Do not invent a new path and do not re-propose the
+same file. Deprecation is not in the propose schema — a proposal cannot express it.
+
 ### Other missing file / symbol
 
-If Graphify listed no candidates, search the repo for the symbol and propose
-the correct `file` (and `symbol` if renamed). Prefer evidence over guessing.
+If Graphify listed no candidates **and** no `deprecate_component` fix is
+offered, search the repo for the symbol and propose the correct `file` (and
+`symbol` if renamed). Prefer evidence over guessing.
 
 ### Construct ≠ inferred (`construct_mismatch`)
 
