@@ -26,9 +26,8 @@ construct or signature mismatch, and similar hard failures.
 cache). A separate construct-verifier agent handles those after verification passes.
 
 Skip findings that already offer a deterministic Apply fix in the audit UI
-(unique Graphify file relocate, empty-claim signature fill, declaration re-pin,
-removed-file deprecation) unless Apply is unavailable — prefer human one-click
-when it exists.
+(unique Graphify file relocate, empty-claim signature fill, declaration
+re-pin) unless Apply is unavailable — prefer human one-click when it exists.
 
 ## Important: which tools to use
 
@@ -89,21 +88,51 @@ definition that matches this component’s role, and propose `field: "file"`.
 
 If none of the candidates fit, skip — do not invent a path.
 
-### Removed file (`missing_file`, no Graphify candidates)
-
-Before searching for a symbol, check the finding for a deterministic
-`deprecate_component` fix (its message reads `deleted in <commit> (mark the
-component deprecated)`). That means the path was tracked by git and later
-deleted or renamed away — the source is genuinely gone. **Skip it**; the human
-one-click marks the component `deprecated` with `removedIn` provenance, and
-verification then skips it. Do not invent a new path and do not re-propose the
-same file. Deprecation is not in the propose schema — a proposal cannot express it.
-
 ### Other missing file / symbol
 
-If Graphify listed no candidates **and** no `deprecate_component` fix is
-offered, search the repo for the symbol and propose the correct `file` (and
-`symbol` if renamed). Prefer evidence over guessing.
+If Graphify listed no candidates, search the repo for the symbol and propose
+the correct `file` (and `symbol` if renamed). Prefer evidence over guessing.
+
+### Source gone — deprecation (`missing_file` / `symbol_unmatched`)
+
+The audit only reports that a claimed file or symbol is **absent**; absence
+alone is not deprecation. It can mean the source was deleted, or it was renamed,
+moved, made private, or inlined. **You decide**, after reading the evidence:
+
+1. **Read the source and git history.** Locate the file (or the file the symbol
+   lived in) at the last commit that touched it — `git log -1 --follow -- <file>`
+   and `git show` the commit. Read the diff and the current tree.
+2. **If the code moved or was renamed** (a successor exists, perhaps in another
+   file or under a new name) → propose `field: "file"` and/or `field: "symbol"`
+   pointing at the live declaration. Do **not** deprecate.
+3. **If the code is genuinely gone** — deleted, nothing replaced it — propose a
+   deprecation. Set both fields in one proposal:
+   `field: "deprecated"` with `value: true`, and `field: "removedIn"` with
+   `value: { "commit": "<short sha>", "reason": "<that commit's subject>" }`.
+4. **If you cannot tell** whether it was removed or relocated → skip. Do not
+   deprecate on a guess.
+
+Deprecation is a lifecycle marker, not a rewrite: accept sets `component.deprecated`
+and `removedIn`, and verification then skips the component. A separate pass later
+decides what to do with deprecated nodes. Only propose it when the evidence shows
+removal.
+
+```json
+{
+  "rationale": "topology-audit.ts was deleted in e168afc ('Remove topology relations'); the symbols live nowhere in the current tree.",
+  "author": "construct-fixer",
+  "finding": {
+    "kind": "missing_file",
+    "componentAlias": "topology",
+    "message": "…"
+  },
+  "changes": [
+    { "target": "component", "componentAlias": "topology", "field": "deprecated", "value": true },
+    { "target": "component", "componentAlias": "topology", "field": "removedIn",
+      "value": { "commit": "e168afc", "reason": "Remove topology relations; nest module boundaries by path" } }
+  ]
+}
+```
 
 ### Construct ≠ inferred (`construct_mismatch`)
 
@@ -213,6 +242,7 @@ Allowed change fields:
   store, not the model JSON; `file` / `symbol` / `purl` default from the
   component)
 - component: `file` | `symbol` | `construct` | `name` | `purl` | `declarationRef`
+  | `deprecated` (boolean) | `removedIn` (`{ commit, reason? }`)
 - trail-step: `file` | `line` | `symbol` | `from` | `to` | `mechanism` | `annotation`
 
 5. **Verify.** List proposals with the brief’s proposals curl. Do **not**

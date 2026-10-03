@@ -24,7 +24,6 @@ import type {
 	GraphifyEdge,
 	GraphifyNode,
 } from "../../../subsystems-react/src/graphify/types";
-import type { SubsystemComponentRemoval } from "@principal-ai/subsystems-core";
 import type {
 	SubsystemComponent,
 	SubsystemComponentVerificationResult,
@@ -39,7 +38,6 @@ import {
 	parseSourceLocation,
 	type SubsystemDeclarationRef,
 } from "./declaration-ref";
-import { commitInfo, lastCommitTouching } from "./git-repo";
 import { loadGraphifyGraph } from "./graphify-runner";
 import {
 	assessSubsystemGraphifyReadiness,
@@ -143,46 +141,6 @@ export function adoptGraphifyDeclarationRefFixFromVerify(
 		}`,
 		declarationRef: repin,
 		previousStartLine: stored?.startLine,
-	};
-}
-
-/**
- * A file the component claims is neither on disk now nor in Graphify (the
- * symbol was not relocated), but git tracks it — this is not a typo, it is a
- * file that existed and was later deleted or renamed away.
- *
- * A missing path git never tracked proves nothing (the model may simply be
- * wrong), so this is the guard that keeps deprecation to the deletion case.
- */
-export async function detectRemovedComponentFile(opts: {
-	componentFile: string | undefined;
-	repoRoot: string | undefined;
-	fileExists: boolean | null;
-	/** Graphify found the symbol at another existing path — a relocate, not a removal. */
-	hasFileSuggest: boolean;
-	/** Graphify matched the symbol at multiple paths — agent judgment, not deprecation. */
-	hasFileCandidates: boolean;
-}): Promise<SubsystemComponentRemoval | undefined> {
-	if (!opts.repoRoot || !opts.componentFile) return undefined;
-	if (opts.fileExists !== false) return undefined;
-	if (opts.hasFileSuggest || opts.hasFileCandidates) return undefined;
-	const removingSha = await lastCommitTouching(opts.repoRoot, opts.componentFile);
-	if (!removingSha) return undefined;
-	const info = await commitInfo(opts.repoRoot, removingSha);
-	if (!info) return undefined;
-	return {
-		commit: info.shortSha,
-		...(info.subject ? { reason: info.subject } : {}),
-	};
-}
-
-export function deprecateComponentFixFromVerify(
-	removal: SubsystemComponentRemoval,
-): Extract<SubsystemModelAuditFix, { id: "deprecate_component" }> {
-	return {
-		id: "deprecate_component",
-		label: `Mark deprecated — removed in ${removal.commit}`,
-		removal,
 	};
 }
 
@@ -1238,36 +1196,20 @@ export async function auditSubsystemModel(
 		if (check.fileExists) filesVerified++;
 		else {
 			issue = true;
-			// A relocate (Graphify has the symbol elsewhere on disk) is the
-			// preferred fix; only when there is no relocate at all do we look
-			// for the deletion case (path git tracked, now gone).
-			let fix: SubsystemModelAuditFix | undefined = r.fileSuggest
+			const fix = r.fileSuggest
 				? adoptGraphifyFileFixFromVerify(c, r.fileSuggest)
 				: undefined;
 			const candidates = r.fileCandidates?.map((x) => x.file) ?? [];
-			if (!fix && candidates.length === 0) {
-				const removal = await detectRemovedComponentFile({
-					componentFile: c.file,
-					repoRoot: r.file?.repoRoot,
-					fileExists: r.file?.exists ?? null,
-					hasFileSuggest: r.fileSuggest != null,
-					hasFileCandidates: r.fileCandidates != null,
-				});
-				if (removal) fix = deprecateComponentFixFromVerify(removal);
-			}
 			findings.push({
 				kind: "missing_file",
 				severity: "error",
 				componentAlias: c.alias,
 				componentName: c.name,
-				message:
-					fix?.id === "deprecate_component"
-						? `File not found: ${c.file} — deleted in ${fix.removal.commit} (mark the component deprecated)`
-						: fix
-							? `File not found: ${c.file} — Graphify has ${c.symbol} at ${fix.file} (deterministic update available)`
-							: candidates.length > 1
-								? `File not found: ${c.file} — Graphify has ${c.symbol} at multiple paths: ${candidates.join(", ")} (agent judgment required)`
-								: `File not found: ${c.file}`,
+				message: fix
+					? `File not found: ${c.file} — Graphify has ${c.symbol} at ${fix.file} (deterministic update available)`
+					: candidates.length > 1
+						? `File not found: ${c.file} — Graphify has ${c.symbol} at multiple paths: ${candidates.join(", ")} (agent judgment required)`
+						: `File not found: ${c.file}`,
 				fix,
 			});
 		}
@@ -1603,15 +1545,13 @@ export async function auditSubsystemModel(
  * - `adopt_graphify_signature` — copy graphify named type bags into declaration
  * - `adopt_graphify_file` — update component.file from Graphify when claimed path missing
  * - `adopt_graphify_declaration_ref` — re-pin declarationRef from Graphify source_location
- * - `deprecate_component` — mark a missing file git shows was deleted (`deprecated` + `removedIn`)
  */
 export async function applySubsystemModelAuditFix(opts: {
 	graphId: string;
 	fixId:
 		| "adopt_graphify_signature"
 		| "adopt_graphify_file"
-		| "adopt_graphify_declaration_ref"
-		| "deprecate_component";
+		| "adopt_graphify_declaration_ref";
 	componentAlias?: string;
 }): Promise<
 	| {
@@ -1625,8 +1565,7 @@ export async function applySubsystemModelAuditFix(opts: {
 	if (
 		opts.fixId !== "adopt_graphify_signature" &&
 		opts.fixId !== "adopt_graphify_file" &&
-		opts.fixId !== "adopt_graphify_declaration_ref" &&
-		opts.fixId !== "deprecate_component"
+		opts.fixId !== "adopt_graphify_declaration_ref"
 	) {
 		return { ok: false, error: `unknown fix: ${opts.fixId}` };
 	}
@@ -1637,70 +1576,6 @@ export async function applySubsystemModelAuditFix(opts: {
 	const targetAliases = opts.componentAlias
 		? [opts.componentAlias]
 		: graph.components.map((c) => c.alias);
-
-	if (opts.fixId === "deprecate_component") {
-		// Re-derive the removal per component from the current tree + git rather
-		// than trusting an alias list from an earlier audit — a file may have
-		// been restored (or the relocate fix applied) since the offer was staged.
-		const removals = new Map<string, SubsystemComponentRemoval>();
-
-		for (const componentAlias of targetAliases) {
-			const component = graph.components.find((c) => c.alias === componentAlias);
-			if (!component) {
-				if (opts.componentAlias) {
-					return { ok: false, error: `unknown component: ${componentAlias}` };
-				}
-				continue;
-			}
-			if (component.deprecated) continue;
-
-			const verified = await verifySubsystemComponent(opts.graphId, componentAlias, {
-				dryRun: true,
-			});
-			const removal = await detectRemovedComponentFile({
-				componentFile: component.file,
-				repoRoot: verified.file?.repoRoot,
-				fileExists: verified.file?.exists ?? null,
-				hasFileSuggest: verified.fileSuggest != null,
-				hasFileCandidates: verified.fileCandidates != null,
-			});
-			if (removal) {
-				removals.set(componentAlias, removal);
-				continue;
-			}
-			if (opts.componentAlias) {
-				return {
-					ok: false,
-					error:
-						"not a removed file (path exists, was never tracked by git, or Graphify has a relocate)",
-				};
-			}
-		}
-
-		if (removals.size === 0) {
-			return { ok: false, error: "no deprecatable removed files found" };
-		}
-
-		const components = graph.components.map((c) => {
-			const removal = removals.get(c.alias);
-			if (!removal) return c;
-			return { ...c, deprecated: true, removedIn: removal };
-		});
-
-		const updated = await updateSubsystemModel(opts.graphId, { components });
-		if (!updated) {
-			return { ok: false, error: `failed to update graph: ${opts.graphId}` };
-		}
-
-		const audited = await auditSubsystemModel(opts.graphId);
-		if (!audited.ok) return { ok: false, error: audited.error };
-		return {
-			ok: true,
-			applied: removals.size,
-			report: audited.report,
-			fingerprint: audited.fingerprint,
-		};
-	}
 
 	if (opts.fixId === "adopt_graphify_file") {
 		const fileUpdates = new Map<string, string>();

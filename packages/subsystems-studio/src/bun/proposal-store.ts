@@ -269,6 +269,17 @@ function validateChanges(
 				if (ch.value !== null && typeof ch.value !== "object") {
 					return "declarationRef value must be an object or null";
 				}
+			} else if (ch.field === "deprecated") {
+				if (typeof ch.value !== "boolean") {
+					return "deprecated value must be a boolean";
+				}
+			} else if (ch.field === "removedIn") {
+				if (ch.value !== null && typeof ch.value !== "object") {
+					return "removedIn value must be an object or null";
+				}
+				if (ch.value !== null && typeof (ch.value as { commit?: unknown }).commit !== "string") {
+					return "removedIn value needs a commit string";
+				}
 			} else if (ch.value !== null && typeof ch.value !== "string") {
 				return `${ch.field} value must be a string or null`;
 			}

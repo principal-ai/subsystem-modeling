@@ -654,16 +654,6 @@ export type SubsystemModelAuditFix =
 			/** Re-pin from Graphify `source_location` + current line hash. */
 			declarationRef: SubsystemDeclarationRef;
 			previousStartLine?: number;
-	  }
-	| {
-			id: "deprecate_component";
-			label: string;
-			/**
-			 * Provenance for the removal. `commit` is the creating/removing
-			 * commit whose subject names the change; the model stores it on
-			 * `component.removedIn` so the audit explains itself without git.
-			 */
-			removal: SubsystemComponentRemoval;
 	  };
 
 /**
@@ -1017,6 +1007,33 @@ export type SubsystemModelProposalChange =
 			componentAlias: string;
 			field: "declarationRef";
 			value: SubsystemDeclarationRef | null;
+	  }
+	| {
+			/**
+			 * Lifecycle correction: the claim's source is gone. The agent reads
+			 * source and git history and decides absence means removal, not a
+			 * rename or relocate. Accept sets `component.deprecated`; verification
+			 * then skips source checks exactly as it does for `proposed`.
+			 *
+			 * Deprecation is a transitional marker, not a resting state — a
+			 * separate pass later removes the node and repairs the trails that
+			 * referenced it.
+			 */
+			target: "component";
+			componentAlias: string;
+			field: "deprecated";
+			value: boolean;
+	  }
+	| {
+			/**
+			 * Provenance for a deprecation: the commit that removed the source and
+			 * its subject, captured so the model explains itself without a git
+			 * call. Propose alongside `deprecated: true`.
+			 */
+			target: "component";
+			componentAlias: string;
+			field: "removedIn";
+			value: SubsystemComponentRemoval | null;
 	  }
 	| {
 			target: "trail-step";
@@ -1726,8 +1743,7 @@ export type StudioRequests = {
 			fixId:
 				| "adopt_graphify_signature"
 				| "adopt_graphify_file"
-				| "adopt_graphify_declaration_ref"
-				| "deprecate_component";
+				| "adopt_graphify_declaration_ref";
 			/** One component, or omit to apply every adoptable instance of this fix. */
 			componentAlias?: string;
 		};

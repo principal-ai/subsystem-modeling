@@ -2081,7 +2081,17 @@ const requests: RequestHandlers = {
 				});
 				// A per-finding Apply closes that finding, so the staged batch no
 				// longer describes reality — drop it rather than offer stale work.
-				if (applied.ok) pendingAuditFixPreviews.delete(graphId);
+				if (applied.ok) {
+					pendingAuditFixPreviews.delete(graphId);
+					// The write landed on disk: notify every surface (graph canvas,
+					// Maintain list, badges) exactly as the batch path does, so the
+					// change appears without a close/reopen.
+					broadcastSubsystemModelChanged({ graphId, reason: "updated" });
+					broadcastSubsystemModelProposalsChanged({
+						graphId,
+						pendingCount: await pendingProposalCount(graphId),
+					});
+				}
 				return applied;
 			},
 			getPendingAuditFixes: async ({ graphId }) => ({

@@ -50,7 +50,6 @@ const AUDIT_FIX_KIND_LABEL: Record<SubsystemModelAuditFixGroup["fixId"], string>
 	adopt_graphify_declaration_ref: "declaration re-pins",
 	adopt_graphify_signature: "signature fills",
 	adopt_graphify_file: "file relocates",
-	deprecate_component: "deprecations",
 };
 
 // Disabled for now — Excalidraw edits don't save back to the store yet
@@ -499,6 +498,11 @@ export function SubsystemModelView({
 				})
 				.then((res) => {
 					if (res.ok && res.report) setAuditReport(res.report);
+					// The fix rewrote the component (e.g. deprecated + removedIn),
+					// so reload the graph too — otherwise the snapshot this view
+					// holds keeps the pre-fix nodes until a remount. A targeted
+					// refetch, not a full rerender.
+					if (res.ok) loadGraph();
 					// A per-finding Apply invalidates the staged batch host-side.
 					loadFixPreview();
 				})
@@ -506,7 +510,7 @@ export function SubsystemModelView({
 					/* best-effort — the next audit refresh reconciles */
 				});
 		},
-		[auditFindingById, graphId, loadFixPreview],
+		[auditFindingById, graphId, loadGraph, loadFixPreview],
 	);
 
 	if (graph === undefined) {

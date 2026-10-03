@@ -229,65 +229,6 @@ export async function commitTouches(
 	return commits;
 }
 
-/**
- * The newest commit in `repoRoot` that touched `relPath`. Follows the path
- * across renames, so a claim whose file moved (`old.ts` → `new.ts`) resolves to
- * the rename commit on either side. Returns null when the path was never
- * tracked here, or when the repo is unreadable.
- *
- * Used to date a component's source: for a missing file, this is the commit
- * that *removed* it (the file is gone now, so the last commit to touch it is
- * the deletion/rename); for a present file, it is the commit that last changed
- * it.
- */
-export async function lastCommitTouching(
-	repoRoot: string,
-	relPath: string,
-): Promise<string | null> {
-	if (!relPath) return null;
-	const out = await gitStdout(repoRoot, [
-		"log",
-		"-1",
-		"--format=%H",
-		"--follow",
-		"--",
-		relPath,
-	]);
-	const sha = out?.trim();
-	return sha && /^[0-9a-f]{40}$/.test(sha) ? sha : null;
-}
-
-/** Short subject line for a commit, or null when it cannot be read. */
-export async function commitSubject(
-	repoRoot: string,
-	sha: string,
-): Promise<string | null> {
-	const out = await gitStdout(repoRoot, ["log", "-1", "--format=%s", sha]);
-	const subject = out?.trim();
-	return subject || null;
-}
-
-/** A commit's info, abbreviated for embedding in model provenance. */
-export interface CommitInfo {
-	/** Abbreviated (short) sha — what `removedIn.commit` stores. */
-	shortSha: string;
-	/** Subject line of the commit. */
-	subject: string | null;
-}
-
-export async function commitInfo(
-	repoRoot: string,
-	sha: string,
-): Promise<CommitInfo | null> {
-	const full = sha.trim();
-	if (!/^[0-9a-f]{40}$/.test(full)) return null;
-	const out = await gitStdout(repoRoot, ["show", "-s", "--format=%h%n%s", full]);
-	if (out == null) return null;
-	const [shortSha = "", ...rest] = out.split("\n");
-	if (!shortSha.trim()) return null;
-	return { shortSha: shortSha.trim(), subject: rest.join("\n").trim() || null };
-}
-
 /** The sha the remote's default branch points at, or null when unavailable. */
 export async function remoteRefSha(repoRoot: string): Promise<string | null> {
 	const head = await gitStdout(repoRoot, [

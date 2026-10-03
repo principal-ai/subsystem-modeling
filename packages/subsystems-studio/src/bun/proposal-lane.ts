@@ -26,6 +26,9 @@ export function laneForChange(
 	// component
 	if (ch.field === "module") return "static-topology";
 	if (ch.field === "process") return "dynamic-topology";
+	// Deprecation is a lifecycle correction to a construct claim (its source is
+	// gone) — same lane as the construct it retires.
+	if (ch.field === "deprecated" || ch.field === "removedIn") return "construct";
 	return "construct";
 }
 
