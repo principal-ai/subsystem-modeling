@@ -123,9 +123,10 @@ export function ComponentNodePreview({
 
 /**
  * The container a `c4-container` proposal is proposing, drawn with the same
- * card the C4 graph renders — the reviewer sees the element exactly as it
- * will look accepted, in its `proposed` state. Self-contained: the payload
- * rides the proposal's own change, no graph or store lookup.
+ * card the C4 graph renders. Pinned to `accepted` so it draws solid: the
+ * dashed state is the graph's pending-mark, and here the card previews what
+ * accepting will produce. Self-contained: the payload rides the proposal's
+ * own change, no graph or store lookup.
  */
 export function ContainerNodePreview({
 	container,
@@ -134,7 +135,7 @@ export function ContainerNodePreview({
 }) {
 	const node: C4Container = {
 		kind: "container",
-		state: "proposed",
+		state: "accepted",
 		...container,
 	};
 	return (

@@ -68,7 +68,13 @@ function C4NodeView(
     const el = ref.current;
     if (el && typeof console !== 'undefined') {
       const r = el.getBoundingClientRect();
-      console.log('[c4-size]', element.kind, element.id, Math.round(r.width) + '×' + Math.round(r.height));
+      const first = el.firstElementChild as HTMLElement | null;
+      console.log(
+        '[c4-size]', element.kind, element.id,
+        'screen=', Math.round(r.width) + '×' + Math.round(r.height),
+        'layout=', (el.offsetWidth || 0) + '×' + (el.offsetHeight || 0),
+        'cardLayout=', (first?.offsetWidth || 0) + '×' + (first?.offsetHeight || 0),
+      );
     }
   }, [element.id, element.kind, element.label, element.description]);
   return (
@@ -308,7 +314,7 @@ const FLIP_MS = 240;
 
 function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter = 28 }: C4GraphProps) {
   const { theme } = useTheme();
-  const { fitView } = useReactFlow();
+  const { fitView, getViewport } = useReactFlow();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const [nodes, setNodes] = useState<Node[]>([]);
   const [rfEdges, setRfEdges] = useState<Edge[]>([]);
@@ -330,7 +336,14 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
   useEffect(() => {
     if (!ready || !pendingFitRef.current) return;
     pendingFitRef.current = false;
-    fitView({ padding: 0.15, duration: FLIP_MS, nodes: [{ id: model.system.id }] });
+    if (typeof console !== 'undefined') console.log('[c4-fit] firing fitView, nodes=', model.nodes.length);
+    fitView({ padding: 0.15, duration: FLIP_MS, maxZoom: 1, nodes: [{ id: model.system.id }] });
+    if (typeof console !== 'undefined') {
+      setTimeout(() => {
+        const vp = getViewport?.();
+        console.log('[c4-fit] viewport after fit', vp);
+      }, FLIP_MS + 50);
+    }
   }, [ready, model.system.id, fitView]);
 
   /** Called once the new layout is committed, from the layout effect. */
@@ -338,6 +351,7 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
     // The camera fit runs from a `ready`-keyed effect (see below), after React
     // has committed the new nodes — fitting earlier measures stale geometry and
     // the camera just snaps.
+    if (typeof console !== 'undefined') console.log('[c4-fit] afterLayout, queued');
     pendingFitRef.current = true;
   };
 
@@ -355,6 +369,7 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
   useEffect(() => {
     let alive = true;
     setReady(false);
+    if (typeof console !== 'undefined') console.log('[c4-fit] layout effect, open=', model.openContainerId);
     setSelectedId(null);
 
     // Draw only the elements for this view. A container diagram shows the
