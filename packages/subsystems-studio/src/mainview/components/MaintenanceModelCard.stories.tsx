@@ -52,6 +52,24 @@ const RUNS: SubsystemModelRun[] = [
 		verdict: "partially_verified",
 		summary: "Confirmed 6 module boundaries, drafted one correction.",
 		pendingCount: 1,
+		commitsAtStart: {
+			"pkg:github/principal-ai/subsystem-modeling": "b2c4e81f0a9d3756ce14b8f2d9071aa5e63c4b21",
+		},
+	},
+	{
+		id: "run-0",
+		graphId: "g-payments",
+		graphTitle: "Payments Service",
+		status: "done",
+		startedAt: "2026-09-25T08:00:00.000Z",
+		endedAt: "2026-09-25T08:02:00.000Z",
+		agent: "construct-fixer",
+		model: "opencode-go/deepseek-v4-flash",
+		verdict: "partially_verified",
+		summary: "Older run — superseded by run-1.",
+		commitsAtStart: {
+			"pkg:github/principal-ai/subsystem-modeling": "7d1f2a90c4b3e5f60718293a4b5c6d7e8f901234",
+		},
 	},
 ];
 
@@ -245,13 +263,13 @@ export const Blocked: Story = {
 	},
 };
 
-/** Run history available — the Runs ( n ) toggle appears. */
+/** A finished run available — the card expands to show it. */
 export const WithRuns: Story = {
 	args: { runs: RUNS, proposals: PROPOSALS },
 };
 
-/** Run history expanded: the Fix-cycle strip plus the run rows and their
- *  per-run proposal outcomes. */
+/** Expanded: the most recent run and its proposal outcomes. Older finished
+ *  runs are intentionally not listed. */
 export const RunsExpanded: Story = {
 	args: { runs: RUNS, proposals: PROPOSALS, runsOpen: true },
 };

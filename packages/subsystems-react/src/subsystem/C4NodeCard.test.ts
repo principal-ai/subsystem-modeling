@@ -3,13 +3,16 @@ import {
   nodeStyle,
   nodeSubtitle,
   nodeTag,
-  nodeStateTag,
+  nodeKindIcon,
+  nodeTopLabel,
   nodeShape,
   nodeMissing,
   NODE_W,
   NODE_H,
+  nodeSize,
+  COMPONENT_SIZE,
 } from './C4NodeCard';
-import type { C4Node, C4ElementType, C4AssociationState } from './toC4';
+import type { C4Element, C4Container } from './c4';
 
 const theme = {
   colors: {
@@ -21,50 +24,65 @@ const theme = {
   },
 } as Parameters<typeof nodeStyle>[1];
 
-function node(over: Partial<C4Node> = {}): C4Node {
-  return { id: 'n', kind: 'container', label: 'n', members: [], constructs: [], isStore: false, ...over };
+/**
+ * A container element with overridable fields. `state` is required — every
+ * authored element carries a decision — so the card never has to cope with a
+ * box nobody proposed, and no test pretends otherwise.
+ */
+function node(over: Partial<C4Container> = {}): C4Element {
+  return {
+    id: 'n',
+    kind: 'container',
+    label: 'n',
+    containerKind: 'application',
+    technology: '',
+    state: 'proposed',
+    ...over,
+  };
 }
 
-function decorated(state: C4AssociationState, extra: Record<string, unknown> = {}): C4Node {
-  return node({ decoration: { id: 'container:x', state, ...extra } as C4Node['decoration'] });
-}
-
-describe('nodeStyle', () => {
+describe('nodeStyle — one axis per channel', () => {
   test('selected overrides everything', () => {
-    expect(nodeStyle(decorated('accepted'), theme, true).width).toBe(3);
-    expect(nodeStyle(node(), theme, true).color).toBe('#4ec9b0');
+    expect(nodeStyle(node({ state: 'accepted' }), theme, true).width).toBe(3);
+    expect(nodeStyle(node({ state: 'accepted' }), theme, true).dash).toBe('solid');
   });
 
-  test('accepted is solid and uses the primary colour', () => {
-    const s = nodeStyle(decorated('accepted'), theme);
-    expect(s.dash).toBe('solid');
-    expect(s.color).toBe('#4ec9b0');
+  test('accepted is solid', () => {
+    expect(nodeStyle(node({ state: 'accepted' }), theme).dash).toBe('solid');
   });
 
-  test('proposed is dashed and uses the warning colour', () => {
-    const s = nodeStyle(decorated('proposed'), theme);
-    expect(s.dash).toBe('dashed');
-    expect(s.color).toBe('#e8a33a');
+  test('proposed is dashed', () => {
+    expect(nodeStyle(node({ state: 'proposed' }), theme).dash).toBe('dashed');
   });
 
   test('rejected is dotted and muted', () => {
-    const s = nodeStyle(decorated('rejected'), theme);
+    const s = nodeStyle(node({ state: 'rejected' }), theme);
     expect(s.dash).toBe('dotted');
     expect(s.color).toBe('#555');
   });
 
-  test('no association is muted, so confirmed boxes read stronger', () => {
-    expect(nodeStyle(node(), theme).color).toBe('#555');
+  test('the dash belongs to state, never to kind', () => {
+    // This is the bug that made proposed boxes draw solid: the card rendered
+    // `shape.dash`, and shape answered to kind. Every kind at the same state
+    // must now draw the same dash.
+    for (const kind of ['container', 'component', 'external-system', 'person'] as const) {
+      expect(nodeStyle(node({ kind, state: 'proposed' }), theme).dash).toBe('dashed');
+      expect(nodeStyle(node({ kind, state: 'accepted' }), theme).dash).toBe('solid');
+    }
   });
 
-  test('an external and an actor are distinguished without an association', () => {
-    expect(nodeStyle(node({ kind: 'external' }), theme).color).toBe('#e8a33a');
-    expect(nodeStyle(node({ kind: 'actor' }), theme).color).toBe('#e3b341');
+  test('colour follows the technology, not the state', () => {
+    // Same kind and state, different tech: different hue.
+    const react = nodeStyle(node({ technology: 'React 19', state: 'accepted' }), theme).color;
+    const bun = nodeStyle(node({ technology: 'Bun', state: 'accepted' }), theme).color;
+    expect(react).not.toBe(bun);
+    // State does not move the colour.
+    expect(nodeStyle(node({ technology: 'React 19', state: 'proposed' }), theme).color).toBe(react);
   });
 
-  test('confirmation state wins over kind for colour and dash', () => {
-    const s = nodeStyle(decorated('accepted'), theme);
-    expect(s.color).toBe('#4ec9b0');
+  test('an unknown technology falls back to the muted border', () => {
+    expect(nodeStyle(node({ technology: '', state: 'accepted' }), theme).color).toBe('#555');
+    expect(nodeStyle(node({ technology: 'COBOL', state: 'accepted' }), theme).color).toBe('#555');
   });
 
   test('border weight carries the level, not the state', () => {
@@ -72,174 +90,225 @@ describe('nodeStyle', () => {
     // invisible in grayscale and to a colourblind reader.
     expect(nodeStyle(node({ kind: 'component' }), theme).width).toBe(1);
     expect(nodeStyle(node(), theme).width).toBe(2);
-    expect(nodeStyle(decorated('accepted', { type: 'application' }), theme).width).toBe(2);
   });
 
-  test('a component stays thinner when confirmed', () => {
-    const confirmed = decorated('accepted');
-    expect(nodeStyle({ ...confirmed, kind: 'component' }, theme).width).toBe(1);
+  test('a component stays thinner once confirmed', () => {
+    expect(nodeStyle(node({ kind: 'component', state: 'accepted' }), theme).width).toBe(1);
   });
 
   test('falls back safely when the theme has no colour', () => {
     const bare = { colors: {} } as Parameters<typeof nodeStyle>[1];
-    expect(() => nodeStyle(decorated('accepted'), bare)).not.toThrow();
-    expect(nodeStyle(decorated('accepted'), bare).dash).toBe('solid');
+    expect(() => nodeStyle(node({ state: 'accepted' }), bare)).not.toThrow();
+    expect(nodeStyle(node({ state: 'accepted' }), bare).dash).toBe('solid');
   });
 });
 
 describe('nodeTag — what the box IS', () => {
-  test('names the C4 level, never the confirmation state', () => {
-    expect(nodeTag(node())).toBe('container');
-    expect(nodeTag(decorated('accepted'))).toBe('container');
-    expect(nodeTag(decorated('proposed'))).toBe('container');
-    expect(nodeTag(decorated('rejected'))).toBe('container');
+  test('names the C4 kind, never the confirmation state', () => {
+    expect(nodeTag(node({ state: 'accepted' }))).toBe('container');
+    expect(nodeTag(node({ state: 'proposed' }))).toBe('container');
+    expect(nodeTag(node({ state: 'rejected' }))).toBe('container');
   });
 
-  test('keeps every level distinct', () => {
+  test('keeps all four kinds distinct', () => {
     expect(nodeTag(node({ kind: 'component' }))).toBe('component');
-    expect(nodeTag(node({ kind: 'external' }))).toBe('external');
-    expect(nodeTag(node({ kind: 'actor' }))).toBe('actor');
+    expect(nodeTag(node({ kind: 'external-system' }))).toBe('external-system');
+    expect(nodeTag(node({ kind: 'person' }))).toBe('person');
   });
 
   test('a confirmed container is still a container', () => {
     // This is the regression that made the two levels unreadable: state used
-    // to overwrite the level, so an accepted container stopped being one.
-    expect(nodeTag(decorated('accepted'))).not.toBe('confirmed');
+    // to overwrite the kind, so an accepted container stopped being one.
+    expect(nodeTag(node({ state: 'accepted' }))).not.toBe('confirmed');
   });
 });
 
-describe('nodeStateTag — whether anyone vouched for it', () => {
-  test('names each confirmation state', () => {
-    expect(nodeStateTag(decorated('accepted'))).toBe('confirmed');
-    expect(nodeStateTag(decorated('proposed'))).toBe('proposed');
-    expect(nodeStateTag(decorated('rejected'))).toBe('rejected');
+describe('nodeKindIcon — a container’s sort, not its C4 kind', () => {
+  test('application and data-store get different icons', () => {
+    const app = nodeKindIcon(node({ containerKind: 'application' }));
+    const store = nodeKindIcon(node({ containerKind: 'data-store' }));
+    expect(app).toBeDefined();
+    expect(store).toBeDefined();
+    expect(app).not.toBe(store);
   });
 
-  test('says unconfirmed rather than showing nothing', () => {
-    expect(nodeStateTag(node())).toBe('unconfirmed');
-    expect(nodeStateTag(node({ kind: 'component' }))).toBe('unconfirmed');
+  test('only containers get an icon — the shape carries the rest', () => {
+    for (const kind of ['component', 'external-system', 'person'] as const) {
+      expect(nodeKindIcon(node({ kind }))).toBeUndefined();
+    }
   });
 
-  test('is a separate axis from the level', () => {
-    // Same level, different state — and vice versa.
-    expect(nodeTag(decorated('accepted'))).toBe(nodeTag(node()));
-    expect(nodeStateTag(node())).not.toBe(nodeStateTag(decorated('accepted')));
-    expect(nodeStateTag(node({ kind: 'component' }))).toBe(nodeStateTag(node()));
+  test('the icon does not depend on confirmation state', () => {
+    expect(nodeKindIcon(node({ state: 'proposed' }))).toBe(
+      nodeKindIcon(node({ state: 'accepted' })),
+    );
   });
 });
 
-describe('nodeShape — level without relying on colour', () => {
-  test('a container is a sharp solid box', () => {
+describe('nodeTopLabel — the technology, or the kind when none is stated', () => {
+  test('a stated technology is the label', () => {
+    expect(
+      nodeTopLabel(node({ containerKind: 'application', technology: 'Bun + Electrobun' })),
+    ).toBe('Bun + Electrobun');
+    expect(nodeTopLabel(node({ kind: 'component', technology: 'React + ELK' }))).toBe('React + ELK');
+  });
+
+  test('a container with no technology falls back to its kind', () => {
+    expect(nodeTopLabel(node({ containerKind: 'data-store', technology: '' }))).toBe('data-store');
+  });
+
+  test('the other kinds fall back to their C4 kind', () => {
+    expect(nodeTopLabel(node({ kind: 'component' }))).toBe('component');
+    expect(nodeTopLabel(node({ kind: 'external-system' }))).toBe('external-system');
+    expect(nodeTopLabel(node({ kind: 'person' }))).toBe('person');
+  });
+});
+
+describe('nodeShape — kind without relying on colour or dash', () => {
+  test('a container is a sharp rectangle', () => {
     const s = nodeShape(node());
+    expect(s.kind).toBe('rect');
     expect(s.radius).toBeLessThanOrEqual(4);
-    expect(s.dash).toBe('solid');
   });
 
-  test('a component is a rounded box', () => {
-    expect(nodeShape(node({ kind: 'component' })).radius).toBeGreaterThan(nodeShape(node()).radius);
+  test('a component is a square', () => {
+    expect(nodeShape(node({ kind: 'component' })).kind).toBe('square');
   });
 
-  test('an external is dashed — there is nothing to confirm inside it', () => {
-    expect(nodeShape(node({ kind: 'external' })).dash).toBe('dashed');
+  test('an external system is a rounded rectangle', () => {
+    const s = nodeShape(node({ kind: 'external-system' }));
+    expect(s.kind).toBe('rect');
+    expect(s.radius).toBeGreaterThan(nodeShape(node()).radius);
   });
 
-  test('an actor is a pill', () => {
-    expect(nodeShape(node({ kind: 'actor' })).radius).toBeGreaterThanOrEqual(NODE_H / 2);
+  test('a person is a pill', () => {
+    const s = nodeShape(node({ kind: 'person' }));
+    expect(s.kind).toBe('pill');
+    expect(s.radius).toBeGreaterThanOrEqual(NODE_H / 2);
   });
 
   test('shape does not depend on confirmation state', () => {
-    expect(nodeShape(decorated('proposed')).radius).toBe(nodeShape(decorated('accepted')).radius);
+    expect(nodeShape(node({ state: 'proposed' })).kind).toBe(
+      nodeShape(node({ state: 'accepted' })).kind,
+    );
   });
 });
 
 describe('nodeSubtitle', () => {
-  test('shows type and technology once confirmed', () => {
-    const s = nodeSubtitle(
-      decorated('accepted', { type: 'application', technology: 'Bun + Electrobun' }),
-    );
-    expect(s).toBe('application · Bun + Electrobun');
+  test('is the element description when it has one', () => {
+    expect(
+      nodeSubtitle(node({ technology: 'Bun', description: 'Runs the audit pipeline.' })),
+    ).toBe('Runs the audit pipeline.');
   });
 
-  test('omits technology when it was never stated', () => {
-    expect(nodeSubtitle(decorated('accepted', { type: 'data-store' }))).toBe('data-store');
-  });
-
-  test('falls back to the construct breakdown for a raw container', () => {
-    const s = nodeSubtitle(node({ constructs: ['function', 'store'], members: ['a', 'b'] }));
-    expect(s).toContain('function');
-    expect(s).toContain('store');
-    expect(s).toContain('2 components');
-  });
-
-  test('singularises a single member', () => {
-    const s = nodeSubtitle(node({ constructs: ['function'], members: ['a'] }));
-    expect(s).toContain('1 component');
-    expect(s).not.toContain('1 components');
-  });
-
-  test('a component shows its construct and file basename', () => {
-    const s = nodeSubtitle(
-      node({
-        kind: 'component',
-        component: {
-          alias: 'a',
-          name: 'buildGroups',
-          construct: 'function',
-          file: 'src/subsystem/model.ts',
-          purl: 'pkg:x#src/subsystem/model.ts',
-        },
-      }),
-    );
-    expect(s).toBe('function · model.ts');
+  test('is empty when nothing is stated — there is no fallback', () => {
+    const withTech = node({ technology: 'Bun + Electrobun' });
+    const withMembers = node({ constructs: ['function', 'store'], members: ['a', 'b'] });
+    const component = node({
+      kind: 'component',
+      component: {
+        alias: 'a',
+        name: 'buildGroups',
+        construct: 'function',
+        file: 'src/subsystem/model.ts',
+        purl: 'pkg:x#src/subsystem/model.ts',
+      },
+    });
+    for (const n of [withTech, withMembers, component]) {
+      expect(nodeSubtitle(n)).toBe('');
+    }
   });
 });
 
 describe('nodeMissing', () => {
-  test('a bare container reports both notation gaps', () => {
-    expect(nodeMissing(node())).toEqual(['technology', 'description']);
+  test('a container with neither reports both notation gaps', () => {
+    expect(nodeMissing(node({ technology: '', description: undefined }))).toEqual([
+      'technology',
+      'description',
+    ]);
   });
 
   test('one supplied gap drops only that one', () => {
-    expect(nodeMissing(decorated('accepted', { technology: 'React' }))).toEqual(['description']);
+    expect(nodeMissing(node({ technology: 'React', description: undefined }))).toEqual([
+      'description',
+    ]);
   });
 
   test('a fully stated container reports nothing', () => {
     expect(
-      nodeMissing(decorated('accepted', { technology: 'React', description: 'Renders graphs.' })),
+      nodeMissing(node({ technology: 'React', description: 'Renders graphs.', state: 'accepted' })),
     ).toEqual([]);
   });
 
   test('the requirement is on containers only', () => {
-    expect(nodeMissing(node({ kind: 'external' }))).toEqual([]);
-    expect(nodeMissing(node({ kind: 'actor' }))).toEqual([]);
-    expect(nodeMissing(node({ kind: 'component' }))).toEqual([]);
+    for (const kind of ['external-system', 'person', 'component'] as const) {
+      expect(nodeMissing(node({ kind, technology: '', description: undefined }))).toEqual([]);
+    }
+  });
+});
+
+describe('nodeSize — a component is a proper square', () => {
+  test('a component has equal width and height', () => {
+    const s = nodeSize(node({ kind: 'component' }));
+    expect(s.width).toBe(s.height);
+  });
+
+  test('a container is wider than it is tall', () => {
+    const s = nodeSize(node());
+    expect(s.width).toBeGreaterThan(s.height);
+  });
+
+  test('a component is smaller than its container', () => {
+    const c = nodeSize(node({ kind: 'component' }));
+    const k = nodeSize(node());
+    expect(c.width).toBeLessThan(k.width);
+    expect(c.height).toBeLessThan(k.height);
+  });
+
+  test('the square still fits its three lines of text', () => {
+    // tag + 2-line label slot + subtitle + 10px padding x2. Without this the
+    // square clips its own subtitle.
+    const s = nodeSize(node({ kind: 'component' }));
+    const content = 16 + 40 + 16 + 20;
+    expect(s.height).toBeGreaterThanOrEqual(content);
+  });
+
+  test('every kind but a component shares the container box', () => {
+    const c = nodeSize(node());
+    expect(nodeSize(node({ kind: 'external-system' }))).toEqual(c);
+    expect(nodeSize(node({ kind: 'person' }))).toEqual(c);
   });
 });
 
 describe('card metrics', () => {
   test('exposes the size the graph lays out against', () => {
-    expect(NODE_W).toBeGreaterThan(0);
-    expect(NODE_H).toBeGreaterThan(0);
+    expect(NODE_W).toBe(250);
+    expect(NODE_H).toBe(150);
+  });
+
+  test('COMPONENT_SIZE is a square, not just a smaller rectangle', () => {
+    expect(COMPONENT_SIZE).toBe(nodeSize(node({ kind: 'component' })).width);
+    expect(COMPONENT_SIZE).toBe(nodeSize(node({ kind: 'component' })).height);
   });
 
   test('is near-square, not a wide strip', () => {
-    // The card carries four fields (tag, label, type+technology, notation
-    // gap). A 3:1 strip truncates the last two; this is the aspect ratio that
-    // lets each sit on its own line.
+    // The card carries three fields (technology row, label, description). A
+    // 3:1 strip wraps the last two hard; this is the aspect ratio that lets
+    // each sit on its own line.
     const ratio = NODE_W / NODE_H;
     expect(ratio).toBeGreaterThan(1);
     expect(ratio).toBeLessThan(1.8);
   });
 
-  test('is tall enough for four lines of content', () => {
-    // tag + 2-line label + subtitle + gap marker, plus 8px padding top/bottom.
+  test('is tall enough for three lines of content', () => {
+    // technology row + 2-line label + description, plus padding.
     expect(NODE_H).toBeGreaterThanOrEqual(130);
   });
 
-  test('leaves breathing room around four lines of text', () => {
+  test('leaves breathing room around three lines of text', () => {
     // Top-aligned now, not centred, so this is about slack rather than
-    // balance: tag + 2-line label slot + subtitle + gap slot + padding.
-    const contentBudget = 16 + 40 + 16 + 18 + 20; // lines + 10px padding ×2
+    // balance: technology row + 2-line label slot + description + padding.
+    const contentBudget = 16 + 40 + 16 + 20; // lines + 10px padding ×2
     expect(NODE_H - contentBudget).toBeGreaterThanOrEqual(12);
   });
 
@@ -250,20 +319,24 @@ describe('card metrics', () => {
   });
 });
 
-/** Compile-time guard: every declared element type is reachable from a card. */
-const ALL_TYPES: C4ElementType[] = [
-  'application',
-  'data-store',
-  'queue',
-  'library',
-  'software-system',
-  'person',
-];
-
-describe('element types', () => {
-  test('each one renders as a subtitle without special-casing', () => {
-    for (const type of ALL_TYPES) {
-      expect(nodeSubtitle(decorated('accepted', { type }))).toBe(type);
+describe('container kinds', () => {
+  test('each container kind has an icon and a fallback label', () => {
+    for (const containerKind of ['application', 'data-store'] as const) {
+      expect(nodeKindIcon(node({ containerKind }))).toBeDefined();
+      // No technology stated, so the label falls back to the kind.
+      expect(nodeTopLabel(node({ containerKind, technology: '' }))).toBe(containerKind);
     }
+  });
+
+  test('application and data-store do not share an icon', () => {
+    expect(nodeKindIcon(node({ containerKind: 'application' }))).not.toBe(
+      nodeKindIcon(node({ containerKind: 'data-store' })),
+    );
+  });
+
+  test('a library is not one of them', () => {
+    // C4 says a module "typically" is not an element at all, so there is no
+    // kind to render. A library-shaped group is a review comment.
+    expect(['application', 'data-store']).not.toContain('library');
   });
 });

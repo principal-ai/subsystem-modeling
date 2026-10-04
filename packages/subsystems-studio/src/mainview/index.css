@@ -27,6 +27,19 @@ body {
 	animation: principal-studio-spin 1s linear infinite;
 }
 
+/*
+ * The provenance chip is a toggle, so it has three states: resting, hover, and
+ * selected (the strip is open). The colour is set in JS from the theme's
+ * severity tone (`--chip-fg`); hover only deepens the fill — a 12% tint of that
+ * tone over its own 5% base — so the surface lifts without the border moving.
+ * `:not([aria-expanded="true"])` keeps the selected fill from being overridden
+ * on hover; the menu-open chip must stay pinned. `!important` is how a
+ * stylesheet beats a React inline style.
+ */
+.principal-studio-provenance-chip:hover:not([aria-expanded="true"]) {
+	background: color-mix(in srgb, var(--chip-fg) 17%, transparent) !important;
+}
+
 
 @keyframes principal-studio-audit-border {
 	0% {

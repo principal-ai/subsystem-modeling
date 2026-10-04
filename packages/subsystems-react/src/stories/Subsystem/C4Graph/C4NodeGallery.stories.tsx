@@ -6,12 +6,13 @@ import {
   nodeStyle,
   nodeSubtitle,
   nodeTag,
-  nodeStateTag,
+  nodeTopLabel,
   nodeShape,
+  nodeSize,
   nodeMissing,
   NODE_W,
 } from '../../../subsystem/C4NodeCard';
-import type { C4Node, C4ElementType } from '../../../subsystem/toC4';
+import type { C4Element } from '../../../subsystem/c4';
 
 // ---------------------------------------------------------------------------
 // A card gallery: every C4 box variant, outside the graph.
@@ -23,6 +24,10 @@ import type { C4Node, C4ElementType } from '../../../subsystem/toC4';
 // Rendering the card directly (not through React Flow) is the point: the node
 // is a plain presentational component, so it can be reviewed and diffed
 // without a layout engine in the way.
+//
+// Every card here is an authored `C4Element` — the shape a C4 box draws with,
+// produces from an authored element, with the per-kind fields already resolved
+// to the one shape the card draws with.
 // ---------------------------------------------------------------------------
 
 const meta = {
@@ -43,38 +48,34 @@ type Story = StoryObj<typeof meta>;
 
 // --- sample nodes ---------------------------------------------------------
 
-function node(over: Partial<C4Node> & { id: string; label: string }): C4Node {
+function node(over: Record<string, unknown> & { id: string; label: string }): C4Element {
   return {
     kind: 'container',
+    containerKind: 'application',
+    technology: '',
+    state: 'proposed',
     members: [],
     constructs: [],
-    isStore: false,
     ...over,
-  };
+  } as C4Element;
 }
 
-const CONFIRMED = {
-  id: 'container:studio-host',
-  label: 'Studio Host',
-  type: 'application' as C4ElementType,
-  technology: 'Bun + Electrobun',
-  description: 'Runs the audit pipeline, owns the model store, serves the RPC surface.',
-  state: 'accepted' as const,
-};
-
-const VARIANTS: Array<{ group: string; note: string; node: C4Node }> = [
+const VARIANTS: Array<{ group: string; note: string; node: C4Element }> = [
   // `id` on each variant is its caption key, not a component field.
+
   // --- confirmation state: the axis that matters most --------------------
   {
     group: 'Confirmation state',
-    note: 'The whole point of the association layer. Solid = a person signed off. Dashed = an agent asked, nobody answered. Muted = raw derivation, never reviewed.',
+    note: 'Solid = a person signed off. Dashed = an agent asked and nobody answered. This is the only field that changes how a box is drawn, so it is the only one a confirm UI needs to move.',
     node: node({
       id: 'a1',
-      label: 'subsystems-studio/host',
-      key: 'subsystems-studio/host',
+      label: 'Subsystem Studio — host',
       members: ['a', 'b', 'c'],
       constructs: ['function', 'store'],
-      decoration: CONFIRMED,
+      containerKind: 'application',
+      technology: 'Bun + Electrobun',
+      description: 'Runs the audit pipeline, owns the model store, serves the RPC surface.',
+      state: 'accepted',
     }),
   },
   {
@@ -82,16 +83,12 @@ const VARIANTS: Array<{ group: string; note: string; node: C4Node }> = [
     note: '',
     node: node({
       id: 'a2',
-      label: 'subsystems-core/types',
-      key: 'subsystems-core/types',
+      label: 'subsystems-react (proposed container?)',
       members: ['x', 'y'],
-      constructs: ['interface', 'type_alias'],
-      decoration: {
-        id: 'container:subsystems-core/types',
-        label: 'subsystems-core/types',
-        type: 'library',
-        state: 'proposed',
-      },
+      constructs: ['function', 'interface'],
+      containerKind: 'application',
+      technology: 'React',
+      state: 'proposed',
     }),
   },
   {
@@ -99,79 +96,99 @@ const VARIANTS: Array<{ group: string; note: string; node: C4Node }> = [
     note: '',
     node: node({
       id: 'a3',
-      label: 'principal-studio-cli',
-      key: 'principal-studio-cli',
+      label: 'Subsystem Modeling CLI',
       members: ['cli-create'],
       constructs: ['function'],
+      containerKind: 'application',
+      technology: 'Node',
+      description: 'Creates and updates models from the terminal.',
+      state: 'accepted',
     }),
   },
   {
     group: '',
-    note: '',
+    note: 'Rejected elements are not drawn at all. This card exists to prove the fallback branch exists, not because a diagram ever shows one.',
     node: node({
       id: 'a4',
       label: 'graphify/extract',
-      key: 'graphify/extract',
       members: ['extract'],
       constructs: ['function'],
-      decoration: {
-        id: 'container:graphify/extract',
-        label: 'graphify/extract',
-        type: 'application',
-        state: 'rejected',
-      },
+      containerKind: 'application',
+      technology: 'Bun',
+      state: 'rejected',
     }),
   },
   {
     group: '',
-    note: '',
-    node: node({ id: 'a5', label: 'Studio Host', key: 'p1 + p2', sourceKeys: ['p1', 'p2'], members: ['a'], constructs: ['function'], decoration: CONFIRMED }),
+    note: 'A box that consolidated two derived keys says so — the inputs are hidden once merged, and silently losing them would be a lie about provenance.',
+    node: node({
+      id: 'a5',
+      label: 'Subsystem Studio — host',
+      derivedFrom: ['subsystems-studio/host', 'principal-studio/host'],
+      members: ['a'],
+      constructs: ['function'],
+      containerKind: 'application',
+      technology: 'Bun + Electrobun',
+      state: 'accepted',
+    }),
   },
 
-  // --- C4 element type ----------------------------------------------------
+  // --- the four kinds ------------------------------------------------------
   {
-    group: 'C4 element type',
-    note: 'C4 requires a type on every element. The document has no such field, so this is always a confirmation.',
+    group: 'The four kinds',
+    note: 'C4 has a closed vocabulary: software system, container, component, code. Outside the boundary it adds people. There is no "library" kind — c4model says a module typically is not an element at all, so a library is a review comment, not a fifth box.',
     node: node({
       id: 'b1',
       label: 'Subsystem model store',
       members: ['s1'],
       constructs: ['store'],
-      decoration: { id: 'container:ds', label: 'Subsystem model store', type: 'data-store', technology: 'JSON files on disk', state: 'accepted', description: 'Every stored model plus its index.' },
+      containerKind: 'data-store',
+      technology: 'JSON files on disk',
+      description: 'Every stored model plus its index.',
+      state: 'accepted',
     }),
   },
   {
     group: '',
-    note: '',
+    note: 'A queue or topic is a data store, not its own kind. C4 says an individual queue is a bucket of messages — a data store — and that the message bus itself is not a container at all. The queue-ness lives in the label and technology.',
     node: node({
       id: 'b2',
       label: 'Audit correction queue',
       members: ['s2'],
       constructs: ['store'],
-      decoration: { id: 'container:q', label: 'Audit correction queue', type: 'queue', technology: 'agent session transport', state: 'accepted', description: 'Proposals awaiting a human decision.' },
+      containerKind: 'data-store',
+      technology: 'agent session transport',
+      description: 'Proposals awaiting a human decision.',
+      state: 'accepted',
     }),
   },
   {
     group: '',
-    note: '',
+    note: 'A component is a real square, not a smaller rectangle. Border weight drops to 1px as a second signal, so the level survives grayscale.',
     node: node({
       id: 'b3',
-      label: 'subsystems-core',
-      members: ['i1', 'i2'],
-      constructs: ['interface', 'function'],
-      decoration: { id: 'container:lib', label: 'subsystems-core', type: 'library', technology: 'TypeScript', state: 'accepted', description: 'Schema and validation. Not a deployable unit.' },
+      label: 'Boundary layout builder',
+      kind: 'component',
+      parentId: 'container:shared-ui',
+      members: ['h1', 'h2'],
+      constructs: ['function'],
+      technology: 'React + ELK',
+      description: 'Turns claims into nested compound frames.',
+      state: 'accepted',
     }),
   },
   {
     group: '',
-    note: '',
+    note: 'An external system keeps the rectangle but goes dashed — it is outside the boundary, which is a different statement from "inside, and unconfirmed".',
     node: node({
       id: 'b4',
       label: 'OpenCode v2 service',
-      kind: 'external',
+      kind: 'external-system',
       members: ['oc2'],
       constructs: ['external'],
-      decoration: { id: 'external:oc2', label: 'OpenCode v2 service', type: 'software-system', technology: 'HTTP', state: 'accepted', description: 'Runs maintain agent sessions.' },
+      technology: 'HTTP',
+      description: 'Runs maintain agent sessions.',
+      state: 'accepted',
     }),
   },
   {
@@ -180,24 +197,26 @@ const VARIANTS: Array<{ group: string; note: string; node: C4Node }> = [
     node: node({
       id: 'b5',
       label: 'Maintain operator',
-      kind: 'actor',
+      kind: 'person',
       members: ['a'],
       constructs: ['custom_entity'],
-      decoration: { id: 'actor:a', label: 'Maintain operator', type: 'person', state: 'proposed', description: 'Reviews and accepts correction proposals.' },
+      description: 'Reviews and accepts correction proposals.',
+      state: 'proposed',
     }),
   },
 
   // --- the gaps C4 keeps asking about ------------------------------------
   {
     group: 'Notation gaps',
-    note: 'C4 requires technology and description on every container. A confirmed box that never got either says so on its face rather than looking finished.',
+    note: 'C4 requires technology and description on every container. A box that never got either says so on its face rather than looking finished — and `technology` is required by the type, so the only way to have the gap is an empty string.',
     node: node({
       id: 'c1',
-      label: 'site/web',
-      key: 'site/web',
+      label: 'In-memory renderer state',
       members: ['w1', 'w2', 'w3'],
-      constructs: ['function'],
-      decoration: { id: 'container:site/web', label: 'site/web', type: 'application', state: 'accepted' },
+      constructs: ['store'],
+      containerKind: 'application',
+      technology: '',
+      state: 'accepted',
     }),
   },
   {
@@ -205,25 +224,28 @@ const VARIANTS: Array<{ group: string; note: string; node: C4Node }> = [
     note: '',
     node: node({
       id: 'c2',
-      label: 'subsystems-studio/renderer',
-      key: 'subsystems-studio/renderer',
+      label: 'Subsystem Studio — renderer',
       members: ['r1', 'r2'],
       constructs: ['function'],
-      decoration: { id: 'container:renderer', label: 'subsystems-studio/renderer', type: 'application', technology: 'React', state: 'accepted' },
+      containerKind: 'application',
+      technology: 'React 19',
+      state: 'accepted',
     }),
   },
 
   // --- the pair that was confusing, side by side ------------------------
   {
     group: 'Container vs component',
-    note: 'The case that started this. Same card, same border colour, no association on either — previously identical. Now: sharp + 2px + the word "container", versus rounded + 1px + "component".',
+    note: 'The case that started this. Same border colour and same state, previously identical. Now a wide rectangle says "container" and a square says "component", so the level is readable before the text is.',
     node: node({
       id: 'e1',
-      label: 'subsystems-studio/host',
-      key: 'subsystems-studio/host',
+      label: 'Subsystem Studio — host',
       members: ['a', 'b', 'c'],
       constructs: ['function', 'store'],
-      decoration: { id: 'container:host', label: 'subsystems-studio/host', type: 'application', technology: 'Bun + Electrobun', state: 'accepted', description: 'Runs the audit pipeline.' },
+      containerKind: 'application',
+      technology: 'Bun + Electrobun',
+      description: 'Runs the audit pipeline.',
+      state: 'accepted',
     }),
   },
   {
@@ -231,16 +253,20 @@ const VARIANTS: Array<{ group: string; note: string; node: C4Node }> = [
     note: '',
     node: node({
       id: 'e2',
-      label: 'subsystems-studio/host',
+      label: 'Studio Host',
       kind: 'component',
+      parentId: 'container:studio-host',
       members: ['h1'],
       constructs: ['function'],
+      technology: 'Bun',
+      description: 'Resolves the model root and registers repos.',
+      state: 'accepted',
       component: {
         alias: 'h1',
-        name: 'subsystems-studio/host',
+        name: 'StudioHost',
         construct: 'function',
-        file: 'src/bun/index.ts',
-        purl: 'pkg:x#src/bun/index.ts',
+        file: 'packages/subsystems-studio/src/bun/index.ts',
+        purl: 'pkg:x#packages/subsystems-studio/src/bun/index.ts',
       },
     }),
   },
@@ -269,6 +295,8 @@ function Case({ caption, children }: { caption: string; children: React.ReactNod
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-start' }}>
       {children}
+      {/* Caption spans the container box so every card's caption starts at the
+          same x — otherwise the narrower square column looks misaligned. */}
       <span
         style={{
           fontFamily: 'monospace',
@@ -284,14 +312,16 @@ function Case({ caption, children }: { caption: string; children: React.ReactNod
   );
 }
 
+const KINDS = ['container', 'component', 'external-system', 'person'] as const;
+
 function Gallery() {
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? '#9a9aa0';
 
   const legend: Array<[string, string]> = [
-    ['accepted', nodeStyle({ id: 'x', kind: 'container', label: '', members: [], constructs: [], isStore: false, decoration: CONFIRMED } as C4Node, theme).color],
-    ['proposed', nodeStyle({ id: 'x', kind: 'container', label: '', members: [], constructs: [], isStore: false, decoration: { id: 'y', state: 'proposed' } } as C4Node, theme).color],
-    ['unconfirmed', nodeStyle({ id: 'x', kind: 'container', label: '', members: [], constructs: [], isStore: false } as C4Node, theme).color],
+    ['accepted', nodeStyle(node({ id: 'x', label: '', state: 'accepted' }), theme).color],
+    ['proposed', nodeStyle(node({ id: 'x', label: '', state: 'proposed' }), theme).color],
+    ['rejected', nodeStyle(node({ id: 'x', label: '', state: 'rejected' }), theme).color],
   ];
 
   let currentGroup = '';
@@ -306,19 +336,29 @@ function Gallery() {
 
       <div style={{ fontFamily: 'monospace', fontSize: 11, marginBottom: 26, lineHeight: 1.9 }}>
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-          <span style={{ color: '#e8e8ea' }}>LEVEL — shape and border weight</span>
+          <span style={{ color: '#e8e8ea' }}>KIND — shape and border weight</span>
+        </div>
+        <div style={{ color: muted, marginTop: 2 }}>
+          Top-left is the technology’s brand mark — shown only when we hold the official SVG — and its
+          name. Top-right is a container’s C4 sort, application vs data-store. The line under the label
+          is the description.
         </div>
         <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 4 }}>
-          {(['container', 'component', 'external', 'actor'] as const).map((kind) => {
-            const s = nodeShape(node({ kind }));
+          {KINDS.map((kind) => {
+            const s = nodeShape(node({ id: 'x', label: '', kind }));
+            const size = nodeSize(node({ id: 'x', label: '', kind }));
+            const color = nodeStyle(node({ id: 'x', label: '', kind }), theme).color;
+            const weight = kind === 'component' ? 1 : 2;
+            // Drawn at the real aspect ratio — the whole signal is square vs
+            // rectangle, so a legend that flattened both would lie.
             return (
               <span key={kind} style={{ display: 'flex', alignItems: 'center', gap: 6, color: muted }}>
                 <span
                   style={{
-                    width: 20,
-                    height: 13,
-                    borderRadius: Math.min(s.radius, 6),
-                    border: `${kind === 'component' ? 1 : 2} ${s.dash} ${nodeStyle(node({ kind }), theme).color}`,
+                    width: 28,
+                    height: Math.round((28 * size.height) / size.width),
+                    borderRadius: Math.min(s.radius, 9),
+                    border: `${weight} ${nodeStyle(node({ id: 'x', label: '', kind }), theme).dash} ${color}`,
                     display: 'inline-block',
                   }}
                 />
@@ -345,16 +385,25 @@ function Gallery() {
           const showHeader = v.group && v.group !== currentGroup;
           if (v.group) currentGroup = v.group;
           return (
-            <React.Fragment key={v.id ?? v.node.id}>
+            <React.Fragment key={v.node.id}>
               {showHeader && (
                 <div style={{ width: '100%' }}>
                   <Section title={v.group} note={v.note} />
                 </div>
               )}
               <Case
-                caption={`${v.node.id} · "${nodeTag(v.node)}" / ${nodeStateTag(v.node)} · r${nodeShape(v.node).radius} · ${nodeSubtitle(v.node)}${
-                  nodeMissing(v.node).length ? ` · missing ${nodeMissing(v.node).join('+')}` : ''
-                }`}
+                caption={[
+                  v.node.id,
+                  `"${nodeTag(v.node)}"`,
+                  v.node.kind === 'container' ? v.node.containerKind : null,
+                  v.node.state,
+                  `${nodeShape(v.node).kind} ${nodeSize(v.node).width}×${nodeSize(v.node).height}`,
+                  nodeTopLabel(v.node),
+                  nodeSubtitle(v.node),
+                  nodeMissing(v.node).length ? `missing ${nodeMissing(v.node).join('+')}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
               >
                 <C4NodeCard node={v.node} />
               </Case>

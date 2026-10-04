@@ -34,6 +34,24 @@ export function hashDeclarationLineFromContent(
 	return hashDeclarationLine(raw);
 }
 
+/**
+ * Hash a range of lines (1-based, inclusive) for call site verification.
+ * Returns null if the range is invalid or out of bounds.
+ */
+export function hashContentRange(
+	content: string,
+	start: number,
+	end: number,
+): string | null {
+	const lines = content.split(/\r?\n/);
+	if (start < 1 || end < start || end > lines.length) return null;
+	const slice = lines
+		.slice(start - 1, end)
+		.map(normalizeDeclarationLine)
+		.join("\n");
+	return createHash("sha256").update(slice, "utf8").digest("hex").slice(0, 32);
+}
+
 export async function buildDeclarationRef(input: {
 	file: string;
 	startLine: number;

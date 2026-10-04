@@ -115,7 +115,8 @@
     },
     "declarationProvenance": {
       "type": "string",
-      "description": "Where `declaration` came from. `verified` is reserved for tool-extracted data; hand-authored declarations must be `authored` (also the default when declaration is present without provenance).",
+      "deprecated": true,
+      "description": "[DEPRECATED] No longer used — verification now tracks at the model level via verifiedAtCommits. Kept for migration compatibility.",
       "enum": [
         "verified",
         "authored"
@@ -217,10 +218,11 @@
         },
         "declaration": {
           "$ref": "#/$defs/constructDeclaration",
-          "description": "Structured declaration shape of the construct for the click panel (parameters, members, etc.). Hand-author when highlighting specific inputs/outputs; set `declarationProvenance` accordingly."
+          "description": "Structured declaration shape of the construct for the click panel (parameters, members, etc.)."
         },
         "declarationProvenance": {
-          "$ref": "#/$defs/declarationProvenance"
+          "$ref": "#/$defs/declarationProvenance",
+          "deprecated": true
         },
         "tokens": {
           "type": "array",
@@ -281,6 +283,10 @@
           "type": "string",
           "minLength": 1,
           "description": "Frame name for this step — the function/method on the stack at the site. Required; the Trails list shows this instead of a bare mechanism + filename fallback."
+        },
+        "proposed": {
+          "type": "boolean",
+          "description": "Planned seam — the step describes intended behavior through code that is not written yet. Verification skips source checks; viewers tint it like a proposed node. A step is proposed when it says so OR either endpoint component is proposed."
         },
         "annotation": {
           "type": "string",
@@ -469,7 +475,7 @@
       }
     },
     "constructDeclaration": {
-      "description": "Discriminated structured declaration of a construct (`kind`). Hand-authored declarations should set component.declarationProvenance to authored.",
+      "description": "Discriminated structured declaration of a construct (`kind`).",
       "oneOf": [
         {
           "$ref": "#/$defs/classDeclaration"

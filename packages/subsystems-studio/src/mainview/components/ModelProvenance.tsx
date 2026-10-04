@@ -48,9 +48,8 @@
 
 import { useState, type CSSProperties, type ReactNode } from "react";
 import {
-	ChevronDown,
-	ChevronRight,
 	CircleCheck,
+	CircleDashed,
 	Copy,
 	Download,
 	FileDiff,
@@ -69,17 +68,134 @@ import type {
 /** Sha length rendered in the strip. Seven chars is git's own default. */
 const SHORT_SHA = 7;
 
-function shortSha(sha: string | undefined): string {
+export function shortSha(sha: string | undefined): string {
 	return sha ? sha.slice(0, SHORT_SHA) : "";
 }
 
 /** `pkg:github/acme/widget` → `acme/widget`; anything unexpected renders raw. */
-function ownerName(purl: string): string {
+export function ownerName(purl: string): string {
 	const parts = purl.split("#")[0]!.split("/").filter(Boolean);
 	return parts.length >= 2
 		? `${parts[parts.length - 2]}/${parts[parts.length - 1]}`
 		: purl;
 }
+
+/** `#rgb` / `#rrggbb` → `[h, s, l]` (degrees, %). `undefined` for anything else. */
+function hexToHsl(hex: string): [number, number, number] | undefined {
+	const match = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
+	if (!match) return undefined;
+	let body = match[1]!;
+	if (body.length === 3) body = body.split("").map((c) => c + c).join("");
+	const n = parseInt(body, 16);
+	const r = ((n >> 16) & 255) / 255;
+	const g = ((n >> 8) & 255) / 255;
+	const b = (n & 255) / 255;
+	const max = Math.max(r, g, b);
+	const min = Math.min(r, g, b);
+	const l = (max + min) / 2;
+	const d = max - min;
+	if (d === 0) return [0, 0, l * 100];
+	const s = d / (1 - Math.abs(2 * l - 1));
+	let h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+	h *= 60;
+	if (h < 0) h += 360;
+	return [h, s * 100, l * 100];
+}
+
+/** `[h, s, l]` → `#rrggbb`, so it survives the badge's `${fg}55` alpha suffix. */
+function hslToHex(h: number, s: number, l: number): string {
+	const sN = s / 100;
+	const lN = l / 100;
+	const c = (1 - Math.abs(2 * lN - 1)) * sN;
+	const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+	const m = lN - c / 2;
+	let r = 0;
+	let g = 0;
+	let b = 0;
+	if (h < 60) [r, g, b] = [c, x, 0];
+	else if (h < 120) [r, g, b] = [x, c, 0];
+	else if (h < 180) [r, g, b] = [0, c, x];
+	else if (h < 240) [r, g, b] = [0, x, c];
+	else if (h < 300) [r, g, b] = [x, 0, c];
+	else [r, g, b] = [c, 0, x];
+	const to = (v: number) =>
+		Math.round(Math.min(1, Math.max(0, v + m)) * 255)
+			.toString(16)
+			.padStart(2, "0");
+	return `#${to(r)}${to(g)}${to(b)}`;
+}
+
+/**
+ * The four severity tiers, as HSL deltas from the theme's colour.
+ *
+ * Tier 0 is the palest (least severe) and tier 3 the deepest. Saturation does
+ * most of the work and lightness moves only a little, so the deep end stays
+ * bright enough to read on the dark studio surface.
+ */
+const SEVERITY_TIERS: ReadonlyArray<readonly [number, number, number]> = [
+	[6, -14, 8],
+	[0, 0, 0],
+	[-9, 12, -2],
+	[-16, 24, -6],
+];
+
+/**
+ * Apply one severity tier to a base colour.
+ *
+ * A touched model is always a caution, never an error, so the badge stays in
+ * the yellow family rather than sliding toward red: a worse model simply reads
+ * as a deeper, richer amber. The ramp is derived from the theme's own
+ * `warning` instead of hard-coded hexes, so it respects light and dark
+ * palettes and any custom theme. Only hue, saturation and lightness are nudged
+ * — the base colour still carries the theme's intent.
+ *
+ * Hue is clamped well inside the yellow→amber band so severity never reads as
+ * error-red, and lightness is bounded so the palest tint stays readable on
+ * white and the deepest amber on a dark surface.
+ */
+function applySeverityTier(base: string, tier: number): string {
+	const hsl = hexToHsl(base);
+	if (!hsl) return base;
+	const [dh, ds, dl] = SEVERITY_TIERS[Math.max(0, Math.min(3, tier))]!;
+	const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+	return hslToHex(
+		clamp(hsl[0] + dh, 28, 60),
+		clamp(hsl[1] + ds, 0, 100),
+		clamp(hsl[2] + dl, 40, 74),
+	);
+}
+
+/**
+ * Severity from an absolute count of changed files. Used as the fallback when
+ * no component denominator is available — before the model has been measured,
+ * or on a model too small for a proportion to mean anything.
+ *
+ * Thresholds: 1 file (palest), 2–4, 5–14, 15+ (deepest). A non-positive count
+ * is left at the base colour so a distance-free state never reads as "mild".
+ */
+export function severityShade(base: string, count: number): string {
+	if (count < 1) return base;
+	return applySeverityTier(base, count >= 15 ? 3 : count >= 5 ? 2 : count >= 2 ? 1 : 0);
+}
+
+/**
+ * Severity from the fraction of grounded components affected. This is the
+ * primary ramp: a proportion compares across models of different sizes where a
+ * raw count cannot.
+ *
+ * Thresholds: <10%, 10–30%, 30–60%, 60%+.
+ */
+export function severityShadeForFraction(base: string, fraction: number): string {
+	const tier = fraction >= 0.6 ? 3 : fraction >= 0.3 ? 2 : fraction >= 0.1 ? 1 : 0;
+	return applySeverityTier(base, tier);
+}
+
+/**
+ * Below this many grounded components a proportion is noise — one changed
+ * component of four is 25% but says almost nothing. Small models keep the
+ * absolute ramp.
+ */
+const MIN_COMPONENTS_FOR_FRACTION = 8;
 
 /** Per-repo verdict across both axes. */
 export type ProvenanceStatus =
@@ -307,10 +423,25 @@ export interface ModelProvenanceData {
 	 * refusal is currently observable only as a pin that did not move.
 	 */
 	autoRePin?: AutoRePin;
+	/**
+	 * The saved audit's verdict. When the model carries a verified pin but the
+	 * latest audit no longer supports full verification, the chip reads
+	 * "Unverified" rather than green "Verified" — the pin proves the code did
+	 * not move; it does not prove the audit that earned it still passes. See
+	 * `ModelProvenanceSnapshot.auditVerdict` for the host-side decision.
+	 */
+	auditVerdict?: "fully_verified" | "partially_verified" | "issues";
 	/** Per-purl commit at create, immutable. */
 	createdAtCommits?: Record<string, PurlCommit>;
 	/** Per-purl commit the last fully-verified audit earned. */
 	verifiedAtCommits?: Record<string, PurlCommit>;
+	/**
+	 * Model-wide grounded contact — the denominator behind the severity shade.
+	 * Mirrors `ModelProvenanceSnapshot.componentContact` (`contract.ts`): a
+	 * proportion of affected components is comparable across models where a raw
+	 * file count is not. Absent when no repo could be measured.
+	 */
+	componentContact?: { referenced: number; affected: number };
 }
 
 /** One repo's fully-resolved provenance, after combining both axes. */
@@ -374,7 +505,10 @@ export function provenanceRows(
  * rollup falls back to the drift signal — honestly labelled as unmeasured
  * rather than clean.
  */
-export function summarizeProvenance(rows: ProvenanceRow[]): {
+export function summarizeProvenance(
+	rows: ProvenanceRow[],
+	componentContact?: { referenced: number; affected: number },
+): {
 	status: ProvenanceStatus;
 	anchor: AnchorVerdict;
 	touchedCount: number;
@@ -393,6 +527,12 @@ export function summarizeProvenance(rows: ProvenanceRow[]): {
 	historyRewritten: boolean;
 	staleCount: number;
 	total: number;
+	/**
+	 * Model-wide grounded contact, passed through from the snapshot. `undefined`
+	 * when the host could not measure a denominator, in which case the badge
+	 * falls back to the absolute file count.
+	 */
+	componentContact?: { referenced: number; affected: number };
 } {
 	const touchedCount = rows.filter((r) => r.anchor === "touched").length;
 	const dirtyCount = rows.filter((r) => r.anchor === "dirty").length;
@@ -450,6 +590,7 @@ export function summarizeProvenance(rows: ProvenanceRow[]): {
 		historyRewritten: rows.some((r) => r.changes?.historyRewritten),
 		staleCount,
 		total: rows.length,
+		componentContact,
 	};
 }
 
@@ -504,7 +645,7 @@ export function provenanceCopy(
 
 	if (status === "current") {
 		return {
-			label: "Current",
+			label: "Verified",
 			title: `Every referenced ${repos} still points at the commit this model was verified against${remoteKnown ? ", locally and remotely" : ""}.`,
 		};
 	}
@@ -536,7 +677,7 @@ export function provenanceCopy(
 						? ` The pin was not carried forward — ${autoRePinReason(autoRePin.blockedBy)}`
 						: "";
 		return {
-			label: "Current",
+			label: "Verified",
 			title: `Your checkout moved on ${count}, but no file this model references changed, so this model is still accurate. No re-audit needed.${pinNote}`,
 		};
 	}
@@ -554,20 +695,12 @@ export function provenanceCopy(
 		const distance = historyRewritten
 			? "Your checkout's history was rewritten since this model was verified, so the distance is unknown"
 			: `Your checkout moved${nCommits} since this model was verified`;
-		const filePart = `${changedFileCount} ${changedFileCount === 1 ? "file" : "files"} changed`;
-		// A complete chip string rather than a verdict word in front of two
-		// numbers — "Changed 22 commits · 1 file" reads as a label glued onto
-		// a noun phrase. The facts stand on their own.
-		const parts: string[] = [];
-		if (!historyRewritten && commitsSincePin !== undefined) {
-			parts.push(
-				`${commitsSincePin} ${commitsSincePin === 1 ? "commit" : "commits"}`,
-			);
-		}
-		parts.push(filePart);
+		// The chip carries the blast radius and nothing more; the commit
+		// distance is a tooltip detail, not a headline.
+		const detail = `${changedFileCount} ${changedFileCount === 1 ? "file change" : "files change"} since verification`;
 		return {
 			label: "",
-			detail: parts.join(" · "),
+			detail,
 			title: `${changedFileCount === 1 ? "One file this model references has" : `${changedFileCount} files this model references have`} changed since it was verified (${distance}). Re-audit to re-pin.`,
 		};
 	}
@@ -603,13 +736,24 @@ export function ProvenanceBadge({
 }) {
 	const { theme } = useTheme();
 	const rows = provenanceRows(provenance);
-	const summary = summarizeProvenance(rows);
+	const summary = summarizeProvenance(rows, provenance.componentContact);
 	const remoteKnown = (provenance.remoteFreshness ?? []).length > 0;
 	const { label, title, detail } = provenanceCopy(
 		summary,
 		remoteKnown,
 		provenance.autoRePin,
 	);
+
+	// Audit-axis downgrade. A verified pin proves the code did not move; it
+	// says nothing about whether the audit that earned it still passes. When
+	// the saved audit's verdict is anything but fully_verified — a newer audit
+	// found open work, or the pin predates a verification dimension (trail
+	// step checks) that the current model has not satisfied — the chip must
+	// not read "Verified". One word covers every such case: Unverified.
+	const auditDowngraded =
+		provenance.auditVerdict != null &&
+		provenance.auditVerdict !== "fully_verified" &&
+		!!provenance.verifiedAtCommits;
 
 	// A record with no pins at all is a migration transient, not a state we
 	// support: `commitsFromDeclarationRefs` (`purl-commits.ts:116`) already
@@ -631,66 +775,87 @@ export function ProvenanceBadge({
 	// "unmoved", "drifted but unaffected" and "re-pinned" alike; the pin's
 	// bookkeeping is a tooltip detail, not a downgrade.
 	const current = summary.status === "current" || summary.anchor === "clean";
+	// The downgrade outranks the commit-based reading: same unmoved checkout,
+	// but the pin's claim is no longer supported, so it is neither green nor
+	// "current" — it is unverified work.
+	const effectiveCurrent = current && !auditDowngraded;
 	// `anchor === "dirty"` outranks `status === "current"`: you can sit exactly
-	// on your pin with unsaved edits to an anchor, and a green "Current" would
+	// on your pin with unsaved edits to an anchor, and a green "Verified" would
 	// hide that. Past that, color tracks the anchor verdict rather than raw
 	// drift — a moved repo whose referenced files are provably untouched is
 	// quiet, not an alarm. Uncommitted edits are NOT handled here: they get
 	// their own badge, so a model that is current-but-dirty still reads
-	// `Current` here and carries a separate pencil chip beside it.
-	const tone =
-		current
+	// `Verified` here and carries a separate pencil chip beside it.
+	//
+	// The touched states borrow the theme's warning and deepen it by blast
+	// radius. The primary ramp is the proportion of grounded components
+	// affected — comparable across models — with the raw file count as a
+	// fallback when no denominator was measured or the model is too small for a
+	// percentage to mean anything.
+	const contact = summary.componentContact;
+	const touchedFg =
+		contact &&
+		contact.affected > 0 &&
+		contact.referenced >= MIN_COMPONENTS_FOR_FRACTION
+			? severityShadeForFraction(
+					theme.colors.warning,
+					contact.affected / contact.referenced,
+				)
+			: severityShade(theme.colors.warning, summary.changedFileCount);
+	const tone = auditDowngraded
+		? { fg: theme.colors.warning, Icon: CircleDashed }
+		: effectiveCurrent
 			? { fg: theme.colors.success, Icon: CircleCheck }
 			: summary.status === "unresolved" || summary.anchor === "unknown"
 					? { fg: theme.colors.textMuted, Icon: GitCompareArrows }
 					: summary.status === "remote-ahead"
 						? { fg: theme.colors.info ?? theme.colors.primary, Icon: Download }
 						: summary.status === "diverged"
-							? { fg: theme.colors.warning, Icon: TriangleAlert }
-							: { fg: theme.colors.warning, Icon: FileDiff };
+							? { fg: touchedFg, Icon: TriangleAlert }
+							: { fg: touchedFg, Icon: FileDiff };
 
 	const { fg, Icon } = tone;
 
-	// The commit count is the badge's payload — a sha conveys nothing to a reader.
-	// For `touched` the label is a verdict ("Changed"), so the count rides
-	// alongside it. For the `unknown` states the label already reads as an age
-	// ("22 behind"), so it must not be repeated here.
-	const behind =
-		summary.anchor === "touched" && summary.commitsSincePin !== undefined
-			? `${summary.commitsSincePin} ${summary.commitsSincePin === 1 ? "commit" : "commits"}`
+	// Downgraded copy: keep the chip's job ("when was it checked") but let the
+	// amber carry the warning — the pin still stands, the verification behind
+	// it no longer does.
+	const chipLabel = auditDowngraded && current ? "Unverified" : label;
+	const chipTitle =
+		auditDowngraded && current
+			? "This model was verified at the pinned commit, but the latest audit no longer supports full verification. Run maintenance to re-verify."
+			: title;
+
+	// The chip carries the blast radius and nothing more — no commit distance,
+	// no sha. Only meaningful for `touched`; the `unknown` states already read
+	// as an age ("22 behind"), so the count must not be repeated there.
+	const impact =
+		summary.anchor === "touched" && summary.changedFileCount > 0
+			? `${summary.changedFileCount} ${summary.changedFileCount === 1 ? "file change" : "files change"} since verification`
 			: "";
 	const repos =
 		summary.total > 1 && summary.staleCount > 0
 			? ` · ${summary.staleCount}/${summary.total}`
 			: "";
-	// "22 commits · 3 files" — the range, then the blast radius. Both are
-	// needed: the count says how far, the files say how much it matters.
-	const files =
-		summary.changedFileCount > 0
-			? `· ${summary.changedFileCount} ${summary.changedFileCount === 1 ? "file" : "files"}`
-			: "";
 
 	const body = (
 		<>
 			<Icon size={12} style={{ flexShrink: 0 }} aria-hidden="true" />
-			{detail ? <span>{detail}</span> : <span>{label}</span>}
-			{!detail && behind && (
+			{detail ? <span>{detail}</span> : <span>{chipLabel}</span>}
+			{!detail && impact && (
 				<span style={{ fontFamily: theme.fonts.monospace, fontWeight: 400 }}>
-					{behind}
+					{impact}
 				</span>
 			)}
-			{!detail && files && <span style={{ opacity: 0.9 }}>{files}</span>}
 			{repos && <span style={{ opacity: 0.8 }}>{repos}</span>}
-			{onToggle &&
-				(open ? (
-					<ChevronDown size={11} style={{ flexShrink: 0 }} aria-hidden="true" />
-				) : (
-					<ChevronRight size={11} style={{ flexShrink: 0 }} aria-hidden="true" />
-				))}
 		</>
 	);
 
-	const style: CSSProperties = {
+	/**
+	 * The chip's resting colours. When it is *interactive* the fill is lighter
+	 * than the bordering tint so hover and selected have somewhere to go;
+	 * otherwise it keeps the fuller fill, since nothing will ever change it.
+	 */
+	const baseStyle: CSSProperties = {
 		display: "inline-flex",
 		alignItems: "center",
 		gap: 5,
@@ -698,7 +863,7 @@ export function ProvenanceBadge({
 		padding: "3px 8px",
 		borderRadius: BADGE_RADIUS,
 		border: `1px solid ${fg}55`,
-		background: `${fg}14`,
+		background: onToggle ? `${fg}0d` : `${fg}14`,
 		color: fg,
 		fontSize: theme.fontSizes[0],
 		fontFamily: theme.fonts.body,
@@ -708,22 +873,39 @@ export function ProvenanceBadge({
 
 	if (!onToggle) {
 		return (
-			<span title={title} style={style}>
+			<span title={chipTitle} style={baseStyle}>
 				{body}
 			</span>
 		);
 	}
+
+	// Interactive: three distinct states. Resting is the quietest; hover
+	// (a CSS rule on `--chip-fg`, the theme's tone) deepens the surface without
+	// a border change, so the cursor alone reads as "clickable"; selected (the
+	// strip is open) pins the fill to that deeper depth and sharpens the border,
+	// so the open chip stays visibly attached to the strip beneath it even
+	// after the pointer leaves.
+	const interactiveStyle: CSSProperties = {
+		...baseStyle,
+		cursor: "pointer",
+		appearance: "none",
+		transition: "background-color 120ms ease, border-color 120ms ease",
+		["--chip-fg" as string]: fg,
+		background: open ? `${fg}24` : `${fg}0d`,
+		border: `1px solid ${fg}${open ? "88" : "55"}`,
+	};
 	return (
 		<button
 			type="button"
+			className="principal-studio-provenance-chip"
 			onClick={(e) => {
 				e.stopPropagation();
 				onToggle();
 			}}
-			title={title}
-			aria-label={title}
+			title={chipTitle}
+			aria-label={chipTitle}
 			aria-expanded={open}
-			style={{ ...style, cursor: "pointer" }}
+			style={interactiveStyle}
 		>
 			{body}
 		</button>
@@ -1132,7 +1314,7 @@ export function CommitDots({
  * model can be perfectly current *and* have uncommitted edits to a file it
  * anchors, because you can be sitting on your pin mid-edit. Folding that into
  * one badge forces a precedence between two things that are not alternatives,
- * which is exactly the trap that made a green "Current" hide a dirty anchor.
+ * which is exactly the trap that made a green "Verified" hide a dirty anchor.
  *
  * Nothing is owed here. There is no commit to be behind of, so there is nothing
  * to re-audit until the edit lands — the badge exists so the reader knows the

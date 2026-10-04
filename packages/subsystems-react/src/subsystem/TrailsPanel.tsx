@@ -20,6 +20,7 @@ import {
   reorderTrails,
   trailStepGraphEdgeId,
   type SubsystemTrail,
+  type SubsystemTrailStep,
 } from './model';
 import { buildStepBrief } from './trailBrief';
 
@@ -90,10 +91,14 @@ function TrailFlow({
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const hoverBg = theme.colors.background;
   const wholeFlowActive = active !== null && active.stepIndex === null;
-  // A step is "proposed" when either endpoint is a proposed component.
-  const stepProposed = (from: string, to: string) =>
-    proposedAliases != null && (proposedAliases.has(from) || proposedAliases.has(to));
-  const touchesProposed = trail.steps.some((s) => stepProposed(s.from, s.to));
+  // A step is "proposed" when it says so itself OR either endpoint component
+  // is proposed — the step flag covers planned seams whose endpoints already
+  // exist as real components.
+  const stepProposed = (step: SubsystemTrailStep) =>
+    step.proposed === true ||
+    (proposedAliases != null &&
+      (proposedAliases.has(step.from) || proposedAliases.has(step.to)));
+  const touchesProposed = trail.steps.some((s) => stepProposed(s));
   const [headerHover, setHeaderHover] = useState(false);
   const [collapseHover, setCollapseHover] = useState(false);
   const [playHover, setPlayHover] = useState(false);
@@ -366,7 +371,7 @@ function TrailFlow({
         >
           {trail.steps.map((step, i) => {
             const stepActive = active !== null && active.stepIndex === i;
-            const proposed = stepProposed(step.from, step.to);
+            const proposed = stepProposed(step);
             const revealed =
               stepActive || hoveredStep === i || focusedStep === i || copiedStep === i;
             const copied = copiedStep === i;

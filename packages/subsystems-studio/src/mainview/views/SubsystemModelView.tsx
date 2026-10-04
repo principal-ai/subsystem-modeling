@@ -186,6 +186,8 @@ export function SubsystemModelView({
 	);
 	const [fixPreviewBusy, setFixPreviewBusy] = useState(false);
 	const [fixPreviewError, setFixPreviewError] = useState<string | null>(null);
+	/** A per-finding Apply that refused, when the finding survived a re-audit. */
+	const [applyFixError, setApplyFixError] = useState<string | null>(null);
 
 	const loadFixPreview = useCallback(() => {
 		void electrobun.rpc!.request
@@ -454,6 +456,7 @@ export function SubsystemModelView({
 				stepIndex={stepIndex}
 				readFile={readFile}
 				contextLines={8}
+				background={theme.colors.background}
 				onOpenFile={onOpenFile}
 				proposedAliases={proposedAliases}
 				resolveSymbol={resolveSymbol}
@@ -461,7 +464,7 @@ export function SubsystemModelView({
 				onVisibleStepChange={onVisibleStepChange}
 			/>
 		),
-		[readFile],
+		[readFile, theme.colors.background],
 	);
 
 	// Chip: toggle the diagnostics list. Findings come from the persisted audit
@@ -485,11 +488,43 @@ export function SubsystemModelView({
 		onToggle: onDiagnosticToggle,
 	};
 
+	// A refused one-click fix almost always means the report the button came from
+	// is stale: the deterministic fix re-derives its premise from the tree, and
+	// the file it wanted to adopt has since moved or appeared. Run the audit
+	// again — if the finding is gone the button was a phantom and the list
+	// self-heals; if it survives, surface the refusal instead of a silent no-op.
+	const reauditAndReconcile = useCallback(
+		(componentAlias: string | undefined, fixId: string, refusal?: string) => {
+			void electrobun.rpc!.request
+				.auditSubsystemModel({ graphId })
+				.then((res) => {
+					if (res.ok && res.report) {
+						setAuditReport(res.report);
+						setAuditStale(false);
+						loadGraph();
+						const survives = res.report.findings.some(
+							(f) => f.componentAlias === componentAlias && f.fix?.id === fixId,
+						);
+						if (!survives) {
+							setApplyFixError(null);
+							return;
+						}
+					}
+					setApplyFixError(refusal ?? "The fix could not be applied.");
+				})
+				.catch(() => {
+					setApplyFixError(refusal ?? "The fix could not be applied.");
+				});
+		},
+		[graphId, loadGraph],
+	);
+
 	const onApplyIssueFix = useCallback(
 		(issue: SubsystemIssue) => {
 			const finding = auditFindingById.get(issue.id);
 			const fixId = finding?.fix?.id;
 			if (!fixId) return;
+			setApplyFixError(null);
 			void electrobun.rpc!.request
 				.applySubsystemModelAuditFix({
 					graphId,
@@ -497,20 +532,30 @@ export function SubsystemModelView({
 					componentAlias: finding?.componentAlias,
 				})
 				.then((res) => {
-					if (res.ok && res.report) setAuditReport(res.report);
-					// The fix rewrote the component (e.g. deprecated + removedIn),
-					// so reload the graph too — otherwise the snapshot this view
-					// holds keeps the pre-fix nodes until a remount. A targeted
-					// refetch, not a full rerender.
-					if (res.ok) loadGraph();
+					if (res.ok) {
+						if (res.report) {
+							setAuditReport(res.report);
+							setAuditStale(false);
+						}
+						// The fix rewrote the component (e.g. relocated a file), so
+						// reload the graph too — otherwise the snapshot this view
+						// holds keeps the pre-fix nodes until a remount. A targeted
+						// refetch, not a full rerender.
+						loadGraph();
+					} else {
+						// The host refused the fix; reconcile the stale report.
+						reauditAndReconcile(finding?.componentAlias, fixId, res.error);
+					}
 					// A per-finding Apply invalidates the staged batch host-side.
 					loadFixPreview();
 				})
-				.catch(() => {
-					/* best-effort — the next audit refresh reconciles */
+				.catch((err: unknown) => {
+					setApplyFixError(
+						err instanceof Error ? err.message : String(err),
+					);
 				});
 		},
-		[auditFindingById, graphId, loadGraph, loadFixPreview],
+		[auditFindingById, graphId, loadGraph, loadFixPreview, reauditAndReconcile],
 	);
 
 	if (graph === undefined) {
@@ -598,6 +643,50 @@ export function SubsystemModelView({
 			</div>
 		) : null;
 
+	// A refused per-finding Apply that survived re-audit. Shown above the graph
+	// so a click that cannot land is never silent.
+	const applyFixErrorNode = applyFixError ? (
+		<div
+			role="alert"
+			style={{
+				display: "flex",
+				alignItems: "center",
+				gap: 10,
+				flexWrap: "wrap",
+				padding: "8px 12px",
+				borderBottom: `1px solid ${theme.colors.border}`,
+				background: theme.colors.background,
+				fontSize: theme.fontSizes[1],
+			}}
+		>
+			<span
+				style={{
+					flex: 1,
+					minWidth: 0,
+					color: theme.colors.error ?? "#e5534b",
+				}}
+			>
+				{applyFixError}
+			</span>
+			<button
+				type="button"
+				onClick={() => setApplyFixError(null)}
+				style={{
+					padding: "4px 10px",
+					borderRadius: 5,
+					border: `1px solid ${theme.colors.border}`,
+					background: "transparent",
+					color: theme.colors.textSecondary,
+					fontFamily: theme.fonts.body,
+					fontSize: theme.fontSizes[1],
+					cursor: "pointer",
+				}}
+			>
+				Dismiss
+			</button>
+		</div>
+	) : null;
+
 	return (
 		<div
 			style={{
@@ -609,6 +698,7 @@ export function SubsystemModelView({
 				background: theme.colors.background,
 			}}
 		>
+			{applyFixErrorNode}
 			{fixPreviewNode}
 			<div style={{ flex: 1, minHeight: 0, position: "relative" }}>
 			<SubsystemComponentGraph

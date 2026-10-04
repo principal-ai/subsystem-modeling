@@ -92,11 +92,30 @@ function targetFor(
 	}
 	if (finding.trailId) {
 		const wt = graph.trails?.find((w) => w.id === finding.trailId);
+		// A finding that names a specific step (0-based `finding.step`) targets
+		// the STEP, not the whole flow: the card wears the footprint icon, and
+		// the graph's `issueStep` lookup can focus (and badge) the exact trail
+		// step. Without this, step findings resolve to null in the graph and
+		// the edge badges never render.
+		if (finding.step != null && Number.isInteger(finding.step)) {
+			const step = wt?.steps?.[finding.step];
+			// Label the step the way the trail UI does — its call-site symbol,
+			// one row per numbered step. `symbol` is required on the step type,
+			// so no fallback: a missing one is a model-authoring bug and should
+			// read as one.
+			const label = step?.symbol ?? (wt?.title ?? finding.trailId);
+			return {
+				kind: "step",
+				id: finding.trailId,
+				label,
+				detail: wt?.title ?? finding.trailId,
+				stepIndex: finding.step,
+			};
+		}
 		return {
 			kind: "trail",
 			id: finding.trailId,
 			label: wt?.title ?? finding.trailId,
-			detail: finding.step != null ? `step ${finding.step}` : undefined,
 		};
 	}
 	if (finding.purl) {

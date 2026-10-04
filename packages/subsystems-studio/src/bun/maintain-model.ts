@@ -57,10 +57,12 @@ import {
 	noteSubsystemModelRunFinish,
 	noteSubsystemModelRunStart,
 } from "./subsystem-model-runs";
+import { capturePurlCommits } from "./purl-commits";
 
 export const CONSTRUCT_VERIFIER_AGENT = "construct-verifier";
 export const PACKAGE_MODULE_VERIFIER_AGENT = "package-module-verifier";
 export const RUNTIME_TOPOLOGY_VERIFIER_AGENT = "runtime-topology-verifier";
+export const TRAIL_VERIFIER_AGENT = "trail-verifier";
 export const CONSTRUCT_FIXER_AGENT = "construct-fixer";
 export const PACKAGE_MODULE_FIXER_AGENT = "package-module-fixer";
 
@@ -68,10 +70,15 @@ export type MaintainAgentId =
 	| typeof CONSTRUCT_VERIFIER_AGENT
 	| typeof PACKAGE_MODULE_VERIFIER_AGENT
 	| typeof RUNTIME_TOPOLOGY_VERIFIER_AGENT
+	| typeof TRAIL_VERIFIER_AGENT
 	| typeof CONSTRUCT_FIXER_AGENT
 	| typeof PACKAGE_MODULE_FIXER_AGENT;
 
-export type MaintainLayer = "construct" | "static-topology" | "dynamic-topology";
+export type MaintainLayer =
+	| "construct"
+	| "static-topology"
+	| "dynamic-topology"
+	| "trail";
 export type MaintainMode = "issues" | "verify";
 
 export type MaintainRoute = {
@@ -120,6 +127,7 @@ export const PACKAGE_MODULE_VERIFIER_AGENT_PATH = agentInstallPath(
 export const RUNTIME_TOPOLOGY_VERIFIER_AGENT_PATH = agentInstallPath(
 	RUNTIME_TOPOLOGY_VERIFIER_AGENT,
 );
+export const TRAIL_VERIFIER_AGENT_PATH = agentInstallPath(TRAIL_VERIFIER_AGENT);
 
 const CONSTRUCT_FIXER_PACKAGE_PATH = agentPackagePath(CONSTRUCT_FIXER_AGENT);
 const CONSTRUCT_VERIFIER_PACKAGE_PATH = agentPackagePath(CONSTRUCT_VERIFIER_AGENT);
@@ -191,6 +199,13 @@ function isRuntimeTopologyGapFinding(
 	);
 }
 
+/** Trail step call site verification — unconfirmed or stale. */
+function isTrailStepGapFinding(
+	f: SubsystemModelAuditReport["findings"][number],
+): boolean {
+	return f.kind === "step_unconfirmed" || f.kind === "step_stale";
+}
+
 function isConstructIssueFinding(
 	f: SubsystemModelAuditReport["findings"][number],
 ): boolean {
@@ -204,6 +219,7 @@ function isConstructGapFinding(
 ): boolean {
 	if (isBoundaryFindingKind(f.kind) || isAvailabilityFindingKind(f.kind))
 		return false;
+	if (isTrailStepGapFinding(f)) return false;
 	if (f.severity === "error") return false;
 	return (
 		f.kind === "construct_unconfirmed" ||
@@ -277,6 +293,13 @@ export function selectMaintainRoute(
 		return {
 			agent: RUNTIME_TOPOLOGY_VERIFIER_AGENT,
 			layer: "dynamic-topology",
+			mode: "verify",
+		};
+	}
+	if (report.findings.some(isTrailStepGapFinding)) {
+		return {
+			agent: TRAIL_VERIFIER_AGENT,
+			layer: "trail",
 			mode: "verify",
 		};
 	}
@@ -374,6 +397,11 @@ export function ensureMaintainAgentsInstalled(): {
 			),
 			"utf8",
 		);
+		writeFileSync(
+			TRAIL_VERIFIER_AGENT_PATH,
+			loadTopologyAgentSource(agentPackageCandidates(TRAIL_VERIFIER_AGENT)),
+			"utf8",
+		);
 		return {
 			ok: true,
 			paths: [
@@ -382,6 +410,7 @@ export function ensureMaintainAgentsInstalled(): {
 				PACKAGE_MODULE_FIXER_AGENT_PATH,
 				PACKAGE_MODULE_VERIFIER_AGENT_PATH,
 				RUNTIME_TOPOLOGY_VERIFIER_AGENT_PATH,
+				TRAIL_VERIFIER_AGENT_PATH,
 			],
 		};
 	} catch (err) {
@@ -507,6 +536,8 @@ function briefTitle(route: MaintainRoute): string {
 			return "# Subsystem model package-module-verifier brief";
 		case RUNTIME_TOPOLOGY_VERIFIER_AGENT:
 			return "# Subsystem model runtime-topology-verifier brief";
+		case TRAIL_VERIFIER_AGENT:
+			return "# Subsystem model trail-verifier brief";
 	}
 }
 
@@ -519,6 +550,9 @@ function proposeShapeHint(agent: MaintainAgentId): string {
 	}
 	if (agent === RUNTIME_TOPOLOGY_VERIFIER_AGENT) {
 		return `Propose body shape: \`{ "rationale": "…", "author": "${agent}", "finding": {…}, "changes": […] }\`. For process-nest disagreement, use \`{ "target": "component", "field": "process", "value": "<deployment unit>" }\`. Do **not** call accept/reject.`;
+	}
+	if (agent === TRAIL_VERIFIER_AGENT) {
+		return `Propose body shape: \`{ "rationale": "…", "author": "${agent}", "finding": {…}, "changes": […] }\`. For trail step call sites, use \`{ "target": "augmentation", "field": "callSite", "trailId", "stepIndex", "file", "symbol", "purl", "value": { "lines": { "start", "end" }, "target": { "file", "symbol" }, "mechanism" } }\` — contentHash is computed for you at accept time; omit it. Do **not** call accept/reject.`;
 	}
 	return `Propose body shape: \`{ "rationale": "…", "author": "${agent}", "finding": {…}, "changes": […] }\`. For construct_unconfirmed when the claim is already correct — or construct_mismatch where the claim is right but Graphify's inferred construct is only a weak hint (e.g. \`store\`) — use \`{ "target": "augmentation", "componentAlias", "field": "construct", "value": "<the confirmed construct>" }\`. Do not adopt Graphify's inferred value. For store_type_undeclared (and store_type_stale when the type actually changed), use \`{ "target": "declaration", "componentAlias", "field": "valueType", "value": "<the type as written in source>", "lines": { "start", "end" } }\`; if a stale store's type is unchanged, propose nothing. For signature_unconfirmed, use \`{ "target": "augmentation", "componentAlias", "field": "signature", "value": { "parameters": [{ "name": …, "type": …, "optional": … }], "returnType": … } }\` — the full signature, not a bag of type names. When the return type is not declared, infer it from the implementation and say so in the rationale. Do **not** call accept/reject.`;
 }
@@ -535,6 +569,8 @@ function taskBlurb(route: MaintainRoute): string {
 			return "Review each **package/module containment gap**. For an intentional module≠file grouping, propose a **module augmentation**. For an authoring slip, propose a `module` field fix. Skip only when unsure. Ignore construct/process findings. Finish with a short plain-text summary.";
 		case RUNTIME_TOPOLOGY_VERIFIER_AGENT:
 			return "Review each **process membership gap** (process nest disagreement). Propose the corrected `process` deployment unit via Access curl. Skip only when unsure. Ignore construct/package-module findings. Finish with a short plain-text summary.";
+		case TRAIL_VERIFIER_AGENT:
+			return "Review each **trail step call site finding** (`step_unconfirmed`, `step_stale`). Open the step's caller file, locate the call to the target component's symbol, and propose a `callSite` augmentation confirming the call site's exact line span, target, and mechanism via Access curl. For a stale call site, re-read the current lines and propose the fresh span. Skip only when the call site no longer exists or the step's claim is wrong in a way a callSite augmentation cannot express. Ignore construct/package-module/process findings. Finish with a short plain-text summary.";
 	}
 }
 
@@ -998,6 +1034,12 @@ async function runMaintainStage(opts: {
 	const runOnce = async (runModel: string, probeRunId: string) => {
 		const runId = randomUUID();
 		const startedAt = new Date().toISOString();
+		// The commit(s) the agent will read: the HEAD of every referenced repo
+		// that resolves locally. Best-effort — a run must never fail over the
+		// coordinate it records.
+		const commitsAtStart = await capturePurlCommits(graph.components).catch(
+			() => ({}),
+		);
 		let sessionId: string | undefined;
 		const run = await runMaintainAgent({
 			agent,
@@ -1026,6 +1068,7 @@ async function runMaintainStage(opts: {
 					layer,
 					mode,
 					model: runModel,
+					commitsAtStart,
 					startedAt,
 				}).catch(() => {});
 				opts.onSession?.(sid);
@@ -1104,6 +1147,11 @@ export async function maintainSubsystemModel(
 
 	if (!route) {
 		const summary = "Fully verified — nothing for Maintain to propose";
+		// A skipped pass still read the tree, so record the same coordinate a
+		// spawned run would — the row stays comparable across outcomes.
+		const commitsAtStart = await capturePurlCommits(ctx.graph.components).catch(
+			() => ({}),
+		);
 		try {
 			await noteSubsystemModelRunFinish({
 				graphId,
@@ -1113,6 +1161,7 @@ export async function maintainSubsystemModel(
 				verdict,
 				pendingCount,
 				summary,
+				commitsAtStart,
 			});
 		} catch {
 			// Best-effort log — skip reporting still succeeds without it.

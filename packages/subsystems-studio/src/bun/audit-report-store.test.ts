@@ -217,6 +217,9 @@ function report(
 			missingFiles: 0,
 			missingSymbols: 0,
 			trailFailures: 0,
+			stepsUnconfirmed: 0,
+			stepsStale: 0,
+			stepsVerified: 0,
 			staleDeclarations: 0,
 			constructMismatches: 0,
 			signatureMismatches: 0,
@@ -461,6 +464,29 @@ describe("summarizeLanes", () => {
 		expect(lanes["static-topology"]).toBe("issues");
 		expect(lanes["dynamic-topology"]).toBe("none");
 		expect(lanes.trail).toBe("none");
+	});
+
+	test("an unmatched symbol is a red construct lane, not a yellow gap", () => {
+		// The file exists but the symbol is absent — emitted at check verdict
+		// `issue` (error finding). A mere `ok` verdict would tally as open and
+		// paint the lane yellow, understating a broken claim as unconfirmed.
+		const lanes = summarizeLanes(
+			report({
+				checks: [
+					componentCheck({}),
+					componentCheck({
+						componentAlias: "symbol-unmatched",
+						fileExists: true,
+						symbolDeclared: false,
+						anchor: "file-only",
+						graphify: "weak",
+						verdict: "issue",
+					}),
+				],
+			}),
+			{ hasTrails: false },
+		);
+		expect(lanes.construct).toBe("issues");
 	});
 
 	test("trail failures -> issues when trails exist", () => {

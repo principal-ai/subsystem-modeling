@@ -61,6 +61,7 @@ export const AGENT_LABEL: Record<string, string> = {
 	"construct-verifier": "Construct Verifier",
 	"package-module-verifier": "Package/Module Verifier",
 	"runtime-topology-verifier": "Runtime Topology Verifier",
+	"trail-verifier": "Trail Verifier",
 	"construct-fixer": "Construct Fixer",
 	"package-module-fixer": "Package/Module Fixer",
 	// Legacy (pre-rename) ids.

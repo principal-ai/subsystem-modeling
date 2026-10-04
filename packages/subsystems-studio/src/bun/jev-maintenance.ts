@@ -118,6 +118,18 @@ function constructSubject(proposal: SubsystemModelProposal): string {
 	return LANE_SUBJECT.construct;
 }
 
+/** Trail-lane wording, finer-grained by change. */
+function trailSubject(proposal: SubsystemModelProposal): string {
+	const c: SubsystemModelProposalChange | undefined = proposal.changes[0];
+	if (
+		c?.target === "augmentation" &&
+		c.field === "callSite"
+	) {
+		return "The proposed call site verification is accurate: the claimed line span in the caller file contains the caller's call to the target symbol, with the claimed mechanism, and the span matches the source exactly.";
+	}
+	return LANE_SUBJECT.trail;
+}
+
 export function proposalLane(
 	proposal: SubsystemModelProposal,
 ): SubsystemVerificationLane {
@@ -132,7 +144,11 @@ export function proposalLane(
 export function accuracyInstruction(proposal: SubsystemModelProposal): string {
 	const lane = proposalLane(proposal);
 	const subject =
-		lane === "construct" ? constructSubject(proposal) : LANE_SUBJECT[lane];
+		lane === "construct"
+			? constructSubject(proposal)
+			: lane === "trail"
+				? trailSubject(proposal)
+				: LANE_SUBJECT[lane];
 	return `${subject} Judge only whether the source supports it — ignore whether accepting it is risky.`;
 }
 
@@ -154,8 +170,18 @@ export function riskInstruction(
 		proposalLane(proposal) === "construct" &&
 		c?.target === "augmentation" &&
 		c.field === "signature";
-	if (!isSourceBackedSignatureAugment) return base;
-	return `${base}. This is a signature augmentation verified against the declaration in the source under review; it records a confirmation and does not rewrite the model JSON. Score Safe when the proposed signature matches the source, Needs human only when the source is ambiguous, and Unsafe only when the source contradicts it.`;
+	if (isSourceBackedSignatureAugment) {
+		return `${base}. This is a signature augmentation verified against the declaration in the source under review; it records a confirmation and does not rewrite the model JSON. Score Safe when the proposed signature matches the source, Needs human only when the source is ambiguous, and Unsafe only when the source contradicts it.`;
+	}
+	const isSourceBackedCallSiteAugment =
+		opts?.hasSourceContext === true &&
+		proposalLane(proposal) === "trail" &&
+		c?.target === "augmentation" &&
+		c.field === "callSite";
+	if (isSourceBackedCallSiteAugment) {
+		return `${base}. This is a call site augmentation verified against the caller file in the source under review; it records a confirmation (content hash of the claimed span) and does not rewrite the model JSON. Score Safe when the claimed span contains the caller's call to the target symbol, Needs human only when the call site is ambiguous, and Unsafe only when the source contradicts the claim.`;
+	}
+	return base;
 }
 
 /** Per-lane `change_kind` choice: instructions + option criteria. */
@@ -185,6 +211,8 @@ export function changeKindQuestion(proposal: SubsystemModelProposal): {
 				criteria: {
 					trail_fix:
 						"Correcting a trail step (file, line, symbol, from/to, mechanism)",
+					callsite_confirm:
+						"Verifying a trail step's call site (a callSite augmentation)",
 				},
 			};
 		default:

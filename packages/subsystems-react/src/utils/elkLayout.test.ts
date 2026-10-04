@@ -12,9 +12,13 @@ import {
   pointsToPath,
   pointsToSmoothPath,
   calculatePathMidpoint,
+  pointAlongPath,
+  fractionAlongPath,
   planCompoundGroups,
+  getElkOptions,
   type Point,
 } from './elkLayout';
+import { EDGE_LABEL_WIDTH, EDGE_LABEL_SIDE_PADDING } from './edgeLabel';
 
 describe('planCompoundGroups', () => {
   test('drops a single-leaf group by default and promotes its member', () => {
@@ -129,6 +133,52 @@ describe('planCompoundGroups', () => {
 });
 
 describe('elkLayout helper functions', () => {
+  describe('getElkOptions — label-aware between-layer spacing', () => {
+    test('does not stack spacing on top of ELK’s reserved label layer', () => {
+      // CENTER_LAYER already reserves the label; adding the box width here
+      // double-counts and balloons the run (measured 548px for 140 + 204).
+      const opts = getElkOptions({ edgeLabels: { enabled: true, placement: 'CENTER' } });
+      expect(opts['elk.layered.spacing.nodeNodeBetweenLayers']).toBe('0');
+    });
+
+    test('an explicit interLayerSpacing still wins', () => {
+      const opts = getElkOptions({ interLayerSpacing: 120, edgeLabels: { enabled: true } });
+      expect(opts['elk.layered.spacing.nodeNodeBetweenLayers']).toBe('120');
+    });
+  });
+
+  describe('pointAlongPath / fractionAlongPath', () => {
+    const bent: Point[] = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 100 },
+    ];
+
+    test('half is the arc-length midpoint, not a corner', () => {
+      // Total length 200; half is 100 along, which is the corner (100,0).
+      const mid = pointAlongPath(bent, 0.5);
+      expect(mid).toEqual({ x: 100, y: 0 });
+    });
+
+    test('a fraction lands on the correct segment', () => {
+      // 0.75 of 200 = 150 → 50 down the second segment.
+      expect(pointAlongPath(bent, 0.75)).toEqual({ x: 100, y: 50 });
+      // 0.25 of 200 = 50 → half along the first segment.
+      expect(pointAlongPath(bent, 0.25)).toEqual({ x: 50, y: 0 });
+    });
+
+    test('clamps and handles degenerate input', () => {
+      expect(pointAlongPath(bent, -1)).toEqual({ x: 0, y: 0 });
+      expect(pointAlongPath(bent, 2)).toEqual({ x: 100, y: 100 });
+      expect(pointAlongPath([{ x: 5, y: 5 }], 0.5)).toEqual({ x: 5, y: 5 });
+    });
+
+    test('fractionAlongPath inverts pointAlongPath', () => {
+      const at = pointAlongPath(bent, 0.75);
+      expect(fractionAlongPath(bent, at)).toBeCloseTo(0.75, 5);
+    });
+  });
+
   describe('pointsToPath', () => {
     test('should return empty string for empty array', () => {
       expect(pointsToPath([])).toBe('');

@@ -38,11 +38,11 @@ Analyze the target subsystem in the repo and produce:
 - **Components** (nodes) — concrete code units anchored to a real exported
   `symbol`, tagged with `construct`. The `file` field is each
   unit's location anchor. Hand-author a `declaration` (params, return type,
-  members) when the click panel should show signature shape — pair with
-  `declarationProvenance: "authored"`. **`construct: "module"` is rejected** —
-  a file is not a node. Anchor each export as its real construct and set
-  optional `module` (source path) so the file draws as a frame. If you catch
-  yourself posting a file as a component, stop and find the symbol.
+  members) when the click panel should show signature shape.
+  **`construct: "module"` is rejected** — a file is not a node. Anchor each
+  export as its real construct and set optional `module` (source path) so the
+  file draws as a frame. If you catch yourself posting a file as a component,
+  stop and find the symbol.
 - **Boundaries** — package / `module` / `process` membership frames (see
   below). These are the model's topology: `module` is source-file containment,
   `process` is runtime deployment. There are no authored edge relations —
@@ -89,8 +89,7 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
         "kind": "function",                        // discriminator; match construct when possible
         "parameters": [{ "name": "root", "type": "string" }],
         "returnType": "Promise<SessionSummary[]>"    // no callers/callees — not in the schema
-      },
-      "declarationProvenance": "authored"          // required when declaration is set by hand
+      }
     }
   ],
   "trails": [                                // flows — see section below
@@ -292,8 +291,7 @@ construct; `storage` is orthogonal to `construct`, exactly like `framework` to
     "storage": "memory",
     "valueType": "Map<string, OpencodeLiveFeedState>",
     "properties": []
-  },
-  "declarationProvenance": "authored"
+  }
 }
 ```
 
@@ -362,16 +360,10 @@ that is `storage` + `valueType` + `properties` (see above). Declarations are
 `additionalProperties: false` — only use the fields the schema declares for
 that `kind`, or the model is rejected. There are **no** `callers` / `callees`
 fields (retired); interactions live on trail steps. A store has `storage` /
-`valueType` / `valueTypeRef` / `properties` and nothing else. Every hand-written
-`declaration` must carry provenance:
+`valueType` / `valueTypeRef` / `properties` and nothing else.
 
-- `"declarationProvenance": "authored"` — written by you from reading the
-  code; informative but not checked against source (defaulted when omitted)
-- `"declarationProvenance": "verified"` — reserved for tool-extracted data
-  (graphify AST / signature extraction). Never claim it by hand.
-
-Invalid provenance values are rejected; declarations without one are stored
-as `authored`.
+> **Note:** `declarationProvenance` is deprecated and no longer needed.
+> Verification now tracks at the model level via `verifiedAtCommits`.
 
 ## 4. Re-open later
 

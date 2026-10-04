@@ -1,8 +1,8 @@
 /**
  * MaintenanceModelList — the "Models" section of the Maintainer surface: one
  * card per stored subsystem model showing its verification lanes, pending
- * proposals, and (when expanded) its Fix-cycle position and recent Maintain
- * runs. Extracted from `MaintenancePanel` as a pure presentational component so
+ * proposals, and (when expanded) its most recent Maintain run. Extracted from
+ * `MaintenancePanel` as a pure presentational component so
  * it can be rendered without the panel's RPC wiring (see
  * `MaintenanceModelList.stories.tsx`).
  *
@@ -30,6 +30,8 @@ import { useTheme } from "@principal-ade/industry-theme";
 import {
 	ProvenanceBadge,
 	ProvenanceDetail,
+	ownerName,
+	shortSha,
 	type ModelProvenanceData,
 } from "./ModelProvenance";
 import type { AnchorChanges, ModelProvenanceDetail } from "../../shared/contract";
@@ -86,6 +88,7 @@ export const AGENT_META: Array<{ agent: string; label: string; Icon: LucideIcon 
 		label: "Runtime Topology Verifier",
 		Icon: Server,
 	},
+	{ agent: "trail-verifier", label: "Trail Verifier", Icon: Route },
 ];
 
 /** Compact copyable context for one run — mirrors the agent-sessions row copy. */
@@ -103,6 +106,11 @@ function formatRunContext(run: SubsystemModelRun, graphTitle: string): string {
 	lines.push("");
 	if (run.sessionId) lines.push(`Session id: \`${run.sessionId}\``);
 	if (run.model) lines.push(`Model: \`${run.model}\``);
+	const commits = Object.entries(run.commitsAtStart ?? {});
+	if (commits.length > 0) {
+		lines.push("Commits at start:");
+		for (const [purl, sha] of commits) lines.push(`- \`${sha}\` ${purl}`);
+	}
 	lines.push(`Started: ${run.startedAt}`);
 	if (run.endedAt) lines.push(`Finished: ${run.endedAt}`);
 	if (run.verdict) lines.push(`Verdict: ${run.verdict}`);
@@ -190,6 +198,9 @@ function RunRow({
 	const rejectedProposals = (proposals ?? []).filter(
 		(p) => p.status === "rejected",
 	).length;
+	// The commit(s) the agent read, one per referenced repo. Empty for runs
+	// recorded before commits were captured, in which case nothing renders.
+	const startCommits = Object.entries(run.commitsAtStart ?? {});
 	return (
 		<div
 			onClick={onOpen}
@@ -307,6 +318,28 @@ function RunRow({
 				{copied ? <Check size={12} /> : <Copy size={12} />}
 			</button>
 		</div>
+		{startCommits.length > 0 && (
+			<div
+				style={{
+					display: "flex",
+					flexWrap: "wrap",
+					alignItems: "center",
+					gap: 10,
+					padding: "0 0 2px",
+					fontSize: theme.fontSizes[0],
+					fontFamily: theme.fonts.monospace,
+					color: muted,
+				}}
+			>
+				<span style={{ fontFamily: theme.fonts.body }}>at</span>
+				{startCommits.map(([purl, sha]) => (
+					<span key={purl} title={`${purl} @ ${sha}`}>
+						{ownerName(purl)}{" "}
+						<span style={{ color: theme.colors.text }}>{shortSha(sha)}</span>
+					</span>
+				))}
+			</div>
+		)}
 		</div>
 	);
 }
@@ -619,10 +652,12 @@ export function MaintenanceModelCard({
 					: `${feed.status}…`
 			: "Preparing OpenCode session…"
 		: null;
-	// A persisted "running" row always has a live block above it (the run is
-	// in flight), so drop it from the history list to avoid stating it twice.
-	// Unconditional so a lagging overview/feed can't produce a duplicate.
-	const historyRuns = runs.filter((r) => r.status !== "running");
+	// Runs arrive newest first, so the first finished one is the most recent.
+	// A persisted "running" row always has a live block above it (the run is in
+	// flight), so drop it to avoid stating it twice. Only the newest finished
+	// run is shown: older rows are history nobody acts on, and the Fix-cycle
+	// strip already summarizes the sequence.
+	const latestRun = runs.find((r) => r.status !== "running");
 	return (
 		<div
 			onClick={() => onToggleRuns(model.graphId)}
@@ -722,17 +757,6 @@ export function MaintenanceModelCard({
 								: undefined
 						}
 					/>
-				)}
-				{provenanceOpen && provenance && (
-					<span
-						style={{
-							minWidth: 0,
-							fontSize: theme.fontSizes[0],
-							color: muted,
-						}}
-					>
-						since last verification
-					</span>
 				)}
 				<span style={{ flex: 1 }} />
 				<button
@@ -954,7 +978,19 @@ export function MaintenanceModelCard({
 						borderBottomRightRadius: 6,
 					}}
 				>
-					{historyRuns.length === 0 ? (
+					{latestRun ? (
+						<RunRow
+							key={latestRun.id}
+							run={latestRun}
+							graphTitle={model.title}
+							proposals={proposalsForRun(proposals, latestRun)}
+							onOpen={
+								latestRun.sessionId
+									? () => onOpenRun(latestRun, model)
+									: undefined
+							}
+						/>
+					) : (
 						<div
 							style={{
 								fontSize: theme.fontSizes[1],
@@ -963,20 +999,6 @@ export function MaintenanceModelCard({
 						>
 							No runs yet.
 						</div>
-					) : (
-						historyRuns.map((run) => (
-						<RunRow
-							key={run.id}
-							run={run}
-							graphTitle={model.title}
-							proposals={proposalsForRun(proposals, run)}
-							onOpen={
-								run.sessionId
-									? () => onOpenRun(run, model)
-									: undefined
-							}
-						/>
-						))
 					)}
 				</div>
 			)}

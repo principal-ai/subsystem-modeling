@@ -39,6 +39,7 @@ import {
   deriveGraphEdges,
   isConstructsOnlyModel,
   moduleGroupNodeId,
+  processGroupNodeId,
   isTrailMechanism,
   edgeColor,
   MECHANISM_DESCRIPTIONS,
@@ -869,15 +870,23 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
   // the selected step until it does.
   const [visibleStepIndex, setVisibleStepIndex] = useState<number | null>(null);
   const drawerStepIndex = drawerTarget?.kind === 'trail' ? drawerTarget.stepIndex : null;
+  // Reset when the drawer switches trail (or closes) — synchronously, so the bar
+  // never paints the previous trail's position. A step change *within* the same
+  // trail is deliberately not reset: the code view scrolls to the new step and
+  // the viewport tracker carries the fill across that scroll. Resetting on step
+  // change flashed — the post-paint effect snapped the fill to the target, then
+  // Pierre's smooth scroll re-reported the old viewport, bouncing target → old →
+  // target.
+  const activeTrailId = focusedTrail?.id ?? null;
+  const [visibleTrailId, setVisibleTrailId] = useState(activeTrailId);
+  if (activeTrailId !== visibleTrailId) {
+    setVisibleTrailId(activeTrailId);
+    setVisibleStepIndex(null);
+  }
   const drawerProgress = useMemo(() => {
     if (drawerStepIndex == null || !focusedTrail) return null;
     return { index: visibleStepIndex ?? drawerStepIndex, total: focusedTrail.steps.length };
   }, [drawerStepIndex, focusedTrail, visibleStepIndex]);
-
-  // A new trail or step invalidates whatever the last scroll reported.
-  useEffect(() => {
-    setVisibleStepIndex(null);
-  }, [focusedTrail?.id, drawerStepIndex]);
 
   // Refresh selected component when the components list updates (e.g. verify
   // writes back declarationRef).
@@ -1091,16 +1100,24 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
     [components],
   );
 
-  // A `module` issue target names a boundary frame, so focusing the card frames
-  // that region on the canvas. Null when the target names no frame (a singleton
-  // dropped from the layout, or a region key nothing declares).
-  const issueModuleNodeId = useCallback(
+  // A `module` / `process` issue target names a boundary frame, so focusing
+  // the card frames that region on the canvas. Null when the target names no
+  // frame (a singleton dropped from the layout, or a region key nothing
+  // declares).
+  const issueFrameNodeId = useCallback(
     (issue: SubsystemIssue): string | null => {
       const target = issue.target;
-      if (target?.kind !== 'module') return null;
-      const key = target.id ?? target.label;
-      if (!components.some((c) => c.module?.trim() === key)) return null;
-      return moduleGroupNodeId(key);
+      if (target?.kind === 'module') {
+        const key = target.id ?? target.label;
+        if (!components.some((c) => c.module?.trim() === key)) return null;
+        return moduleGroupNodeId(key);
+      }
+      if (target?.kind === 'process') {
+        const key = target.id ?? target.label;
+        if (!components.some((c) => c.process === key)) return null;
+        return processGroupNodeId(key);
+      }
+      return null;
     },
     [components],
   );
@@ -1151,7 +1168,9 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
   }, [issues, issueComponent]);
 
   // Per-frame diagnostics badge: the same fold, but for findings about a
-  // BOUNDARY rather than a construct. Keyed by the region's React Flow node id.
+  // BOUNDARY rather than a construct. Keyed by the region's React Flow node
+  // id — a `module` target names a module frame, a `process` target a process
+  // frame (dynamic-topology findings, e.g. C4 process verification).
   // Only kinds with a dedicated frame icon qualify (`ISSUE_KIND_ICON`) — a
   // finding with no icon of its own has nothing to badge the frame with, and
   // borrowing its layer's icon would imply the frame is at fault for it.
@@ -1160,8 +1179,12 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
     if (!issues?.length) return map;
     for (const issue of issues) {
       const target = issue.target;
-      if (target?.kind !== 'module' || !ISSUE_KIND_ICON[issue.kind]) continue;
-      const id = moduleGroupNodeId(target.id ?? target.label);
+      if (!target || !ISSUE_KIND_ICON[issue.kind]) continue;
+      if (target.kind !== 'module' && target.kind !== 'process') continue;
+      const id =
+        target.kind === 'module'
+          ? moduleGroupNodeId(target.id ?? target.label)
+          : processGroupNodeId(target.id ?? target.label);
       const prev = map.get(id);
       map.set(id, {
         severity:
@@ -1175,6 +1198,49 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
     }
     return map;
   }, [issues]);
+
+  // Per-edge step verification badge: maps edge IDs to step verification status.
+  // Keyed by the React Flow edge id (from → mechanism → to). An edge can have
+  // multiple steps with issues; we show the worst status (stale > unconfirmed).
+  const stepIssueBadgeByEdgeId = useMemo(() => {
+    const map = new Map<string, { kind: 'step_unconfirmed' | 'step_stale'; severity: 'info' | 'error'; count: number }>();
+    if (!issues?.length || !trails?.length) {
+      return map;
+    }
+    for (const issue of issues) {
+      if (issue.kind !== 'step_unconfirmed' && issue.kind !== 'step_stale') continue;
+      const stepInfo = issueStep(issue);
+      if (!stepInfo) continue;
+      const step = stepInfo.trail.steps[stepInfo.stepIndex];
+      if (!step) continue;
+      const edgeId = trailStepGraphEdgeId(step);
+      const prev = map.get(edgeId);
+      // step_stale is worse than step_unconfirmed
+      const isWorse = issue.kind === 'step_stale' && prev?.kind !== 'step_stale';
+      map.set(edgeId, {
+        kind: isWorse || !prev ? issue.kind as 'step_unconfirmed' | 'step_stale' : prev.kind,
+        severity: prev?.severity === 'error' || issue.severity === 'error' ? 'error' : 'info',
+        count: (prev?.count ?? 0) + 1,
+      });
+    }
+    return map;
+  }, [issues, trails, issueStep]);
+
+  // Edges backed by a step that ITSELF declares `proposed` — a planned seam
+  // between otherwise-real components. Distinct from a proposed ENDPOINT
+  // (the node is the placeholder there, and draws its own dashed border):
+  // here the seam is the claim that is not real yet, so the edge label draws
+  // dashed. Proposed steps are never verified, so this never competes with
+  // the step-issue badge.
+  const proposedEdgeIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const trail of trails ?? []) {
+      for (const step of trail.steps) {
+        if (step.proposed) set.add(trailStepGraphEdgeId(step));
+      }
+    }
+    return set;
+  }, [trails]);
 
   // Expanded verification layers in the diagnostics list. When any layer with
   // findings is expanded, the canvas dims everything that layer does not
@@ -1216,6 +1282,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
   // target:
   //   component   → that node
   //   module      → every component in that module
+  //   process     → every component with that `process` key
   //   trail → the flow's nodes + its step edges
   //   repo        → every component of that repo
   //   graph       → whole-graph finding; implicates nothing specific
@@ -1246,6 +1313,11 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
           ) {
             nodeIds.add(c.alias);
           }
+        }
+      } else if (t.kind === 'process') {
+        const key = t.id ?? t.label;
+        for (const c of components) {
+          if (c.process === key) nodeIds.add(c.alias);
         }
       } else if (t.kind === 'trail') {
         const wt = (trails ?? []).find(
@@ -1437,7 +1509,8 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
         // Host override wins over the library's derived frame color.
         const color = region?.key != null ? boundaryColors?.[region.key] : undefined;
         // Boundary findings badge the FRAME, not a member — a region's shape is
-        // the fault, so no leaf construct carries it.
+        // the fault, so no leaf construct carries it. Process verification
+        // findings ride the same path: their target kind is `process`.
         const regionIssue = regionIssueByNodeId.get(n.id);
         return {
           ...n,
@@ -1495,6 +1568,17 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
     () => convertedEdges.map((e) => e.id).sort().join(','),
     [convertedEdges],
   );
+  // Stamp `proposedStep` onto edge data so the SVG edge itself (not just its
+  // label) draws dashed when a backing trail step declares itself proposed.
+  const proposedStampedEdges = useMemo(
+    () =>
+      baseEdges.map((e) =>
+        proposedEdgeIds.has(e.id)
+          ? { ...e, data: { ...(e.data as object), proposedStep: true } }
+          : e,
+      ),
+    [baseEdges, proposedEdgeIds],
+  );
 
   const dispEdges = useMemo(() => {
     const paint = (e: Edge, dimmed: boolean): Edge => {
@@ -1523,7 +1607,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
       return isTrailMechanism(mechanism);
     };
     if (openedEdgeIds || focusEdgeIds || previewEdgeIds || issueFocusEdgeIds) {
-      return baseEdges.map((e) => {
+      return proposedStampedEdges.map((e) => {
         const vis = flowElementVisibility({
           inOpened: openedEdgeIds?.has(e.id) === true,
           inSelected: focusEdgeIds?.has(e.id) === true,
@@ -1537,13 +1621,13 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
       });
     }
     if (selectedEdgeId) {
-      return baseEdges.map((e) => ({
+      return proposedStampedEdges.map((e) => ({
         ...paint(e, e.id !== selectedEdgeId),
         hidden: !edgeInView(e),
       }));
     }
-    return baseEdges.map((e) => ({ ...e, hidden: !edgeInView(e) }));
-  }, [baseEdges, selectedEdgeId, openedEdgeIds, focusEdgeIds, previewEdgeIds, issueFocusEdgeIds, resolvedEdgeView]);
+    return proposedStampedEdges.map((e) => ({ ...e, hidden: !edgeInView(e) }));
+  }, [proposedStampedEdges, selectedEdgeId, openedEdgeIds, focusEdgeIds, previewEdgeIds, issueFocusEdgeIds, resolvedEdgeView]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -2314,7 +2398,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
       } else {
         // Nothing selectable — but a module target names a boundary frame, so
         // frame that region.
-        const moduleNodeId = issueModuleNodeId(issue);
+        const moduleNodeId = issueFrameNodeId(issue);
         if (moduleNodeId) {
           setSelected(null);
           setSelectedEdgeId(null);
@@ -2332,7 +2416,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
     [
       issueComponent,
       issueStep,
-      issueModuleNodeId,
+      issueFrameNodeId,
       focusTrailStep,
       onSelect,
       onSelectIssue,
@@ -2356,7 +2440,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
         setSelectedEdgeId(null);
       } else {
         const step = issueStep(issue);
-        const moduleNodeId = step ? null : issueModuleNodeId(issue);
+        const moduleNodeId = step ? null : issueFrameNodeId(issue);
         if (step) {
           // Only unwind a step focus this card still owns. A dim-mode graph
           // keeps its step focus in hover state instead (owned by the pointer,
@@ -2383,7 +2467,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
         fitView({ padding: 0.1, duration: 300, minZoom: 0.05, maxZoom: 2 });
       });
     },
-    [issueComponent, issueStep, issueModuleNodeId, fitView],
+    [issueComponent, issueStep, issueFrameNodeId, fitView],
   );
 
   // Construct tokens inside a trail snippet. A step's line is an edge
@@ -2444,7 +2528,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
   // doesn't intercept pointer events). Uses ELK-computed label midpoints from
   // the actual edge path (not node-center approximations).
   const edgeLabels = useMemo(() => {
-    return dispEdges
+    const labels = dispEdges
       .filter((e) => {
         if (e.hidden) return false;
         const d = e?.data as { dimmed?: boolean } | undefined;
@@ -2459,6 +2543,8 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
           labelY?: number;
           pathLength?: number;
         } | undefined;
+        const stepIssue = stepIssueBadgeByEdgeId.get(e.id);
+        const proposed = proposedEdgeIds.has(e.id);
         return {
           id: e.id,
           mechanism: d?.mechanism ?? 'uses',
@@ -2468,9 +2554,12 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
           midY: d?.labelY ?? 0,
           pathLength: d?.pathLength ?? 0,
           stepNos: selectedFlowStepNos?.get(e.id),
+          stepIssue,
+          proposed,
         };
       });
-  }, [dispEdges, selectedFlowStepNos]);
+    return labels;
+  }, [dispEdges, selectedFlowStepNos, stepIssueBadgeByEdgeId, proposedEdgeIds]);
 
   // Unique source files across components → sidebar file trees.
   const treeFilePaths = treeFiles;
@@ -2897,7 +2986,9 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
                   crisp rounded box; soft / ambiguous ones (uses, feeds,
                   watches …) get a real lobed cloud silhouette — ambiguous, not
                   a dashed proposal (or a pill, which border-radius can only
-                  ever make). */}
+                  ever make). A step that ITSELF declares `proposed` dashes the
+                  silhouette — the seam is planned, distinct from a proposed
+                  ENDPOINT, which dashes the node instead. */}
               {verifiable ? (
                 <span
                   aria-hidden
@@ -2905,7 +2996,9 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
                     position: 'absolute',
                     inset: 0,
                     borderRadius: 4,
-                    border: `0.5px solid ${color}`,
+                    border: lbl.proposed
+                      ? `1.5px dashed ${color}`
+                      : `0.5px solid ${color}`,
                     background:
                       theme.colors.backgroundSecondary ?? theme.colors.background,
                     pointerEvents: 'none',
@@ -2930,6 +3023,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
                     stroke={hexWithAlpha(color, 0.75)}
                     strokeWidth={1.2}
                     strokeLinejoin="round"
+                    strokeDasharray={lbl.proposed ? '4 3' : undefined}
                   />
                 </svg>
               )}
@@ -2950,6 +3044,53 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
               >
                 {text}
               </span>
+              {lbl.stepIssue && (() => {
+                const StepIssueIcon = ISSUE_KIND_ICON[lbl.stepIssue.kind];
+                // Match IssueList: error severity = red, info severity = amber
+                const issueColor = lbl.stepIssue.severity === 'error'
+                  ? (theme.colors.error ?? '#e5534b')
+                  : (theme.colors.warning ?? '#d4a017');
+                const badgeBg = theme.colors.backgroundSecondary ?? theme.colors.background;
+                return (
+                  <span
+                    aria-hidden
+                    title={lbl.stepIssue.kind === 'step_stale'
+                      ? 'Call site changed since verification'
+                      : 'Call site not yet verified'}
+                    style={{
+                      position: 'absolute',
+                      right: -7,
+                      bottom: -6,
+                      zIndex: 2,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 3,
+                      minWidth: 18,
+                      padding: '2px 4px',
+                      borderRadius: 4,
+                      border: `1.5px solid ${issueColor}`,
+                      background: badgeBg,
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    {StepIssueIcon && (
+                      <StepIssueIcon size={12} color={issueColor} />
+                    )}
+                    {lbl.stepIssue.count > 1 && (
+                      <span style={{
+                        color: issueColor,
+                        fontFamily: theme.fonts.monospace,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        lineHeight: 1,
+                      }}>
+                        {lbl.stepIssue.count}
+                      </span>
+                    )}
+                  </span>
+                );
+              })()}
             </div>
           );
         })}

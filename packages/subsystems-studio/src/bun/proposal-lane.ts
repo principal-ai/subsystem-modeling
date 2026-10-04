@@ -21,6 +21,7 @@ export function laneForChange(
 	if (ch.target === "declaration") return "construct";
 	if (ch.target === "augmentation") {
 		if (ch.field === "construct" || ch.field === "signature") return "construct";
+		if (ch.field === "callSite") return "trail";
 		return "static-topology"; // module (containment)
 	}
 	// component
@@ -57,6 +58,8 @@ export function laneForFindingKind(
 		case "boundary_process_missing":
 			return "dynamic-topology";
 		case "trail":
+		case "step_unconfirmed":
+		case "step_stale":
 			return "trail";
 		default:
 			return null;

@@ -324,12 +324,8 @@ export interface SubsystemComponent {
    */
   declaration?: SubsystemConstructDeclaration;
   /**
-   * Where the structured `declaration` came from. `verified` = extracted from
-   * source by tooling (graphify AST, signature extraction) — may be trusted
-   * as matching the code. `authored` = written by the authoring agent/human
-   * to highlight specific inputs/outputs — informative, not checked against
-   * source. Declaration without provenance is treated as `authored`; only
-   * tooling may claim `verified`.
+   * @deprecated No longer used — verification now tracks at the model level
+   * via `verifiedAtCommits`. Keeping the field temporarily for migration.
    */
   declarationProvenance?: SubsystemDeclarationProvenance;
   /**
@@ -410,6 +406,14 @@ export interface SubsystemTrailStep {
    * mechanism + filename fallback.
    */
   symbol: string;
+  /**
+   * Planned seam — the step describes intended behavior through code that is
+   * not written yet. Orthogonal to (and redundant with) the endpoints' own
+   * `proposed` flags: a step is proposed when it says so OR either endpoint
+   * is proposed. Verification skips source checks either way, and viewers
+   * tint it exactly like a proposed node.
+   */
+  proposed?: boolean;
   /**
    * Free-text note anchored to this step's site line. Optional — informative
    * only, never verified against source; the Pierre trail code view
@@ -1425,6 +1429,12 @@ export interface SubsystemGraphEdgeData extends Record<string, unknown> {
   /** True while another edge is selected — render this edge (and its label)
    *  dimmed to focus the selected relationship. */
   dimmed?: boolean;
+  /**
+   * A backing trail step declares itself `proposed` — a planned seam between
+   * otherwise-real components. The SVG edge and its label draw dashed;
+   * distinct from a proposed ENDPOINT, which dashes the node instead.
+   */
+  proposedStep?: boolean;
   /** ELK-computed label midpoint (from the actual edge path, not node centers). */
   labelX?: number;
   labelY?: number;

@@ -239,45 +239,42 @@ export type {
   SubsystemSignatureClaim,
   SubsystemSignatureParameter,
 } from './subsystem/model';
-// --- C4 projection + the confirmed association layer ------------------
+// --- C4 projection -----------------------------------------------------
 export { C4Graph } from './subsystem/C4Graph';
 export type { C4GraphProps } from './subsystem/C4Graph';
-export { C4NodeCard, nodeStyle, nodeSubtitle, nodeTag, nodeStateTag, nodeShape, nodeMissing, NODE_W, NODE_H } from './subsystem/C4NodeCard';
-export type { C4NodeCardProps, NodeStyle } from './subsystem/C4NodeCard';
-export {
-  toC4,
-  isGroundedComponent,
-  labelFromPurl,
-  deriveRepoKey,
-  indexAssociations,
-} from './subsystem/toC4';
+export { C4NodeCard, nodeStyle, nodeSubtitle, nodeTag, nodeKindIcon, nodeTopLabel, nodeShape, nodeSize, nodeMissing, NODE_W, NODE_H, COMPONENT_SIZE } from './subsystem/C4NodeCard';
+export { TechMark, technologyBrand, TECH_BRANDS } from './subsystem/techIcons';
+export type { TechBrand } from './subsystem/techIcons';
+export type { C4NodeCardProps, NodeStyle, NodeShape, C4ShapeKind } from './subsystem/C4NodeCard';
+// --- C4 elements: authored, not derived -------------------------------
+export { labelFromPurl, protocolColor, PROTOCOL_COLOR, PROTOCOL_COLOR_FALLBACK } from './subsystem/c4';
 export type {
-  C4Kind,
   C4View,
-  C4Node,
   C4Group,
   C4Edge,
   C4Model,
-  C4Decoration,
-  C4ElementType,
-  C4Association,
-  C4AssociationState,
-  ToC4Options,
-} from './subsystem/toC4';
+  C4ContainerKind,
+  C4Container,
+  C4Component,
+  C4ExternalSystem,
+  C4Person,
+  C4Element,
+  C4ElementSet,
+  C4ElementState,
+} from './subsystem/c4';
+// --- Evidence an agent reads before proposing -------------------------
 export {
-  deriveConcerns,
-  suggestMerges,
-  buildAssociations,
-  mergeAssociations,
-  associationWeight,
-  summarizeAssociations,
-} from './subsystem/c4Associations';
+  findUnassigned,
+  isRuntimeConstruct,
+  proposeElements,
+  suggestContainerKind,
+  verifyProcessBoundaries,
+} from './subsystem/c4Evidence';
 export type {
-  C4AssociationSet,
-  C4AssociationReason,
-  C4ConcernKind,
   C4MemberView,
-} from './subsystem/c4Associations';
+  C4ProcessVerification,
+  C4ProcessBoundaryStatus,
+} from './subsystem/c4Evidence';
 export {
   constructBadgeLabel,
   constructBadgeColor,

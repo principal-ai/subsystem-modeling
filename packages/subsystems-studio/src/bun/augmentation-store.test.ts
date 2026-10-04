@@ -5,12 +5,15 @@ import { join } from "node:path";
 import {
 	attachSignatureAugmentations,
 	augmentationKey,
+	callSiteAugmentationKey,
 	findAcceptedConstructAugmentation,
 	findAcceptedModuleAugmentation,
 	findAcceptedSignatureAugmentation,
+	findAcceptedCallSiteAugmentation,
 	upsertAcceptedConstructAugmentation,
 	upsertAcceptedModuleAugmentation,
 	upsertAcceptedSignatureAugmentation,
+	upsertAcceptedCallSiteAugmentation,
 } from "./augmentation-store";
 
 describe("augmentationKey", () => {
@@ -198,5 +201,55 @@ describe("attachSignatureAugmentations", () => {
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}
+	});
+
+	test("upsert then find accepted call site augmentation", async () => {
+		const root = mkdtempSync(join(tmpdir(), "ga-store-callsite-"));
+		try {
+			const written = await upsertAcceptedCallSiteAugmentation({
+				purl: "pkg:github/acme/widget",
+				file: "src/api.ts",
+				symbol: "handleRequest",
+				callSite: {
+					lines: { start: 42, end: 44 },
+					contentHash: "abc123",
+					target: { file: "src/db.ts", symbol: "query" },
+					mechanism: "calls",
+				},
+				source: "test-agent",
+				rationale: "verified call site",
+				evidence: ["observed in code"],
+				storeRoot: root,
+			});
+			expect(written.ok).toBe(true);
+
+			const found = await findAcceptedCallSiteAugmentation({
+				purl: "pkg:github/acme/widget",
+				file: "src/api.ts",
+				symbol: "handleRequest",
+				targetFile: "src/db.ts",
+				targetSymbol: "query",
+				mechanism: "calls",
+				storeRoot: root,
+			});
+			expect(found).not.toBeNull();
+			expect(found?.claims.callSite?.lines).toEqual({ start: 42, end: 44 });
+			expect(found?.claims.callSite?.contentHash).toBe("abc123");
+			expect(found?.claims.callSite?.mechanism).toBe("calls");
+			expect(found?.provenance.source).toBe("test-agent");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test("callSiteAugmentationKey normalizes paths", () => {
+		const key = callSiteAugmentationKey(
+			"./src\\caller.ts",
+			"myFunc",
+			"./target\\callee.ts",
+			"otherFunc",
+			"calls",
+		);
+		expect(key).toBe("src/caller.ts::myFunc->target/callee.ts::otherFunc@calls");
 	});
 });

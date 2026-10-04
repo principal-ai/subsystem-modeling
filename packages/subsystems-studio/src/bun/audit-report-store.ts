@@ -278,11 +278,24 @@ export function summarizeLanes(
 		}
 	}
 
+	// Trail lane considers mechanical failures, step verification, and staleness
+	const hasStepIssues = (report.summary.stepsStale ?? 0) > 0;
+	const hasUnconfirmedSteps = (report.summary.stepsUnconfirmed ?? 0) > 0;
+	const hasVerifiedSteps = (report.summary.stepsVerified ?? 0) > 0;
+	const hasAnyStepInfo = hasStepIssues || hasUnconfirmedSteps || hasVerifiedSteps;
 	const trail: VerificationLaneStatus = !opts.hasTrails
 		? "none"
-		: report.summary.trailFailures > 0
+		: report.summary.trailFailures > 0 || hasStepIssues
 			? "issues"
-			: "verified";
+			: hasUnconfirmedSteps
+				? "partial"
+				: hasVerifiedSteps
+					? "verified"
+					// No step verification info yet — treat as verified for backward compat
+					// (models created before step verification was implemented)
+					: hasAnyStepInfo
+						? "partial"
+						: "verified";
 
 	// Every component carries a construct claim, so a model with components can
 	// never be "none" on the construct lane — an unchecked claim is open work.

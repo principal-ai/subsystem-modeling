@@ -13,6 +13,7 @@ import { join } from "node:path";
 import type {
 	SubsystemModelDocument,
 	SubsystemModelProposal,
+	SubsystemModelProposalChange,
 } from "../shared/contract";
 import { resolveRepoRootForPurl } from "./graphify-store";
 import { purlRepoKey } from "./subsystem-model-store";
@@ -162,6 +163,64 @@ function sliceComponent(
 }
 
 /**
+ * First callSite augmentation change in the proposal, if any. Call site
+ * changes are keyed by trail step and carry their own file/purl rather than a
+ * component alias.
+ */
+function callSiteChange(
+	proposal: SubsystemModelProposal,
+): (SubsystemModelProposalChange & {
+	field: "callSite";
+	trailId: string;
+	stepIndex: number;
+	file: string;
+	purl: string;
+	value: { lines: { start: number; end: number } };
+}) | undefined {
+	for (const change of proposal.changes) {
+		if (change.target !== "augmentation" || change.field !== "callSite")
+			continue;
+		const ch = change as unknown as {
+			trailId?: unknown;
+			stepIndex?: unknown;
+			file?: unknown;
+			purl?: unknown;
+			value?: { lines?: { start?: unknown; end?: unknown } };
+		};
+		const start = typeof ch.value?.lines?.start === "number" ? ch.value.lines.start : null;
+		const end = typeof ch.value?.lines?.end === "number" ? ch.value.lines.end : null;
+		if (
+			typeof ch.trailId === "string" &&
+			typeof ch.stepIndex === "number" &&
+			typeof ch.file === "string" &&
+			typeof ch.purl === "string" &&
+			start != null &&
+			end != null &&
+			start >= 1 &&
+			end >= start
+		) {
+			return {
+				...change,
+				field: "callSite",
+				trailId: ch.trailId,
+				stepIndex: ch.stepIndex,
+				file: ch.file,
+				purl: ch.purl,
+				value: { lines: { start, end } },
+			} as SubsystemModelProposalChange & {
+				field: "callSite";
+				trailId: string;
+				stepIndex: number;
+				file: string;
+				purl: string;
+				value: { lines: { start: number; end: number } };
+			};
+		}
+	}
+	return undefined;
+}
+
+/**
  * Build the source-context block for a proposal, or `undefined` when nothing
  * could be resolved locally (no repo checkout, missing file, no aliases).
  */
@@ -170,9 +229,40 @@ export async function buildProposalSourceContext(
 	proposal: SubsystemModelProposal,
 ): Promise<string | undefined> {
 	const aliases = componentAliases(proposal);
-	if (aliases.length === 0) return undefined;
+	const callSite = callSiteChange(proposal);
+	if (aliases.length === 0 && !callSite) return undefined;
 	const blocks: string[] = [];
 	let total = 0;
+
+	if (callSite) {
+		// The caller file is the code Jev must check the claim against: slice
+		// the claimed span with breathing room around it.
+		const purlKey = purlRepoKey(callSite.purl);
+		const repoRoot = purlKey ? resolveRepoRootForPurl(purlKey) : null;
+		if (repoRoot) {
+			try {
+				const content = await fs.readFile(
+					join(repoRoot, callSite.file),
+					"utf8",
+				);
+				const lines = splitLines(content);
+				const start = Math.max(1, callSite.value.lines.start - CONTEXT_BEFORE_LINES);
+				const end = Math.min(
+					lines.length,
+					callSite.value.lines.end + CONTEXT_AFTER_LINES,
+				);
+				const rendered = renderRanges(lines, [{ start, end }]);
+				const block = [
+					`--- ${callSite.file} (claimed call site lines ${callSite.value.lines.start}-${callSite.value.lines.end}, trail ${callSite.trailId} step ${callSite.stepIndex + 1}) ---`,
+					rendered,
+				].join("\n");
+				blocks.push(block.slice(0, MAX_CHARS_PER_COMPONENT));
+				total += block.length;
+			} catch {
+				// Caller file unreadable — fall through to component context.
+			}
+		}
+	}
 
 	for (const alias of aliases) {
 		const component = graph.components.find((c) => c.alias === alias);

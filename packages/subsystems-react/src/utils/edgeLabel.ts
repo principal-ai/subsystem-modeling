@@ -20,6 +20,34 @@ export const EDGE_LABEL_HEIGHT = 40;
 export const EDGE_LABEL_FONT_SIZE = 14;
 
 /**
+ * Approx monospace advance at `EDGE_LABEL_FONT_SIZE` (14px), incl. the tiny
+ * letter-spacing. Fira Code / SF Mono / Courier sit at ~0.6em (8.4px); rounded
+ * up so a width estimate never undershoots and clips the label.
+ */
+const LABEL_CHAR_WIDTH = 8.5;
+
+/** Chip chrome: horizontal padding is 8+8 in the overlay (see C4EdgeLabels). */
+const LABEL_CHIP_CHROME = 16;
+
+/**
+ * Estimated rendered width of an edge label's chip, from its text. Both the
+ * overlay and the ELK reservation must use this same number, or the reserved
+ * run drifts from what renders. Clamped to a minimum so a one-word protocol
+ * still reads as a chip.
+ */
+export function estimateEdgeLabelWidth(text: string): number {
+  return Math.max(48, (text?.length ?? 0) * LABEL_CHAR_WIDTH + LABEL_CHIP_CHROME);
+}
+
+/**
+ * Reserved label width for C4's own edges, used as the fallback/max when a
+ * caller doesn't size per-label. C4's lines carry short protocols (`RPC`,
+ * `HTTP`, `file I/O`), so the shared 140 (sized for the component graph's
+ * `registers-into`) is wider than needed and inflates the run between boxes.
+ */
+export const C4_LABEL_WIDTH = 90;
+
+/**
  * Clear space we want on each side of a label box.
  *
  * Passed as ELK's `interLayerSpacing` (`nodeNodeBetweenLayers`). ELK's

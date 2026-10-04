@@ -308,6 +308,11 @@ export async function modelProvenance(
 
 	const purlFreshness: SubsystemModelPurlFreshness[] = [];
 	const anchorChanges: Record<string, AnchorChanges> = {};
+	// Model-wide grounded-contact rollup: how many components a drift could
+	// invalidate, and how many actually did. Only measured repos count — see
+	// the `committed` guard below.
+	let referencedComponents = 0;
+	let affectedComponents = 0;
 
 	for (const key of keys) {
 		const pinned =
@@ -329,7 +334,18 @@ export async function modelProvenance(
 		const files = byPurl.get(key) ?? [];
 		const changes: AnchorChanges = {};
 		const committed = await diff(root, pinned, live, files);
-		if (committed) changes.committed = committed;
+		if (committed) {
+			changes.committed = committed;
+			// The diff is the measurement; only then may a component be counted
+			// as grounded. A null diff means the repo was not compared, so its
+			// components stay out of the denominator rather than reading clean.
+			const changed = new Set(committed);
+			for (const c of stored.components) {
+				if (!c.file || purlRepoKey(c.purl) !== key) continue;
+				referencedComponents += 1;
+				if (changed.has(c.file)) affectedComponents += 1;
+			}
+		}
 		const uncommitted = await dirty(root, files);
 		if (uncommitted.length > 0) changes.dirty = uncommitted;
 
@@ -354,6 +370,14 @@ export async function modelProvenance(
 		verifiedAtCommits: stored.verifiedAtCommits,
 		purlFreshness,
 		...(Object.keys(anchorChanges).length > 0 ? { anchorChanges } : {}),
+		...(referencedComponents > 0
+			? {
+					componentContact: {
+						referenced: referencedComponents,
+						affected: affectedComponents,
+					},
+				}
+			: {}),
 	};
 }
 

@@ -295,6 +295,39 @@ describe("modelProvenance", () => {
 		expect(snap.anchorChanges?.[KEY_A]?.historyRewritten).toBeUndefined();
 	});
 
+	test("rolls affected components over the measured denominator", async () => {
+		const snap = await modelProvenance(
+			{
+				...TWO_REPO_SOURCE,
+				components: [
+					{ alias: "w", file: "src/w.ts", purl: `${KEY_A}#src/w.ts` },
+					{ alias: "x", file: "src/x.ts", purl: `${KEY_A}#src/x.ts` },
+					// KEY_B has no checkout, so its component must not reach the
+					// denominator — an unmeasured repo is not "unaffected".
+					{ alias: "g", file: "src/g.ts", purl: `${KEY_B}#src/g.ts` },
+				],
+			},
+			{
+				resolveRoot: (k) => ROOTS_BY_KEY[k],
+				head: async () => LIVE,
+				diff: async (_root, _from, _to, paths) =>
+					paths.includes("src/w.ts") ? ["src/w.ts"] : [],
+				dirty: async () => [],
+			},
+		);
+		expect(snap.componentContact).toEqual({ referenced: 2, affected: 1 });
+	});
+
+	test("omits component contact when no repo could be measured", async () => {
+		const snap = await modelProvenance(TWO_REPO_SOURCE, {
+			resolveRoot: () => undefined,
+			head: async () => null,
+			diff: async () => [],
+			dirty: async () => [],
+		});
+		expect(snap.componentContact).toBeUndefined();
+	});
+
 	test("carries a rewritten history without inventing a distance", async () => {
 		const snap = await modelProvenance(TWO_REPO_SOURCE, {
 			resolveRoot: (k) => ROOTS_BY_KEY[k],

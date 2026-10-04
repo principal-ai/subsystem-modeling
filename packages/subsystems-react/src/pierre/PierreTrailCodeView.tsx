@@ -68,15 +68,10 @@ function stepIndexFromItemContext(context: unknown): number | null {
   return Number.isFinite(index) ? index : null;
 }
 
-/**
- * Assumed height of the compact file header, in px.
- *
- * Must track the header chrome passed to `buildPierreOptions` (fontSizes[0] at
- * line-height 1.15 plus 2px vertical padding) — CodeView sizes its
- * virtualization window and sticky offset from this, and the library's own
- * default of 44 is more than double the compact header.
- */
-const TRAIL_HEADER_HEIGHT = 18;
+/** Line-height multiplier for the compact per-file header. */
+const TRAIL_HEADER_LINE_HEIGHT = 1.15;
+/** Vertical padding on the compact per-file header, px (each side). */
+const TRAIL_HEADER_PAD_Y = 2;
 
 /** Pointer/dotted-underline affordance for a clickable construct token. */
 function paintSymbolToken(el: HTMLElement | undefined, active: boolean): void {
@@ -208,7 +203,7 @@ export function PierreTrailCodeView({
   stepIndex,
   readFile,
   contextLines = 8,
-  background,
+  background: backgroundProp,
   onOpenFile,
   onVisibleStepChange,
   proposedAliases,
@@ -216,6 +211,14 @@ export function PierreTrailCodeView({
   onSymbolClick,
 }: PierreTrailCodeViewProps) {
   const { theme, mode } = useTheme();
+  const background = backgroundProp ?? theme.colors.background;
+  // The per-file header renders the step's file path (Pierre's `[data-title]`),
+  // so this font size is what the path reads at. It also drives CodeView's
+  // virtualization window and sticky offset via `diffHeaderHeight`, so derive
+  // the header height from it rather than tracking two numbers by hand.
+  const headerFontSize = theme.fontSizes[1];
+  const headerHeight =
+    Math.round(headerFontSize * TRAIL_HEADER_LINE_HEIGHT) + 2 * TRAIL_HEADER_PAD_Y;
   const viewRef = useRef<CodeViewHandle<undefined>>(null);
   // CodeView's scroll container — also the box we measure items against.
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -261,9 +264,33 @@ export function PierreTrailCodeView({
     onVisibleStepChangeRef.current?.(next);
   }, []);
 
-  const onCodeViewScroll = useCallback(() => {
-    reportVisibleStep();
+  // Coalesce measurement to one report per frame, after layout settles.
+  // `onPostRender` is a CodeView *shared file callback*: it fires for every item
+  // as virtualization mounts/unmounts them mid-scroll. Measuring synchronously
+  // there read geometry before the browser had laid the newly-mounted items out,
+  // so the "topmost visible" step bounced between values instead of advancing
+  // one step at a time. Deferring to rAF measures settled geometry once.
+  const visibleReportRaf = useRef<number | null>(null);
+  const scheduleVisibleStepReport = useCallback(() => {
+    if (visibleReportRaf.current != null) return;
+    visibleReportRaf.current = window.requestAnimationFrame(() => {
+      visibleReportRaf.current = null;
+      reportVisibleStep();
+    });
   }, [reportVisibleStep]);
+
+  useEffect(
+    () => () => {
+      if (visibleReportRaf.current != null) {
+        window.cancelAnimationFrame(visibleReportRaf.current);
+      }
+    },
+    [],
+  );
+
+  const onCodeViewScroll = useCallback(() => {
+    scheduleVisibleStepReport();
+  }, [scheduleVisibleStepReport]);
 
   // A step onto a proposed component is planned work; label its missing file
   // accordingly instead of showing a bare "not found".
@@ -404,14 +431,15 @@ export function PierreTrailCodeView({
     ) => {
       const id = context?.item?.id;
       // Item-level renders don't move the viewport, but the first paint does
-      // decide which step is on screen.
-      reportVisibleStep();
+      // decide which step is on screen. Schedule rather than measure here (see
+      // `scheduleVisibleStepReport`).
+      scheduleVisibleStepReport();
       if (id == null) return;
       const sliceStart = sliceStartByItemId.get(id);
       if (sliceStart == null) return;
       remapSnippetLineNumbers(node, sliceStart);
     },
-    [sliceStartByItemId, reportVisibleStep],
+    [sliceStartByItemId, scheduleVisibleStepReport],
   );
 
   // No step numbers in the file header: the sidebar already numbers the steps,
@@ -546,22 +574,22 @@ export function PierreTrailCodeView({
       // PIERRE_BASE_OPTIONS and `disableFileHeader` must follow it.
       ...buildPierreOptions(background, {
         background: theme.colors.backgroundSecondary,
-        fontSize: `${theme.fontSizes[0]}px`,
-        lineHeight: '1.15',
-        padding: '2px 8px',
+        fontSize: `${headerFontSize}px`,
+        lineHeight: String(TRAIL_HEADER_LINE_HEIGHT),
+        padding: `${TRAIL_HEADER_PAD_Y}px 8px`,
       }),
       disableFileHeader: false,
       // The library assumes a 44px header (DEFAULT_VIRTUAL_FILE_METRICS); the
-      // compact chrome above is ~18px. CodeView uses this for its
+      // compact chrome above is `headerHeight`. CodeView uses this for its
       // virtualization window and sticky offset, so leaving it at 44 drifts.
-      itemMetrics: { diffHeaderHeight: TRAIL_HEADER_HEIGHT },
+      itemMetrics: { diffHeaderHeight: headerHeight },
       layout: { paddingTop: 0, paddingBottom: 0, gap: 4 },
       onPostRender,
       ...(onOpenFile ? { onLineClick } : {}),
       ...symbolHandlers,
       ...(mode === 'light' || mode === 'dark' ? { themeType: mode } : {}),
     };
-  }, [background, theme.colors.backgroundSecondary, theme.fontSizes, mode, onPostRender, onOpenFile, onLineClick, symbolHandlers]);
+  }, [background, headerFontSize, headerHeight, theme.colors.backgroundSecondary, mode, onPostRender, onOpenFile, onLineClick, symbolHandlers]);
 
   useEffect(() => {
     if (load.status !== 'ready' || stepIndex == null) return;

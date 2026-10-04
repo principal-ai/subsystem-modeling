@@ -323,17 +323,28 @@ export function MaintenancePanel() {
 	// Re-paint when a background re-audit finishes (or a run/proposal changes).
 	useEffect(() => {
 		const refresh = () => void load();
+		// `load()` refreshes the overview and run log but not `proposalsByGraph`
+		// (that is loaded lazily on Runs-section expand), so proposal events must
+		// refetch the affected model's list — a run that posts proposals while
+		// its Runs section is expanded would otherwise keep rendering the stale
+		// empty cache as "No proposals".
+		const onProposals = (
+			payload: StudioMessages["subsystemModelProposalsChanged"],
+		) => {
+			void load();
+			void loadProposalsFor(payload.graphId);
+		};
 		subsystemModelChangeSubscribers.add(refresh);
-		subsystemModelProposalsChangeSubscribers.add(refresh);
+		subsystemModelProposalsChangeSubscribers.add(onProposals);
 		subsystemModelMaintainChangeSubscribers.add(refresh);
 		subsystemModelRunsChangeSubscribers.add(refresh);
 		return () => {
 			subsystemModelChangeSubscribers.delete(refresh);
-			subsystemModelProposalsChangeSubscribers.delete(refresh);
+			subsystemModelProposalsChangeSubscribers.delete(onProposals);
 			subsystemModelMaintainChangeSubscribers.delete(refresh);
 			subsystemModelRunsChangeSubscribers.delete(refresh);
 		};
-	}, [load]);
+	}, [load, loadProposalsFor]);
 
 	// Live OpenCode SSE feed, keyed by the graphId the host stamps on it.
 	useEffect(() => {

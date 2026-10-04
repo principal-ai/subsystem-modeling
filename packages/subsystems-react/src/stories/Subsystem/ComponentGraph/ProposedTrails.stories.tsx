@@ -144,6 +144,26 @@ const trails: SubsystemTrail[] = [
       },
     ],
   },
+  {
+    id: 'wt-planned-seam',
+    title: 'Planned seam (step-proposed)',
+    steps: [
+      {
+        from: 'audit',
+        to: 'cli',
+        mechanism: 'uses',
+        file: 'src/bun/verify-subsystem-component.ts',
+        line: 1,
+        symbol: 'probeCliVersion',
+        // Step-level proposed: BOTH endpoints are real components — the
+        // seam itself is what is planned. The edge label draws dashed on
+        // the canvas; distinct from a proposed endpoint, which dashes the
+        // node instead. Verification skips the step until promoted.
+        proposed: true,
+        annotation: 'The step itself is proposed — edge label is dashed.',
+      },
+    ],
+  },
 ];
 
 function ProposedTrailsDemo() {
@@ -153,7 +173,7 @@ function ProposedTrailsDemo() {
         components={components}
         trails={trails}
         title="proposed-work marker"
-        description="Trails that touch a **proposed** component get their title tinted darkgoldenrod in the flows panel; expand a row and each step onto a proposed component is tinted too (index and title). Nodes for proposed components already draw dashed darkgoldenrod on the canvas."
+        description="Trails that touch a **proposed** component get their title tinted darkgoldenrod in the flows panel; expand a row and each step onto a proposed component is tinted too (index and title). Nodes for proposed components draw dashed darkgoldenrod on the canvas. A step that is itself `proposed` — a planned seam between real components — dashes its **edge label** instead."
       />
     </div>
   );

@@ -76,6 +76,22 @@ export interface ElkLayoutOptions {
     enabled?: boolean;
     /** Placement of inline labels. @default 'CENTER' */
     placement?: 'CENTER' | 'TAIL' | 'HEAD';
+    /**
+     * Width of the reserved label box, in flow px. This is what actually sets
+     * the between-layer run for a labelled edge — ELK's CENTER_LAYER creates a
+     * label layer of this width, which dominates the layering spacing. Defaults
+     * to the shared `EDGE_LABEL_WIDTH`; a caller with shorter labels passes a
+     * smaller value to tighten its edges.
+     */
+    width?: number;
+    /**
+     * Per-label width, computed from the label text. When supplied, wins over
+     * `width` for each edge, so the reserved box tracks content instead of one
+     * fixed width. The overlay must use the same function.
+     */
+    measure?: (text: string) => number;
+    /** Height of the reserved label box. Defaults to `EDGE_LABEL_HEIGHT`. */
+    height?: number;
   };
 
   /**
@@ -121,6 +137,34 @@ export interface ElkLayoutOptions {
    * on the duplicate. @default false
    */
   keepSingletonGroups?: boolean;
+
+  /**
+   * Lay a group's members out at the root instead of nesting them inside an
+   * ELK parent, then synthesize the frame's bounds as the bounding box of its
+   * members.
+   *
+   * A nested frame is a real ELK parent, so edges wholly inside it inherit the
+   * frame's padding and its own between-layer spacing on top — which makes an
+   * in-frame edge run longer than a root-level one touching the same nodes.
+   * Flattening removes that: every edge uses one spacing, and the frame is pure
+   * decoration drawn around wherever the members landed.
+   *
+   * Only for groups whose members need no parent-relative positioning (C4's
+   * system frame). @default false
+   */
+  flatGroups?: boolean;
+
+  /**
+   * ELK partition per node id. Nodes are banded by `partition` — ELK places all
+   * of partition 0, then partition 1, etc., in the layout direction — so a
+   * group of nodes can be kept apart from the rest without nesting them in a
+   * parent. C4 uses this to push out-of-boundary nodes (external systems,
+   * people) into their own band, away from the framed containers.
+   *
+   * Requires every laid-out node to have a partition; unknown ids are ignored,
+   * unlisted nodes get partition 0. @default undefined (partitioning off)
+   */
+  partitionByNode?: ReadonlyMap<string, number>;
 }
 
 /** Result of ELK layout computation */
@@ -331,9 +375,73 @@ export function calculatePathLength(points: Point[]): number {
 }
 
 /**
+ * Point a given fraction along a polyline, by arc length.
+ *
+ * Using arc length, not the nearest-point snap, is what keeps a label chip on
+ * the visual middle of a *bent* route. Nearest-point (`closestPointOnPath`)
+ * jumps to whichever segment happens to be nearest the target, so a fanned-out
+ * orthogonal route put the chip on a corner near the source node.
+ *
+ * @public Exported for testing
+ */
+export function pointAlongPath(points: Point[], fraction: number): Point {
+  if (points.length === 0) return { x: 0, y: 0 };
+  if (points.length === 1) return points[0];
+  const total = calculatePathLength(points);
+  if (total === 0) return points[0];
+
+  let remaining = Math.max(0, Math.min(1, fraction)) * total;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const seg = Math.hypot(b.x - a.x, b.y - a.y);
+    if (seg === 0) continue;
+    if (remaining <= seg) {
+      const t = remaining / seg;
+      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+    }
+    remaining -= seg;
+  }
+  return points[points.length - 1];
+}
+
+/**
+ * How far along a polyline a point lies, as a 0…1 fraction of arc length.
+ * The point is assumed to lie on (or near) the path.
+ *
+ * @public Exported for testing
+ */
+export function fractionAlongPath(points: Point[], at: Point): number {
+  if (points.length < 2) return 0.5;
+  const total = calculatePathLength(points);
+  if (total === 0) return 0.5;
+
+  let travelled = 0;
+  let bestDist = Infinity;
+  let bestTravelled = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const seg = Math.hypot(b.x - a.x, b.y - a.y);
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const t = seg === 0 ? 0 : Math.max(0, Math.min(1, ((at.x - a.x) * dx + (at.y - a.y) * dy) / (seg * seg)));
+    const px = a.x + dx * t;
+    const py = a.y + dy * t;
+    const dist = Math.hypot(at.x - px, at.y - py);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestTravelled = travelled + seg * t;
+    }
+    travelled += seg;
+  }
+  return bestTravelled / total;
+}
+
+/**
  * Get ELK layout options based on configuration
  */
-function getElkOptions(options: ElkLayoutOptions): LayoutOptions {
+export function getElkOptions(options: ElkLayoutOptions): LayoutOptions {
   const {
     routingStyle = 'orthogonal',
     nodeSpacing = 50,
@@ -357,6 +465,12 @@ function getElkOptions(options: ElkLayoutOptions): LayoutOptions {
     'elk.spacing.edgeNode': String(edgeNodeSpacing),
     'elk.layered.spacing.edgeEdgeBetweenLayers': String(edgeSpacing),
     'elk.layered.spacing.edgeNodeBetweenLayers': String(edgeNodeSpacing),
+    // Edges host inline labels and `CENTER_LAYER` already reserves a label
+    // layer, so this is EXTRA space stacked on top of that layer — not a
+    // replacement for it. Reserving the full label box here double-counts and
+    // the run balloons (measured: w=140 + 204 here = 548px between two nodes).
+    // `interLayerSpacing` is the only caller-set value; otherwise this is the
+    // small clearance the label layer can't express.
     'elk.layered.spacing.nodeNodeBetweenLayers': String(interLayerSpacing),
     // Port constraints - edges connect at specific sides
     'elk.portConstraints': 'FIXED_SIDE',
@@ -534,7 +648,12 @@ export async function computeElkLayout(
   edges: Edge[],
   options: ElkLayoutOptions = {}
 ): Promise<ElkLayoutResult> {
-  const { preserveNodePositions = true, keepSingletonGroups = false } = options;
+  const {
+    preserveNodePositions = true,
+    keepSingletonGroups = false,
+    flatGroups = false,
+    partitionByNode,
+  } = options;
   const edgeLabels = options.edgeLabels;
   const endpointInset = options.endpointInset ?? 0;
   const direction = options.direction ?? 'RIGHT';
@@ -584,6 +703,7 @@ export async function computeElkLayout(
       properties: {
         'portConstraints': 'FIXED_SIDE',
         ...(layer !== undefined ? { 'layering.layer': String(layer) } : {}),
+        ...(partitionByNode ? { partition: String(partitionByNode.get(node.id) ?? 0) } : {}),
       },
     };
   });
@@ -681,11 +801,20 @@ export async function computeElkLayout(
       sources: [sourcePort],
       targets: [targetPort],
     };
-    // Reserve the fixed label box so ELK leaves the same room for every label,
-    // regardless of text length. The overlay renders into this exact box.
+    // Reserve the label box. ELK's `CENTER_LAYER` sizes a dedicated label layer
+    // from this and adds no clearance of its own, so the box carries the chip
+    // width PLUS the clearance we want on each side — that is the only place
+    // the side padding can take effect. The overlay draws the chip at the
+    // narrower `edgeLabels.width`, centred in this reserved run.
     if (edgeLabels?.enabled !== false && typeof edge.label === 'string') {
+      const chipWidth =
+        edgeLabels?.measure?.(edge.label) ?? edgeLabels?.width ?? EDGE_LABEL_WIDTH;
       elkEdge.labels = [
-        { text: edge.label, width: EDGE_LABEL_WIDTH, height: EDGE_LABEL_HEIGHT },
+        {
+          text: edge.label,
+          width: chipWidth + EDGE_LABEL_SIDE_PADDING * 2,
+          height: edgeLabels?.height ?? EDGE_LABEL_HEIGHT,
+        },
       ];
     }
     return elkEdge;
@@ -707,18 +836,39 @@ export async function computeElkLayout(
     // edge by ~13px) plus a gap before the first child.
     'elk.padding': '[top=64,left=24,bottom=24,right=24]',
     'elk.spacing.nodeNode': '40',
-    // Edges inside a frame host labels too: ELK applies this on both sides of
-    // the reserved label layer, so it is the per-side clearance (same as root).
-    // Labels off falls back to a plain between-layer gap.
+    // Edges inside a frame host labels too, so the frame's own layout has to
+    // reserve the same room the root does — otherwise a nested graph (C4 puts
+    // every box in the system frame) lays its edges out with the label space
+    // ignored, and a 140px chip overflows a ~72px gap. `EDGE_LABEL_EDGE_GAP` is
+    // the full reserved width (label box + clearance at each end); labels off
+    // falls back to a plain between-layer gap.
     'elk.layered.spacing.nodeNodeBetweenLayers': String(
-      edgeLabels?.enabled === false ? 40 : EDGE_LABEL_SIDE_PADDING,
+      edgeLabels?.enabled === false
+        ? 40
+        : (edgeLabels?.width ?? EDGE_LABEL_WIDTH) + EDGE_LABEL_SIDE_PADDING * 2,
     ),
   };
+  // Match the root's inline-label reservation, so ELK inside the frame leaves a
+  // dedicated label layer rather than routing straight through the chip.
+  if (edgeLabels?.enabled !== false) {
+    const placement = edgeLabels?.placement ?? 'CENTER';
+    compoundLayoutOptions['elk.edgeLabels.inline'] = 'true';
+    compoundLayoutOptions['elk.edgeLabels.inlinePlacement'] = placement;
+    compoundLayoutOptions['elk.layered.edgeLabels.centerLabelPlacementStrategy'] = 'CENTER_LAYER';
+  }
 
   const plan = planCompoundGroups(groupDefs, elkById.keys(), keepSingletonGroups);
   const skippedGroups = new Set(plan.skipped);
   const builtGroups = new Map<string, ElkNode>();
+  // Flat groups are not ELK parents at all: their members lay out at the root,
+  // and the frame is synthesized from the members' bounds after layout. This
+  // keeps every edge on one spacing instead of inheriting a nested frame's.
+  const flatGroupIds = new Set<string>();
+  if (flatGroups) {
+    for (const g of plan.built) flatGroupIds.add(g.id);
+  }
   for (const g of plan.built) {
+    if (flatGroups) break;
     const children: ElkNode[] = [];
     for (const cid of g.childIds) {
       const leaf = elkById.get(cid);
@@ -782,6 +932,9 @@ export async function computeElkLayout(
 
   // Create ELK graph
   const rootOptions = getElkOptions(options);
+  if (partitionByNode) {
+    rootOptions['elk.partitioning.activate'] = 'true';
+  }
   if (elkParents.length > 0 || builtGroups.size > 0) {
     rootOptions['elk.hierarchyHandling'] = 'INCLUDE_CHILDREN';
   }
@@ -851,6 +1004,40 @@ export async function computeElkLayout(
   if (layoutedGraph.children) {
     for (const child of layoutedGraph.children) {
       collectGroupResults(child, true);
+    }
+  }
+
+  // Flat groups: synthesize each frame from the bounding box of its members.
+  // `plan.built` is bottom-up, so a nested frame's bounds already exist when its
+  // parent is computed — a frame containing frames unions the child frames, not
+  // just leaves. Without that, an outer frame (the system) would omit the
+  // container frames inside it and mis-size.
+  if (flatGroupIds.size > 0) {
+    const FLAT_PAD = 24;
+    const FLAT_TOP = 64;
+    /** Absolute rect of a group member: a leaf rect, or an already-built frame. */
+    const rectOf = (id: string) =>
+      absoluteRects.get(id) ??
+      (() => {
+        const b = groupBounds.get(id);
+        return b ? { x: b.x, y: b.y, width: b.width, height: b.height } : undefined;
+      })();
+    for (const g of plan.built) {
+      if (!flatGroupIds.has(g.id)) continue;
+      const rects = g.childIds
+        .map(rectOf)
+        .filter((r): r is { x: number; y: number; width: number; height: number } => !!r);
+      if (rects.length === 0) continue;
+      const minX = Math.min(...rects.map((r) => r.x));
+      const minY = Math.min(...rects.map((r) => r.y));
+      const maxX = Math.max(...rects.map((r) => r.x + r.width));
+      const maxY = Math.max(...rects.map((r) => r.y + r.height));
+      groupBounds.set(g.id, {
+        x: minX - FLAT_PAD,
+        y: minY - FLAT_TOP,
+        width: maxX - minX + FLAT_PAD * 2,
+        height: maxY - minY + FLAT_TOP + FLAT_PAD,
+      });
     }
   }
 
@@ -947,10 +1134,14 @@ export async function computeElkLayout(
             lx += sourceOffset.x + (targetOffset.x - sourceOffset.x) * t;
             ly += sourceOffset.y + (targetOffset.y - sourceOffset.y) * t;
           }
-          // Snap onto the polyline stroke. ELK's label box can sit slightly
-          // off the route (side selection / reserved label space); we keep
-          // its along-edge placement but center on the actual path.
-          const onPath = closestPointOnPath(allPoints, { x: lx, y: ly });
+          // Place the chip by arc length, using ELK's label position only as a
+          // hint for *how far along* the route it belongs. Snapping to the
+          // nearest point (the old behaviour) jumped to whichever segment was
+          // nearest the target, which put fanned-out orthogonal labels on a
+          // corner near the source instead of the middle of the line.
+          const hint = closestPointOnPath(allPoints, { x: lx, y: ly });
+          const hintFraction = fractionAlongPath(allPoints, hint);
+          const onPath = pointAlongPath(allPoints, hintFraction);
           edgeLabelPositions.set(edge.id, onPath);
         }
 

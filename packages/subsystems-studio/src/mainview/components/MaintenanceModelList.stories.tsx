@@ -55,6 +55,9 @@ function run(over: Partial<SubsystemModelRun> & { id: string; graphId: string })
 		agent: "construct-fixer",
 		model: "opencode-go/deepseek-v4-flash",
 		verdict: "partially_verified",
+		commitsAtStart: {
+			"pkg:github/principal-ai/subsystem-modeling": "b2c4e81f0a9d3756ce14b8f2d9071aa5e63c4b21",
+		},
 		...over,
 	};
 }

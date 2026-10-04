@@ -20,10 +20,12 @@
     "@stoplight/markdown-viewer": "^5.7.1",
     "@stoplight/mosaic": "^1.53.5",
     "@stoplight/mosaic-code-viewer": "^1.53.5",
+    "@xstate/react": "^6.1.0",
     "@xyflow/react": "^12.11.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.3"
+    "react-router-dom": "^7.18.3",
+    "xstate": "^5.33.2"
   },
   "devDependencies": {
     "@storybook/addon-docs": "^10.6.0",

@@ -237,9 +237,12 @@ export interface SubsystemModelVerification {
 	 * @deprecated Always empty. Symbol checks moved to graphify audit.
 	 */
 	symbolsMissing: Array<{ componentAlias: string; symbol: string; file: string }>;
-	/** Components carrying tool-extracted (`verified`) declarations. */
+	/**
+	 * @deprecated Always 0. Verification now tracks at the model level via
+	 * `verifiedAtCommits`, not per-component provenance.
+	 */
 	declarationsVerified: number;
-	/** Components carrying hand-authored declarations. */
+	/** Components carrying declarations (all counted here now). */
 	declarationsAuthored: number;
 	/**
 	 * Trail step sites that fully resolved (file + line resolve against a
@@ -451,13 +454,12 @@ export async function verifyModelFiles(
 	let declarationsVerified = 0;
 	let declarationsAuthored = 0;
 	for (const c of doc.components) {
-		// Declaration-provenance counts are payload-level stats — independent of
-		// whether this machine has the repo checked out.
-		const raw = c as unknown as Record<string, unknown>;
-		if (raw["declaration"]) {
-			const provenance = raw["declarationProvenance"];
-			if (provenance === "verified") declarationsVerified++;
-			else declarationsAuthored++;
+		// Count components with declarations. The old verified/authored split
+		// tracked per-component provenance; now we track verification at the
+		// model level via verifiedAtCommits, so all declarations count as
+		// "authored" (the legacy distinction is deprecated).
+		if (c.declaration) {
+			declarationsAuthored++;
 		}
 		if (c.proposed) continue;
 		if (!c.file) continue;

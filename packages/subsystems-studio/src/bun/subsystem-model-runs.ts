@@ -83,6 +83,8 @@ export async function noteSubsystemModelRunStart(opts: {
 	layer?: SubsystemModelRun["layer"];
 	mode?: SubsystemModelRun["mode"];
 	model?: string;
+	/** Per-purl HEAD commit(s) the agent is reading — see `SubsystemModelRun`. */
+	commitsAtStart?: SubsystemModelRun["commitsAtStart"];
 	startedAt?: string;
 	root?: string;
 }): Promise<SubsystemModelRun> {
@@ -96,6 +98,7 @@ export async function noteSubsystemModelRunStart(opts: {
 		layer: opts.layer,
 		mode: opts.mode,
 		model: opts.model,
+		commitsAtStart: opts.commitsAtStart,
 		status: "running",
 		startedAt: opts.startedAt ?? new Date().toISOString(),
 	};
@@ -120,6 +123,12 @@ export async function noteSubsystemModelRunFinish(opts: {
 	layer?: SubsystemModelRun["layer"];
 	mode?: SubsystemModelRun["mode"];
 	model?: string;
+	/**
+	 * Per-purl HEAD commit(s) the agent read. Only used when this finish call is
+	 * the one that *creates* the entry (a skipped run / pre-session failure); a
+	 * finish against an existing start leaves the start's capture in place.
+	 */
+	commitsAtStart?: SubsystemModelRun["commitsAtStart"];
 	status: "done" | "error" | "skipped";
 	ok?: boolean;
 	error?: string;
@@ -147,6 +156,9 @@ export async function noteSubsystemModelRunFinish(opts: {
 		summary: opts.summary,
 		pendingCount: opts.pendingCount,
 		verdict: opts.verdict,
+		// Only carry a capture when one was made — present so it survives the
+		// spread of a start-then-finish, absent so an update never nulls it out.
+		...(opts.commitsAtStart ? { commitsAtStart: opts.commitsAtStart } : {}),
 	};
 
 	let index = -1;

@@ -77,6 +77,40 @@ describe("subsystem-model-runs", () => {
 		expect(runs[0].sessionId).toBeUndefined();
 	});
 
+	test("start records commitsAtStart and a later finish preserves it", async () => {
+		const run = await noteSubsystemModelRunStart({
+			root,
+			graphId: "sg-c",
+			sessionId: "ses_c",
+			commitsAtStart: { "pkg:github/acme/widget": "abc123" },
+		});
+		await noteSubsystemModelRunFinish({
+			root,
+			graphId: "sg-c",
+			runId: run.id,
+			status: "done",
+			ok: true,
+		});
+		const runs = await listSubsystemModelRuns({ graphId: "sg-c", root });
+		expect(runs).toHaveLength(1);
+		expect(runs[0].commitsAtStart).toEqual({
+			"pkg:github/acme/widget": "abc123",
+		});
+	});
+
+	test("finish that creates the entry carries commitsAtStart (skipped run)", async () => {
+		await noteSubsystemModelRunFinish({
+			root,
+			graphId: "sg-c2",
+			status: "skipped",
+			commitsAtStart: { "pkg:github/acme/widget": "def456" },
+		});
+		const runs = await listSubsystemModelRuns({ graphId: "sg-c2", root });
+		expect(runs[0].commitsAtStart).toEqual({
+			"pkg:github/acme/widget": "def456",
+		});
+	});
+
 	test("match by sessionId when the run id is not carried through", async () => {
 		await noteSubsystemModelRunStart({
 			root,

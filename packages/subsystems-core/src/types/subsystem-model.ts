@@ -78,6 +78,11 @@ export type SubsystemTrailMechanism =
  */
 export type SubsystemEdgeMechanism = SubsystemTrailMechanism;
 
+/**
+ * @deprecated No longer used — verification now tracks at the model level
+ * via `verifiedAtCommits`. Keeping the type temporarily for migration
+ * compatibility; remove once all dependents have updated.
+ */
 export type SubsystemDeclarationProvenance = 'verified' | 'authored';
 
 /**
@@ -359,6 +364,10 @@ export interface SubsystemComponent {
   layer?: number;
   /** Structured declaration shape of the construct (params, members, …). */
   declaration?: SubsystemConstructDeclaration;
+  /**
+   * @deprecated No longer used — verification now tracks at the model level
+   * via `verifiedAtCommits`. Keeping the field temporarily for migration.
+   */
   declarationProvenance?: SubsystemDeclarationProvenance;
   tokens?: SubsystemDeclToken[];
   /** Location anchor (file/line/hash) — distinct from `declaration` (shape). */
@@ -399,6 +408,14 @@ export interface SubsystemTrailStep {
    * mechanism + filename fallback.
    */
   symbol: string;
+  /**
+   * Planned seam — the step describes intended behavior through code that is
+   * not written yet. Orthogonal to (and redundant with) the endpoints' own
+   * `proposed` flags: a step is proposed when it says so OR either endpoint
+   * is proposed. Verification skips source checks either way, and viewers
+   * tint it exactly like a proposed node.
+   */
+  proposed?: boolean;
   /**
    * Free-text note anchored to this step's site line. Optional — informative
    * only, never verified against source; viewers surface it via the codeview's

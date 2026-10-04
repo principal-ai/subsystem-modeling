@@ -316,6 +316,16 @@ export interface ModelProvenanceSnapshot {
 	 * set would be a claim we cannot stand behind.
 	 */
 	componentContact?: { referenced: number; affected: number };
+	/**
+	 * The saved audit's verdict for this model. Provenance answers "did the
+	 * code move since the verified pin"; this answers "does the current audit
+	 * still support the pin's claim". A pin is never re-evaluated on its own —
+	 * when the latest verdict is anything other than `fully_verified`
+	 * (including a report from before newer verification dimensions existed),
+	 * the badge must not read as verified. Absent when no audit has been
+	 * saved, in which case the badge keeps its commit-based reading.
+	 */
+	auditVerdict?: "fully_verified" | "partially_verified" | "issues";
 }
 
 /**
@@ -622,6 +632,8 @@ export type SubsystemModelAuditFindingKind =
 	| "store_type_stale"
 	| "signature_mismatch"
 	| "signature_unconfirmed"
+	| "step_unconfirmed"
+	| "step_stale"
 	| "repo_unresolved"
 	| "graphify_unavailable"
 	| "third_party_path"
@@ -771,6 +783,12 @@ export interface SubsystemModelAuditReport {
 		missingFiles: number;
 		missingSymbols: number;
 		trailFailures: number;
+		/** Trail steps without an accepted call site augmentation. */
+		stepsUnconfirmed: number;
+		/** Trail steps with a stale augmentation (contentHash mismatch). */
+		stepsStale: number;
+		/** Trail steps verified against accepted call site augmentations. */
+		stepsVerified: number;
 		staleDeclarations: number;
 		constructMismatches: number;
 		signatureMismatches: number;
@@ -887,9 +905,10 @@ export interface MaintenanceOverviewModel {
 			| "construct-verifier"
 			| "package-module-verifier"
 			| "runtime-topology-verifier"
+			| "trail-verifier"
 			| "construct-fixer"
 			| "package-module-fixer";
-		layer: "construct" | "static-topology" | "dynamic-topology";
+		layer: "construct" | "static-topology" | "dynamic-topology" | "trail";
 		mode: "issues" | "verify";
 	} | null;
 }
@@ -912,10 +931,23 @@ export interface SubsystemModelRun {
 	sessionId?: string;
 	/** Maintain agent that ran (or was selected). */
 	agent?: string;
-	layer?: "construct" | "static-topology" | "dynamic-topology";
+	layer?: "construct" | "static-topology" | "dynamic-topology" | "trail";
 	mode?: "issues" | "verify";
 	/** OpenCode model ref used for the run. */
 	model?: string;
+	/**
+	 * Per-purl HEAD commit(s) captured when the run started — the code state the
+	 * agent actually read, keyed by `purlRepoKey` (the same keying the model's
+	 * own `createdAtCommits` / `verifiedAtCommits` use). This is the run's
+	 * coordinate: it lets a run row answer "which commit was the agent looking
+	 * at", which the session/timing fields cannot.
+	 *
+	 * Absent on runs recorded before this was captured, and for referenced purls
+	 * with no resolvable local checkout (omitted rather than fabricated). An
+	 * empty object therefore means "captured, nothing resolvable", not "not
+	 * captured" — the same measured-vs-unmeasured distinction provenance keeps.
+	 */
+	commitsAtStart?: Record<string, PurlCommit>;
 	status: "running" | "done" | "error" | "skipped";
 	startedAt: string;
 	endedAt?: string;
@@ -1106,6 +1138,30 @@ export type SubsystemModelProposalChange =
 			value: string | null;
 			/** 1-based inclusive span of the declaration read from source. */
 			lines: SubsystemDeclarationSpan;
+	  }
+	| {
+			/**
+			 * Confirm a trail step's call site: the agent verifies that `from`
+			 * calls/uses/feeds `to` at the specified location. Accept writes
+			 * the augmentation store with a content hash for staleness detection.
+			 */
+			target: "augmentation";
+			field: "callSite";
+			trailId: string;
+			stepIndex: number;
+			/** The call site claim with line range, content hash, target, and mechanism. */
+			value: {
+				lines: SubsystemDeclarationSpan;
+				contentHash: string;
+				target: { file: string; symbol: string };
+				mechanism: SubsystemTrailMechanism;
+			};
+			/** Site file (from step). */
+			file: string;
+			/** Site symbol (from step — the caller). */
+			symbol: string;
+			/** Site purl (from step). */
+			purl: string;
 	  };
 
 export type SubsystemModelProposalStatus = "pending" | "accepted" | "rejected";
@@ -1818,7 +1874,7 @@ export type StudioRequests = {
 			error?: string;
 			next?: {
 				agent: string;
-				layer: "construct" | "static-topology" | "dynamic-topology";
+				layer: "construct" | "static-topology" | "dynamic-topology" | "trail";
 				mode: "issues" | "verify";
 			} | null;
 		};
@@ -2373,6 +2429,7 @@ export type StudioMessages = {
 			| "construct-verifier"
 			| "package-module-verifier"
 			| "runtime-topology-verifier"
+			| "trail-verifier"
 			| "construct-fixer"
 			| "package-module-fixer";
 		/** True when audit was fully verified and no agent ran. */
@@ -2387,9 +2444,14 @@ export type StudioMessages = {
 				| "construct-verifier"
 				| "package-module-verifier"
 				| "runtime-topology-verifier"
+				| "trail-verifier"
 				| "construct-fixer"
 				| "package-module-fixer";
-			layer: "construct" | "static-topology" | "dynamic-topology";
+			layer:
+				| "construct"
+				| "static-topology"
+				| "dynamic-topology"
+				| "trail";
 			mode: "issues" | "verify";
 		};
 	};

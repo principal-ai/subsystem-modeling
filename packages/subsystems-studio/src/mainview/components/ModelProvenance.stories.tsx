@@ -64,9 +64,19 @@ const LocalMatch: ModelProvenanceData = {
 	],
 };
 
+/**
+ * Pinned and unmoved, but the latest audit no longer supports full
+ * verification (e.g. trail step checks found unconfirmed call sites, or the
+ * pin predates a newer verification dimension). The chip reads "Unverified",
+ * not green "Verified" — see `ModelProvenanceData.auditVerdict`.
+ */
+const LocalMatchAuditPartial: ModelProvenanceData = {
+	...LocalMatch,
+	auditVerdict: "partially_verified",
+};
+
 /** One repo's local checkout advanced — the row that motivates the surface. */
-const LocalMoved: ModelProvenanceData = {
-	createdAtCommits: { [CORE]: PIN_CORE },
+const LocalMoved: ModelProvenanceData = {	createdAtCommits: { [CORE]: PIN_CORE },
 	verifiedAtCommits: { [CORE]: PIN_CORE },
 	purlFreshness: [{ purl: CORE, pinned: PIN_CORE, live: LIVE_CORE, status: "moved" }],
 };
@@ -128,7 +138,7 @@ const DirtyOnly_FIXTURE: ModelProvenanceData = {
 
 /**
  * ⚠️ Aspirational — 22 commits moved, nothing anchored changed, and the pin was
- * promoted automatically. Reads `Current` in green because that is now a
+ * promoted automatically. Reads `Verified` in green because that is now a
  * *proven* claim: git is content-addressed, so identical anchored files mean an
  * audit at the old pin would return the same verdict.
  */
@@ -165,8 +175,8 @@ const RePinBlockedRewritten_FIXTURE: ModelProvenanceData = {
 
 /**
  * ⚠️ Aspirational — the headline case. 22 commits have landed on an anchored
- * file. The badge reads `Changed 22`, which is the number that conveys urgency;
- * the sha it replaced conveyed nothing.
+ * file. The badge reads `1 file change since verification`, which
+ * leads with the blast radius; the sha it replaced conveyed nothing.
  *
  * 22 is the real measured figure for this repo, from
  * `git rev-list --left-right --count 83a9a50...HEAD`.
@@ -299,6 +309,39 @@ const ChangedOneCommit_FIXTURE: ModelProvenanceData = {
 };
 
 /**
+ * A touched model at a chosen blast radius, for the severity-shade ramp. The
+ * commit distance is held constant — only `committed.length` moves — so the
+ * colour is the only thing that differs between the fixtures.
+ */
+function touchedFiles(count: number): ModelProvenanceData {
+	return {
+		...Changed22Commits_FIXTURE,
+		anchorChanges: {
+			[CORE]: {
+				committed: Array.from(
+					{ length: count },
+					(_, i) => `packages/subsystems-core/src/anchored/f${i}.ts`,
+				),
+				commitsSincePin: 22,
+				pinOnlyCommits: 0,
+			},
+		},
+	};
+}
+
+/**
+ * A model with a measured component denominator. `affected` components changed
+ * out of `referenced` grounded ones — the proportion the severity shade keys
+ * off once the host has measured it.
+ */
+function componentContact(
+	affected: number,
+	referenced: number,
+): ModelProvenanceData {
+	return { ...touchedFiles(affected), componentContact: { affected, referenced } };
+}
+
+/**
  * ⚠️ Aspirational — the pin was orphaned by a rebase or force-push. The raw
  * count would be measured from a merge-base and can overstate reality badly, so
  * it is suppressed and the copy says the history was rewritten instead. The
@@ -403,7 +446,7 @@ const NoRemote: ModelProvenanceData = {
  * Every badge the rollup can produce.
  *
  * The two drifted-but-clean rows are transient by design: auto re-pin promotes
- * those models to `Current`, so they are what the host reports *before* the
+ * those models to `Verified`, so they are what the host reports *before* the
  * promotion lands rather than a steady state worth a story of its own. Kept
  * here because `AllBadges` is the one place that shows the whole matrix, and
  * the distance gate below is what decides whether the count appears.
@@ -464,13 +507,14 @@ type Story = StoryObj<typeof meta>;
  * current` here — four restatements, with `created` duplicating the pin on any
  * model verified only once.
  */
-export const Current: Story = {
+export const Verified: Story = {
 	args: { provenance: LocalMatch },
 };
 
 /**
- * A committed change reached an anchored file. The count leads and the sha is
- * dropped: nobody diffs shas by hand, and 22 commits is the actionable fact.
+ * A committed change reached an anchored file. The blast radius leads and the
+ * sha is dropped: nobody diffs shas by hand, and "1 file change since
+ * verification" is the actionable fact.
  */
 export const Changed: Story = {
 	args: { provenance: Changed22Commits_FIXTURE },
@@ -590,15 +634,20 @@ const metaBadge = {
 } satisfies Meta<typeof ProvenanceBadge>;
 
 export const Badge = metaBadge;
+
+export const BadgeUnverifiedAudit: BadgeStory = {
+	args: { provenance: LocalMatchAuditPartial },
+};
+
 type BadgeStory = StoryObj<typeof metaBadge>;
 
 /**
  * ⚠️ Aspirational `commits` — one dot per commit, oldest → newest, coloured
  * where it touched an anchored file.
  *
- * The net diff cannot tell `DotsScattered` from `DotsClustered`: both are "22
- * commits, 1 file changed". The dots show that one is spread across the range
- * and the other is three commits old — which is the difference between
+ * The net diff cannot tell `DotsScattered` from `DotsClustered`: both are "1
+ * file change since verification". The dots show that one is spread across the
+ * range and the other is three commits old — which is the difference between
  * re-auditing now and not worrying about it.
  */
 export const CommitDots: BadgeStory = {
@@ -653,6 +702,98 @@ export const AllBadges: BadgeStory = {
 			))}
 		</>
 	),
+};
+
+/**
+ * The primary ramp: severity by proportion of grounded components affected.
+ * The commit distance is held at 22 and the denominator at 40, so only the
+ * fraction moves — 8% is pale, 70% is a deep amber. Only the chip colour
+ * changes; the label stays "N files change since verification".
+ */
+export const ComponentSeverity: BadgeStory = {
+	render: () => (
+		<div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+			{(
+				[
+					["8% affected", componentContact(3, 40)],
+					["30% affected", componentContact(12, 40)],
+					["50% affected", componentContact(20, 40)],
+					["70% affected", componentContact(28, 40)],
+				] as Array<[string, ModelProvenanceData]>
+			).map(([name, data]) => (
+				<div key={name} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+					<ProvenanceBadge provenance={data} />
+					<span style={{ color: "#8b7968", fontSize: 11 }}>{name}</span>
+				</div>
+			))}
+			<div style={{ color: "#8b7968", fontSize: 11 }}>
+				ramp stops — &lt;10% · 10–30% · 30–60% · 60%+, derived from{" "}
+				<code>theme.colors.warning</code> via <code>severityShadeForFraction()</code>
+			</div>
+		</div>
+	),
+};
+
+/**
+ * The colour fallback before a component denominator exists — a record with no
+ * `componentContact`, or a model below the small-model floor. Only the chip
+ * colour moves with the changed-file count; the copy is the same in both ramps.
+ */
+export const FileCountSeverity: BadgeStory = {
+	render: () => (
+		<div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+			{(
+				[
+					["1 file", touchedFiles(1)],
+					["4 files", touchedFiles(4)],
+					["12 files", touchedFiles(12)],
+					["40 files", touchedFiles(40)],
+				] as Array<[string, ModelProvenanceData]>
+			).map(([name, data]) => (
+				<div key={name} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+					<ProvenanceBadge provenance={data} />
+					<span style={{ color: "#8b7968", fontSize: 11 }}>{name}</span>
+				</div>
+			))}
+			<div style={{ color: "#8b7968", fontSize: 11 }}>
+				ramp stops — 1 · 2–4 · 5–14 · 15+ files, derived from{" "}
+				<code>theme.colors.warning</code> via <code>severityShade()</code>
+			</div>
+		</div>
+	),
+};
+
+/**
+ * The chip's three states side by side. Resting is the quietest fill; hover
+ * deepens it without moving the border (hover the middle chip to check); the
+ * selected chip is pinned to the same depth with a sharper border, so an open
+ * strip stays visibly attached after the pointer leaves. Hover is a CSS rule
+ * keyed on `--chip-fg`, so it works identically for every severity tone.
+ */
+export const ButtonStates: BadgeStory = {
+	render: function Render() {
+		const [open, setOpen] = useState(false);
+		return (
+			<div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+				<div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+					<ProvenanceBadge provenance={Changed22Commits_FIXTURE} />
+					<span style={{ color: "#8b7968", fontSize: 11 }}>
+						non-interactive — no toggle, so no hover or selected state
+					</span>
+				</div>
+				<div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+					<ProvenanceBadge
+						provenance={Changed22Commits_FIXTURE}
+						onToggle={() => setOpen(!open)}
+						open={open}
+					/>
+					<span style={{ color: "#8b7968", fontSize: 11 }}>
+						interactive — hover it, then click to select ({open ? "selected" : "resting"})
+					</span>
+				</div>
+			</div>
+		);
+	},
 };
 
 /** The list-row interaction: clicking the chip expands the strip in place. */
@@ -791,7 +932,7 @@ type RegStory = StoryObj<typeof metaRegression>;
  *
  * - `dirty` outranks `current` — a model can sit exactly on its pin with
  *   uncommitted edits to an anchor; `anchorVerdict` once short-circuited to
- *   `clean` on `match` and rendered a green "Current".
+ *   `clean` on `match` and rendered a green "Verified".
  * - `current` outranks `clean` — every current model also reads `clean`, so
  *   testing the anchor first swallowed every healthy model into the muted
  *   drift branch.

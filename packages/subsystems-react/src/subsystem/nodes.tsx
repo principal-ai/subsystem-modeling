@@ -146,10 +146,10 @@ function NodeIssueOverlay({ issue }: { issue: SubsystemNodeIssue }) {
 
 /**
  * The shared severity chip: a severity-colored ring around the finding's icon,
- * with a count when there is more than one. Component nodes anchor it to the
- * bottom-right corner; a region frame anchors it to the top-right so it never
- * collides with the frame's own name badge. `aria-hidden` and inert — the
- * canvas badge never competes with the sidebar card for the interaction.
+ * with a count when there is more than one. Component nodes and region frames
+ * both anchor it overhanging the bottom-right corner — the issues convention.
+ * `aria-hidden` and inert — the canvas badge never competes with the sidebar
+ * card for the interaction.
  */
 function IssueChip({
   color,
@@ -709,8 +709,8 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
           label
         )}
       </div>
-      {/* Boundary diagnostics badge — top-right, opposite the name badge, so the
-          two never collide however long the module path grows. */}
+      {/* Boundary diagnostics badge — overhanging the bottom-right corner, the
+          same anchor component chips wear. */}
       {data.issue && ISSUE_KIND_ICON[data.issue.kind] && (
         <IssueChip
           color={
@@ -720,7 +720,7 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
           }
           Icon={ISSUE_KIND_ICON[data.issue.kind]!}
           count={data.issue.count}
-          anchor={{ right: 12, top: 0, transform: 'translateY(-50%)' }}
+          anchor={{ right: -9, bottom: -8 }}
         />
       )}
     </div>
@@ -833,8 +833,11 @@ export function SubsystemEdge({
   const edgeRef = { mechanism, provenance: data?.provenance };
   const color = edgeColor(edgeRef);
   // Dash style encodes provenance (graphify) and relationship kind (dashed =
-  // inverted-control or observational: hierarchy, registration, watches).
-  const isDashed = edgeStrokeStyle(edgeRef) === 'dashed';
+  // inverted-control or observational: hierarchy, registration, watches). A
+  // step-proposed edge also dashes — the seam itself is planned — matching
+  // the dashed edge label and a proposed node's dashed border.
+  const isDashed =
+    edgeStrokeStyle(edgeRef) === 'dashed' || data?.proposedStep === true;
   const dimmed = data?.dimmed === true;
   // Dim the stroke by color, never via path `opacity`. SVG markers are shared
   // by id; opacity on the referencing path paints every arrowhead that uses

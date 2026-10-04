@@ -49,7 +49,9 @@ import {
 	findAcceptedConstructAugmentation,
 	findAcceptedModuleAugmentation,
 	findAcceptedSignatureAugmentation,
+	findAcceptedCallSiteAugmentation,
 } from "./augmentation-store";
+import { hashContentRange } from "./declaration-ref";
 import { auditBoundaryFields } from "./boundary-audit";
 import {
 	buildAuditFingerprint,
@@ -1393,12 +1395,21 @@ export async function auditSubsystemModel(
 					});
 					seenComponentIssue.add(c.alias);
 				} else {
+					// A claimed symbol with no matching declaration is a broken
+					// claim, not a confirmation gap: the file exists but nothing in
+					// it declares the symbol. Error severity routes it to the
+					// construct-fixer (the agent that can relocate, rename, or
+					// deprecate), the same lane as a missing file. `issue = true`
+					// marks the check a hard failure so the lane reads red, not
+					// the yellow of an unconfirmed claim.
+					issue = true;
 					findings.push({
 						...base,
 						kind: "symbol_unmatched",
-						severity: "info",
+						severity: "error",
 						message: `No Graphify node matches symbol ${c.symbol} in ${c.file}`,
 					});
+					seenComponentIssue.add(c.alias);
 				}
 				weakAnchors++;
 			}
@@ -1456,6 +1467,93 @@ export async function auditSubsystemModel(
 		});
 	}
 
+	// Trail step verification via call site augmentations
+	let stepsVerified = 0;
+	let stepsUnconfirmed = 0;
+	let stepsStale = 0;
+	const componentByAlias = new Map(graph.components.map((c) => [c.alias, c]));
+
+	for (const trail of graph.trails ?? []) {
+		for (let stepIndex = 0; stepIndex < trail.steps.length; stepIndex++) {
+			const step = trail.steps[stepIndex]!;
+			const toComponent = componentByAlias.get(step.to);
+
+			// A proposed step — or one whose endpoints are proposed components —
+			// describes planned behavior through code that may not exist yet.
+			// Same rule the component lane applies: verification skips source
+			// checks until promoted. Not counted as unconfirmed.
+			if (
+				step.proposed ||
+				toComponent?.proposed ||
+				componentByAlias.get(step.from)?.proposed
+			) {
+				continue;
+			}
+
+			// Skip steps where we can't resolve the target component
+			if (!toComponent?.file?.trim() || !toComponent?.symbol?.trim()) continue;
+
+			// The step's site purl determines the repo
+			const stepPurl = step.purl?.trim();
+			if (!stepPurl || !isRepoPurl(stepPurl)) continue;
+
+			// Look up accepted call site augmentation
+			const aug = await findAcceptedCallSiteAugmentation({
+				purl: stepPurl,
+				file: step.file,
+				symbol: step.symbol,
+				targetFile: toComponent.file,
+				targetSymbol: toComponent.symbol,
+				mechanism: step.mechanism,
+			});
+
+			if (!aug?.claims.callSite) {
+				// No augmentation — step is unconfirmed
+				stepsUnconfirmed++;
+				findings.push({
+					kind: "step_unconfirmed",
+					severity: "info",
+					trailId: trail.id,
+					step: stepIndex,
+					message: `Trail "${trail.title}" step ${stepIndex + 1}: call site not verified (${step.from} → ${step.to} via ${step.mechanism})`,
+				});
+				continue;
+			}
+
+			// Verify the content hash still matches
+			const repoRoot = resolveRepoRootForPurl(stepPurl);
+			if (!repoRoot) {
+				// Can't verify — repo not resolved, skip
+				continue;
+			}
+
+			const filePath = join(repoRoot, step.file);
+			try {
+				const content = await fs.readFile(filePath, "utf8");
+				const currentHash = hashContentRange(
+					content,
+					aug.claims.callSite.lines.start,
+					aug.claims.callSite.lines.end,
+				);
+				if (currentHash === aug.claims.callSite.contentHash) {
+					stepsVerified++;
+				} else {
+					stepsStale++;
+					findings.push({
+						kind: "step_stale",
+						severity: "info",
+						trailId: trail.id,
+						step: stepIndex,
+						message: `Trail "${trail.title}" step ${stepIndex + 1}: call site changed since verification (lines ${aug.claims.callSite.lines.start}-${aug.claims.callSite.lines.end} in ${step.file})`,
+					});
+				}
+			} catch {
+				// File doesn't exist or can't be read — already covered by mechanical checks
+				continue;
+			}
+		}
+	}
+
 	const summary = {
 		components: graph.components.length,
 		filesVerified,
@@ -1469,6 +1567,9 @@ export async function auditSubsystemModel(
 		missingFiles: files.missingCount,
 		missingSymbols,
 		trailFailures: 0,
+		stepsUnconfirmed,
+		stepsStale,
+		stepsVerified,
 		staleDeclarations,
 		constructMismatches,
 		signatureMismatches,
@@ -1767,7 +1868,6 @@ export async function applySubsystemModelAuditFix(opts: {
 		return {
 			...c,
 			declaration,
-			declarationProvenance: "verified" as const,
 		};
 	});
 

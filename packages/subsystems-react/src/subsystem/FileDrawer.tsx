@@ -117,21 +117,46 @@ export function FileDrawer({
             userSelect: "none",
           }}
         >
+          {showProgress && progress != null && (
+            <div
+              role="img"
+              aria-label={`Step ${progress.index + 1} of ${progress.total}`}
+              style={{
+                display: "flex",
+                gap: 2,
+                flexShrink: 0,
+              }}
+            >
+              {Array.from({ length: progress.total }, (_, i) => (
+                <span
+                  key={i}
+                  style={{
+                    flex: 1,
+                    height: 2,
+                    borderRadius: 1,
+                    background:
+                      i <= progress.index
+                        ? theme.colors.primary
+                        : theme.colors.border,
+                  }}
+                />
+              ))}
+            </div>
+          )}
           <div
             style={{
               display: "flex",
               alignItems: "center",
               gap: 8,
-              padding: "6px 10px",
-              // With segments present they form the header's bottom edge, so
-              // only draw the hairline when there is nothing to stand in for it.
-              borderBottom: showProgress
-                ? "none"
-                : `1px solid ${theme.colors.border}`,
+              // Top runs deeper than the bottom so the title/label sits
+              // optically centered inside the sticky top edge.
+              padding: "10px 10px 8px",
+              // The header row is the last chrome row now, so its hairline is
+              // the boundary with the code below.
+              borderBottom: `1px solid ${theme.colors.border}`,
             }}
           >
             <span
-              title={title ?? undefined}
               style={{
                 flex: 1,
                 minWidth: 0,
@@ -197,33 +222,6 @@ export function FileDrawer({
               <X size={14} />
             </button>
           </div>
-          {showProgress && progress != null && (
-            <div
-              role="img"
-              aria-label={`Step ${progress.index + 1} of ${progress.total}`}
-              style={{
-                display: "flex",
-                gap: 2,
-                flexShrink: 0,
-                padding: "0 10px 6px",
-              }}
-            >
-              {Array.from({ length: progress.total }, (_, i) => (
-                <span
-                  key={i}
-                  style={{
-                    flex: 1,
-                    height: 2,
-                    borderRadius: 1,
-                    background:
-                      i <= progress.index
-                        ? theme.colors.primary
-                        : theme.colors.border,
-                  }}
-                />
-              ))}
-            </div>
-          )}
         </div>
         <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
           {children}

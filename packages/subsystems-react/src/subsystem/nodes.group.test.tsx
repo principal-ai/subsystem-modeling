@@ -113,4 +113,19 @@ describe('SubsystemGroupNode boundary badge', () => {
     });
     expect(container.textContent).toContain('3');
   });
+
+  test('a process verification finding badges the process frame too', () => {
+    // Dynamic-topology findings target kind `process`; the frame badge is the
+    // same mechanism as a module finding — the boundary's state is the fault.
+    const { container } = renderGroup({
+      region,
+      issue: {
+        severity: 'info',
+        kind: 'boundary_process_unassigned',
+        count: 1,
+      },
+    });
+    // The kind has a dedicated frame icon, so the lucide icon carries the class.
+    expect(container.querySelector('.lucide-circle-ellipsis')).not.toBeNull();
+  });
 });

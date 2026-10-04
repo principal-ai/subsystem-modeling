@@ -31,6 +31,8 @@ export interface MergeInputModel {
 	/** Store id (sg-...) — stable ordering + local namespacing. */
 	id: string;
 	document: SubsystemDocumentBody;
+	/** Per-purl commit when this model last passed fully_verified. */
+	verifiedAtCommits?: Record<string, string>;
 }
 
 export interface MergeConflictValue {
@@ -74,6 +76,8 @@ export interface MergeResult {
 interface GroupMember {
 	modelId: string;
 	component: SubsystemComponent;
+	/** Whether this model has verifiedAtCommits for the component's purl. */
+	isVerified: boolean;
 }
 
 function normName(name: string | undefined): string {
@@ -137,8 +141,8 @@ function recordConflict(
 /**
  * Merge one identity group into a single component. Deterministic: members
  * arrive in stable model order and every pick is first-non-empty-wins, with
- * two principled overrides (grounded beats proposed; verified-sourced
- * declaration beats authored). Real divergences are recorded, not resolved.
+ * two principled overrides (grounded beats proposed; declaration from a
+ * verified model beats unverified). Real divergences are recorded, not resolved.
  */
 function mergeGroup(
 	members: GroupMember[],
@@ -190,14 +194,13 @@ function mergeGroup(
 	take("purl", (c) => c.purl);
 	take("tokens", (c) => c.tokens);
 	take("declarationRef", (c) => c.declarationRef);
-	// Declaration: prefer a verified-sourced shape, else first.
+	// Declaration: prefer from a model whose audit verified this component's purl.
 	take("declaration", (c) => c.declaration, () => {
 		const verified = members.find(
-			(m) => m.component.declaration !== undefined && m.component.declarationProvenance === "verified",
+			(m) => m.component.declaration !== undefined && m.isVerified,
 		);
 		return verified?.component.declaration;
 	});
-	take("declarationProvenance", (c) => c.declarationProvenance);
 
 	// Grounded beats proposed: a placeholder disappears once any model
 	// grounds the declaration.
@@ -242,9 +245,15 @@ export function mergeSubsystemModels(models: MergeInputModel[]): MergeResult {
 	for (const m of ordered) {
 		for (const c of m.document.components ?? []) {
 			const key = joinKeyFor(m.id, c);
+			// Check if the model has verifiedAtCommits for this component's purl
+			const componentPurl = purlRepoKey(c.purl) ?? "";
+			const isVerified = componentPurl !== "" && 
+				m.verifiedAtCommits !== undefined && 
+				componentPurl in m.verifiedAtCommits;
+			const member: GroupMember = { modelId: m.id, component: c, isVerified };
 			const g = groups.get(key);
-			if (g) g.push({ modelId: m.id, component: c });
-			else groups.set(key, [{ modelId: m.id, component: c }]);
+			if (g) g.push(member);
+			else groups.set(key, [member]);
 		}
 	}
 

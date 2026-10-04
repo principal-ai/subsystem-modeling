@@ -17,10 +17,15 @@ import {
   ChevronDown,
   ChevronRight,
   CircleCheck,
+  CircleDashed,
+  CircleEllipsis,
+  CircleHelp,
+  CircleX,
   Component,
   FileX,
   FolderGit2,
   Footprints,
+  History,
   MapPin,
   Network,
   Route,
@@ -39,6 +44,7 @@ export type SubsystemIssueSeverity = 'error' | 'info';
 export type SubsystemIssueTargetKind =
   | 'component'
   | 'module'
+  | 'process'
   | 'trail'
   | 'step'
   | 'repo'
@@ -103,7 +109,15 @@ const KIND_CATEGORY: Record<string, SubsystemIssueCategory> = {
   graphify_unavailable: 'repo',
   boundary_module_file_mismatch: 'static-topology',
   boundary_process_nest_disagree: 'dynamic-topology',
+  // C4 process verification (verifyProcessBoundaries): a boundary whose
+  // container claim is not an accepted one. `verified` reports nothing —
+  // the audit reports absence only.
+  boundary_process_unassigned: 'dynamic-topology',
+  boundary_process_proposed: 'dynamic-topology',
+  boundary_process_rejected: 'dynamic-topology',
   trail: 'trail',
+  step_unconfirmed: 'trail',
+  step_stale: 'trail',
 };
 
 /**
@@ -164,6 +178,14 @@ export const ISSUE_KIND_ICON: Record<string, LucideIcon> = {
   // One module, more than one claimed process parent — a containment that can't
   // be drawn, which is why the region sits at the root instead of nested.
   boundary_process_nest_disagree: Split,
+  // C4 process verification: unclaimed = no container at all, proposed = an
+  // agent scaffold awaits a decision, rejected = a container was declined.
+  boundary_process_unassigned: CircleEllipsis,
+  boundary_process_proposed: CircleDashed,
+  boundary_process_rejected: CircleX,
+  // Trail step verification: unconfirmed = no augmentation yet, stale = code changed
+  step_unconfirmed: CircleHelp,
+  step_stale: History,
 };
 
 /**
@@ -233,7 +255,7 @@ export function humanizeIssueKind(kind: string): string {
 const KIND_LABEL: Record<string, string> = {
   missing_file: 'Construct declaration file missing',
   symbol_ambiguous: 'Multiple construct symbol matches',
-  symbol_unmatched: 'Construct symbol unconfirmed',
+  symbol_unmatched: 'Construct symbol missing',
   stale_declaration: 'Construct declaration drift',
   construct_mismatch: 'Construct type mismatch',
   construct_unconfirmed: 'Construct type unconfirmed',
@@ -243,7 +265,14 @@ const KIND_LABEL: Record<string, string> = {
   graphify_unavailable: 'Graphify cache unavailable',
   boundary_module_file_mismatch: 'Declaration file outside module',
   boundary_process_nest_disagree: 'Module spans multiple process contexts',
+  // C4 process verification (labels read as boundary states, since the layer
+  // scopes them to process frames).
+  boundary_process_unassigned: 'Process boundary unclaimed',
+  boundary_process_proposed: 'Container awaiting decision',
+  boundary_process_rejected: 'Container rejected',
   trail: 'Step issue',
+  step_unconfirmed: 'Call site not verified',
+  step_stale: 'Call site changed',
 };
 
 /** Label for an issue's kind. Explicit `kindLabel` wins; unknown kinds humanize. */
@@ -275,8 +304,13 @@ const KIND_ORDER: Record<string, number> = {
   boundary_module_file_mismatch: 23,
   // Runtime topology — process containment
   boundary_process_nest_disagree: 30,
-  // Trail
+  boundary_process_unassigned: 31,
+  boundary_process_proposed: 32,
+  boundary_process_rejected: 33,
+  // Trail — mechanical issues first, then step verification
   trail: 40,
+  step_unconfirmed: 41,
+  step_stale: 42,
 };
 
 const KIND_ORDER_FALLBACK = 100;

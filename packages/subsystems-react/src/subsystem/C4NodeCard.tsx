@@ -7,166 +7,222 @@
  *
  * The encoding has one job: make confirmation state legible at a glance. A box
  * nobody has looked at must not read the same as a box a person signed off.
- * Everything else here is C4 notation — a type, a technology, a description —
- * surfaced in the order a reader wants it.
+ * Kind is carried by shape and size — plus an icon for a container's sort,
+ * application vs data-store — and C4 notation is surfaced in the order a reader
+ * wants it: technology on the top row, description under the label.
  */
 
 import { useTheme } from '@principal-ade/industry-theme';
-import { describeConstructBreakdown } from './model';
-import type { C4Node } from './toC4';
+import { AppWindow, Database } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { TechMark, technologyBrand } from './techIcons';
+import type { C4Element } from './c4';
 
 /**
- * Card box. Near-square rather than a wide strip: a C4 element carries four
- * things at once (tag, label, type + technology, and the notation gap it still
- * has), and a wide strip forces the last two to truncate. The extra height is
- * what lets the `needs …` marker sit on its own line instead of clipping.
+ * Card box for a container: a wide rectangle. A container carries four things
+ * at once (technology row, label, description, and the notation gap it still
+ * has), and a strip would force the last two to wrap hard.
  */
-export const NODE_W = 210;
-export const NODE_H = 138;
+export const NODE_W = 250;
+export const NODE_H = 150;
 
 /**
- * Fixed slot heights, so rows line up across every card regardless of which
- * optional fields are present. Without these a card missing its notation-gap
- * marker is two lines shorter and a row of cards reads as ragged.
+ * A component is a proper square — equal sides, and visibly smaller than the
+ * container it sits inside. Square-vs-rectangle is the clearest signal that
+ * these are different C4 levels, and it survives grayscale and colour-blind
+ * reading where a border-weight difference alone does not.
+ */
+export const COMPONENT_SIZE = 140;
+
+/**
+ * Per-level box size. The graph lays out against these, so a square component
+ * and a rectangular container do not collide at a shared nominal width.
+ */
+export function nodeSize(node: C4Element): { width: number; height: number } {
+  return node.kind === 'component'
+    ? { width: COMPONENT_SIZE, height: COMPONENT_SIZE }
+    : { width: NODE_W, height: NODE_H };
+}
+
+/**
+ * Fixed label slot, so the description below sits at the same y on every card
+ * even when a label is one line rather than two.
  */
 const LABEL_SLOT_H = 40;
-const GAP_SLOT_H = 18;
 
 type Theme = ReturnType<typeof useTheme>['theme'];
 
 export interface NodeStyle {
   color: string;
-  dash: string;
+  dash: 'solid' | 'dashed' | 'dotted';
   width: number;
 }
 
 /**
- * Border style and colour for one node, by what we know about it.
+ * Border style for one node: colour from **technology**, dash and weight from
+ * **confirmation state** and level.
  *
- * Confirmation state wins over C4 kind: an accepted container and a raw
- * derived container are both "containers", and the reader's first question
- * about either is whether anyone vouched for it.
+ * One axis per channel, so nothing is said twice:
+ *
+ *   colour         → technology (the brand hue; see `technologyBrand`)
+ *   dash           → confirmation state (solid accepted, dashed proposed)
+ *   weight         → C4 level, as a grayscale redundancy for the square
+ *   shape + size   → C4 kind (`nodeShape`, `nodeSize`)
+ *
+ * Colour moved from state to technology: on a container diagram the reader
+ * wants "is this Bun or React" at a glance, and the state already reads off the
+ * dash. A selected node overrides colour so a click target stands out.
  */
-export function nodeStyle(node: C4Node, theme: Theme, selected = false): NodeStyle {
+/** The technology string for an element, if its kind has one. */
+export function nodeTechnology(node: C4Element): string | undefined {
+  switch (node.kind) {
+    case 'container':
+    case 'component':
+      return node.technology;
+    case 'external-system':
+      return node.technology;
+    case 'person':
+      return undefined;
+  }
+}
+
+export function nodeStyle(node: C4Element, theme: Theme, selected = false): NodeStyle {
   const muted = theme.colors.border ?? '#555';
+  const techColor = technologyBrand(nodeTechnology(node))?.color;
   if (selected) return { color: theme.colors.primary ?? '#5aa', dash: 'solid', width: 3 };
 
-  // Border width carries the C4 level, so a component stays a component even
+  // Border weight carries the level, so a component stays a component even
   // in grayscale or for a reader who cannot separate the hues.
   const weight = node.kind === 'component' ? 1 : 2;
+  const color = techColor ?? muted;
 
-  switch (node.decoration?.state) {
+  switch (node.state) {
     case 'accepted':
-      // Solid and saturated — part of the architecture now.
-      return { color: theme.colors.primary ?? '#4ec9b0', dash: 'solid', width: weight };
+      // Solid — part of the architecture now.
+      return { color, dash: 'solid', width: weight };
     case 'proposed':
       // Dashed — an agent asked; a human has not answered.
-      return { color: theme.colors.warning ?? '#e8a33a', dash: 'dashed', width: weight };
+      return { color, dash: 'dashed', width: weight };
     case 'rejected':
-      // Should never be drawn (toC4 drops it); belt-and-braces.
+      // Should never be drawn (a rejected element is not projected); belt-and-braces.
       return { color: muted, dash: 'dotted', width: 1 };
-    default:
-      break;
   }
-
-  // No association at all — the raw derivation. Muted, so confirmed boxes
-  // read as the stronger signal.
-  switch (node.kind) {
-    case 'external':
-      return { color: theme.colors.warning ?? '#a78bfa', dash: 'solid', width: weight };
-    case 'actor':
-      return { color: theme.colors.accent ?? theme.colors.info ?? '#e3b341', dash: 'solid', width: weight };
-    default:
-      return { color: muted, dash: 'solid', width: weight };
-  }
-}
-
-function baseName(path: string): string {
-  const parts = path.split('/').filter(Boolean);
-  return parts[parts.length - 1] ?? path;
-}
-
-/** The type + technology line under the label. */
-export function nodeSubtitle(node: C4Node): string {
-  const d = node.decoration;
-  if (d?.type || d?.technology) return [d.type, d.technology].filter(Boolean).join(' · ');
-
-  // No confirmed attributes: fall back to what the document told us.
-  if (node.kind === 'component') {
-    return `${node.component?.construct ?? 'code'}${node.component?.file ? ` · ${baseName(node.component.file)}` : ''}`;
-  }
-  const count = node.members.length;
-  return `${describeConstructBreakdown(node.constructs)}${count > 0 ? ` · ${count} component${count === 1 ? '' : 's'}` : ''}`;
 }
 
 /**
- * The C4 level — what the box IS.
- *
- * Deliberately independent of confirmation state. An accepted container is
- * still a container, and a component is a component whether or not anyone has
- * reviewed it; collapsing the two into one label is what made the two
- * indistinguishable. Confirmation is a separate axis (`nodeStateTag`).
+ * The line under the label: the element's one-line responsibility, which C4
+ * asks every element to carry. No fallback — when nothing is stated, the
+ * notation-gap row says so rather than the card inventing a summary.
  */
-export function nodeTag(node: C4Node): string {
+export function nodeSubtitle(node: C4Element): string {
+  return node.description ?? '';
+}
+
+/**
+ * What the box IS — its C4 kind. An accepted container is still a container;
+ * collapsing the two is what once made containers and components unreadable.
+ * Confirmation state is a separate axis carried by the border (see
+ * `nodeStyle`), not by a word on the card.
+ */
+export function nodeTag(node: C4Element): string {
   return node.kind;
 }
 
 /**
- * Confirmation state, as its own short tag. Empty when nothing was proposed —
- * which is itself the distinction from a reviewed element.
+ * The icon on the top row: a container's sort, **application vs data-store**.
+ *
+ * The C4 kind itself does not need a glyph — the box shape already carries it
+ * (square vs rectangle vs pill), and the row's one text slot is worth more
+ * spent on the technology. Only containers have a C4-recognised split, so the
+ * other kinds return nothing.
  */
-export function nodeStateTag(node: C4Node): string {
-  switch (node.decoration?.state) {
-    case 'accepted':
-      return 'confirmed';
-    case 'proposed':
-      return 'proposed';
-    case 'rejected':
-      return 'rejected';
-    default:
-      return 'unconfirmed';
+export function nodeKindIcon(node: C4Element): LucideIcon | undefined {
+  switch (node.kind) {
+    case 'container':
+      return node.containerKind === 'data-store' ? Database : AppWindow;
+    case 'component':
+    case 'external-system':
+    case 'person':
+      return undefined;
   }
 }
 
 /**
- * Shape cue for the C4 level, independent of colour and dash pattern.
+ * The text on the top row: the technology the box is built with (Bun, React,
+ * Postgres…). Falls back to the container kind / C4 kind when no technology is
+ * stated, so the row is never blank.
+ */
+export function nodeTopLabel(node: C4Element): string {
+  const technology = nodeTechnology(node);
+  if (technology) return technology;
+  switch (node.kind) {
+    case 'container':
+      return node.containerKind;
+    case 'component':
+    case 'external-system':
+    case 'person':
+      return node.kind;
+  }
+}
+
+/** How a box is drawn. Shape carries the C4 kind, independent of colour. */
+export type C4ShapeKind = 'rect' | 'square' | 'pill';
+
+export interface NodeShape {
+  kind: C4ShapeKind;
+  /** Corner radius, for the shapes that use one. */
+  radius: number;
+}
+
+/**
+ * Shape cue for the C4 kind, independent of colour and dash — both of which
+ * belong to confirmation state.
  *
- * Colour alone is not enough: a container and a component with no association
- * both fall back to the muted border, so they were identical in grayscale.
  * The convention:
  *
- *   container   solid rectangle   — a runtime boundary, drawn to scale
- *   component   rounded rectangle — a part inside one, drawn smaller
- *   external    rounded rectangle + dashed (nothing to confirm inside)
- *   actor       fully rounded      — a person, not a box
+ *   container        wide rectangle, sharp corners — a runtime boundary
+ *   component        square — a part inside one (see `nodeSize`)
+ *   external system  wide rectangle, rounded     — someone else's system
+ *   person           pill                          — not a box at all
+ *
+ * An external system is separated from a container by radius alone, which is
+ * a weak cue. That is deliberate rather than an oversight: the border dash is
+ * the only channel that could say "outside our control" loudly, and it is
+ * already spent on proposed-vs-accepted. The kind icon says it, and the frame
+ * position says it structurally.
  */
-export function nodeShape(node: C4Node): { radius: number; dash: 'solid' | 'dashed' } {
+export function nodeShape(node: C4Element): NodeShape {
   switch (node.kind) {
-    case 'actor':
-      return { radius: NODE_H / 2, dash: 'solid' };
-    case 'external':
-      return { radius: 14, dash: 'dashed' };
+    case 'person':
+      return { kind: 'pill', radius: NODE_H / 2 };
+    case 'external-system':
+      return { kind: 'rect', radius: 14 };
     case 'component':
-      return { radius: 14, dash: 'solid' };
-    default:
-      return { radius: 4, dash: 'solid' };
+      return { kind: 'square', radius: 6 };
+    case 'container':
+      return { kind: 'rect', radius: 4 };
   }
 }
 
 /**
- * C4 notation requires a technology and a description on every container.
- * Name the gaps rather than leaving them to be noticed.
+ * The gaps the C4 notation still wants on this element, named rather than left
+ * to be noticed.
+ *
+ * Containers are where the notation is strictest: it requires a technology and
+ * a description on every one. A component needs a technology too, but a
+ * component drawn without a parent already reports `unknown_container`, and
+ * that is the question worth asking first.
  */
-export function nodeMissing(node: C4Node): string[] {
+export function nodeMissing(node: C4Element): string[] {
   if (node.kind !== 'container') return [];
   const missing: string[] = [];
-  if (!node.decoration?.technology) missing.push('technology');
-  if (!node.decoration?.description) missing.push('description');
+  if (!node.technology) missing.push('technology');
+  if (!node.description) missing.push('description');
   return missing;
 }
 
 export interface C4NodeCardProps {
-  node: C4Node;
+  node: C4Element;
   selected?: boolean;
   /** Draw React Flow's edge handles. Off when rendering a bare gallery. */
   handles?: React.ReactNode;
@@ -178,15 +234,22 @@ export function C4NodeCard({ node, selected = false, handles, onClick }: C4NodeC
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const style = nodeStyle(node, theme, selected);
   const shape = nodeShape(node);
-  const missing = nodeMissing(node);
-  const unconfirmed = !node.decoration?.state;
+  const Icon = nodeKindIcon(node);
+  const brand = technologyBrand(nodeTechnology(node));
+  const topLabel = nodeTopLabel(node);
+  const subtitle = nodeSubtitle(node);
+
+  const size = nodeSize(node);
+  // A pill (a person) has no straight left edge, so left-aligned text reads as
+  // spilling out of the oval. Centre the text and inset it from the curve.
+  const centered = shape.kind === 'pill';
 
   return (
     <div
       onClick={onClick}
       style={{
-        width: NODE_W,
-        minHeight: NODE_H,
+        width: size.width,
+        minHeight: size.height,
         boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
@@ -195,57 +258,56 @@ export function C4NodeCard({ node, selected = false, handles, onClick }: C4NodeC
         // height on every card. In a graph grid that makes the row unscannable.
         justifyContent: 'flex-start',
         gap: 3,
-        padding: '10px 12px',
+        padding: centered ? '10px 30px' : '10px 12px',
         borderRadius: shape.radius,
         background: theme.colors.backgroundSecondary ?? theme.colors.background,
-        border: `${style.width} ${style.dash} ${style.color}`,
+        border: `${style.width}px ${style.dash} ${style.color}`,
         boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
         cursor: onClick ? 'pointer' : 'default',
         fontFamily: theme.fonts.body,
       }}
     >
-      {/* Level and state on one row, separately styled. The level is what the
-          box IS; the state is whether anyone has vouched for it. Merging them
-          into one label is what made containers and components unreadable. */}
+      {/* Left: the brand mark when we hold the official one, then the
+          technology. Right: a container's C4 sort, application vs data-store.
+          The kind itself stays on the shape, confirmation on the border (see
+          `nodeShape`, `nodeStyle`). */}
       <span
         style={{
           display: 'flex',
-          alignItems: 'baseline',
+          alignItems: 'center',
+          justifyContent: centered ? 'center' : 'space-between',
           gap: 6,
           fontFamily: theme.fonts.monospace,
           fontSize: theme.fontSizes[0],
+          color: muted,
           letterSpacing: 0.5,
           textTransform: 'uppercase',
+          minWidth: 0,
         }}
       >
-        <span
-          style={{
-            color: style.color,
-            fontWeight: 600,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            minWidth: 0,
-          }}
-        >
-          {nodeTag(node)}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          {brand && <TechMark brand={brand} />}
+          <span
+            style={{
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              minWidth: 0,
+            }}
+          >
+            {topLabel}
+          </span>
         </span>
-        <span
-          title={unconfirmed ? 'Nobody has reviewed this element yet' : undefined}
-          style={{
-            color: unconfirmed ? muted : style.color,
-            // Unconfirmed is a quiet absence, not a loud claim.
-            opacity: unconfirmed ? 0.75 : 1,
-            letterSpacing: 0,
-            textTransform: 'none',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            minWidth: 0,
-          }}
-        >
-          {nodeStateTag(node)}
-        </span>
+        {Icon && (
+          <span
+            title={node.kind === 'container' ? node.containerKind : node.kind}
+            aria-label={node.kind === 'container' ? node.containerKind : node.kind}
+            style={{ display: 'inline-flex', flexShrink: 0, color: style.color }}
+          >
+            <Icon size={13} strokeWidth={2.25} />
+          </span>
+        )}
       </span>
       {/* Two lines rather than an ellipsis: a truncated label hides the very
           thing that distinguishes two containers from each other. The fixed
@@ -262,43 +324,25 @@ export function C4NodeCard({ node, selected = false, handles, onClick }: C4NodeC
           WebkitLineClamp: 2,
           WebkitBoxOrient: 'vertical',
           overflow: 'hidden',
+          textAlign: centered ? 'center' : 'left',
         }}
         title={node.label}
       >
         {node.label}
       </span>
-      <span
-        style={{
-          fontFamily: theme.fonts.monospace,
-          fontSize: theme.fontSizes[0],
-          color: muted,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}
-        title={node.decoration?.description ?? node.members.join(', ')}
-      >
-        {nodeSubtitle(node)}
-      </span>
-      {/* Reserved row: without it, a card with no notation gap is two lines
-          shorter and the row of cards reads as ragged. */}
-      <span style={{ height: GAP_SLOT_H }} aria-hidden="true" />
-      {missing.length > 0 && (
+      {subtitle && (
         <span
-          title={`C4 requires a ${missing.join(' and a ')} on every container`}
           style={{
             fontFamily: theme.fonts.monospace,
             fontSize: theme.fontSizes[0],
-            color: theme.colors.warning ?? '#e8a33a',
-            lineHeight: 1.3,
-            height: GAP_SLOT_H,
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
+            color: muted,
+            lineHeight: 1.35,
+            whiteSpace: 'normal',
+            overflowWrap: 'anywhere',
+            textAlign: centered ? 'center' : 'left',
           }}
         >
-          needs {missing.join(' + ')}
+          {subtitle}
         </span>
       )}
       {handles}

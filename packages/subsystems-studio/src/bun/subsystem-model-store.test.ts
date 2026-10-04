@@ -230,10 +230,9 @@ describe("declaration provenance", () => {
 		expect(Object.keys(d("c"))).toEqual(["kind", "methods"]);
 	});
 
-	test("verification counts details by provenance", async () => {
-		// `declarationProvenance` ships in the next @principal-ai/subsystems-react
-		// publish; until then the store treats it as payload-level JSON, so the
-		// fixture is typed loosely here.
+	test("verification counts all declarations as authored (provenance deprecated)", async () => {
+		// declarationProvenance is deprecated — verification now tracks at the
+		// model level via verifiedAtCommits. All declarations count as authored.
 		const components = [
 			{ alias: "v1", name: "V1", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "exportedFn", declaration: fnDetail, declarationProvenance: "verified" },
 			{ alias: "a1", name: "A1", construct: "function", file: "declares.ts", purl: "pkg:github/a/repo-a", symbol: "privateFn", declaration: fnDetail },
@@ -241,8 +240,10 @@ describe("declaration provenance", () => {
 		const result = await verifyModelFiles({
 			components,
 		});
-		expect(result.declarationsVerified).toBe(1);
-		// No provenance on a1: counted as authored, not written back onto the payload.
+		// declarationsVerified is always 0 now (deprecated)
+		expect(result.declarationsVerified).toBe(0);
+		// Both components have declarations, so both count as authored
+		expect(result.declarationsAuthored).toBe(2);
 	});
 });
 

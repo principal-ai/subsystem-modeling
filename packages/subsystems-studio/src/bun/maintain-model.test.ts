@@ -52,6 +52,9 @@ function emptyReport(
 			missingFiles: 0,
 			missingSymbols: 0,
 			trailFailures: 0,
+			stepsUnconfirmed: 0,
+			stepsStale: 0,
+			stepsVerified: 0,
 			staleDeclarations: 0,
 			constructMismatches: 0,
 			signatureMismatches: 0,
@@ -240,6 +243,29 @@ describe("selectMaintainRoute", () => {
 			agent: CONSTRUCT_VERIFIER_AGENT,
 			layer: "construct",
 			mode: "verify",
+		});
+	});
+
+	test("routes an unmatched symbol to construct-fixer (a broken claim, not a gap)", () => {
+		// symbol_unmatched is emitted at error severity: the file exists but
+		// nothing in it declares the symbol. That is a hard failure, so it must
+		// reach the fixer (which can relocate, rename, or deprecate) rather than
+		// the verifier, which only fills confirmation gaps.
+		const report = emptyReport({
+			needsUpdate: true,
+			findings: [
+				{
+					kind: "symbol_unmatched",
+					severity: "error",
+					componentAlias: "a",
+					message: "No Graphify node matches symbol foo in a.ts",
+				},
+			],
+		});
+		expect(selectMaintainRoute(report)).toEqual({
+			agent: CONSTRUCT_FIXER_AGENT,
+			layer: "construct",
+			mode: "issues",
 		});
 	});
 

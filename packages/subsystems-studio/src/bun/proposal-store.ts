@@ -16,7 +16,15 @@ import type {
 	SubsystemModelSecondOpinion,
 	SubsystemSignatureClaim,
 } from "../shared/contract";
-import { upsertAcceptedConstructAugmentation, upsertAcceptedSignatureAugmentation, upsertAcceptedModuleAugmentation } from "./augmentation-store";
+import { 
+	upsertAcceptedConstructAugmentation, 
+	upsertAcceptedSignatureAugmentation, 
+	upsertAcceptedModuleAugmentation,
+	upsertAcceptedCallSiteAugmentation,
+	type CallSiteAugmentationClaim,
+} from "./augmentation-store";
+import { hashContentRange } from "./declaration-ref";
+import { resolveRepoRootForPurl } from "./graphify-store";
 import { deriveProposalLane } from "./proposal-lane";
 import {
 	getSubsystemModel,
@@ -197,6 +205,26 @@ function buildPreview(
 				),
 				after: ch.value,
 			});
+		} else if (ch.target === "augmentation" && ch.field === "callSite") {
+			// Call site augmentation for trail steps
+			const callSiteCh = ch as {
+				trailId: string;
+				stepIndex: number;
+				file: string;
+				symbol: string;
+				value: {
+					lines: { start: number; end: number };
+					target: { file: string; symbol: string };
+					mechanism: string;
+				};
+			};
+			const trail = graph.trails?.find((t) => t.id === callSiteCh.trailId);
+			const trailTitle = trail?.title ?? callSiteCh.trailId;
+			rows.push({
+				label: `verify call site: ${trailTitle} step ${callSiteCh.stepIndex + 1}`,
+				before: "not yet verified",
+				after: `${callSiteCh.symbol} → ${callSiteCh.value.target.symbol} (${callSiteCh.value.mechanism}) at lines ${callSiteCh.value.lines.start}-${callSiteCh.value.lines.end}`,
+			});
 		} else if (ch.target === "augmentation" && ch.field === "module") {
 			const resolved = resolveAugmentationTarget(graph, ch);
 			const name = resolved?.componentName ?? ch.componentAlias;
@@ -210,10 +238,10 @@ function buildPreview(
 			});
 		} else if (ch.target === "augmentation") {
 			const resolved = resolveAugmentationTarget(graph, ch);
-			const name = resolved?.componentName ?? ch.componentAlias;
+			const name = resolved?.componentName ?? (ch as { componentAlias?: string }).componentAlias;
 			const where = resolved
 				? `${resolved.file}#${resolved.symbol}`
-				: ch.componentAlias;
+				: (ch as { componentAlias?: string }).componentAlias;
 			if (ch.field === "signature") {
 				const sig = ch.value;
 				rows.push({
@@ -327,11 +355,60 @@ function validateChanges(
 			if (
 				ch.field !== "construct" &&
 				ch.field !== "signature" &&
-				ch.field !== "module"
+				ch.field !== "module" &&
+				ch.field !== "callSite"
 			) {
 				return `unsupported augmentation field: ${(ch as { field: string }).field}`;
+			} else if (ch.field === "callSite") {
+				// Call site augmentation for trail steps
+				const callSiteCh = ch as {
+					trailId?: string;
+					stepIndex?: number;
+					file?: string;
+					symbol?: string;
+					purl?: string;
+					value?: {
+						lines?: { start?: number; end?: number };
+						contentHash?: string;
+						target?: { file?: string; symbol?: string };
+						mechanism?: string;
+					};
+				};
+				if (!callSiteCh.trailId || typeof callSiteCh.stepIndex !== "number") {
+					return "callSite augmentation requires trailId and stepIndex";
+				}
+				const trail = graph.trails?.find((t) => t.id === callSiteCh.trailId);
+				if (!trail) {
+					return `unknown trail: ${callSiteCh.trailId}`;
+				}
+				if (callSiteCh.stepIndex < 0 || callSiteCh.stepIndex >= trail.steps.length) {
+					return `step index ${callSiteCh.stepIndex} out of range for trail ${callSiteCh.trailId}`;
+				}
+				if (!callSiteCh.file?.trim() || !callSiteCh.symbol?.trim() || !callSiteCh.purl?.trim()) {
+					return "callSite augmentation requires file, symbol, and purl";
+				}
+				const val = callSiteCh.value;
+				if (
+					!val ||
+					!val.lines ||
+					typeof val.lines.start !== "number" ||
+					typeof val.lines.end !== "number" ||
+					val.lines.start < 1 ||
+					val.lines.end < val.lines.start
+				) {
+					return "callSite value.lines must be { start >= 1, end >= start }";
+				}
+				if (val.contentHash !== undefined && !val.contentHash?.trim()) {
+					return "callSite value.contentHash must be a non-empty string when provided";
+				}
+				if (!val.target?.file?.trim() || !val.target?.symbol?.trim()) {
+					return "callSite value.target must have file and symbol";
+				}
+				if (!val.mechanism?.trim()) {
+					return "callSite value.mechanism is required";
+				}
 			} else if (!validDeclarationSpan(ch)) {
-				return `augmentation for ${ch.componentAlias} needs a lines span { start, end } (1-based, inclusive) of the declaration read from source`;
+				return `augmentation for ${(ch as { componentAlias?: string }).componentAlias} needs a lines span { start, end } (1-based, inclusive) of the declaration read from source`;
 			} else if (ch.field === "construct") {
 				if (typeof ch.value !== "string" || !ch.value.trim()) {
 					return "augmentation construct value must be a non-empty string";
@@ -414,9 +491,7 @@ function applyChangesToGraph(
 			if (idx < 0) continue;
 			const component = components[idx]!;
 			// Author a field of the structured declaration, creating the
-			// declaration when the model has none. Provenance becomes `authored`:
-			// the agent read source, so this is a hand-written claim, never a
-			// verified one.
+			// declaration when the model has none.
 			const existing: Record<string, unknown> =
 				component.declaration && typeof component.declaration === "object"
 					? { ...(component.declaration as unknown as Record<string, unknown>) }
@@ -426,7 +501,6 @@ function applyChangesToGraph(
 			components[idx] = {
 				...component,
 				declaration: existing as unknown as (typeof component)["declaration"],
-				declarationProvenance: "authored",
 			};
 		} else if (ch.target === "trail-step") {
 			const tl = trails.find((t) => t.id === ch.trailId);
@@ -446,16 +520,80 @@ function applyChangesToGraph(
 	};
 }
 
-async function applyAugmentationChanges(
-	graph: StoredSubsystemModel,
+/**
+ * Fill a callSite claim's `contentHash` from the caller file when the
+ * proposal omitted it (the normal agent path — the agent claims the span,
+ * Studio hashes what's actually on disk). Returns the error string when the
+ * span is out of bounds or the caller file can't be read.
+ */
+async function withCallSiteContentHash(change: {
+	purl: string;
+	file: string;
+	value: CallSiteAugmentationClaim;
+}): Promise<CallSiteAugmentationClaim | string> {
+	if (change.value.contentHash?.trim()) return change.value;
+	const repoRoot = resolveRepoRootForPurl(change.purl);
+	if (!repoRoot) {
+		return `callSite contentHash could not be computed: repo not resolved for ${change.purl}`;
+	}
+	let content: string;
+	try {
+		content = await fs.readFile(join(repoRoot, change.file), "utf8");
+	} catch {
+		return `callSite contentHash could not be computed: cannot read ${change.file}`;
+	}
+	const hash = hashContentRange(
+		content,
+		change.value.lines.start,
+		change.value.lines.end,
+	);
+	if (!hash) {
+		return `callSite contentHash could not be computed: lines ${change.value.lines.start}-${change.value.lines.end} out of bounds in ${change.file}`;
+	}
+	return { ...change.value, contentHash: hash };
+}
+
+async function applyAugmentationChanges(	graph: StoredSubsystemModel,
 	changes: SubsystemModelProposalChange[],
 	proposal: SubsystemModelProposal,
 ): Promise<string | null> {
 	for (const ch of changes) {
 		if (ch.target !== "augmentation") continue;
+		
+		// Call site augmentations are keyed by trail step, not component
+		if (ch.field === "callSite") {
+			const callSiteCh = ch as {
+				trailId: string;
+				stepIndex: number;
+				file: string;
+				symbol: string;
+				purl: string;
+				value: CallSiteAugmentationClaim;
+			};
+			// contentHash is normally computed from the caller file at accept
+			// time; an explicitly provided hash (tests, backfills) wins.
+			const callSite = await withCallSiteContentHash(callSiteCh);
+			if (typeof callSite === "string") return callSite;
+			const written = await upsertAcceptedCallSiteAugmentation({
+				purl: callSiteCh.purl,
+				file: callSiteCh.file,
+				symbol: callSiteCh.symbol,
+				callSite,
+				source: proposal.author?.trim() || "proposal",
+				rationale: proposal.rationale,
+				evidence: [
+					`proposal ${proposal.id}`,
+					`trail ${callSiteCh.trailId} step ${callSiteCh.stepIndex}`,
+				],
+			});
+			if (!written.ok) return written.error;
+			continue;
+		}
+
+		// Component-based augmentations
 		const resolved = resolveAugmentationTarget(graph, ch);
 		if (!resolved) {
-			return `augmentation for ${ch.componentAlias} needs file, symbol, and purl`;
+			return `augmentation for ${(ch as { componentAlias?: string }).componentAlias} needs file, symbol, and purl`;
 		}
 		if (ch.field === "construct") {
 			const written = await upsertAcceptedConstructAugmentation({

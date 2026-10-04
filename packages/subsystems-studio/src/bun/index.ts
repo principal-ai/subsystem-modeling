@@ -1827,7 +1827,11 @@ const requests: RequestHandlers = {
 					const touches = (full.components ?? []).some(
 						(c) => (purlRepoKey(c.purl) ?? "__no-repo__") === repoKey,
 					);
-					if (touches) models.push({ id: e.id, document: full });
+					if (touches) models.push({ 
+						id: e.id, 
+						document: full,
+						verifiedAtCommits: full.verifiedAtCommits,
+					});
 				}
 				const merged = mergeSubsystemModels(models);
 				// Overlay accepted signature augmentations for display only.
@@ -1960,13 +1964,20 @@ const requests: RequestHandlers = {
 						// repo, reusing the record this handler already fetched. Runs
 						// per model on every overview pass, so it deliberately excludes
 						// the per-commit walk (see getModelProvenanceDetail).
+						// `auditVerdict` rides along so the badge can refuse to read
+						// "Verified" when the saved audit no longer supports it — the
+						// pin says the code did not move; it says nothing about
+						// whether the audit that earned it still passes.
 						const provenance = full
-							? await modelProvenance({
-									createdAtCommits: full.createdAtCommits,
-									verifiedAtCommits: full.verifiedAtCommits,
-									components: full.components,
-									trails: full.trails,
-								})
+							? {
+									...(await modelProvenance({
+										createdAtCommits: full.createdAtCommits,
+										verifiedAtCommits: full.verifiedAtCommits,
+										components: full.components,
+										trails: full.trails,
+									})),
+									auditVerdict: verdict === "unknown" ? undefined : verdict,
+								}
 							: undefined;
 						// Carry the pin forward when nothing anchored moved. The proof is
 						// content identity, not a re-audit — but it is a write, so it only
