@@ -11,7 +11,7 @@
  * drawers, no trail playback.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Edge,
   EdgeProps,
@@ -62,19 +62,30 @@ function C4NodeView(
   >,
 ) {
   const { element, selected, componentCount, onExpand } = props.data;
+  // TEMP: measured size per card, to size squares against real content.
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el && typeof console !== 'undefined') {
+      const r = el.getBoundingClientRect();
+      console.log('[c4-size]', element.kind, element.id, Math.round(r.width) + '×' + Math.round(r.height));
+    }
+  }, [element.id, element.kind, element.label, element.description]);
   return (
-    <C4NodeCard
-      node={element}
-      selected={selected}
-      componentCount={componentCount ?? 0}
-      onExpand={onExpand}
-      handles={
-        <>
-          <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
-          <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
-        </>
-      }
-    />
+    <div ref={ref}>
+      <C4NodeCard
+        node={element}
+        selected={selected}
+        componentCount={componentCount ?? 0}
+        onExpand={onExpand}
+        handles={
+          <>
+            <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
+            <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+          </>
+        }
+      />
+    </div>
   );
 }
 
@@ -288,10 +299,12 @@ const nodeTypes = {
   'c4-node': C4NodeView,
   'c4-group': C4GroupView,
 };
-
 const edgeTypes = {
   'c4-edge': C4EdgeView,
 };
+
+/** Drill-down camera glide, in ms (see `afterLayout`). */
+const FLIP_MS = 240;
 
 function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter = 28 }: C4GraphProps) {
   const { theme } = useTheme();
@@ -306,6 +319,27 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
   );
 
   const derivedGroups = useMemo(() => deriveC4Groups(model), [model]);
+
+  /** Set by the layout effect; consumed by the `ready` effect to run the fit. */
+  const pendingFitRef = useRef(false);
+
+  // Fit the camera AFTER the new nodes are committed (when `ready` flips true),
+  // so `fitView` measures the real geometry. Fit the SYSTEM frame explicitly:
+  // on a drill-down the drawn nodes are just the opened container's contents,
+  // so fitting them would zoom to the container, not the whole system.
+  useEffect(() => {
+    if (!ready || !pendingFitRef.current) return;
+    pendingFitRef.current = false;
+    fitView({ padding: 0.15, duration: FLIP_MS, nodes: [{ id: model.system.id }] });
+  }, [ready, model.system.id, fitView]);
+
+  /** Called once the new layout is committed, from the layout effect. */
+  const afterLayout = () => {
+    // The camera fit runs from a `ready`-keyed effect (see below), after React
+    // has committed the new nodes — fitting earlier measures stale geometry and
+    // the camera just snaps.
+    pendingFitRef.current = true;
+  };
 
   const layoutKey = useMemo(
     () =>
@@ -370,7 +404,7 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
           componentCount: childComponentCount.get(n.id) ?? 0,
           // Only a container with components can be opened.
           ...(n.kind === 'container' && (childComponentCount.get(n.id) ?? 0) > 0 && onOpenContainer
-            ? { onExpand: () => onOpenContainer(n.id) }
+            ? { onExpand: () => onOpenContainer?.(n.id) }
             : {}),
         },
       };
@@ -525,7 +559,7 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
                   : {}),
                 // An opened container frame can be collapsed by the host.
                 ...(def?.kind === 'container' && model.openContainerId === id && onCloseContainer
-                  ? { onCollapse: onCloseContainer }
+                  ? { onCollapse: () => onCloseContainer?.() }
                   : {}),
               },
             };
@@ -551,7 +585,7 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
         setNodes([...shells, ...leaves]);
         setRfEdges(withPaths);
         setReady(true);
-        requestAnimationFrame(() => fitView({ padding: 0.15 }));
+        afterLayout();
       })
       .catch((err) => {
         if (!alive) return;
@@ -561,7 +595,7 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
         setNodes(rfNodes.map((n) => ({ ...n, parentId: undefined })));
         setRfEdges(rfEdges);
         setReady(true);
-        requestAnimationFrame(() => fitView({ padding: 0.15 }));
+        afterLayout();
       });
 
     return () => {

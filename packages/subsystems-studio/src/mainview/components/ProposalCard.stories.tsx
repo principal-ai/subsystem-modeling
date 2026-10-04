@@ -252,6 +252,58 @@ const scoringError: SubsystemModelProposal = {
 };
 
 /** The model component a construct proposal previews beside the card. */
+/**
+ * A `c4-container` proposal — the reviewer sees the container rendered with
+ * the same card the C4 graph uses, in its proposed state, beside the
+ * before/after rows.
+ */
+const containerProposal: SubsystemModelProposal = {
+  id: "sp-1a2b3c4d5e6f",
+  graphId: GRAPH_ID,
+  runId: "60c84543-0f9a-45a6-80f9-f3879867ec98",
+  status: "pending",
+  createdAt: "2026-10-04T18:12:00.000Z",
+  lane: "dynamic-topology",
+  rationale:
+    "host and SessionStore run in one Bun process; the boundary is a deployable unit. Technology from the graphify bun signal.",
+  finding: {
+    kind: "boundary_process_unassigned",
+    processKey: "subsystems-studio/host",
+    message:
+      "No C4 container claims the process boundary \"subsystems-studio/host\" yet.",
+  },
+  changes: [
+    {
+      target: "c4-container",
+      purl: "pkg:github/principal-ai/subsystem-modeling",
+      container: {
+        id: "container:subsystems-studio/host",
+        label: "Studio host",
+        containerKind: "application",
+        technology: "Bun",
+        process: "subsystems-studio/host",
+        description: "Boots the host and owns retained session state.",
+      },
+    },
+  ],
+  preview: [
+    {
+      label: "propose container subsystems-studio/host",
+      before: "no container claims subsystems-studio/host",
+      after: "application · Bun · verifies subsystems-studio/host",
+    },
+  ],
+  author: "container-verifier",
+  secondOpinion: {
+    source: "jev-latest",
+    checkedAt: "2026-10-04T18:12:00.500Z",
+    verdict: "accurate",
+    confidence: 0.86,
+    changeKind: "c4_container_upsert",
+    risk: "Needs human",
+  },
+};
+
 const tabRegistryComponent: SubsystemComponent = {
   alias: "tab-registry",
   name: "tabs",
@@ -302,6 +354,10 @@ export const SignatureAugmentationAccurate: Story = {
 
 export const ComponentFixUpdatesModel: Story = {
   args: { proposal: componentFix },
+};
+
+export const ContainerProposal: Story = {
+  args: { proposal: containerProposal },
 };
 
 export const MultiChange: Story = {

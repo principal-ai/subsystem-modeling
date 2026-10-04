@@ -1305,6 +1305,10 @@ export interface SubsystemModelProposal {
 		severity?: string;
 		componentAlias?: string;
 		componentName?: string;
+		/** Process boundary key — container-first findings target the frame. */
+		processKey?: string;
+		/** Module frame key when the finding is about boundary membership. */
+		moduleKey?: string;
 		trailId?: string;
 		step?: number;
 		message?: string;

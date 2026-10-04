@@ -205,12 +205,12 @@ export function deriveC4Groups(
     }
   }
 
-  // The system frame wraps the framed containers (component view) or every
-  // drawn top-level element (container view), so it always reads as the boundary.
+  // The system frame wraps the framed containers (component view) or the whole
+  // set of containers (container view) — the boundary is the system, so it must
+  // NOT shrink to the opened container. Opening one adds a nested container
+  // frame inside it; the system frame still spans everything.
   const systemMembers =
-    model.view === 'component'
-      ? framedContainers
-      : (opened ? [opened] : containers.map((c) => c.id));
+    model.view === 'component' ? framedContainers : containers.map((c) => c.id);
   if (systemMembers.length > 0) {
     groups.push({
       id: model.system.id,

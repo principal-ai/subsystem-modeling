@@ -30,13 +30,16 @@ import {
 	type NodeProps,
 } from "@xyflow/react";
 import {
+	C4NodeCard,
 	SubsystemComponentNode,
 	SubsystemCallbacksProvider,
+	type C4Container,
 	type SubsystemComponent,
 	type SubsystemGraphNodeData,
 } from "@principal-ai/subsystems-react";
 import type {
 	SubsystemModelProposal,
+	SubsystemModelProposalChange,
 	SubsystemVerificationLane,
 } from "../../shared/contract";
 
@@ -116,6 +119,39 @@ export function ComponentNodePreview({
 			</SubsystemCallbacksProvider>
 		</ReactFlowProvider>
 	);
+}
+
+/**
+ * The container a `c4-container` proposal is proposing, drawn with the same
+ * card the C4 graph renders — the reviewer sees the element exactly as it
+ * will look accepted, in its `proposed` state. Self-contained: the payload
+ * rides the proposal's own change, no graph or store lookup.
+ */
+export function ContainerNodePreview({
+	container,
+}: {
+	container: Omit<C4Container, "state" | "kind">;
+}) {
+	const node: C4Container = {
+		kind: "container",
+		state: "proposed",
+		...container,
+	};
+	return (
+		<div style={{ display: "flex", justifyContent: "center", width: "100%" }}>
+			<C4NodeCard node={node} />
+		</div>
+	);
+}
+
+/** The `c4-container` change a proposal carries, if any. */
+export function proposalContainerChange(
+	p: SubsystemModelProposal,
+): Extract<SubsystemModelProposalChange, { target: "c4-container" }> | null {
+	for (const ch of p.changes) {
+		if (ch.target === "c4-container") return ch;
+	}
+	return null;
 }
 
 export function formatValue(v: unknown): string {
@@ -424,6 +460,7 @@ export function ProposalCard({
 	const rejecting = action === "reject";
 	const LaneIcon = p.lane ? LANE_ICON[p.lane] : null;
 	const showNode = p.lane === "construct" && previewComponent != null;
+	const containerChange = proposalContainerChange(p);
 
 	return (
 		<article
@@ -457,6 +494,12 @@ export function ProposalCard({
 					}}
 				>
 					<ComponentNodePreview component={previewComponent} />
+				</div>
+			)}
+
+			{containerChange && (
+				<div style={{ marginBottom: 12 }}>
+					<ContainerNodePreview container={containerChange.container} />
 				</div>
 			)}
 
