@@ -639,7 +639,10 @@ export type SubsystemModelAuditFindingKind =
 	| "third_party_path"
 	| "boundary_module_file_mismatch"
 	| "boundary_process_nest_disagree"
-	| "boundary_process_missing";
+	| "boundary_process_missing"
+	| "boundary_process_unassigned"
+	| "boundary_process_proposed"
+	| "boundary_process_rejected";
 
 export type SubsystemModelAuditSeverity = "error" | "info";
 
@@ -686,6 +689,8 @@ export interface SubsystemModelAuditFinding {
 	componentName?: string;
 	/** Module frame key when the finding is about boundary membership. */
 	moduleKey?: string;
+	/** Process boundary key when the finding is about a process boundary. */
+	processKey?: string;
 	/** Repo purl when the finding is graph-level, about a repo rather than a node. */
 	purl?: string;
 	trailId?: string;

@@ -7,6 +7,9 @@
  */
 
 import type { SubsystemComponent } from "@principal-ai/subsystems-core";
+import { getSubsystemProcessRegions } from "@principal-ai/subsystems-core";
+import { verifyProcessBoundaries } from "@principal-ai/subsystems-react";
+import type { C4Element } from "@principal-ai/subsystems-react";
 
 export type BoundaryCheckKind =
 	| "module_file"
@@ -31,12 +34,17 @@ export interface BoundaryAuditFinding {
 	kind:
 		| "boundary_module_file_mismatch"
 		| "boundary_process_nest_disagree"
-		| "boundary_process_missing";
+		| "boundary_process_missing"
+		| "boundary_process_unassigned"
+		| "boundary_process_proposed"
+		| "boundary_process_rejected";
 	severity: "error" | "info";
 	componentAlias?: string;
 	componentName?: string;
 	/** Module key when the finding is about a multi-member module group. */
 	moduleKey?: string;
+	/** Process key when the finding is about a process boundary as a whole. */
+	processKey?: string;
 	message: string;
 }
 
@@ -333,4 +341,39 @@ export function auditBoundaryFields(
 			processMissing,
 		},
 	};
+}
+
+/**
+ * Process-boundary verification against the C4 element store — the same read
+ * the renderer's issues list does (`verifyProcessBoundaries` over the process
+ * rollup), so the audit and the UI speak one vocabulary:
+ * `boundary_process_unassigned` / `_proposed` / `_rejected`, one finding per
+ * boundary that is NOT verified. `verified` reports nothing — the audit
+ * reports absence only, and silence is the good state.
+ *
+ * Pure over its inputs; the caller reads the element set(s) from disk.
+ */
+export function auditProcessVerification(
+	components: readonly SubsystemComponent[],
+	elements: readonly C4Element[],
+): BoundaryAuditFinding[] {
+	const rollup = getSubsystemProcessRegions({ components });
+	const statuses = verifyProcessBoundaries({ rollup, elements });
+	const findings: BoundaryAuditFinding[] = [];
+	for (const { key, status, element } of statuses) {
+		if (status === "verified") continue;
+		const label = element?.label ?? key;
+		findings.push({
+			kind: `boundary_process_${status}`,
+			severity: "info",
+			processKey: key,
+			message:
+				status === "unassigned"
+					? `No C4 container claims the process boundary ${JSON.stringify(key)} yet — a container-verifier run would assess it.`
+					: status === "proposed"
+						? `Container ${JSON.stringify(label)} claims the process boundary ${JSON.stringify(key)} and awaits a decision.`
+						: `Container ${JSON.stringify(label)} was rejected for the process boundary ${JSON.stringify(key)} — it stays unclaimed until a container is accepted.`,
+		});
+	}
+	return findings;
 }

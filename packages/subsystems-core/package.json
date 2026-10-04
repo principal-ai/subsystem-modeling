@@ -1,6 +1,6 @@
 {
   "name": "@principal-ai/subsystems-core",
-  "version": "0.48.0",
+  "version": "0.48.1",
   "description": "Subsystem model types and agent-session tooling for Principal AI",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

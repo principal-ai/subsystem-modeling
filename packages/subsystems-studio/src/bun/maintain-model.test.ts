@@ -4,6 +4,7 @@ import {
 	buildVerificationBrief,
 	CONSTRUCT_FIXER_AGENT,
 	CONSTRUCT_VERIFIER_AGENT,
+	CONTAINER_VERIFIER_AGENT,
 	PACKAGE_MODULE_FIXER_AGENT,
 	PACKAGE_MODULE_VERIFIER_AGENT,
 	RUNTIME_TOPOLOGY_VERIFIER_AGENT,
@@ -204,6 +205,61 @@ describe("selectMaintainRoute", () => {
 			layer: "dynamic-topology",
 			mode: "verify",
 		});
+	});
+
+	test("routes unassigned process boundary to container-verifier", () => {
+		const report = emptyReport({
+			findings: [
+				{
+					kind: "boundary_process_unassigned",
+					severity: "info",
+					processKey: "app/host",
+					message: "no container claims it",
+				},
+			],
+		});
+		expect(selectMaintainRoute(report)).toEqual({
+			agent: CONTAINER_VERIFIER_AGENT,
+			layer: "dynamic-topology",
+			mode: "verify",
+		});
+	});
+
+	test("container-verifier waits for runtime-topology to settle membership first", () => {
+		const report = emptyReport({
+			findings: [
+				{
+					kind: "boundary_process_unassigned",
+					severity: "info",
+					processKey: "app/host",
+					message: "no container claims it",
+				},
+				{
+					kind: "boundary_process_nest_disagree",
+					severity: "info",
+					componentAlias: "a",
+					message: "disagree",
+				},
+			],
+		});
+		expect(selectMaintainRoute(report)?.agent).toBe(
+			RUNTIME_TOPOLOGY_VERIFIER_AGENT,
+		);
+	});
+
+	test("rejected boundary does not route to container-verifier — the rejection is the decision", () => {
+		const report = emptyReport({
+			findings: [
+				{
+					kind: "boundary_process_rejected",
+					severity: "info",
+					processKey: "app/host",
+					message: "rejected",
+				},
+			],
+		});
+		const route = selectMaintainRoute(report);
+		expect(route?.agent).not.toBe(CONTAINER_VERIFIER_AGENT);
 	});
 
 	test("prefers process gaps over construct gaps", () => {

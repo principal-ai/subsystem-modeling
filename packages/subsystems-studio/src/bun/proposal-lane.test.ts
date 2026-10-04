@@ -70,6 +70,16 @@ describe("laneForFindingKind", () => {
 		expect(laneForFindingKind("boundary_process_nest_disagree")).toBe(
 			"dynamic-topology",
 		);
+		// Process-verification kinds (element-store read) are dynamic-topology.
+		expect(laneForFindingKind("boundary_process_unassigned")).toBe(
+			"dynamic-topology",
+		);
+		expect(laneForFindingKind("boundary_process_proposed")).toBe(
+			"dynamic-topology",
+		);
+		expect(laneForFindingKind("boundary_process_rejected")).toBe(
+			"dynamic-topology",
+		);
 		expect(laneForFindingKind("trail")).toBe("trail");
 	});
 	test("unknown -> null", () => {

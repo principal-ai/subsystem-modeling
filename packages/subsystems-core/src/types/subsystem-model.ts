@@ -553,7 +553,7 @@ export interface SubsystemRegionGroup {
  * someone can accept a container for.
  */
 export function getSubsystemProcessRegions(
-  doc: Pick<SubsystemModelDocument, 'components'>,
+  doc: { readonly components: readonly SubsystemComponent[] },
 ): SubsystemRegionGroup[] {
   const byProcess = new Map<string, string[]>();
   for (const c of doc.components) {
@@ -575,7 +575,7 @@ export function getSubsystemProcessRegions(
  * value, in first-appearance order. Label is the module path (file).
  */
 export function getSubsystemModuleRegions(
-  doc: Pick<SubsystemModelDocument, 'components'>,
+  doc: { readonly components: readonly SubsystemComponent[] },
 ): SubsystemRegionGroup[] {
   const byModule = new Map<string, string[]>();
   for (const c of doc.components) {

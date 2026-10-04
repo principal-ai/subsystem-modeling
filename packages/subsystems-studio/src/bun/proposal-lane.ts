@@ -61,6 +61,9 @@ export function laneForFindingKind(
 			return "static-topology";
 		case "boundary_process_nest_disagree":
 		case "boundary_process_missing":
+		case "boundary_process_unassigned":
+		case "boundary_process_proposed":
+		case "boundary_process_rejected":
 			return "dynamic-topology";
 		case "trail":
 		case "step_unconfirmed":

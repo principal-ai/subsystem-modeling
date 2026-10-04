@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { SubsystemComponent } from "@principal-ai/subsystems-core";
 import {
 	auditBoundaryFields,
+	auditProcessVerification,
 	moduleAgreesWithFile,
 	normalizeBoundaryPath,
 } from "./boundary-audit";
+import type { C4Element } from "@principal-ai/subsystems-react";
 
 describe("moduleAgreesWithFile", () => {
 	test("exact match and prefix", () => {
@@ -284,5 +286,79 @@ describe("auditBoundaryFields", () => {
 			expect(r.summary.processRequired).toBe(0);
 			expect(r.findings).toEqual([]);
 		});
+	});
+});
+
+describe("auditProcessVerification", () => {
+	const components = [
+		{
+			alias: "a",
+			name: "a",
+			construct: "function",
+			file: "src/a.ts",
+			purl: "pkg:github/a/repo",
+			process: "app/host",
+		},
+		{
+			alias: "b",
+			name: "b",
+			construct: "function",
+			file: "src/b.ts",
+			purl: "pkg:github/a/repo",
+			process: "app/renderer",
+		},
+	] as unknown as SubsystemComponent[];
+
+	const container = (
+		id: string,
+		process: string,
+		state: "accepted" | "proposed" | "rejected",
+	): C4Element =>
+		({
+			kind: "container",
+			id,
+			label: id,
+			state,
+			containerKind: "application",
+			technology: "node",
+			process,
+		}) as C4Element;
+
+	test("empty store reads as unassigned for every claimed boundary", () => {
+		const f = auditProcessVerification(components, []);
+		expect(f.map((x) => [x.kind, x.processKey])).toEqual([
+			["boundary_process_unassigned", "app/host"],
+			["boundary_process_unassigned", "app/renderer"],
+		]);
+		expect(f.every((x) => x.severity === "info")).toBe(true);
+	});
+
+	test("accepted container verifies — silence; proposed and rejected report", () => {
+		const f = auditProcessVerification(components, [
+			container("c1", "app/host", "accepted"),
+			container("c2", "app/renderer", "proposed"),
+		]);
+		expect(f).toHaveLength(1);
+		expect(f[0]!.kind).toBe("boundary_process_proposed");
+		expect(f[0]!.processKey).toBe("app/renderer");
+	});
+
+	test("accepted beats rejected beats proposed (precedence map)", () => {
+		const f = auditProcessVerification(components, [
+			container("r", "app/host", "rejected"),
+			container("a", "app/host", "accepted"),
+			container("p", "app/host", "proposed"),
+			container("ok", "app/renderer", "accepted"),
+		]);
+		expect(f).toEqual([]);
+	});
+
+	test("rejected-only boundary reports without a fix", () => {
+		const f = auditProcessVerification(components, [
+			container("r", "app/host", "rejected"),
+			container("ok", "app/renderer", "accepted"),
+		]);
+		expect(f).toHaveLength(1);
+		expect(f[0]!.kind).toBe("boundary_process_rejected");
 	});
 });

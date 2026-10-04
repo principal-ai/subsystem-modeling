@@ -8,6 +8,7 @@
  * - package/module containment issues → package-module-fixer
  * - package/module containment gaps → package-module-verifier
  * - process (runtime deployment-unit) gaps → runtime-topology-verifier
+ * - unverified process boundaries (element store) → container-verifier
  * - construct unconfirmed → construct-verifier
  * - fully verified → no-op
  *
@@ -168,7 +169,11 @@ export interface MaintainModelResult {
 function isBoundaryFindingKind(kind: string | undefined): boolean {
 	return (
 		kind === "boundary_module_file_mismatch" ||
-		kind === "boundary_process_nest_disagree"
+		kind === "boundary_process_nest_disagree" ||
+		// Process-verification kinds (element-store read): never construct work.
+		kind === "boundary_process_unassigned" ||
+		kind === "boundary_process_proposed" ||
+		kind === "boundary_process_rejected"
 	);
 }
 
@@ -201,6 +206,22 @@ function isRuntimeTopologyGapFinding(
 	return (
 		f.kind === "boundary_process_nest_disagree" ||
 		f.kind === "boundary_process_missing"
+	);
+}
+
+/**
+ * Process-boundary container verification — an unassigned or proposed boundary
+ * is the container-verifier's trigger. `rejected` does NOT route: the rejection
+ * is the decision (remembered by the proposal store), and re-proposing is
+ * exactly what it exists to prevent. The finding still reports, so the human
+ * sees the boundary is unverified by choice.
+ */
+function isContainerVerificationFinding(
+	f: SubsystemModelAuditReport["findings"][number],
+): boolean {
+	return (
+		f.kind === "boundary_process_unassigned" ||
+		f.kind === "boundary_process_proposed"
 	);
 }
 
@@ -297,6 +318,16 @@ export function selectMaintainRoute(
 	) {
 		return {
 			agent: RUNTIME_TOPOLOGY_VERIFIER_AGENT,
+			layer: "dynamic-topology",
+			mode: "verify",
+		};
+	}
+	// Container verification runs AFTER the runtime-topology verifier: the
+	// boundary assessment reads process keys, so membership claims (which
+	// process a component belongs to) should be settled first.
+	if (report.findings.some(isContainerVerificationFinding)) {
+		return {
+			agent: CONTAINER_VERIFIER_AGENT,
 			layer: "dynamic-topology",
 			mode: "verify",
 		};
@@ -407,6 +438,13 @@ export function ensureMaintainAgentsInstalled(): {
 			loadTopologyAgentSource(agentPackageCandidates(TRAIL_VERIFIER_AGENT)),
 			"utf8",
 		);
+		writeFileSync(
+			CONTAINER_VERIFIER_AGENT_PATH,
+			loadTopologyAgentSource(
+				agentPackageCandidates(CONTAINER_VERIFIER_AGENT),
+			),
+			"utf8",
+		);
 		return {
 			ok: true,
 			paths: [
@@ -416,6 +454,7 @@ export function ensureMaintainAgentsInstalled(): {
 				PACKAGE_MODULE_VERIFIER_AGENT_PATH,
 				RUNTIME_TOPOLOGY_VERIFIER_AGENT_PATH,
 				TRAIL_VERIFIER_AGENT_PATH,
+				CONTAINER_VERIFIER_AGENT_PATH,
 			],
 		};
 	} catch (err) {
@@ -691,6 +730,10 @@ export function buildMaintainBrief(opts: {
 				return isPackageModuleGapFinding(f);
 			case RUNTIME_TOPOLOGY_VERIFIER_AGENT:
 				return isRuntimeTopologyGapFinding(f);
+			case CONTAINER_VERIFIER_AGENT:
+				// Rejected boundaries ride along as context — the agent must know
+				// the decision exists so it does not re-propose it.
+				return isContainerVerificationFinding(f) || f.kind === "boundary_process_rejected";
 		}
 	});
 

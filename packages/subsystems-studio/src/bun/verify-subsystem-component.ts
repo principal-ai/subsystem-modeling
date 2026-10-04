@@ -52,7 +52,9 @@ import {
 	findAcceptedCallSiteAugmentation,
 } from "./augmentation-store";
 import { hashContentRange } from "./declaration-ref";
-import { auditBoundaryFields } from "./boundary-audit";
+import { auditBoundaryFields, auditProcessVerification } from "./boundary-audit";
+import type { C4Element } from "@principal-ai/subsystems-react";
+import { readC4ElementSet } from "./c4-element-store";
 import {
 	buildAuditFingerprint,
 	classifyAuditReport,
@@ -1463,6 +1465,31 @@ export async function auditSubsystemModel(
 			componentAlias: f.componentAlias,
 			componentName: f.componentName,
 			moduleKey: f.moduleKey,
+			processKey: f.processKey,
+			message: f.message,
+		});
+	}
+
+	// Process-boundary verification — read the accepted element set(s) for the
+	// repos this model references and report every boundary that is not
+	// verified. Same read the renderer's issues list does, so the audit and
+	// the UI speak one vocabulary; a model spanning several repos merges them
+	// (a container claiming a process may live in any of the sets).
+	const elementSetRepoKeys = new Set(
+		graph.components
+			.map((c) => purlRepoKey(c.purl))
+			.filter((k): k is string => Boolean(k)),
+	);
+	const storeElements: C4Element[] = [];
+	for (const repoKey of elementSetRepoKeys) {
+		const set = await readC4ElementSet(repoKey);
+		storeElements.push(...set.elements);
+	}
+	for (const f of auditProcessVerification(graph.components, storeElements)) {
+		findings.push({
+			kind: f.kind,
+			severity: f.severity,
+			processKey: f.processKey,
 			message: f.message,
 		});
 	}
