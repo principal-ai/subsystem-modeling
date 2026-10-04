@@ -24,7 +24,7 @@ import {
 	type CallSiteAugmentationClaim,
 } from "./augmentation-store";
 import { hashContentRange } from "./declaration-ref";
-import { upsertAcceptedC4Elements } from "./c4-element-store";
+import { upsertAcceptedC4Elements, readC4ElementSet } from "./c4-element-store";
 import { resolveRepoRootForPurl } from "./graphify-store";
 import { deriveProposalLane } from "./proposal-lane";
 import {
@@ -294,6 +294,49 @@ function validDeclarationSpan(ch: {
 		start >= 1 &&
 		end >= start
 	);
+}
+
+/**
+ * A component `process` proposal may only cite a key an ACCEPTED container
+ * claims in the element store. The container decision is the parent: without
+ * it, a process gap stays open until a container-verifier run gets one
+ * accepted — an agent never coins a deployment-unit key from nothing.
+ * Clearing a claim (null value) is always allowed.
+ */
+async function processBackingError(
+	graph: StoredSubsystemModel,
+	changes: SubsystemModelProposalChange[],
+): Promise<string | null> {
+	const processChanges: Array<{ componentAlias: string; value: string }> = [];
+	for (const ch of changes) {
+		if (ch.target !== "component" || ch.field !== "process") continue;
+		if (ch.value === null || typeof ch.value !== "string") continue;
+		processChanges.push({ componentAlias: ch.componentAlias, value: ch.value });
+	}
+	if (processChanges.length === 0) return null;
+	const keyCache = new Map<string, Set<string>>();
+	for (const ch of processChanges) {
+		const component = graph.components.find((c) => c.alias === ch.componentAlias);
+		const repoKey = component ? purlRepoKey(component.purl) : undefined;
+		if (!repoKey) {
+			return `process change for ${ch.componentAlias}: component purl resolves to no repo`;
+		}
+		let verifiedKeys = keyCache.get(repoKey);
+		if (!verifiedKeys) {
+			const set = await readC4ElementSet(repoKey);
+			verifiedKeys = new Set<string>();
+			for (const e of set.elements) {
+				if (e.kind === "container" && e.process?.trim()) {
+					verifiedKeys.add(e.process.trim());
+				}
+			}
+			keyCache.set(repoKey, verifiedKeys);
+		}
+		if (!verifiedKeys.has(ch.value.trim())) {
+			return `process ${JSON.stringify(ch.value)} is claimed by no accepted container — get a container accepted first (container-verifier)`;
+		}
+	}
+	return null;
 }
 
 function validateChanges(
@@ -810,6 +853,8 @@ export async function createSubsystemModelProposal(input: {
 	}
 	const invalid = validateChanges(graph, input.changes);
 	if (invalid) return { ok: false, error: invalid };
+	const unbacked = await processBackingError(graph, input.changes);
+	if (unbacked) return { ok: false, error: unbacked };
 
 	const proposal: SubsystemModelProposal = {
 		id: newProposalId(),
@@ -851,6 +896,10 @@ export async function acceptSubsystemModelProposal(
 
 	const invalid = validateChanges(graph, proposal.changes);
 	if (invalid) return { ok: false, error: invalid };
+	// Re-checked at accept: a container backing the claim may have been
+	// rejected (or the store emptied) since the proposal was created.
+	const unbacked = await processBackingError(graph, proposal.changes);
+	if (unbacked) return { ok: false, error: unbacked };
 
 	const patch = applyChangesToGraph(graph, proposal.changes);
 	if (patch) {

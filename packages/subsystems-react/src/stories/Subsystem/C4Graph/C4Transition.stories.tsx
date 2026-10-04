@@ -94,7 +94,6 @@ function Demo() {
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <C4Graph
           model={model}
-          title="Subsystem Modeling"
           onSelectNode={setSelected}
           onOpenContainer={setOpenId}
           onCloseContainer={() => setOpenId(null)}

@@ -7,7 +7,7 @@ import {
 	acceptSubsystemModelProposal,
 	createSubsystemModelProposal,
 } from "./proposal-store";
-import { createSubsystemModel } from "./subsystem-model-store";
+import { createSubsystemModel, getSubsystemModel } from "./subsystem-model-store";
 import { readC4ElementSet } from "./c4-element-store";
 import { registerProjectInAlexandria } from "./alexandria";
 import type { SubsystemComponent } from "@principal-ai/subsystems-react";
@@ -234,5 +234,129 @@ describe("consolidation proposal change", () => {
 		});
 		expect(unknownKey.ok).toBe(false);
 		if (!unknownKey.ok) expect(unknownKey.error).toContain("unknown process key");
+	});
+});
+
+describe("container-first: component process claims need a verified key", () => {
+	const processChange = (value: string | null) => [
+		{
+			target: "component" as const,
+			componentAlias: "main",
+			field: "process" as const,
+			value,
+		},
+	];
+
+	test("an unbacked key is rejected at create — no agent coins a deployment unit", async () => {
+		const graphId = await createModel();
+		const created = await createSubsystemModelProposal({
+			graphId,
+			rationale: "r",
+			author: "runtime-topology-verifier",
+			changes: processChange("subsystems-studio/host"),
+		});
+		expect(created.ok).toBe(false);
+		if (!created.ok) expect(created.error).toContain("no accepted container");
+	});
+
+	test("clearing a claim needs no backing", async () => {
+		const graphId = await createModel();
+		const cleared = await createSubsystemModelProposal({
+			graphId,
+			rationale: "r",
+			author: "runtime-topology-verifier",
+			changes: processChange(null),
+		});
+		expect(cleared.ok).toBe(true);
+	});
+
+	test("once a container is accepted, claims to its key pass — create AND accept", async () => {
+		const graphId = await createModel();
+		const container = await createSubsystemModelProposal({
+			graphId,
+			rationale: "the host is one deployable unit",
+			changes: [
+				{
+					target: "c4-container",
+					purl: KEY,
+					container: {
+						id: "container:studio/host",
+						label: "Studio host",
+						containerKind: "application",
+						technology: "Bun",
+						process: "studio/host",
+					},
+				},
+			],
+		});
+		expect(container.ok).toBe(true);
+		if (!container.ok) return;
+		expect((await acceptSubsystemModelProposal(graphId, container.proposal.id)).ok).toBe(true);
+
+		const claim = await createSubsystemModelProposal({
+			graphId,
+			rationale: "main runs in the accepted host process",
+			author: "runtime-topology-verifier",
+			changes: processChange("studio/host"),
+		});
+		expect(claim.ok).toBe(true);
+		if (!claim.ok) return;
+		const accepted = await acceptSubsystemModelProposal(graphId, claim.proposal.id);
+		expect(accepted.ok).toBe(true);
+
+		const after = await getSubsystemModel(graphId);
+		expect(after?.components.find((c) => c.alias === "main")?.process).toBe("studio/host");
+	});
+
+	test("a container accepted-then-rejected store state re-blocks the claim at accept", async () => {
+		// Store keeps only accepted elements, so "rejected later" reads as
+		// absent: the pending claim loses its backing and accept refuses.
+		const graphId = await createModel();
+		const container = await createSubsystemModelProposal({
+			graphId,
+			rationale: "r",
+			changes: [
+				{
+					target: "c4-container",
+					purl: KEY,
+					container: {
+						id: "container:studio/host",
+						label: "Studio host",
+						containerKind: "application",
+						technology: "Bun",
+						process: "studio/host",
+					},
+				},
+			],
+		});
+		expect(container.ok).toBe(true);
+		if (!container.ok) return;
+		await acceptSubsystemModelProposal(graphId, container.proposal.id);
+
+		const claim = await createSubsystemModelProposal({
+			graphId,
+			rationale: "r",
+			author: "runtime-topology-verifier",
+			changes: processChange("studio/host"),
+		});
+		expect(claim.ok).toBe(true);
+		if (!claim.ok) return;
+
+		// Empty the store behind the proposal's back (the accepted-only store
+		// has no remove API, so simulate by removing the file's elements).
+		const { promises: fs } = await import("node:fs");
+		const { join } = await import("node:path");
+		const { sanitizePurlDirName } = await import("./graphify-store");
+		const file = join(
+			process.env["PRINCIPAL_C4_ELEMENTS_HOME"]!,
+			`${sanitizePurlDirName(KEY)}.json`,
+		);
+		const doc = JSON.parse(await fs.readFile(file, "utf8"));
+		doc.elements = [];
+		await fs.writeFile(file, JSON.stringify(doc, null, 2));
+
+		const accepted = await acceptSubsystemModelProposal(graphId, claim.proposal.id);
+		expect(accepted.ok).toBe(false);
+		if (!accepted.ok) expect(accepted.error).toContain("no accepted container");
 	});
 });

@@ -24,6 +24,25 @@ the model JSON on disk.
 **Do not** chase hard failures, containment (module — static topology), or
 construct findings. Those belong to other agents.
 
+## Container-first: propose only verified keys
+
+You may only propose a `process` value that an **accepted C4 container**
+claims in the element store. The store rejects anything else — a deployment
+unit key is never coined by you, only approved by a human through a container
+(the container-verifier proposes it). Concretely:
+
+- Get the model's element sets (`GET /api/subsystem-model/<id>/audit` lists
+  the boundaries; the element store backs them). Collect the accepted
+  containers' `process` keys.
+- A `boundary_process_missing` whose component's repo has **no accepted
+  container** arrives as `boundary_process_unbacked` — that run routes to the
+  **container-verifier**. Do not propose the component claim; skip with a
+  note that the boundary needs a container first.
+- When a verified key exists, propose assignments **only to that key** —
+  even if you believe a different key would be more accurate. Believing a
+  different unit exists is a container-verifier question, not a spelling
+  choice on your side.
+
 ## Important: which tools to use
 
 The brief’s **Access** section is authoritative. Prefer **Studio HTTP (`curl`)**.
@@ -102,6 +121,8 @@ Allowed changes:
 
 ## Rules
 
+- **Propose only `process` values backed by an accepted container** — the
+  store validates this on create and again on accept.
 - Prefer skip over aggressive clears when unsure.
 - Never edit model JSON on disk directly.
 - Never auto-accept.

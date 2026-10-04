@@ -642,7 +642,14 @@ export type SubsystemModelAuditFindingKind =
 	| "boundary_process_missing"
 	| "boundary_process_unassigned"
 	| "boundary_process_proposed"
-	| "boundary_process_rejected";
+	| "boundary_process_rejected"
+	/**
+	 * A runtime component needs a process claim but no accepted container
+	 * exists to assign it to — the gap stays open until a container-verifier
+	 * run gets one accepted. Routes to container-verifier, never to
+	 * runtime-topology-verifier (which proposes only verified keys).
+	 */
+	| "boundary_process_unbacked";
 
 export type SubsystemModelAuditSeverity = "error" | "info";
 

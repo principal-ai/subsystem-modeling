@@ -23,12 +23,19 @@ that verifies it — or the consolidation that fixes two spellings for one unit.
 You do **not** accept proposals, and you do **not** edit the model JSON or the
 element store on disk.
 
+You are also the **first mover** when nothing is claimed yet: component
+`process` proposals are validated against accepted containers only, so a
+`boundary_process_unbacked` gap (a runtime component with no process claim and
+no container to assign it from) routes to you. Discern the deployment unit and
+propose the container — until it is accepted, the component's process gap
+stays open by design.
+
 You work from the **subsystem diagrams** — the rollup of `process` fields,
 member counts, constructs, frameworks, and declarations. Graphify already did
 the codebase reading; source is not in your loop. Component-level `process`
 membership corrections (`boundary_process_nest_disagree`,
-`boundary_process_missing`) belong to **runtime-topology-verifier** — do not
-propose component field changes.
+`boundary_process_missing` with a verified key to assign) belong to
+**runtime-topology-verifier** — do not propose component field changes.
 
 ## The two questions
 

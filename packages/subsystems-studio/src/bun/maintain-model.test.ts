@@ -247,6 +247,33 @@ describe("selectMaintainRoute", () => {
 		);
 	});
 
+	test("unbacked process gap routes to container-verifier, ahead of runtime-topology", () => {
+		// Container-first: with no accepted container to assign from, the
+		// missing-claim gap cannot be fixed by proposing component claims —
+		// get the container accepted first.
+		const report = emptyReport({
+			findings: [
+				{
+					kind: "boundary_process_missing",
+					severity: "info",
+					componentAlias: "a",
+					message: "claims no process",
+				},
+				{
+					kind: "boundary_process_unbacked",
+					severity: "info",
+					componentAlias: "a",
+					message: "no accepted container to assign from",
+				},
+			],
+		});
+		expect(selectMaintainRoute(report)).toEqual({
+			agent: CONTAINER_VERIFIER_AGENT,
+			layer: "dynamic-topology",
+			mode: "verify",
+		});
+	});
+
 	test("rejected boundary does not route to container-verifier — the rejection is the decision", () => {
 		const report = emptyReport({
 			findings: [

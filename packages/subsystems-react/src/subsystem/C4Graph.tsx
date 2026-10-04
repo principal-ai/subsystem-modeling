@@ -26,17 +26,18 @@ import {
   useViewport,
 } from '@xyflow/react';
 import { useTheme } from '@principal-ade/industry-theme';
-import { Box, LayoutGrid, Minimize2 } from 'lucide-react';
+import { Box, Minimize2 } from 'lucide-react';
 import { computeElkLayout, pointAlongPath, pointsToSmoothPath } from '../utils/elkLayout';
 import { EDGE_LABEL_FONT_SIZE, EDGE_LABEL_HEIGHT, C4_LABEL_WIDTH, estimateEdgeLabelWidth } from '../utils/edgeLabel';
 import { deriveC4Groups, protocolColor } from './c4';
 import { C4NodeCard, NODE_H, NODE_W, nodeSize, nodeStyle } from './C4NodeCard';
+import { TechMark, technologyBrand } from './techIcons';
+import type { TechBrand } from './techIcons';
 import { GRAPH_CANVAS_CLASS, GRAPH_NAV_PROPS, GraphChrome, GraphLayerStyle } from './graphChrome';
 import type { C4Element, C4Model } from './c4';
 
 export interface C4GraphProps {
   model: C4Model;
-  title?: string;
   onSelectNode?: (id: string | null) => void;
   /**
    * Drill-down. Called from the expand affordance on a container card; the host
@@ -189,16 +190,24 @@ function C4EdgeView({ data, markerEnd }: EdgeProps<Edge<{ path?: string; color?:
 
 function C4GroupView(
   props: NodeProps<
-    Node<{ label: string; kind: 'system' | 'container'; color: string; onCollapse?: () => void }>
+    Node<{
+      label: string;
+      kind: 'system' | 'container';
+      color: string;
+      onCollapse?: () => void;
+      brand?: TechBrand;
+    }>
   >,
 ) {
   const { theme } = useTheme();
   const color = props.data.color;
   const isSystem = props.data.kind === 'system';
   const onCollapse = props.data.onCollapse;
-  // A system frame is the box we draw; a container frame groups components
-  // inside one. Boxes for each, so the badge says which level you are looking at.
-  const FrameIcon = isSystem ? Box : LayoutGrid;
+  const brand = props.data.brand;
+  // A container frame shows its technology mark (React/Bun/Node…) so the
+  // boundary says what it is built with, same as the node it wraps. The system
+  // frame has no single technology, so it keeps a neutral `Box`.
+  const FrameIcon = isSystem || !brand ? Box : undefined;
   return (
     <div
       style={{
@@ -237,7 +246,11 @@ function C4GroupView(
           whiteSpace: 'nowrap',
         }}
       >
-        <FrameIcon size={13} strokeWidth={2.25} aria-hidden />
+        {FrameIcon ? (
+          <FrameIcon size={13} strokeWidth={2.25} aria-hidden />
+        ) : brand ? (
+          <TechMark brand={brand} size={14} />
+        ) : null}
         {props.data.label}
         {onCollapse && (
           <button
@@ -280,7 +293,7 @@ const edgeTypes = {
   'c4-edge': C4EdgeView,
 };
 
-function Inner({ model, title, onSelectNode, onOpenContainer, onCloseContainer, gutter = 28 }: C4GraphProps) {
+function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter = 28 }: C4GraphProps) {
   const { theme } = useTheme();
   const { fitView } = useReactFlow();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -319,6 +332,11 @@ function Inner({ model, title, onSelectNode, onOpenContainer, onCloseContainer, 
       if (n.kind === 'component') {
         // Show a component only when its container is the opened one.
         return (n.container ?? n.parentId) === model.openContainerId;
+      }
+      if (n.kind === 'container') {
+        // An opened container is drawn as a frame, not a box — so it must not
+        // also paint as a node, or the box sits inside its own frame.
+        return n.id !== model.openContainerId;
       }
       return true;
     };
@@ -386,23 +404,30 @@ function Inner({ model, title, onSelectNode, onOpenContainer, onCloseContainer, 
       }),
     );
 
-    const rfEdges: Edge[] = model.edges.map((e) => {
-      // Colour keys off the protocol, not the trail verb: on a container
-      // diagram the transport is what a reader distinguishes at a glance.
-      const color = protocolColor(e.protocol);
-      return {
-        id: e.id,
-        type: 'c4-edge',
-        source: e.source,
-        target: e.target,
-        // The reserved label box and the chip must agree on size, so ELK is
-        // given the same text the chip draws (protocol first, then label). The
-        // chip itself is the C4EdgeLabels overlay, not this field.
-        label: e.protocol ?? e.label,
-        markerEnd: { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
-        data: { edge: e, color, path: '' },
-      };
-    });
+    // Only draw an edge whose BOTH endpoints are on screen. A hidden component
+    // (a closed container's children) must not be an edge endpoint: ELK throws
+    // on an edge to a node that isn't in the graph, and React Flow would draw a
+    // line to nowhere.
+    const drawnIds = new Set(rfNodes.map((n) => n.id));
+    const rfEdges: Edge[] = model.edges
+      .filter((e) => drawnIds.has(e.source) && drawnIds.has(e.target))
+      .map((e) => {
+        // Colour keys off the protocol, not the trail verb: on a container
+        // diagram the transport is what a reader distinguishes at a glance.
+        const color = protocolColor(e.protocol);
+        return {
+          id: e.id,
+          type: 'c4-edge',
+          source: e.source,
+          target: e.target,
+          // The reserved label box and the chip must agree on size, so ELK is
+          // given the same text the chip draws (protocol first, then label). The
+          // chip itself is the C4EdgeLabels overlay, not this field.
+          label: e.protocol ?? e.label,
+          markerEnd: { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
+          data: { edge: e, color, path: '' },
+        };
+      });
 
     void computeElkLayout(rfNodes, rfEdges, {
       direction: 'RIGHT',
@@ -493,6 +518,11 @@ function Inner({ model, title, onSelectNode, onOpenContainer, onCloseContainer, 
                 label: def?.label ?? id,
                 kind: def?.kind ?? 'container',
                 color: frameColor,
+                // A container frame shows its technology mark, so the boundary
+                // says what it is built with (matching the node's tech row).
+                ...(def?.kind !== 'system' && element
+                  ? { brand: technologyBrand('technology' in element ? element.technology : undefined) }
+                  : {}),
                 // An opened container frame can be collapsed by the host.
                 ...(def?.kind === 'container' && model.openContainerId === id && onCloseContainer
                   ? { onCollapse: onCloseContainer }
@@ -526,7 +556,9 @@ function Inner({ model, title, onSelectNode, onOpenContainer, onCloseContainer, 
       .catch((err) => {
         if (!alive) return;
         console.warn('[c4-graph] ELK layout failed, using grid:', err);
-        setNodes(rfNodes);
+        // No shells in the fallback, so a `parentId` would point at a node that
+        // isn't in the array — React Flow refuses to position it.
+        setNodes(rfNodes.map((n) => ({ ...n, parentId: undefined })));
         setRfEdges(rfEdges);
         setReady(true);
         requestAnimationFrame(() => fitView({ padding: 0.15 }));
@@ -570,15 +602,6 @@ function Inner({ model, title, onSelectNode, onOpenContainer, onCloseContainer, 
       ),
     [nodes, selectedId],
   );
-
-  // What the current view draws: runtime units at container level, components
-  // at component level. Mirrors the `inView` filter used for the nodes.
-  const runtime = model.nodes.filter((n) =>
-    model.view === 'component' ? n.kind === 'component' : n.kind === 'container',
-  ).length;
-  const outside = model.nodes.filter(
-    (n) => n.kind === 'external-system' || n.kind === 'person',
-  ).length;
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', background: theme.colors.background }}>
@@ -626,29 +649,6 @@ function Inner({ model, title, onSelectNode, onOpenContainer, onCloseContainer, 
           }}
         >
           Laying out C4 view…
-        </div>
-      )}
-      {title && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 12,
-            left: 12,
-            // Above the edge-label overlay (zIndex 5).
-            zIndex: 10,
-            fontSize: theme.fontSizes[2],
-            fontWeight: 600,
-            color: theme.colors.text,
-            background: theme.colors.backgroundSecondary ?? theme.colors.background,
-            border: `1px solid ${theme.colors.border ?? '#333'}`,
-            borderRadius: 6,
-            padding: '4px 10px',
-          }}
-        >
-          {title}
-          <span style={{ fontFamily: theme.fonts.monospace, fontSize: theme.fontSizes[0], color: muted, marginLeft: 8 }}>
-            {model.view} view · {runtime} {model.view === 'container' ? 'containers' : 'components'} · {outside} outside
-          </span>
         </div>
       )}
       {selected && (

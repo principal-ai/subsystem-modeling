@@ -151,14 +151,17 @@ export function nodeKindIcon(node: C4Element): LucideIcon | undefined {
  * The text on the top row: the technology the box is built with (Bun, React,
  * Postgres…). Falls back to the container kind / C4 kind when no technology is
  * stated, so the row is never blank.
+ *
+ * A component returns `''`: its technology is almost always the container's, so
+ * restating it is noise. The container frame already carries it.
  */
 export function nodeTopLabel(node: C4Element): string {
+  if (node.kind === 'component') return '';
   const technology = nodeTechnology(node);
   if (technology) return technology;
   switch (node.kind) {
     case 'container':
       return node.containerKind;
-    case 'component':
     case 'external-system':
     case 'person':
       return node.kind;
@@ -343,20 +346,22 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
           minWidth: 0,
         }}
       >
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          {brand && <TechMark brand={brand} />}
-          <span
-            style={{
-              fontWeight: 600,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              minWidth: 0,
-            }}
-          >
-            {topLabel}
+        {topLabel && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            {brand && <TechMark brand={brand} />}
+            <span
+              style={{
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                minWidth: 0,
+              }}
+            >
+              {topLabel}
+            </span>
           </span>
-        </span>
+        )}
         {node.kind === 'container' && (
           <span
             style={{

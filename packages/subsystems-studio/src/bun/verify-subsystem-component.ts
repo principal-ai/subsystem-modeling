@@ -52,7 +52,11 @@ import {
 	findAcceptedCallSiteAugmentation,
 } from "./augmentation-store";
 import { hashContentRange } from "./declaration-ref";
-import { auditBoundaryFields, auditProcessVerification } from "./boundary-audit";
+import {
+	auditBoundaryFields,
+	auditProcessVerification,
+	auditProcessBacking,
+} from "./boundary-audit";
 import type { C4Element } from "@principal-ai/subsystems-react";
 import { readC4ElementSet } from "./c4-element-store";
 import {
@@ -1471,23 +1475,20 @@ export async function auditSubsystemModel(
 	}
 
 	// Process-boundary verification — read the accepted element set(s) for the
-	// repos this model references and report every boundary that is not
-	// verified. Same read the renderer's issues list does, so the audit and
-	// the UI speak one vocabulary; a model spanning several repos merges them
-	// (a container claiming a process may live in any of the sets).
-	const elementSetRepoKeys = new Set(
-		graph.components
-			.map((c) => purlRepoKey(c.purl))
-			.filter((k): k is string => Boolean(k)),
-	);
-	const storeElements: C4Element[] = [];
-	for (const repoKey of elementSetRepoKeys) {
-		const set = await readC4ElementSet(repoKey);
-		storeElements.push(...set.elements);
+	// repos this model references. Same read the renderer's issues list does,
+	// so the audit and the UI speak one vocabulary. Kept per-repo for the
+	// backing check (a component can only be assigned to its own repo's
+	// containers); merged for the boundary read (a container claiming a
+	// process may live in any of the sets).
+	const backingSets = new Map<string, C4Element[]>();
+	for (const c of graph.components) {
+		const repoKey = purlRepoKey(c.purl);
+		if (!repoKey || backingSets.has(repoKey)) continue;
+		backingSets.set(repoKey, (await readC4ElementSet(repoKey)).elements);
 	}
 	const processVerification = auditProcessVerification(
 		graph.components,
-		storeElements,
+		[...backingSets.values()].flat(),
 	);
 	for (const f of processVerification.findings) {
 		findings.push({
@@ -1498,6 +1499,18 @@ export async function auditSubsystemModel(
 		});
 	}
 	boundary.checks.push(...processVerification.checks);
+
+	// Container-first rule: a process gap with no accepted container to assign
+	// from stays open until the container-verifier gets one accepted.
+	for (const f of auditProcessBacking(graph.components, backingSets)) {
+		findings.push({
+			kind: f.kind,
+			severity: f.severity,
+			componentAlias: f.componentAlias,
+			componentName: f.componentName,
+			message: f.message,
+		});
+	}
 
 	// Trail step verification via call site augmentations
 	let stepsVerified = 0;

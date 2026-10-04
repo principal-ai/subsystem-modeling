@@ -210,7 +210,7 @@ function Demo() {
   return (
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-        <C4Graph model={model} title="Subsystem Modeling" onSelectNode={setSelected} />
+        <C4Graph model={model} onSelectNode={setSelected} />
       </div>
       <div
         style={{

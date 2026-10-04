@@ -173,7 +173,8 @@ function isBoundaryFindingKind(kind: string | undefined): boolean {
 		// Process-verification kinds (element-store read): never construct work.
 		kind === "boundary_process_unassigned" ||
 		kind === "boundary_process_proposed" ||
-		kind === "boundary_process_rejected"
+		kind === "boundary_process_rejected" ||
+		kind === "boundary_process_unbacked"
 	);
 }
 
@@ -305,6 +306,16 @@ export function selectMaintainRoute(
 		return {
 			agent: PACKAGE_MODULE_VERIFIER_AGENT,
 			layer: "static-topology",
+			mode: "verify",
+		};
+	}
+	// Container-first: a process gap with NO accepted container to assign from
+	// cannot be fixed by proposing component claims (the store validates them
+	// against accepted keys) — get the container accepted first.
+	if (report.findings.some((f) => f.kind === "boundary_process_unbacked")) {
+		return {
+			agent: CONTAINER_VERIFIER_AGENT,
+			layer: "dynamic-topology",
 			mode: "verify",
 		};
 	}
@@ -732,8 +743,13 @@ export function buildMaintainBrief(opts: {
 				return isRuntimeTopologyGapFinding(f);
 			case CONTAINER_VERIFIER_AGENT:
 				// Rejected boundaries ride along as context — the agent must know
-				// the decision exists so it does not re-propose it.
-				return isContainerVerificationFinding(f) || f.kind === "boundary_process_rejected";
+				// the decision exists so it does not re-propose it. Unbacked gaps
+				// are the container-first trigger: propose the container.
+				return (
+					isContainerVerificationFinding(f) ||
+					f.kind === "boundary_process_unbacked" ||
+					f.kind === "boundary_process_rejected"
+				);
 		}
 	});
 

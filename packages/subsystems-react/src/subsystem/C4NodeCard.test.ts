@@ -150,17 +150,20 @@ describe('nodeTopLabel — the technology, or the kind when none is stated', () 
     expect(
       nodeTopLabel(node({ containerKind: 'application', technology: 'Bun + Electrobun' })),
     ).toBe('Bun + Electrobun');
-    expect(nodeTopLabel(node({ kind: 'component', technology: 'React + ELK' }))).toBe('React + ELK');
   });
 
   test('a container with no technology falls back to its kind', () => {
     expect(nodeTopLabel(node({ containerKind: 'data-store', technology: '' }))).toBe('data-store');
   });
 
-  test('the other kinds fall back to their C4 kind', () => {
-    expect(nodeTopLabel(node({ kind: 'component' }))).toBe('component');
+  test('an external system / person falls back to its C4 kind', () => {
     expect(nodeTopLabel(node({ kind: 'external-system' }))).toBe('external-system');
     expect(nodeTopLabel(node({ kind: 'person' }))).toBe('person');
+  });
+
+  test('a component has no top label — its technology is the container’s', () => {
+    expect(nodeTopLabel(node({ kind: 'component', technology: 'React + ELK' }))).toBe('');
+    expect(nodeTopLabel(node({ kind: 'component' }))).toBe('');
   });
 });
 

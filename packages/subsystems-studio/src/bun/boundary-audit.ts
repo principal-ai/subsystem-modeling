@@ -8,7 +8,7 @@
 
 import type { SubsystemComponent } from "@principal-ai/subsystems-core";
 import { getSubsystemProcessRegions } from "@principal-ai/subsystems-core";
-import { verifyProcessBoundaries } from "@principal-ai/subsystems-react";
+import { purlRepoKey, verifyProcessBoundaries } from "@principal-ai/subsystems-react";
 import type { C4Element } from "@principal-ai/subsystems-react";
 
 export type BoundaryCheckKind =
@@ -38,7 +38,8 @@ export interface BoundaryAuditFinding {
 		| "boundary_process_missing"
 		| "boundary_process_unassigned"
 		| "boundary_process_proposed"
-		| "boundary_process_rejected";
+		| "boundary_process_rejected"
+		| "boundary_process_unbacked";
 	severity: "error" | "info";
 	componentAlias?: string;
 	componentName?: string;
@@ -342,6 +343,42 @@ export function auditBoundaryFields(
 			processMissing,
 		},
 	};
+}
+
+/**
+ * Which runtime components have NO verified key to assign a process from —
+ * a required process claim whose repo's element set holds no accepted
+ * container. These are the gaps that must STAY open under the container-first
+ * rule: runtime-topology-verifier proposes only verified keys, so an unbacked
+ * gap routes to the container-verifier (propose the container, human accepts)
+ * instead of an agent coining a deployment-unit key from nothing.
+ *
+ * `sets` maps a component's repo key (`purlRepoKey`) to that repo's element
+ * set. Pure over its inputs.
+ */
+export function auditProcessBacking(
+	components: readonly SubsystemComponent[],
+	sets: ReadonlyMap<string, readonly C4Element[]>,
+): BoundaryAuditFinding[] {
+	const findings: BoundaryAuditFinding[] = [];
+	for (const c of components) {
+		if (!requiresProcess(c)) continue;
+		if (c.process?.trim()) continue;
+		const repoKey = purlRepoKey(c.purl);
+		const set = repoKey ? sets.get(repoKey) : undefined;
+		const hasBackableKey = (set ?? []).some(
+			(e) => e.kind === "container" && e.state === "accepted" && e.process?.trim(),
+		);
+		if (hasBackableKey) continue;
+		findings.push({
+			kind: "boundary_process_unbacked",
+			severity: "info",
+			componentAlias: c.alias,
+			componentName: c.name,
+			message: `${c.construct ?? "component"} ${JSON.stringify(c.alias)} claims no process and no accepted container exists to assign it from — accept a container for this boundary first (container-verifier).`,
+		});
+	}
+	return findings;
 }
 
 /**
