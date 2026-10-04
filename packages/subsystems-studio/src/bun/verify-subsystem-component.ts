@@ -1485,7 +1485,11 @@ export async function auditSubsystemModel(
 		const set = await readC4ElementSet(repoKey);
 		storeElements.push(...set.elements);
 	}
-	for (const f of auditProcessVerification(graph.components, storeElements)) {
+	const processVerification = auditProcessVerification(
+		graph.components,
+		storeElements,
+	);
+	for (const f of processVerification.findings) {
 		findings.push({
 			kind: f.kind,
 			severity: f.severity,
@@ -1493,6 +1497,7 @@ export async function auditSubsystemModel(
 			message: f.message,
 		});
 	}
+	boundary.checks.push(...processVerification.checks);
 
 	// Trail step verification via call site augmentations
 	let stepsVerified = 0;

@@ -26,10 +26,10 @@ import {
   useViewport,
 } from '@xyflow/react';
 import { useTheme } from '@principal-ade/industry-theme';
-import { Box, LayoutGrid } from 'lucide-react';
+import { Box, LayoutGrid, Minimize2 } from 'lucide-react';
 import { computeElkLayout, pointAlongPath, pointsToSmoothPath } from '../utils/elkLayout';
 import { EDGE_LABEL_FONT_SIZE, EDGE_LABEL_HEIGHT, C4_LABEL_WIDTH, estimateEdgeLabelWidth } from '../utils/edgeLabel';
-import { protocolColor } from './c4';
+import { deriveC4Groups, protocolColor } from './c4';
 import { C4NodeCard, NODE_H, NODE_W, nodeSize, nodeStyle } from './C4NodeCard';
 import { GRAPH_CANVAS_CLASS, GRAPH_NAV_PROPS, GraphChrome, GraphLayerStyle } from './graphChrome';
 import type { C4Element, C4Model } from './c4';
@@ -38,6 +38,14 @@ export interface C4GraphProps {
   model: C4Model;
   title?: string;
   onSelectNode?: (id: string | null) => void;
+  /**
+   * Drill-down. Called from the expand affordance on a container card; the host
+   * sets `openContainerId` on the model to swap the box for a frame with its
+   * components inside.
+   */
+  onOpenContainer?: (id: string) => void;
+  /** Called from the collapse affordance inside an opened container frame. */
+  onCloseContainer?: () => void;
   /**
    * Breathing room around each card, in flow px, applied as ELK spacing (not by
    * inflating the node box — that left the edge lines starting short of the
@@ -48,14 +56,17 @@ export interface C4GraphProps {
 }
 
 function C4NodeView(
-  props: NodeProps<Node<{ element: C4Element; selected: boolean; componentCount?: number }>>,
+  props: NodeProps<
+    Node<{ element: C4Element; selected: boolean; componentCount?: number; onExpand?: () => void }>
+  >,
 ) {
-  const { element, selected, componentCount } = props.data;
+  const { element, selected, componentCount, onExpand } = props.data;
   return (
     <C4NodeCard
       node={element}
       selected={selected}
       componentCount={componentCount ?? 0}
+      onExpand={onExpand}
       handles={
         <>
           <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
@@ -176,10 +187,15 @@ function C4EdgeView({ data, markerEnd }: EdgeProps<Edge<{ path?: string; color?:
   );
 }
 
-function C4GroupView(props: NodeProps<Node<{ label: string; kind: 'system' | 'container'; color: string }>>) {
+function C4GroupView(
+  props: NodeProps<
+    Node<{ label: string; kind: 'system' | 'container'; color: string; onCollapse?: () => void }>
+  >,
+) {
   const { theme } = useTheme();
   const color = props.data.color;
   const isSystem = props.data.kind === 'system';
+  const onCollapse = props.data.onCollapse;
   // A system frame is the box we draw; a container frame groups components
   // inside one. Boxes for each, so the badge says which level you are looking at.
   const FrameIcon = isSystem ? Box : LayoutGrid;
@@ -223,6 +239,33 @@ function C4GroupView(props: NodeProps<Node<{ label: string; kind: 'system' | 'co
       >
         <FrameIcon size={13} strokeWidth={2.25} aria-hidden />
         {props.data.label}
+        {onCollapse && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCollapse();
+            }}
+            aria-label="Collapse"
+            style={{
+              pointerEvents: 'auto',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 18,
+              height: 18,
+              marginLeft: 2,
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              color,
+              cursor: 'pointer',
+              lineHeight: 1,
+            }}
+          >
+            <Minimize2 size={12} strokeWidth={2.5} />
+          </button>
+        )}
       </span>
     </div>
   );
@@ -237,7 +280,7 @@ const edgeTypes = {
   'c4-edge': C4EdgeView,
 };
 
-function Inner({ model, title, onSelectNode, gutter = 28 }: C4GraphProps) {
+function Inner({ model, title, onSelectNode, onOpenContainer, onCloseContainer, gutter = 28 }: C4GraphProps) {
   const { theme } = useTheme();
   const { fitView } = useReactFlow();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -249,14 +292,17 @@ function Inner({ model, title, onSelectNode, gutter = 28 }: C4GraphProps) {
     () => new Map(),
   );
 
+  const derivedGroups = useMemo(() => deriveC4Groups(model), [model]);
+
   const layoutKey = useMemo(
     () =>
       [
         ...model.nodes.map((n) => `${n.id}\0${n.parentId ?? ''}\0${n.label}`).sort(),
-        ...model.groups.map((g) => `${g.id}\0${g.parentId ?? ''}\0${g.memberIds.length}`).sort(),
+        ...derivedGroups.map((g) => `${g.id}\0${g.parentId ?? ''}\0${g.memberIds.length}`).sort(),
         ...model.edges.map((e) => `${e.id}\0${e.count}`).sort(),
+        `open:${model.openContainerId ?? ''}`,
       ].join('\n'),
-    [model],
+    [model, derivedGroups],
   );
 
   useEffect(() => {
@@ -266,10 +312,16 @@ function Inner({ model, title, onSelectNode, gutter = 28 }: C4GraphProps) {
 
     // Draw only the elements for this view. A container diagram shows the
     // runtime units (containers, externals, people); components belong to the
-    // component view. Components are still carried on the model (see the side
-    // panel), just not drawn here.
-    const inView = (n: C4Element): boolean =>
-      model.view === 'component' ? n.kind !== 'container' : n.kind !== 'component';
+    // component view — or to a container that has been opened. Components are
+    // always carried on the model (see the side panel), just not drawn here.
+    const inView = (n: C4Element): boolean => {
+      if (model.view === 'component') return n.kind !== 'container';
+      if (n.kind === 'component') {
+        // Show a component only when its container is the opened one.
+        return (n.container ?? n.parentId) === model.openContainerId;
+      }
+      return true;
+    };
 
     // How many components each container groups — computed once here because
     // the card only receives its own element, not the model.
@@ -294,11 +346,19 @@ function Inner({ model, title, onSelectNode, gutter = 28 }: C4GraphProps) {
         width: size.width,
         height: size.height,
         ...(n.parentId ? { parentId: n.parentId } : {}),
-        data: { element: n, selected: false, componentCount: childComponentCount.get(n.id) ?? 0 },
+        data: {
+          element: n,
+          selected: false,
+          componentCount: childComponentCount.get(n.id) ?? 0,
+          // Only a container with components can be opened.
+          ...(n.kind === 'container' && (childComponentCount.get(n.id) ?? 0) > 0 && onOpenContainer
+            ? { onExpand: () => onOpenContainer(n.id) }
+            : {}),
+        },
       };
     });
 
-    const groups = model.groups.map((g) => ({
+    const groups = derivedGroups.map((g) => ({
       id: g.id,
       memberIds: g.memberIds,
       ...(g.parentId ? { parentId: g.parentId } : {}),
@@ -313,7 +373,7 @@ function Inner({ model, title, onSelectNode, gutter = 28 }: C4GraphProps) {
     //
     // Order (ascending = earlier in the layout direction): people, then each
     // frame in model order, then external systems.
-    const frameIds = model.groups.map((g) => g.id);
+    const frameIds = derivedGroups.map((g) => g.id);
     const frameIndex = new Map(frameIds.map((id, i) => [id, i]));
     const partitionByNode = new Map<string, number>(
       model.nodes.map((n) => {
@@ -382,7 +442,7 @@ function Inner({ model, title, onSelectNode, gutter = 28 }: C4GraphProps) {
         });
         setLabelPositions(labelPositions);
         const builtGroups = new Set(result.groupBounds.keys());
-        const groupById = new Map(model.groups.map((g) => [g.id, g]));
+        const groupById = new Map(derivedGroups.map((g) => [g.id, g]));
 
         const depthOf = (id: string): number => {
           let d = 0;
@@ -433,6 +493,10 @@ function Inner({ model, title, onSelectNode, gutter = 28 }: C4GraphProps) {
                 label: def?.label ?? id,
                 kind: def?.kind ?? 'container',
                 color: frameColor,
+                // An opened container frame can be collapsed by the host.
+                ...(def?.kind === 'container' && model.openContainerId === id && onCloseContainer
+                  ? { onCollapse: onCloseContainer }
+                  : {}),
               },
             };
           });

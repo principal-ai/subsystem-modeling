@@ -760,6 +760,8 @@ export interface SubsystemModelAuditBoundaryCheck {
 		| "module_file"
 		| "process_nest"
 		| "process_claim"
+		/** Element-store verification of the boundary this component claims. */
+		| "process_container"
 		| "skipped";
 	module?: string;
 	file?: string;

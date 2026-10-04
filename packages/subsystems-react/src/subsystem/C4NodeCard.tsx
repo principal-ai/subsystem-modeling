@@ -13,7 +13,7 @@
  */
 
 import { useTheme } from '@principal-ade/industry-theme';
-import { AppWindow, Component, Database } from 'lucide-react';
+import { AppWindow, Component, Database, Maximize2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { TechMark, technologyBrand } from './techIcons';
 import type { C4Element } from './c4';
@@ -231,9 +231,14 @@ export interface C4NodeCardProps {
    * row for containers. Omitted/0 → no count.
    */
   componentCount?: number;
+  /**
+   * When set, the card draws an expand affordance (bottom-right) that calls
+   * this — the drill-down trigger. Only containers with components pass it.
+   */
+  onExpand?: () => void;
 }
 
-export function C4NodeCard({ node, selected = false, handles, onClick, componentCount = 0 }: C4NodeCardProps) {
+export function C4NodeCard({ node, selected = false, handles, onClick, componentCount = 0, onExpand }: C4NodeCardProps) {
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const style = nodeStyle(node, theme, selected);
@@ -252,6 +257,7 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
     <div
       onClick={onClick}
       style={{
+        position: 'relative',
         width: size.width,
         minHeight: size.height,
         boxSizing: 'border-box',
@@ -380,6 +386,37 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
         >
           {subtitle}
         </span>
+      )}
+      {/* Drill-down affordance: bottom-right, its own hit target so the card's
+          own click (select) is unaffected. */}
+      {onExpand && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onExpand();
+          }}
+          aria-label="Show components"
+          style={{
+            position: 'absolute',
+            right: 6,
+            bottom: 6,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 22,
+            height: 22,
+            padding: 0,
+            borderRadius: 4,
+            border: `1px solid ${style.color}`,
+            background: theme.colors.backgroundSecondary ?? theme.colors.background,
+            color: style.color,
+            cursor: 'pointer',
+            lineHeight: 1,
+          }}
+        >
+          <Maximize2 size={13} strokeWidth={2.25} />
+        </button>
       )}
       {handles}
     </div>

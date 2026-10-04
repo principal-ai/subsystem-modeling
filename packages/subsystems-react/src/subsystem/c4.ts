@@ -153,13 +153,74 @@ export interface C4ElementSet {
 /** Which level to draw. Determines which frames are drawn. */
 export type C4View = 'container' | 'component';
 
-/** A compound frame: the system, or a container holding its components. */
+/**
+ * A compound frame the renderer draws: the system, or a container holding its
+ * components. Never authored — `deriveC4Groups` produces these from the element
+ * `parentId` chains and the current scope.
+ */
 export interface C4Group {
   id: string;
   kind: 'system' | 'container';
   label: string;
   parentId?: string;
   memberIds: string[];
+}
+
+/**
+ * Derive the frames to draw from the elements and the current scope.
+ *
+ * A container becomes a frame whenever its components are on screen — in the
+ * component view, or when it is the opened container. The system frame wraps
+ * whichever containers are drawn. No frame is authored; this is the view of the
+ * element set, so a container's identity (id, label, technology, colour) lives
+ * only on the element.
+ */
+export function deriveC4Groups(
+  model: Pick<C4Model, 'view' | 'system' | 'nodes' | 'openContainerId'>,
+): C4Group[] {
+  const groups: C4Group[] = [];
+  const containers = model.nodes.filter((n): n is C4Container => n.kind === 'container');
+  const components = model.nodes.filter((n): n is C4Component => n.kind === 'component');
+
+  const opened = model.openContainerId ?? null;
+  // Component view shows every container's components; container view shows a
+  // container's components only when it is opened.
+  const framing = (containerId: string): boolean =>
+    model.view === 'component' || opened === containerId;
+
+  const framedContainers: string[] = [];
+  for (const c of containers) {
+    const members = components
+      .filter((comp) => (comp.container ?? comp.parentId) === c.id)
+      .map((comp) => comp.id);
+    if (members.length > 0 && framing(c.id)) {
+      groups.push({
+        id: c.id,
+        kind: 'container',
+        label: c.label,
+        parentId: model.system.id,
+        memberIds: members,
+      });
+      framedContainers.push(c.id);
+    }
+  }
+
+  // The system frame wraps the framed containers (component view) or every
+  // drawn top-level element (container view), so it always reads as the boundary.
+  const systemMembers =
+    model.view === 'component'
+      ? framedContainers
+      : (opened ? [opened] : containers.map((c) => c.id));
+  if (systemMembers.length > 0) {
+    groups.push({
+      id: model.system.id,
+      kind: 'system',
+      label: model.system.label,
+      memberIds: systemMembers,
+    });
+  }
+
+  return groups;
 }
 
 /**
@@ -229,13 +290,23 @@ export function protocolColor(protocol: string | undefined): string {
   return best ? PROTOCOL_COLOR[best]! : PROTOCOL_COLOR_FALLBACK;
 }
 
-/** A drawable C4 projection. Authored, not derived. */
+/**
+ * A drawable C4 projection. Authored: the boxes and lines, nothing drawn for
+ * you. Frames are derived by the renderer from the elements' `parentId` chains
+ * — a container is a frame when its components are being shown (component view,
+ * or opened via `openContainerId`), never a separately-authored thing.
+ */
 export interface C4Model {
   view: C4View;
   system: { id: string; label: string; repoKey?: string };
   nodes: C4Element[];
-  groups: C4Group[];
   edges: C4Edge[];
+  /**
+   * Drill-down scope: the id of a container whose components should be shown
+   * inside it as a frame. Absent/null → the container is drawn as a box and its
+   * components are hidden. The renderer derives the frames either way.
+   */
+  openContainerId?: string | null;
 }
 
 /**

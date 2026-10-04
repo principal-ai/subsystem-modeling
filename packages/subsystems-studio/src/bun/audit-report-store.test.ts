@@ -466,8 +466,29 @@ describe("summarizeLanes", () => {
 		expect(lanes.trail).toBe("none");
 	});
 
-	test("an unmatched symbol is a red construct lane, not a yellow gap", () => {
-		// The file exists but the symbol is absent — emitted at check verdict
+	test("an unverified process container gaps the dynamic-topology lane", () => {
+		// All process CLAIMS can be internally consistent (green under the old
+		// tally) while no container claims the boundary — the element-store
+		// check must count, or the lane icon lies against the issues list.
+		const lanes = summarizeLanes(
+			report({
+				checks: [componentCheck({})],
+				boundaryChecks: [
+					boundaryCheck({ componentAlias: "p", kind: "process_claim" }),
+					boundaryCheck({
+						componentAlias: "p",
+						kind: "process_container",
+						process: "app/host",
+						verdict: "gap",
+					}),
+				],
+			}),
+			{ hasTrails: false },
+		);
+		expect(lanes["dynamic-topology"]).toBe("partial");
+	});
+
+	test("an unmatched symbol is a red construct lane, not a yellow gap", () => {		// The file exists but the symbol is absent — emitted at check verdict
 		// `issue` (error finding). A mere `ok` verdict would tally as open and
 		// paint the lane yellow, understating a broken claim as unconfirmed.
 		const lanes = summarizeLanes(

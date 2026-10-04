@@ -15,6 +15,7 @@ export type BoundaryCheckKind =
 	| "module_file"
 	| "process_nest"
 	| "process_claim"
+	| "process_container"
 	| "skipped";
 
 export type BoundaryCheckVerdict = "ok" | "issue" | "gap" | "skipped";
@@ -351,17 +352,38 @@ export function auditBoundaryFields(
  * boundary that is NOT verified. `verified` reports nothing — the audit
  * reports absence only, and silence is the good state.
  *
+ * Each finding carries a backing `process_container` check per member alias
+ * (verdict `gap` when unverified), so the lane tallies — which drive the
+ * dynamic-topology icon — see the same state the issues list shows. Without
+ * the checks, a model whose process claims are internally consistent tallies
+ * green while the boundary has no container at all.
+ *
  * Pure over its inputs; the caller reads the element set(s) from disk.
  */
 export function auditProcessVerification(
 	components: readonly SubsystemComponent[],
 	elements: readonly C4Element[],
-): BoundaryAuditFinding[] {
+): { checks: BoundaryComponentCheck[]; findings: BoundaryAuditFinding[] } {
 	const rollup = getSubsystemProcessRegions({ components });
 	const statuses = verifyProcessBoundaries({ rollup, elements });
+	const nameByAlias = new Map(components.map((c) => [c.alias, c.name]));
+	const checks: BoundaryComponentCheck[] = [];
 	const findings: BoundaryAuditFinding[] = [];
-	for (const { key, status, element } of statuses) {
-		if (status === "verified") continue;
+	for (const { key, status, memberAliases, element } of statuses) {
+		const verified = status === "verified";
+		for (const alias of memberAliases) {
+			checks.push({
+				componentAlias: alias,
+				componentName: nameByAlias.get(alias),
+				kind: "process_container",
+				process: key,
+				verdict: verified ? "ok" : "gap",
+				note: verified
+					? `boundary ${JSON.stringify(key)} verified by container ${JSON.stringify(element?.label ?? element?.id ?? key)}`
+					: `boundary ${JSON.stringify(key)} has no accepted container (${status})`,
+			});
+		}
+		if (verified) continue;
 		const label = element?.label ?? key;
 		findings.push({
 			kind: `boundary_process_${status}`,
@@ -375,5 +397,5 @@ export function auditProcessVerification(
 						: `Container ${JSON.stringify(label)} was rejected for the process boundary ${JSON.stringify(key)} — it stays unclaimed until a container is accepted.`,
 		});
 	}
-	return findings;
+	return { checks, findings };
 }

@@ -195,14 +195,6 @@ const containerModel: C4Model = {
   view: 'container',
   system: SYSTEM,
   nodes: NODES,
-  groups: [
-    {
-      id: SYSTEM.id,
-      kind: 'system',
-      label: SYSTEM.label,
-      memberIds: NODES.filter((n) => n.parentId === SYSTEM.id).map((n) => n.id),
-    },
-  ],
   edges: EDGES,
 };
 

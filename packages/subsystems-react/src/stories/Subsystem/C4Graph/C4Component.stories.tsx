@@ -3,7 +3,7 @@ import '@xyflow/react/dist/style.css';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { C4Graph } from '../../../subsystem/C4Graph';
-import type { C4Edge, C4Group, C4Model, C4Element, C4Component } from '../../../subsystem/c4';
+import type { C4Edge, C4Model, C4Element, C4Component, C4Container } from '../../../subsystem/c4';
 
 const meta = {
   title: 'Subsystem/C4Graph/C4Component',
@@ -53,7 +53,25 @@ function component(
   };
 }
 
+/** A container element. Its components make it frame in the renderer. */
+function container(over: Partial<C4Container> & Pick<C4Container, 'id' | 'label'>): C4Element {
+  return {
+    kind: 'container',
+    containerKind: 'application',
+    technology: '',
+    state: 'accepted',
+    members: [],
+    constructs: [],
+    parentId: SYSTEM.id,
+    ...over,
+  };
+}
+
 const NODES: C4Element[] = [
+  // --- the containers these components sit in ------------------------------
+  container({ id: HOST, label: 'Subsystem Studio — host', technology: 'Bun + Electrobun' }),
+  container({ id: RENDERER, label: 'Subsystem Studio — renderer', technology: 'React 19' }),
+
   // --- inside the host ------------------------------------------------------
   component({
     id: 'component:audit-verification',
@@ -131,13 +149,6 @@ const NODES: C4Element[] = [
   }),
 ];
 
-/** The two containers at this level, drawn as frames. */
-const GROUPS: C4Group[] = [
-  { id: HOST, kind: 'container', label: 'Subsystem Studio — host', parentId: SYSTEM.id, memberIds: NODES.filter((n) => n.parentId === HOST).map((n) => n.id) },
-  { id: RENDERER, kind: 'container', label: 'Subsystem Studio — renderer', parentId: SYSTEM.id, memberIds: NODES.filter((n) => n.parentId === RENDERER).map((n) => n.id) },
-  { id: SYSTEM.id, kind: 'system', label: SYSTEM.label, memberIds: [HOST, RENDERER] },
-];
-
 /** A line between components — protocol-labelled, like the container view. */
 function edge(id: string, source: string, target: string, protocol: string): C4Edge {
   return { id, source, target, label: protocol, protocol, mechanisms: [], count: 1 };
@@ -158,7 +169,6 @@ const componentModel: C4Model = {
   view: 'component',
   system: SYSTEM,
   nodes: NODES,
-  groups: GROUPS,
   edges: EDGES,
 };
 
@@ -184,7 +194,7 @@ function Demo() {
           borderTop: '1px solid #333',
         }}
       >
-        <span>{components} components in {model.groups.filter((g) => g.kind === 'container').length} containers</span>
+        <span>{components} components in {model.nodes.filter((n) => n.kind === 'container').length} containers</span>
         <span>{model.edges.length} lines</span>
         <span>selected: {selected ?? '(none)'}</span>
         <span style={{ color: '#777' }}>each component is a grouping stitched across many models</span>

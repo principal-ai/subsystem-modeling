@@ -325,40 +325,49 @@ describe("auditProcessVerification", () => {
 		}) as C4Element;
 
 	test("empty store reads as unassigned for every claimed boundary", () => {
-		const f = auditProcessVerification(components, []);
-		expect(f.map((x) => [x.kind, x.processKey])).toEqual([
+		const { checks, findings } = auditProcessVerification(components, []);
+		expect(findings.map((x) => [x.kind, x.processKey])).toEqual([
 			["boundary_process_unassigned", "app/host"],
 			["boundary_process_unassigned", "app/renderer"],
 		]);
-		expect(f.every((x) => x.severity === "info")).toBe(true);
+		expect(findings.every((x) => x.severity === "info")).toBe(true);
+		// Every finding carries backing checks so the lane tally (the
+		// dynamic-topology icon) sees the same state the issues list shows.
+		expect(checks).toHaveLength(2);
+		expect(
+			checks.every((c) => c.kind === "process_container" && c.verdict === "gap"),
+		).toBe(true);
 	});
 
 	test("accepted container verifies — silence; proposed and rejected report", () => {
-		const f = auditProcessVerification(components, [
+		const { checks, findings } = auditProcessVerification(components, [
 			container("c1", "app/host", "accepted"),
 			container("c2", "app/renderer", "proposed"),
 		]);
-		expect(f).toHaveLength(1);
-		expect(f[0]!.kind).toBe("boundary_process_proposed");
-		expect(f[0]!.processKey).toBe("app/renderer");
+		expect(findings).toHaveLength(1);
+		expect(findings[0]!.kind).toBe("boundary_process_proposed");
+		expect(findings[0]!.processKey).toBe("app/renderer");
+		// The verified boundary's check is ok; only the proposed one gaps.
+		expect(checks.filter((c) => c.verdict === "ok")).toHaveLength(1);
+		expect(checks.filter((c) => c.verdict === "gap")).toHaveLength(1);
 	});
 
 	test("accepted beats rejected beats proposed (precedence map)", () => {
-		const f = auditProcessVerification(components, [
+		const { findings } = auditProcessVerification(components, [
 			container("r", "app/host", "rejected"),
 			container("a", "app/host", "accepted"),
 			container("p", "app/host", "proposed"),
 			container("ok", "app/renderer", "accepted"),
 		]);
-		expect(f).toEqual([]);
+		expect(findings).toEqual([]);
 	});
 
 	test("rejected-only boundary reports without a fix", () => {
-		const f = auditProcessVerification(components, [
+		const { findings } = auditProcessVerification(components, [
 			container("r", "app/host", "rejected"),
 			container("ok", "app/renderer", "accepted"),
 		]);
-		expect(f).toHaveLength(1);
-		expect(f[0]!.kind).toBe("boundary_process_rejected");
+		expect(findings).toHaveLength(1);
+		expect(findings[0]!.kind).toBe("boundary_process_rejected");
 	});
 });

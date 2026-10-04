@@ -273,7 +273,11 @@ export function summarizeLanes(
 	const dynamicTopology = emptyTally();
 	for (const c of report.boundaryChecks ?? []) {
 		if (c.kind === "module_file") classifyBoundaryCheck(c, staticTopology);
-		if (c.kind === "process_nest" || c.kind === "process_claim") {
+		if (
+			c.kind === "process_nest" ||
+			c.kind === "process_claim" ||
+			c.kind === "process_container"
+		) {
 			classifyBoundaryCheck(c, dynamicTopology);
 		}
 	}
