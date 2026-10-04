@@ -265,15 +265,14 @@ export function C4NodeCard({ node, selected = false, handles, onClick }: C4NodeC
         fontFamily: theme.fonts.body,
       }}
     >
-      {/* Left: the brand mark when we hold the official one, then the
-          technology. Right: a container's C4 sort, application vs data-store.
-          The kind itself stays on the shape, confirmation on the border (see
-          `nodeShape`, `nodeStyle`). */}
+      {/* The technology, and the kind mark (− nothing else). The kind itself
+          stays on the shape, confirmation on the border (see `nodeShape`,
+          `nodeStyle`). */}
       <span
         style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: centered ? 'center' : 'space-between',
+          justifyContent: centered ? 'center' : 'flex-start',
           gap: 6,
           fontFamily: theme.fonts.monospace,
           fontSize: theme.fontSizes[0],
@@ -283,51 +282,67 @@ export function C4NodeCard({ node, selected = false, handles, onClick }: C4NodeC
           minWidth: 0,
         }}
       >
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          {brand && <TechMark brand={brand} />}
-          <span
-            style={{
-              fontWeight: 600,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              minWidth: 0,
-            }}
-          >
-            {topLabel}
-          </span>
+        {brand && <TechMark brand={brand} />}
+        <span
+          style={{
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            minWidth: 0,
+          }}
+        >
+          {topLabel}
         </span>
+      </span>
+      {/* The label row: the kind mark, then the name. Two lines rather than an
+          ellipsis — a truncated label hides the very thing that distinguishes
+          two containers from each other. The fixed height reserves both lines
+          even for a one-line label, so the subtitle below sits at the same y on
+          every card. */}
+      <span
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 6,
+          height: LABEL_SLOT_H,
+          minWidth: 0,
+        }}
+      >
         {Icon && (
           <span
             title={node.kind === 'container' ? node.containerKind : node.kind}
             aria-label={node.kind === 'container' ? node.containerKind : node.kind}
-            style={{ display: 'inline-flex', flexShrink: 0, color: style.color }}
+            style={{
+              display: 'inline-flex',
+              flexShrink: 0,
+              color: style.color,
+              // Nudge down so the glyph optically centres on the first text line.
+              marginTop: 3,
+            }}
           >
-            <Icon size={13} strokeWidth={2.25} />
+            <Icon size={16} strokeWidth={2.25} />
           </span>
         )}
-      </span>
-      {/* Two lines rather than an ellipsis: a truncated label hides the very
-          thing that distinguishes two containers from each other. The fixed
-          height reserves both lines even for a one-line label, so the subtitle
-          below sits at the same y on every card. */}
-      <span
-        style={{
-          fontFamily: theme.fonts.body,
-          fontWeight: 600,
-          fontSize: theme.fontSizes[2],
-          color: theme.colors.text,
-          lineHeight: 1.25,
-          height: LABEL_SLOT_H,
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-          textAlign: centered ? 'center' : 'left',
-        }}
-        title={node.label}
-      >
-        {node.label}
+        <span
+          style={{
+            fontFamily: theme.fonts.body,
+            fontWeight: 600,
+            fontSize: theme.fontSizes[2],
+            color: theme.colors.text,
+            lineHeight: 1.25,
+            maxHeight: LABEL_SLOT_H,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            textAlign: centered ? 'center' : 'left',
+            minWidth: 0,
+          }}
+          title={node.label}
+        >
+          {node.label}
+        </span>
       </span>
       {subtitle && (
         <span

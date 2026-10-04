@@ -268,6 +268,7 @@ export {
   isRuntimeConstruct,
   proposeElements,
   suggestContainerKind,
+  verificationIssues,
   verifyProcessBoundaries,
 } from './subsystem/c4Evidence';
 export type {

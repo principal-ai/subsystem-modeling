@@ -118,7 +118,7 @@ describe("c4 element store", () => {
 		expect(exports.some((k) => k.toLowerCase().includes("reject"))).toBe(false);
 	});
 
-	test("validation: blank purl, empty elements, unknown kind all fail", async () => {
+	test("validation: blank purl, empty elements, unknown containerKind all fail", async () => {
 		const root = mkdtempSync(join(tmpdir(), "c4-elements-"));
 		try {
 			expect(
@@ -127,15 +127,18 @@ describe("c4 element store", () => {
 			expect(
 				(await upsertAcceptedC4Elements({ purl: "pkg:github/a/b", elements: [] }, root)).ok,
 			).toBe(false);
+			// The payload type cannot carry a `kind` at all (always a container),
+			// so the kind check the mirror needed is gone — but containerKind is
+			// still runtime-validated, because the store also reads back JSON.
 			const bad = await upsertAcceptedC4Elements(
 				{
 					purl: "pkg:github/a/b",
-					elements: [{ ...container({ id: "c", process: "p" }), kind: "queue" as never }],
+					elements: [{ ...container({ id: "c", process: "p" }), containerKind: "queue" as never }],
 				},
 				root,
 			);
 			expect(bad.ok).toBe(false);
-			if (!bad.ok) expect(bad.error).toContain("unknown element kind");
+			if (!bad.ok) expect(bad.error).toContain("unknown containerKind");
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}

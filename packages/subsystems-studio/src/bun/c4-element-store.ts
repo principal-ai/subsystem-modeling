@@ -2,9 +2,8 @@
  * The C4 element store — the durable home of a repo's approved C4 elements.
  *
  * Layout: `~/.principal/c4-elements/<sanitized-purl>.json`, holding a
- * `C4ElementSet` (see subsystems-react's `c4.ts`; mirrored structurally below
- * because studio resolves the *published* package, which lags the working
- * tree — the two must not diverge behaviorally).
+ * `C4ElementSet` from @principal-ai/subsystems-react (imported, not mirrored,
+ * as of react 0.52.0).
  *
  * The store is the approved architecture, not a history: it holds ACCEPTED
  * elements only. `proposed` exists only on in-memory proposal scaffolds and
@@ -22,6 +21,11 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { sanitizePurlDirName } from "./graphify-store";
 import { purlRepoKey } from "./subsystem-model-store";
+import type {
+	C4Container,
+	C4Element,
+	C4ElementSet,
+} from "@principal-ai/subsystems-react";
 
 const ROOT = join(homedir(), ".principal", "c4-elements");
 
@@ -36,40 +40,16 @@ function storeRoot(override?: string): string {
 	return env ? env : ROOT;
 }
 
-/**
- * Structural mirror of subsystems-react's `C4ElementState`. The element store
- * persists only the `accepted` member — the others exist on in-memory
- * scaffolds (proposals) and never land here.
- */
+/** The store's on-disk state — accepted only, per the C4ElementSet contract. */
 export type C4ElementStoreState = "accepted";
 
-/** Structural mirror of react's `C4ContainerKind` — the only two C4 containers. */
-export type C4ElementStoreContainerKind = "application" | "data-store";
-
 /**
- * Structural mirror of react's `C4Element` (the four C4 kinds, no fifth).
- * Fields not relevant to a kind are simply absent — the store is a durable
- * JSON file, not a discriminated-union enforcer.
+ * The store's entry type: a `C4Element` pinned to `accepted`. Published sets
+ * never carry `proposed` / `rejected` — those live on in-memory scaffolds.
  */
-export interface C4ElementStoreEntry {
-	id: string;
-	kind: "container" | "component" | "external-system" | "person";
-	label: string;
-	parentId?: string;
-	description?: string;
-	state: C4ElementStoreState;
-	/** Why the element is as it is — carried from the accepted proposal. */
-	rationale?: string;
-	/** ISO timestamp of the accept. */
-	decidedAt?: string;
-	containerKind?: C4ElementStoreContainerKind;
-	technology?: string;
-	container?: string;
-	/** The model `process` key this container verifies, exact match. */
-	process?: string;
-}
+export type C4ElementStoreEntry = C4Element & { state: C4ElementStoreState };
 
-export interface C4ElementSetFile {
+export interface C4ElementSetFile extends C4ElementSet {
 	version: 1;
 	/** Repo key, e.g. `pkg:github/owner/name`. */
 	repoKey: string;
@@ -77,16 +57,11 @@ export interface C4ElementSetFile {
 	elements: C4ElementStoreEntry[];
 }
 
-/** The payload a `c4-container` proposal change carries — a container scaffold. */
-export interface C4ContainerUpsert {
-	id: string;
-	label: string;
-	containerKind: C4ElementStoreContainerKind;
-	technology: string;
-	process: string;
-	description?: string;
-	rationale?: string;
-}
+/**
+ * The payload a `c4-container` proposal change carries — the container
+ * scaffold (a `C4Container` minus the state the store forces).
+ */
+export type C4ContainerUpsert = Omit<C4Container, "state" | "kind">;
 
 function filePath(repoKey: string, root?: string): string {
 	return join(storeRoot(root), `${sanitizePurlDirName(repoKey)}.json`);
@@ -156,11 +131,7 @@ export async function upsertAcceptedC4Elements(
 	for (const e of input.elements) {
 		if (!e.id?.trim()) return { ok: false, error: "element id is required" };
 		if (!e.label?.trim()) return { ok: false, error: "element label is required" };
-		if (e.kind != null && !["container", "component", "external-system", "person"].includes(e.kind)) {
-			return { ok: false, error: `unknown element kind: ${e.kind}` };
-		}
 		if (
-			(e.kind ?? "container") === "container" &&
 			e.containerKind != null &&
 			e.containerKind !== "application" &&
 			e.containerKind !== "data-store"
@@ -172,8 +143,10 @@ export async function upsertAcceptedC4Elements(
 	const now = new Date().toISOString();
 	const doc = await readDoc(repoKey, root);
 	for (const e of input.elements) {
+		// The store is JSON on disk, not a discriminated-union enforcer: the
+		// entry is built field-wise and pinned to the accepted state.
 		const entry: C4ElementStoreEntry = {
-			kind: e.kind ?? "container",
+			kind: "container",
 			id: e.id.trim(),
 			label: e.label.trim(),
 			state: "accepted",
@@ -182,12 +155,10 @@ export async function upsertAcceptedC4Elements(
 			...((e.rationale ?? input.rationale)?.trim() && {
 				rationale: (e.rationale ?? input.rationale)!.trim(),
 			}),
-			...((e.kind ?? "container") === "container" && {
-				containerKind: e.containerKind ?? "application",
-				technology: e.technology?.trim() ?? "",
-				process: e.process?.trim(),
-			}),
-		};
+			containerKind: e.containerKind ?? "application",
+			technology: e.technology?.trim() ?? "",
+			process: e.process?.trim(),
+		} as C4ElementStoreEntry;
 		const idx = doc.elements.findIndex((x) => x.id === entry.id);
 		if (idx >= 0) doc.elements[idx] = entry;
 		else doc.elements.push(entry);
