@@ -180,23 +180,21 @@ export interface NodeShape {
  *
  * The convention:
  *
- *   container        wide rectangle, sharp corners — a runtime boundary
+ *   container        wide rectangle, slight radius — a runtime boundary
  *   component        square — a part inside one (see `nodeSize`)
- *   external system  wide rectangle, rounded     — someone else's system
+ *   external system  wide rectangle, no radius    — someone else's system
  *   person           pill                          — not a box at all
  *
- * An external system is separated from a container by radius alone, which is
- * a weak cue. That is deliberate rather than an oversight: the border dash is
- * the only channel that could say "outside our control" loudly, and it is
- * already spent on proposed-vs-accepted. The kind icon says it, and the frame
- * position says it structurally.
+ * A container keeps a slight radius; an external system is drawn with none, so
+ * the two are distinguishable by corner treatment as well as by the kind icon
+ * and frame position. The border dash stays spent on proposed-vs-accepted.
  */
 export function nodeShape(node: C4Element): NodeShape {
   switch (node.kind) {
     case 'person':
       return { kind: 'pill', radius: NODE_H / 2 };
     case 'external-system':
-      return { kind: 'rect', radius: 14 };
+      return { kind: 'rect', radius: 0 };
     case 'component':
       return { kind: 'square', radius: 6 };
     case 'container':
@@ -315,6 +313,7 @@ export function C4NodeCard({ node, selected = false, handles, onClick }: C4NodeC
           below sits at the same y on every card. */}
       <span
         style={{
+          fontFamily: theme.fonts.body,
           fontWeight: 600,
           fontSize: theme.fontSizes[2],
           color: theme.colors.text,

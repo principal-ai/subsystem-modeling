@@ -905,6 +905,7 @@ export interface MaintenanceOverviewModel {
 			| "construct-verifier"
 			| "package-module-verifier"
 			| "runtime-topology-verifier"
+			| "container-verifier"
 			| "trail-verifier"
 			| "construct-fixer"
 			| "package-module-fixer";
@@ -1066,6 +1067,49 @@ export type SubsystemModelProposalChange =
 			componentAlias: string;
 			field: "removedIn";
 			value: SubsystemComponentRemoval | null;
+	  }
+	| {
+			/**
+			 * Propose a C4 container for a process boundary — the umbrella the
+			 * model's `process` fields organize under. The proposing agent works
+			 * from the subsystem diagrams, queries the existing containers, and
+			 * reasons; this change carries its answer. Accept upserts the
+			 * ELEMENT STORE (accepted-only, `~/.principal/c4-elements/`) — the
+			 * boundary then reads `verified`. Not a model edit: the element set
+			 * is the umbrella, not the model.
+			 */
+			target: "c4-container";
+			/** Repo key the element set lands in — one element, one repo. */
+			purl: string;
+			/**
+			 * The container as proposed. `state` is forced to `accepted` at
+			 * accept — the store holds accepts only, the caller never chooses.
+			 */
+			container: {
+				id: string;
+				label: string;
+				containerKind: "application" | "data-store";
+				technology: string;
+				/** The model `process` key this container verifies, exact match. */
+				process: string;
+				description?: string;
+			};
+	  }
+	| {
+			/**
+			 * Consolidate two+ `process` keys that are one deployable unit under
+			 * different spellings (e.g. `subsystems-studio/host` and
+			 * `principal-studio/host`) — a model discrepancy, fixed where it
+			 * lives. Accept REWRITES the model document's components' `process`
+			 * fields to `canonicalKey`; the read side never folds, so this is
+			 * the only way two names become one. Pair with a `c4-container`
+			 * proposal for the surviving key.
+			 */
+			target: "consolidation";
+			/** Every spelling seen for the unit — all rewritten to `canonicalKey`. */
+			processKeys: string[];
+			/** The spelling that survives. Must be one of `processKeys`. */
+			canonicalKey: string;
 	  }
 	| {
 			target: "trail-step";
@@ -2429,6 +2473,7 @@ export type StudioMessages = {
 			| "construct-verifier"
 			| "package-module-verifier"
 			| "runtime-topology-verifier"
+			| "container-verifier"
 			| "trail-verifier"
 			| "construct-fixer"
 			| "package-module-fixer";
@@ -2444,6 +2489,7 @@ export type StudioMessages = {
 				| "construct-verifier"
 				| "package-module-verifier"
 				| "runtime-topology-verifier"
+				| "container-verifier"
 				| "trail-verifier"
 				| "construct-fixer"
 				| "package-module-fixer";

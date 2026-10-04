@@ -24,6 +24,7 @@ import {
 	type CallSiteAugmentationClaim,
 } from "./augmentation-store";
 import { hashContentRange } from "./declaration-ref";
+import { upsertAcceptedC4Elements } from "./c4-element-store";
 import { resolveRepoRootForPurl } from "./graphify-store";
 import { deriveProposalLane } from "./proposal-lane";
 import {
@@ -172,7 +173,21 @@ function buildPreview(
 ): SubsystemModelProposalPreviewRow[] {
 	const rows: SubsystemModelProposalPreviewRow[] = [];
 	for (const ch of changes) {
-		if (ch.target === "component") {
+		if (ch.target === "c4-container") {
+			const c = ch.container;
+			rows.push({
+				label: `c4 container: ${c.label}`,
+				before: `no container claims ${c.process}`,
+				after: `${c.containerKind} · ${c.technology} · verifies ${c.process}`,
+			});
+		} else if (ch.target === "consolidation") {
+			const dropped = ch.processKeys.filter((k) => k !== ch.canonicalKey);
+			rows.push({
+				label: `consolidate process keys → ${ch.canonicalKey}`,
+				before: ch.processKeys.join(" | "),
+				after: `components move off ${dropped.join(", ")} onto ${ch.canonicalKey}`,
+			});
+		} else if (ch.target === "component") {
 			const name =
 				graph.components.find((c) => c.alias === ch.componentAlias)?.name ??
 				ch.componentAlias;
@@ -289,7 +304,37 @@ function validateChanges(
 		return "changes array is required";
 	}
 	for (const ch of changes) {
-		if (ch.target === "component") {
+		if (ch.target === "c4-container") {
+			const c = ch.container;
+			if (!ch.purl?.trim()) return "c4-container change requires a purl";
+			if (!c || typeof c !== "object") return "c4-container change requires a container payload";
+			if (!c.id?.trim()) return "container id is required";
+			if (!c.label?.trim()) return "container label is required";
+			if (!c.technology?.trim()) return "container technology is required (C4 requires a technology on every container)";
+			if (!c.process?.trim()) return "container process claim is required";
+			if (c.containerKind !== "application" && c.containerKind !== "data-store") {
+				return `unknown containerKind: ${String(c.containerKind)}`;
+			}
+		} else if (ch.target === "consolidation") {
+			if (!Array.isArray(ch.processKeys) || ch.processKeys.length < 2) {
+				return "consolidation requires at least two processKeys";
+			}
+			if (ch.processKeys.some((k) => typeof k !== "string" || !k.trim())) {
+				return "consolidation processKeys must be non-empty strings";
+			}
+			if (!ch.canonicalKey?.trim()) return "consolidation requires a canonicalKey";
+			if (!ch.processKeys.includes(ch.canonicalKey)) {
+				return "consolidation canonicalKey must be one of processKeys";
+			}
+			const modelKeys = new Set(
+				graph.components.map((c) => c.process?.trim()).filter(Boolean),
+			);
+			for (const key of ch.processKeys) {
+				if (!modelKeys.has(key.trim())) {
+					return `unknown process key: ${key}`;
+				}
+			}
+		} else if (ch.target === "component") {
 			if (!graph.components.some((c) => c.alias === ch.componentAlias)) {
 				return `unknown component: ${ch.componentAlias}`;
 			}
@@ -469,7 +514,15 @@ function applyChangesToGraph(
 	graph: StoredSubsystemModel,
 	changes: SubsystemModelProposalChange[],
 ): Pick<StoredSubsystemModel, "components" | "trails"> | null {
-	const graphChanges = changes.filter((ch) => ch.target !== "augmentation");
+	// Consolidations are graph edits (they rewrite `process` fields);
+	// c4-container changes land in the element store, not the model.
+	const graphChanges = changes.filter(
+		(ch) =>
+			ch.target === "component" ||
+			ch.target === "declaration" ||
+			ch.target === "trail-step" ||
+			ch.target === "consolidation",
+	);
 	if (graphChanges.length === 0) return null;
 
 	const components = graph.components.map((c) => ({ ...c }));
@@ -511,6 +564,17 @@ function applyChangesToGraph(
 			if (ch.value === null) delete next[ch.field];
 			else next[ch.field] = ch.value;
 			tl.steps[ch.stepIndex] = next as (typeof tl.steps)[number];
+		} else if (ch.target === "consolidation") {
+			// The model edit that fixes a discrepancy: every component whose
+			// `process` names one of the folded keys is rewritten to the
+			// canonical spelling. The read side never folds, so this rewrite is
+			// the only way two names become one.
+			for (let i = 0; i < components.length; i++) {
+				const p = components[i]!.process?.trim();
+				if (p && ch.processKeys.map((k) => k.trim()).includes(p)) {
+					components[i] = { ...components[i]!, process: ch.canonicalKey };
+				}
+			}
 		}
 	}
 
@@ -551,6 +615,38 @@ async function withCallSiteContentHash(change: {
 		return `callSite contentHash could not be computed: lines ${change.value.lines.start}-${change.value.lines.end} out of bounds in ${change.file}`;
 	}
 	return { ...change.value, contentHash: hash };
+}
+
+/**
+ * Apply a proposal's element-store changes at accept time. The only kind that
+ * lands here is `c4-container`: the proposed container is upserted into the
+ * repo's accepted-only element set (state forced to `accepted`), which is
+ * what makes the boundary read `verified`. Returns an error string on the
+ * first failure.
+ */
+async function applyElementStoreChanges(
+	changes: SubsystemModelProposalChange[],
+	proposal: SubsystemModelProposal,
+): Promise<string | null> {
+	const containers = changes
+		.filter((ch): ch is Extract<SubsystemModelProposalChange, { target: "c4-container" }> => ch.target === "c4-container")
+		.map((ch) => ch.container);
+	if (containers.length === 0) return null;
+	const purls = new Set(
+		changes
+			.filter((ch): ch is Extract<SubsystemModelProposalChange, { target: "c4-container" }> => ch.target === "c4-container")
+			.map((ch) => ch.purl),
+	);
+	if (purls.size > 1) {
+		return "a proposal may only carry c4-container changes for one repo";
+	}
+	const written = await upsertAcceptedC4Elements({
+		purl: [...purls][0]!,
+		elements: containers,
+		provenance: { runId: proposal.runId, proposalId: proposal.id },
+		rationale: proposal.rationale,
+	});
+	return written.ok ? null : written.error;
 }
 
 async function applyAugmentationChanges(	graph: StoredSubsystemModel,
@@ -764,6 +860,9 @@ export async function acceptSubsystemModelProposal(
 
 	const augErr = await applyAugmentationChanges(graph, proposal.changes, proposal);
 	if (augErr) return { ok: false, error: augErr };
+
+	const storeErr = await applyElementStoreChanges(proposal.changes, proposal);
+	if (storeErr) return { ok: false, error: storeErr };
 
 	const resolved: SubsystemModelProposal = {
 		...proposal,

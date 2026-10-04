@@ -76,6 +76,7 @@ const MAINTAIN_AGENTS: SubsystemAgent[] = [
 	{ id: "construct-verifier", label: "construct-verifier", lane: "construct", mode: "verify" },
 	{ id: "package-module-verifier", label: "package-module-verifier", lane: "static-topology", mode: "verify" },
 	{ id: "runtime-topology-verifier", label: "runtime-topology-verifier", lane: "dynamic-topology", mode: "verify" },
+	{ id: "container-verifier", label: "container-verifier", lane: "dynamic-topology", mode: "verify" },
 ];
 
 export function SubsystemModelView({

@@ -55,6 +55,7 @@ export function AgentLogo({ agent, size = 14 }: { agent: string; size?: number }
 		"construct-verifier",
 		"package-module-verifier",
 		"runtime-topology-verifier",
+		"container-verifier",
 		"construct-fixer",
 		"package-module-fixer",
 		// Legacy (pre-rename).

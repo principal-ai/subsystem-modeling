@@ -88,6 +88,11 @@ export const AGENT_META: Array<{ agent: string; label: string; Icon: LucideIcon 
 		label: "Runtime Topology Verifier",
 		Icon: Server,
 	},
+	{
+		agent: "container-verifier",
+		label: "Container Verifier",
+		Icon: Server,
+	},
 	{ agent: "trail-verifier", label: "Trail Verifier", Icon: Route },
 ];
 

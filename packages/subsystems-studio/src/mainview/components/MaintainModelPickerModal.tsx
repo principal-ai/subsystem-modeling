@@ -32,6 +32,7 @@ const AGENT_DISPLAY: Record<string, string> = {
 	"construct-verifier": "Construct Verifier",
 	"package-module-verifier": "Package/Module Verifier",
 	"runtime-topology-verifier": "Runtime Topology Verifier",
+	"container-verifier": "Container Verifier",
 	"trail-verifier": "Trail Verifier",
 };
 

@@ -175,10 +175,10 @@ describe('nodeShape — kind without relying on colour or dash', () => {
     expect(nodeShape(node({ kind: 'component' })).kind).toBe('square');
   });
 
-  test('an external system is a rounded rectangle', () => {
+  test('an external system has no corner radius', () => {
     const s = nodeShape(node({ kind: 'external-system' }));
     expect(s.kind).toBe('rect');
-    expect(s.radius).toBeGreaterThan(nodeShape(node()).radius);
+    expect(s.radius).toBe(0);
   });
 
   test('a person is a pill', () => {

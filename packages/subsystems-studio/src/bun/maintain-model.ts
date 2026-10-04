@@ -65,6 +65,7 @@ export const RUNTIME_TOPOLOGY_VERIFIER_AGENT = "runtime-topology-verifier";
 export const TRAIL_VERIFIER_AGENT = "trail-verifier";
 export const CONSTRUCT_FIXER_AGENT = "construct-fixer";
 export const PACKAGE_MODULE_FIXER_AGENT = "package-module-fixer";
+export const CONTAINER_VERIFIER_AGENT = "container-verifier";
 
 export type MaintainAgentId =
 	| typeof CONSTRUCT_VERIFIER_AGENT
@@ -72,7 +73,8 @@ export type MaintainAgentId =
 	| typeof RUNTIME_TOPOLOGY_VERIFIER_AGENT
 	| typeof TRAIL_VERIFIER_AGENT
 	| typeof CONSTRUCT_FIXER_AGENT
-	| typeof PACKAGE_MODULE_FIXER_AGENT;
+	| typeof PACKAGE_MODULE_FIXER_AGENT
+	| typeof CONTAINER_VERIFIER_AGENT;
 
 export type MaintainLayer =
 	| "construct"
@@ -128,6 +130,9 @@ export const RUNTIME_TOPOLOGY_VERIFIER_AGENT_PATH = agentInstallPath(
 	RUNTIME_TOPOLOGY_VERIFIER_AGENT,
 );
 export const TRAIL_VERIFIER_AGENT_PATH = agentInstallPath(TRAIL_VERIFIER_AGENT);
+export const CONTAINER_VERIFIER_AGENT_PATH = agentInstallPath(
+	CONTAINER_VERIFIER_AGENT,
+);
 
 const CONSTRUCT_FIXER_PACKAGE_PATH = agentPackagePath(CONSTRUCT_FIXER_AGENT);
 const CONSTRUCT_VERIFIER_PACKAGE_PATH = agentPackagePath(CONSTRUCT_VERIFIER_AGENT);
@@ -536,6 +541,8 @@ function briefTitle(route: MaintainRoute): string {
 			return "# Subsystem model package-module-verifier brief";
 		case RUNTIME_TOPOLOGY_VERIFIER_AGENT:
 			return "# Subsystem model runtime-topology-verifier brief";
+		case CONTAINER_VERIFIER_AGENT:
+			return "# Subsystem model container-verifier brief";
 		case TRAIL_VERIFIER_AGENT:
 			return "# Subsystem model trail-verifier brief";
 	}
@@ -550,6 +557,9 @@ function proposeShapeHint(agent: MaintainAgentId): string {
 	}
 	if (agent === RUNTIME_TOPOLOGY_VERIFIER_AGENT) {
 		return `Propose body shape: \`{ "rationale": "…", "author": "${agent}", "finding": {…}, "changes": […] }\`. For process-nest disagreement, use \`{ "target": "component", "field": "process", "value": "<deployment unit>" }\`. Do **not** call accept/reject.`;
+	}
+	if (agent === CONTAINER_VERIFIER_AGENT) {
+		return `Propose body shape: \`{ "rationale": "…", "author": "${agent}", "changes": […] }\`. To propose the container that verifies a process boundary, use \`{ "target": "c4-container", "purl": "<repo key>", "container": { "id", "label", "containerKind": "application" | "data-store", "technology", "process" } }\`. When two \`process\` keys are one deployable unit under different spellings, use \`{ "target": "consolidation", "processKeys": […], "canonicalKey" }\` — accept rewrites the model. Do **not** call accept/reject.`;
 	}
 	if (agent === TRAIL_VERIFIER_AGENT) {
 		return `Propose body shape: \`{ "rationale": "…", "author": "${agent}", "finding": {…}, "changes": […] }\`. For trail step call sites, use \`{ "target": "augmentation", "field": "callSite", "trailId", "stepIndex", "file", "symbol", "purl", "value": { "lines": { "start", "end" }, "target": { "file", "symbol" }, "mechanism" } }\` — contentHash is computed for you at accept time; omit it. Do **not** call accept/reject.`;
@@ -569,6 +579,8 @@ function taskBlurb(route: MaintainRoute): string {
 			return "Review each **package/module containment gap**. For an intentional module≠file grouping, propose a **module augmentation**. For an authoring slip, propose a `module` field fix. Skip only when unsure. Ignore construct/process findings. Finish with a short plain-text summary.";
 		case RUNTIME_TOPOLOGY_VERIFIER_AGENT:
 			return "Review each **process membership gap** (process nest disagreement). Propose the corrected `process` deployment unit via Access curl. Skip only when unsure. Ignore construct/package-module findings. Finish with a short plain-text summary.";
+		case CONTAINER_VERIFIER_AGENT:
+			return "Work from the **subsystem diagrams** (the process rollup, not source). Assess each process boundary with the two questions: does a container already exist for it (query containers and the proposal store's rejected history), and can the boundary be discerned into one (library-shaped groups get no proposal). Propose `c4-container` changes for unclaimed boundaries and `consolidation` changes when two `process` keys are one deployable unit. The rationale is your own reasoning. Finish with a short plain-text summary of boundaries assessed, proposals created, and skips.";
 		case TRAIL_VERIFIER_AGENT:
 			return "Review each **trail step call site finding** (`step_unconfirmed`, `step_stale`). Open the step's caller file, locate the call to the target component's symbol, and propose a `callSite` augmentation confirming the call site's exact line span, target, and mechanism via Access curl. For a stale call site, re-read the current lines and propose the fresh span. Skip only when the call site no longer exists or the step's claim is wrong in a way a callSite augmentation cannot express. Ignore construct/package-module/process findings. Finish with a short plain-text summary.";
 	}

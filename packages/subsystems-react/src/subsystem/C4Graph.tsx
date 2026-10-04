@@ -570,7 +570,7 @@ function Inner({ model, title, onSelectNode, gutter = 28 }: C4GraphProps) {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontWeight: 600, color: theme.colors.text, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ fontFamily: theme.fonts.monospace, fontWeight: 600, color: theme.colors.text, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {selected.label}
             </span>
             <button
@@ -629,12 +629,32 @@ function Inner({ model, title, onSelectNode, gutter = 28 }: C4GraphProps) {
               can be inspected without zooming the diagram into them. Inert for
               now — the drill-down hung off them comes later. */}
           {selected.kind === 'container' && selectedComponents.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+                borderTop: `1px solid ${theme.colors.border ?? '#333'}`,
+                paddingTop: 8,
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: theme.fonts.monospace,
+                  fontSize: theme.fontSizes[0],
+                  color: muted,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5,
+                }}
+              >
+                Components
+              </span>
               {selectedComponents.map((c) => (
                 <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                   <span
                     title={c.description ?? c.label}
                     style={{
+                      fontFamily: theme.fonts.body,
                       color: theme.colors.text,
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -662,11 +682,31 @@ function Inner({ model, title, onSelectNode, gutter = 28 }: C4GraphProps) {
           )}
 
           {/* No components authored: fall back to the raw member aliases, or
-              say so plainly when there is nothing inside at all. */}
+              say so plainly when there is nothing inside at all. Same divider +
+              header as the authored list, so the panel sections consistently. */}
           {selected.kind === 'container' && selectedComponents.length === 0 && (
-            (selected.members ?? []).length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {(selected.members ?? []).map((alias) => (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+                borderTop: `1px solid ${theme.colors.border ?? '#333'}`,
+                paddingTop: 8,
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: theme.fonts.monospace,
+                  fontSize: theme.fontSizes[0],
+                  color: muted,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5,
+                }}
+              >
+                Components
+              </span>
+              {(selected.members ?? []).length > 0 ? (
+                (selected.members ?? []).map((alias) => (
                   <span
                     key={alias}
                     title={alias}
@@ -681,19 +721,19 @@ function Inner({ model, title, onSelectNode, gutter = 28 }: C4GraphProps) {
                   >
                     {alias}
                   </span>
-                ))}
-              </div>
-            ) : (
-              <div
-                style={{
-                  fontFamily: theme.fonts.monospace,
-                  fontSize: theme.fontSizes[0],
-                  color: muted,
-                }}
-              >
-                No components
-              </div>
-            )
+                ))
+              ) : (
+                <span
+                  style={{
+                    fontFamily: theme.fonts.monospace,
+                    fontSize: theme.fontSizes[0],
+                    color: muted,
+                  }}
+                >
+                  No components
+                </span>
+              )}
+            </div>
           )}
         </div>
       )}

@@ -96,10 +96,9 @@ export interface C4Container extends C4ElementBase {
   /** C4 requires a technology on every container. */
   technology: string;
   /**
-   * The canonical `process` key this container claims — the boundary it
-   * verifies. Not a member list: the components inside resolve from the model
-   * document, their `process` values folded to this key by accepted
-   * consolidation records (see `c4Evidence`).
+   * The `process` key this container claims — the boundary it verifies,
+   * matched exactly against the model document's keys. Not a member list:
+   * the components inside resolve from the model document.
    */
   process?: string;
 }
@@ -135,7 +134,14 @@ export interface C4Person extends C4ElementBase {
 /** One element. Four kinds, no fifth. */
 export type C4Element = C4Container | C4Component | C4ExternalSystem | C4Person;
 
-/** A whole authored element list, for one repo or composed graph. */
+/**
+ * A whole authored element list, for one repo or composed graph. This is the
+ * shape the durable element store persists (`~/.principal/c4-elements/<purl>.json`):
+ * **accepted elements only** — the set is the approved architecture, not a
+ * history. `proposed` exists only on in-memory proposal scaffolds and is never
+ * persisted; a rejected proposal stays remembered by the proposal store, which
+ * is where proposing agents consult prior rejections.
+ */
 export interface C4ElementSet {
   /** Repo key this set describes, e.g. `pkg:github/owner/name`. */
   repoKey: string;

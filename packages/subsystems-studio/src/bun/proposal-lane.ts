@@ -16,6 +16,11 @@ export function laneForChange(
 	ch: SubsystemModelProposalChange,
 ): SubsystemVerificationLane {
 	if (ch.target === "trail-step") return "trail";
+	// C4 container proposals and process-key consolidations are dynamic-topology
+	// work: they both act on the process boundary (the runtime layer).
+	if (ch.target === "c4-container" || ch.target === "consolidation") {
+		return "dynamic-topology";
+	}
 	// Authoring a declaration field (e.g. a store's `valueType`) is construct
 	// work: it fills the declaration the construct panel renders.
 	if (ch.target === "declaration") return "construct";
