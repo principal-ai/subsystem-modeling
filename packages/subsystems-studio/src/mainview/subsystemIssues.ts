@@ -90,6 +90,17 @@ function targetFor(
 	if (finding.moduleKey) {
 		return { kind: "module", id: finding.moduleKey, label: finding.moduleKey };
 	}
+	// Process-verification findings target the boundary frame: the graph folds
+	// the badge onto the process region and focuses its members on click, both
+	// keyed by `processGroupNodeId(target.id)`. Without this the finding lists
+	// but the graph never learns it exists.
+	if (finding.processKey) {
+		return {
+			kind: "process",
+			id: finding.processKey,
+			label: finding.processKey,
+		};
+	}
 	if (finding.trailId) {
 		const wt = graph.trails?.find((w) => w.id === finding.trailId);
 		// A finding that names a specific step (0-based `finding.step`) targets
