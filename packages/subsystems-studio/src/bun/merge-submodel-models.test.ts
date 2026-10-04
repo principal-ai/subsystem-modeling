@@ -6,7 +6,7 @@ import type { SubsystemDocumentBody } from "./subsystem-model-store";
 function doc(
 	partial: Partial<SubsystemDocumentBody>,
 ): SubsystemDocumentBody {
-	return { components: [], ...partial };
+	return { title: "merge fixture", components: [], ...partial };
 }
 
 function code(alias: string, extra: Partial<SubsystemComponent> = {}): SubsystemComponent {

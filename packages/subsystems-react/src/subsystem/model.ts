@@ -8,8 +8,9 @@
  * subgraphs, only cross-package edges leave the box, and shared seams
  * (registries/barrels/facades) are edge targets, never member nodes.
  *
- * Self-contained in this package (not yet promoted to `@principal-ai/core`), so
- * we can iterate on the UI + story without publishing a dependency.
+ * Document types come from `@principal-ai/subsystems-core` (the portable
+ * standard's home); react layers display concerns (edges, regions, layout)
+ * on top.
  */
 
 import {
@@ -22,9 +23,7 @@ import { EDGE_LABEL_SIDE_PADDING, EDGE_ARROW_INSET } from '../utils/edgeLabel';
 import type { GraphifyComponentDetail } from '../graphify';
 import type {
   SubsystemConstructDeclaration,
-  SubsystemComponentRemoval,
 } from '@principal-ai/subsystems-core';
-import type { SubsystemDeclarationRef } from './declarationRef';
 import { purlOwnerName, purlRepoKey } from './paths';
 
 /**
@@ -55,7 +54,6 @@ export type { SubsystemConstructDeclaration } from '@principal-ai/subsystems-cor
 export type AnyComponentDetail =
   | SubsystemConstructDeclaration
   | GraphifyComponentDetail;
-export type SubsystemDeclarationProvenance = 'verified' | 'authored';
 
 /** One declared parameter in an agent-extracted (augmented) signature. */
 export interface SubsystemSignatureParameter {
@@ -78,84 +76,60 @@ export interface SubsystemSignatureClaim {
   returnType?: string;
 }
 
-export type SubsystemComponentConstruct =
-  | 'class'
-  | 'function'
-  | 'method'
-  | 'interface'
-  | 'type_alias'
-  | 'enum'
-  | 'store'
-  | 'external'
-  | 'custom_entity';
-
 /**
- * Semantic role — where the node sits in the topology, orthogonal to
- * `construct` (what it is). Roles have *inherited* anatomy: an entry renders
- * as its real code shape (function dispatcher, type contract); a service has
- * no source at all (`construct: 'external'` + purl identity). Contrast with
- * `construct: 'store'`, which introduces its own anatomy (the state block) —
- * that is why store is a construct and not a role. Role nodes must stay anchored to real code: an
- * `entry` is a boundary element (route dispatcher, message contract) carrying
- * the wire address as identity; a `service` is an external system the process
- * calls out to (identity via purl, no `process` — it belongs to no region).
+ * Document vocabulary — imported from `@principal-ai/subsystems-core`, the
+ * portable standard's home. This package used to define a parallel copy
+ * ("self-contained until promoted"); core owns the types now, so react
+ * re-exports them by construction instead of hand-mirroring.
  */
-export type SubsystemComponentRole = 'entry' | 'service';
+import type {
+  SubsystemModelDocument,
+  SubsystemTrail,
+  SubsystemTrailStep,
+  SubsystemComponentRole,
+  SubsystemTrailMechanism,
+  SubsystemEdgeMechanism,
+  SubsystemConstruct as SubsystemComponentConstruct,
+  SubsystemComponent as CoreSubsystemComponent,
+} from '@principal-ai/subsystems-core';
+import {
+  getSubsystemProcessRegions as coreGetSubsystemProcessRegions,
+  getSubsystemModuleRegions as coreGetSubsystemModuleRegions,
+} from '@principal-ai/subsystems-core';
 
+export type {
+  SubsystemModelDocument,
+  SubsystemTrail,
+  SubsystemTrailStep,
+  SubsystemComponentRole,
+  SubsystemFramework,
+  SubsystemStereotype,
+  SubsystemEntityKind,
+  SubsystemTrailMechanism,
+  SubsystemEdgeMechanism,
+  SubsystemDeclToken,
+  SubsystemDeclTokenKind,
+  SubsystemDeclarationProvenance,
+} from '@principal-ai/subsystems-core';
+export type { SubsystemComponentConstruct };
 /**
- * Framework that owns a stereotype vocabulary (open string).
- * Examples: `react`, `vue`, `nestjs`, `django`, `spring`.
- * Empty when the node is language-only / framework-agnostic.
+ * A component node — the named unit, construct-tagged; `file` is its location.
+ * Core's portable shape plus the one field a model document never carries:
+ * `signatureAugmentation` is host-enrichment (populated when serving an
+ * enriched graph), never persisted.
  */
-export type SubsystemFramework = string;
-
-/**
- * Framework-level pattern stamped on a language construct (open string).
- * Examples: `component`, `hook`, `middleware`, `controller`, `guard`.
- * Empty when no framework pattern applies. Pair with `framework` when set —
- * a React component stays `construct: 'function'` with
- * `framework: 'react'` + `stereotype: 'component'`.
- */
-export type SubsystemStereotype = string;
-
-// ---------------------------------------------------------------------------
-// Declaration tokens — structured source representation
-// ---------------------------------------------------------------------------
-
-export type SubsystemDeclTokenKind =
-  | 'keyword'
-  | 'name'
-  | 'member'
-  | 'type'
-  | 'punctuation'
-  | 'string'
-  | 'newline';
-
-export interface SubsystemDeclToken {
-  text: string;
-  kind: SubsystemDeclTokenKind;
-  /** Shiki/Pierre foreground when tokenized client-side; omitted on legacy wire tokens. */
-  color?: string;
+export interface SubsystemComponent extends CoreSubsystemComponent {
+  /**
+   * Accepted agent-extracted signature (from the graphify augmentation store)
+   * confirming this function/method when Graphify has no usable signature
+   * edges. Populated by the host when serving an enriched graph — never
+   * persisted in the model document. Rendered as the declaration when the
+   * component has no own `declaration`; no marker distinguishes the source.
+   */
+  signatureAugmentation?: SubsystemSignatureClaim;
 }
 
-/**
- * Trail step mechanism — runtime seams with a `file:line` site.
- */
-export type SubsystemTrailMechanism =
-  | 'calls'
-  | 'uses'
-  | 'feeds'
-  | 'produces'
-  | 'writes'
-  | 'reads'
-  | 'watches'
-  | 'registers-into';
-
-/** Union for derived graph-edge styling — the trail step mechanism. */
-export type SubsystemEdgeMechanism = SubsystemTrailMechanism;
-
-/**
- * Which edge source the canvas draws. The two sources are disjoint; a view
+/** Which edge source the canvas draws. The two sources are disjoint; a view
  * shows only edges (and their labels) from the selected source.
  * - `graphify`: only graphify-native static edges (`imports`, `contains`, …)
  * - `trails`: only trail step edges (`calls`, `feeds`, …)
@@ -203,155 +177,10 @@ export interface SubsystemGraphifyRelation {
   context?: string;
 }
 
-/** A component node — the named unit, construct-tagged; `file` is its location. */
-export interface SubsystemComponent {
-  /**
-   * Model-local stable alias, unique per model. Referenced by trail
-   * `from` / `to`; edges point at the alias, not the location.
-   * Code identity (for composed multi-model views) lives on
-   * `purl` + `file` + `symbol`, not here.
-   */
-  alias: string;
-  name: string;
-  /**
-   * The node's construct — what it IS as a declaration (class, function,
-   * method, interface, type alias, enum, store, external), driving node
-   * anatomy, color, badge, and the verification strategy. Every construct
-   * anchors to a definition; runtime occurrences (variables, activations,
-   * instances) are NOT constructs — they belong to a future execution-mode
-   * graph whose occurrence nodes reference these definitions. Ontology:
-   * construct = what it is, framework + stereotype = which framework pattern
-   * it plays, role = where it sits, process = where it runs. Prefer
-   * `framework` + `stereotype` over inventing framework-specific constructs
-   * (a React component is still `construct: 'function'`).
-   */
-  construct: SubsystemComponentConstruct;
-  /** Source location the component lives in (repo-root-relative path). */
-  file: string;
-  /** PURL identifying the repo or package this component lives in (for subgraph grouping). */
-  purl: string;
-  /**
-   * App/repo logo shown on the declaration card in place of the GitHub owner
-   * avatar (any image URL or data URI). Optional; typically one image stamped
-   * across the components of a repo.
-   */
-  logo?: string;
-  /** One-line purpose shown on the node. */
-  purpose?: string;
-  /**
-   * Design / migration placeholder — participates in edges and flows but is
-   * not a live source declaration yet. Verification skips source checks until
-   * promoted (`proposed` cleared, `file` + `symbol` filled). Orthogonal to
-   * `construct` (intended shape) and `role` (topology).
-   */
-  proposed?: boolean;
-  /**
-   * The claim was real but its source is gone upstream — deleted or renamed.
-   * The inverse of `proposed`; verification skips source checks the same way.
-   * Renders with a slate border and a `deprecated` badge that opens the removal
-   * provenance. Transitional — a cleanup pass removes the node.
-   */
-  deprecated?: boolean;
-  /** Which commit removed this claim's source, and why. Present when deprecated. */
-  removedIn?: SubsystemComponentRemoval;
-  /**
-   * Semantic role — where the node sits in the topology (boundary element,
-   * external system), orthogonal to `construct` (what it is). Drives the
-   * glyph and the edge-pairing rules: boundary-crossing edges must terminate
-   * at an entry or a service. Retained state is NOT a role — it is
-   * `construct: 'store'` (state-block anatomy, `writes`/`reads`/`watches`
-   * inbound, `produces` outbound).
-   */
-  role?: SubsystemComponentRole;
-  /**
-   * Framework that owns the stereotype vocabulary (e.g. `react`, `nestjs`).
-   * Orthogonal to `construct` — leave empty for language-only units.
-   */
-  framework?: SubsystemFramework;
-  /**
-   * Framework pattern this declaration plays (e.g. `component`, `hook`).
-   * When set, the node badge prefers this label over the construct name so
-   * a React UI unit reads as "component" rather than "function".
-   */
-  stereotype?: SubsystemStereotype;
-  /**
-   * Open-string entity kind for `construct: 'custom_entity'` nodes — what the
-   * actor/entity is (e.g. `Person`, `agent`, `queue`). Not code; there is no
-   * graphify anchor. Contrast with `construct` (what the declaration is) and
-   * `role` (where it sits topologically). Empty/unset for code constructs.
-   */
-  entityKind?: string;
-  /**
-   * Authored color override for the node border + badges, when the themed
-   * construct color isn't wanted. Primarily for `construct: 'custom_entity'`
-   * (an author picks a fitting hue for a Person/agent/queue) — but usable on
-   * any construct. Any `#rrggbb` string; when set it wins over the
-   * construct-derived color, mirrors in the declaration panel. Leave unset to
-   * inherit the Pierre construct palette.
-   */
-  color?: string;
-  /**
-   * Runtime process membership — which deployment unit this node is a
-   * member of (e.g. `principal-studio/host`, `principal-studio/renderer`). Nodes
-   * sharing a `process` are drawn inside one boundary region; nodes without
-   * one sit outside every process boundary (external actors, services,
-   * libraries). Orthogonal to `module` (source-file frame).
-   */
-  process?: string;
-  /**
-   * Source-module membership — which file/module this export belongs to
-   * (e.g. `src/session/transcript.ts`). Nodes sharing a `module` are drawn
-   * inside one boundary frame. Prefer this over inventing a module construct:
-   * each export keeps its real construct (`function` / `class` / …) and the
-   * file reads as a frame. Orthogonal to `process` (runtime deployment).
-   * When both are set, the module frame is the component's parent (finer
-   * grain); process framing still groups siblings that share a process.
-   */
-  module?: string;
-  /** A symbol this component exposes / is (the node's identity). */
-  symbol?: string;
-  /**
-   * Semantic layer/phase for the layout (e.g. `1` = input, `2` = processing,
-   * `3` = output). When set, ELK places the component in this layer so the
-   * graph reads as a left-to-right pipeline and *conveys the idea* rather than
-   * letting ELK guess the order.
-   */
-  layer?: number;
-  /**
-   * Structured declaration shape of the construct (params, members, type
-   * buckets, …). Single source of truth for the click panel — authored by
-   * agents/CLI or filled by verified graphify capture. Discriminated by kind.
-   */
-  declaration?: SubsystemConstructDeclaration;
-  /**
-   * @deprecated No longer used — verification now tracks at the model level
-   * via `verifiedAtCommits`. Keeping the field temporarily for migration.
-   */
-  declarationProvenance?: SubsystemDeclarationProvenance;
-  /**
-   * Pre-tokenized declaration for the detail panel. When present, the
-   * renderer skips client-side tokenization. Tokens are language-agnostic;
-   * a different language just needs a different tokenizer and text joiner.
-   */
-  tokens?: SubsystemDeclToken[];
-  /**
-   * Accepted agent-extracted signature (from the graphify augmentation store)
-   * confirming this function/method when Graphify has no usable signature
-   * edges. Populated by the host when serving an enriched graph — never
-   * persisted in the model document. Rendered as the declaration when the
-   * component has no own `declaration`; no marker distinguishes the source.
-   */
-  signatureAugmentation?: SubsystemSignatureClaim;
-  /**
-   * Anchored declaration location: graphify start line + hash of that line's
-   * content at capture time. Populated by verify when an exact anchor resolves.
-   */
-  declarationRef?: SubsystemDeclarationRef;
-}
-
 /**
  * Derived / display graph edge used by renderers. Built from trail steps
  * (and graphify-native relations) — not authored as its own document field.
+ * Richer than core's minimal edge: this is the canvas's drawing shape.
  */
 export interface SubsystemComponentEdge {
   id: string;
@@ -359,7 +188,7 @@ export interface SubsystemComponentEdge {
   to: string; // component alias or external target label
   /**
    * The edge verb. For `provenance: 'subsystem'` (the default) this is a
-   * `SubsystemEdgeMechanism`; for `provenance: 'graphify'` it is the raw
+   * `SubsystemTrailMechanism`; for `provenance: 'graphify'` it is the raw
    * graphify relation. Typed as `string` because the display edge is a derived
    * structure and graphify's verb set is open — the trail vocabulary
    * (`SubsystemTrailMechanism`) stays closed.
@@ -379,60 +208,6 @@ export interface SubsystemComponentEdge {
   confidence?: string;
   /** Reference context on `references` edges (e.g. `return_type`, `field`). */
   context?: string;
-}
-
-/**
- * A single runtime step — `from`/`to`/`mechanism` plus the exact `file:line`
- * where that seam fires for a trail.
- */
-export interface SubsystemTrailStep {
-  from: string;
-  to: string;
-  mechanism: SubsystemTrailMechanism;
-  /** Repo-root-relative path of the file where the seam fires. */
-  file: string;
-  /** 1-based line of the site within `file`. */
-  line: number;
-  /**
-   * File-anchored purl of the seam site (e.g.
-   * `pkg:github/owner/name#path/to/file.ts`), mirroring component `purl`.
-   * Required: readers resolve the checkout from this instead of guessing
-   * the repo from the step's endpoint components.
-   */
-  purl: string;
-  /**
-   * Frame name for this step — the function/method on the stack at the site.
-   * Required; the Trails list shows this instead of a bare
-   * mechanism + filename fallback.
-   */
-  symbol: string;
-  /**
-   * Planned seam — the step describes intended behavior through code that is
-   * not written yet. Orthogonal to (and redundant with) the endpoints' own
-   * `proposed` flags: a step is proposed when it says so OR either endpoint
-   * is proposed. Verification skips source checks either way, and viewers
-   * tint it exactly like a proposed node.
-   */
-  proposed?: boolean;
-  /**
-   * Free-text note anchored to this step's site line. Optional — informative
-   * only, never verified against source; the Pierre trail code view
-   * surfaces it in the annotation column next to the highlighted line.
-   */
-  annotation?: string;
-}
-
-/** An ordered runtime trail — one named behavior story. */
-export interface SubsystemTrail {
-  id: string;
-  title: string;
-  steps: SubsystemTrailStep[];
-}
-
-export interface SubsystemModelDocument {
-  components: SubsystemComponent[];
-  /** Ordered runtime trails (one per named behavior). */
-  trails?: SubsystemTrail[];
 }
 
 /** Stable id for a derived graph edge from a trail step. */
@@ -819,47 +594,29 @@ function packageRegionLabel(packageKey: string): string {
 
 /**
  * Derive process boundary regions — one per distinct non-empty `process`
- * value, in first-appearance order.
+ * value, in first-appearance order. Wraps core's rollup, adding the frame
+ * `kind` the canvas reads.
  */
 export function getSubsystemRegions(
   doc: Pick<SubsystemModelDocument, 'components'>,
 ): SubsystemProcessRegion[] {
-  const byProcess = new Map<string, string[]>();
-  for (const c of doc.components) {
-    const p = c.process?.trim();
-    if (!p) continue;
-    const list = byProcess.get(p) ?? [];
-    list.push(c.alias);
-    byProcess.set(p, list);
-  }
-  return [...byProcess.entries()].map(([key, memberAliases]) => ({
+  return coreGetSubsystemProcessRegions(doc).map((r) => ({
+    ...r,
     kind: 'process' as const,
-    key,
-    label: key,
-    memberAliases,
   }));
 }
 
 /**
  * Derive module boundary regions — one per distinct non-empty `module`
  * value, in first-appearance order. Label is the module path (file).
+ * Wraps core's rollup, adding the frame `kind` the canvas reads.
  */
 export function getSubsystemModuleRegions(
   doc: Pick<SubsystemModelDocument, 'components'>,
 ): SubsystemProcessRegion[] {
-  const byModule = new Map<string, string[]>();
-  for (const c of doc.components) {
-    const m = c.module?.trim();
-    if (!m) continue;
-    const list = byModule.get(m) ?? [];
-    list.push(c.alias);
-    byModule.set(m, list);
-  }
-  return [...byModule.entries()].map(([key, memberAliases]) => ({
+  return coreGetSubsystemModuleRegions(doc).map((r) => ({
+    ...r,
     kind: 'module' as const,
-    key,
-    label: key,
-    memberAliases,
   }));
 }
 
@@ -1933,7 +1690,7 @@ export function nodeMinWidthForBadges(component: {
  * then refines with compound layout.
  */
 export function convertSubsystemToNodes(
-  doc: SubsystemModelDocument,
+  doc: Pick<SubsystemModelDocument, 'components' | 'trails'>,
   opts: { maxNodeWidth?: number } = {},
 ): SubsystemGraphNode[] {
   const { maxNodeWidth } = opts;
@@ -2024,7 +1781,7 @@ export function convertSubsystemToGroups(
  * relationship is visible without a member node.
  */
 export function convertSubsystemToEdges(
-  doc: SubsystemModelDocument,
+  doc: Pick<SubsystemModelDocument, 'components' | 'trails'>,
   graphifyRelations: readonly SubsystemGraphifyRelation[] = [],
 ): SubsystemGraphEdge[] {
   const compAliases = new Set(doc.components.map((c) => c.alias));
@@ -2086,7 +1843,7 @@ export function subsystemGraphLayoutKey(
  * layered with minimized crossings.
  */
 export async function buildSubsystemGraph(
-  doc: SubsystemModelDocument,
+  doc: Pick<SubsystemModelDocument, 'components' | 'trails'>,
   opts: {
     maxNodeWidth?: number;
     showEdgeLabels?: boolean;

@@ -26,10 +26,11 @@ import {
   useViewport,
 } from '@xyflow/react';
 import { useTheme } from '@principal-ade/industry-theme';
+import { Box, LayoutGrid } from 'lucide-react';
 import { computeElkLayout, pointAlongPath, pointsToSmoothPath } from '../utils/elkLayout';
 import { EDGE_LABEL_FONT_SIZE, EDGE_LABEL_HEIGHT, C4_LABEL_WIDTH, estimateEdgeLabelWidth } from '../utils/edgeLabel';
 import { protocolColor } from './c4';
-import { C4NodeCard, NODE_H, NODE_W, nodeSize } from './C4NodeCard';
+import { C4NodeCard, NODE_H, NODE_W, nodeSize, nodeStyle } from './C4NodeCard';
 import { GRAPH_CANVAS_CLASS, GRAPH_NAV_PROPS, GraphChrome, GraphLayerStyle } from './graphChrome';
 import type { C4Element, C4Model } from './c4';
 
@@ -46,12 +47,15 @@ export interface C4GraphProps {
   gutter?: number;
 }
 
-function C4NodeView(props: NodeProps<Node<{ element: C4Element; selected: boolean }>>) {
-  const { element, selected } = props.data;
+function C4NodeView(
+  props: NodeProps<Node<{ element: C4Element; selected: boolean; componentCount?: number }>>,
+) {
+  const { element, selected, componentCount } = props.data;
   return (
     <C4NodeCard
       node={element}
       selected={selected}
+      componentCount={componentCount ?? 0}
       handles={
         <>
           <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
@@ -175,6 +179,10 @@ function C4EdgeView({ data, markerEnd }: EdgeProps<Edge<{ path?: string; color?:
 function C4GroupView(props: NodeProps<Node<{ label: string; kind: 'system' | 'container'; color: string }>>) {
   const { theme } = useTheme();
   const color = props.data.color;
+  const isSystem = props.data.kind === 'system';
+  // A system frame is the box we draw; a container frame groups components
+  // inside one. Boxes for each, so the badge says which level you are looking at.
+  const FrameIcon = isSystem ? Box : LayoutGrid;
   return (
     <div
       style={{
@@ -194,6 +202,9 @@ function C4GroupView(props: NodeProps<Node<{ label: string; kind: 'system' | 'co
           transform: 'translateY(-50%)',
           left: 12,
           zIndex: 1,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
           fontFamily: theme.fonts.monospace,
           fontSize: theme.fontSizes[2],
           fontWeight: 600,
@@ -210,6 +221,7 @@ function C4GroupView(props: NodeProps<Node<{ label: string; kind: 'system' | 'co
           whiteSpace: 'nowrap',
         }}
       >
+        <FrameIcon size={13} strokeWidth={2.25} aria-hidden />
         {props.data.label}
       </span>
     </div>
@@ -259,6 +271,15 @@ function Inner({ model, title, onSelectNode, gutter = 28 }: C4GraphProps) {
     const inView = (n: C4Element): boolean =>
       model.view === 'component' ? n.kind !== 'container' : n.kind !== 'component';
 
+    // How many components each container groups — computed once here because
+    // the card only receives its own element, not the model.
+    const childComponentCount = new Map<string, number>();
+    for (const n of model.nodes) {
+      if (n.kind !== 'component') continue;
+      const parent = n.container ?? n.parentId;
+      if (parent) childComponentCount.set(parent, (childComponentCount.get(parent) ?? 0) + 1);
+    }
+
     // Layout against the true card size, so ELK's ports sit on the card's
     // border — an inflated box leaves the line starting short of the card edge.
     // The `gutter` becomes ELK spacing instead (see `nodeSpacing` below).
@@ -273,7 +294,7 @@ function Inner({ model, title, onSelectNode, gutter = 28 }: C4GraphProps) {
         width: size.width,
         height: size.height,
         ...(n.parentId ? { parentId: n.parentId } : {}),
-        data: { element: n, selected: false },
+        data: { element: n, selected: false, componentCount: childComponentCount.get(n.id) ?? 0 },
       };
     });
 
@@ -389,6 +410,16 @@ function Inner({ model, title, onSelectNode, gutter = 28 }: C4GraphProps) {
             const def = groupById.get(id);
             const parentId = def?.parentId && builtGroups.has(def.parentId) ? def.parentId : undefined;
             const origin = shellOrigin(parentId);
+            // A container frame borrows its container node's border colour, so a
+            // frame and the box it wraps read as the same thing. Falls back to
+            // the accent when no element matches (e.g. a hand-authored group id).
+            const element = model.nodes.find((n) => n.id === id);
+            const frameColor =
+              def?.kind === 'system'
+                ? (theme.colors.text ?? '#888')
+                : element
+                  ? nodeStyle(element, theme).color
+                  : (theme.colors.accent ?? theme.colors.info);
             return {
               id,
               type: 'c4-group',
@@ -401,7 +432,7 @@ function Inner({ model, title, onSelectNode, gutter = 28 }: C4GraphProps) {
               data: {
                 label: def?.label ?? id,
                 kind: def?.kind ?? 'container',
-                color: def?.kind === 'system' ? (theme.colors.text ?? '#888') : (theme.colors.accent ?? theme.colors.info),
+                color: frameColor,
               },
             };
           });
@@ -539,6 +570,8 @@ function Inner({ model, title, onSelectNode, gutter = 28 }: C4GraphProps) {
             position: 'absolute',
             top: 12,
             left: 12,
+            // Above the edge-label overlay (zIndex 5).
+            zIndex: 10,
             fontSize: theme.fontSizes[2],
             fontWeight: 600,
             color: theme.colors.text,
@@ -560,6 +593,9 @@ function Inner({ model, title, onSelectNode, gutter = 28 }: C4GraphProps) {
             position: 'absolute',
             top: 12,
             right: 12,
+            // Above the edge-label overlay (zIndex 5), or chips paint over the
+            // panel.
+            zIndex: 10,
             width: 280,
             maxHeight: 'calc(100% - 24px)',
             overflowY: 'auto',

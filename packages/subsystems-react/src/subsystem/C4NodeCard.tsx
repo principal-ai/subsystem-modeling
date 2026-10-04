@@ -13,7 +13,7 @@
  */
 
 import { useTheme } from '@principal-ade/industry-theme';
-import { AppWindow, Database } from 'lucide-react';
+import { AppWindow, Component, Database } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { TechMark, technologyBrand } from './techIcons';
 import type { C4Element } from './c4';
@@ -225,9 +225,15 @@ export interface C4NodeCardProps {
   /** Draw React Flow's edge handles. Off when rendering a bare gallery. */
   handles?: React.ReactNode;
   onClick?: () => void;
+  /**
+   * Number of `C4Component`s authored inside this element. The card can't see
+   * the model, so the graph passes it in; shown right-aligned on the technology
+   * row for containers. Omitted/0 → no count.
+   */
+  componentCount?: number;
 }
 
-export function C4NodeCard({ node, selected = false, handles, onClick }: C4NodeCardProps) {
+export function C4NodeCard({ node, selected = false, handles, onClick, componentCount = 0 }: C4NodeCardProps) {
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const style = nodeStyle(node, theme, selected);
@@ -265,36 +271,6 @@ export function C4NodeCard({ node, selected = false, handles, onClick }: C4NodeC
         fontFamily: theme.fonts.body,
       }}
     >
-      {/* The technology, and the kind mark (− nothing else). The kind itself
-          stays on the shape, confirmation on the border (see `nodeShape`,
-          `nodeStyle`). */}
-      <span
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: centered ? 'center' : 'flex-start',
-          gap: 6,
-          fontFamily: theme.fonts.monospace,
-          fontSize: theme.fontSizes[0],
-          color: muted,
-          letterSpacing: 0.5,
-          textTransform: 'uppercase',
-          minWidth: 0,
-        }}
-      >
-        {brand && <TechMark brand={brand} />}
-        <span
-          style={{
-            fontWeight: 600,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            minWidth: 0,
-          }}
-        >
-          {topLabel}
-        </span>
-      </span>
       {/* The label row: the kind mark, then the name. Two lines rather than an
           ellipsis — a truncated label hides the very thing that distinguishes
           two containers from each other. The fixed height reserves both lines
@@ -304,26 +280,12 @@ export function C4NodeCard({ node, selected = false, handles, onClick }: C4NodeC
         style={{
           display: 'flex',
           alignItems: 'flex-start',
+          justifyContent: centered ? 'center' : 'flex-start',
           gap: 6,
           height: LABEL_SLOT_H,
           minWidth: 0,
         }}
       >
-        {Icon && (
-          <span
-            title={node.kind === 'container' ? node.containerKind : node.kind}
-            aria-label={node.kind === 'container' ? node.containerKind : node.kind}
-            style={{
-              display: 'inline-flex',
-              flexShrink: 0,
-              color: style.color,
-              // Nudge down so the glyph optically centres on the first text line.
-              marginTop: 3,
-            }}
-          >
-            <Icon size={16} strokeWidth={2.25} />
-          </span>
-        )}
         <span
           style={{
             fontFamily: theme.fonts.body,
@@ -339,10 +301,70 @@ export function C4NodeCard({ node, selected = false, handles, onClick }: C4NodeC
             textAlign: centered ? 'center' : 'left',
             minWidth: 0,
           }}
-          title={node.label}
         >
           {node.label}
         </span>
+        {Icon && (
+          <span
+            aria-label={node.kind === 'container' ? node.containerKind : node.kind}
+            style={{
+              display: 'inline-flex',
+              flexShrink: 0,
+              color: style.color,
+              // Nudge down so the glyph optically centres on the first text line.
+              marginTop: 3,
+            }}
+          >
+            <Icon size={16} strokeWidth={2.25} />
+          </span>
+        )}
+      </span>
+      {/* The technology row: the brand mark when we hold the official one, then
+          the technology. For a container, right-aligned, the number of members
+          it groups. The kind itself stays on the shape, confirmation on the
+          border (see `nodeShape`, `nodeStyle`). */}
+      <span
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: centered ? 'center' : 'space-between',
+          gap: 6,
+          fontFamily: theme.fonts.monospace,
+          fontSize: theme.fontSizes[0],
+          color: muted,
+          letterSpacing: 0.5,
+          textTransform: 'uppercase',
+          minWidth: 0,
+        }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          {brand && <TechMark brand={brand} />}
+          <span
+            style={{
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              minWidth: 0,
+            }}
+          >
+            {topLabel}
+          </span>
+        </span>
+        {node.kind === 'container' && (
+          <span
+            style={{
+              flexShrink: 0,
+              letterSpacing: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            {componentCount}
+            <Component size={12} strokeWidth={2.25} />
+          </span>
+        )}
       </span>
       {subtitle && (
         <span

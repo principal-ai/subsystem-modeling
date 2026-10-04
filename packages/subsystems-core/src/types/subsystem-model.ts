@@ -301,6 +301,12 @@ export interface SubsystemComponent {
   file: string;
   /** PURL for repo/package grouping. Multi-repo graphs draw package frames from distinct purl repo keys. */
   purl: string;
+  /**
+   * App/repo logo shown on the declaration card in place of the GitHub owner
+   * avatar (any image URL or data URI). Optional; typically one image stamped
+   * across the components of a repo.
+   */
+  logo?: string;
   purpose?: string;
   role?: SubsystemComponentRole;
   /**
@@ -524,6 +530,66 @@ export function derivedGraphEdgeId(
   mechanism: SubsystemEdgeMechanism,
 ): string {
   return `${from}--${mechanism}-->${to}`;
+}
+
+/**
+ * A derived boundary region — one per distinct non-empty grouping field on
+ * the document's components, in first-appearance order. Pure data: viewers
+ * add their own frame vocabulary (kinds, node ids) on top.
+ */
+export interface SubsystemRegionGroup {
+  /** The trimmed field value, e.g. `principal-studio/host`. */
+  key: string;
+  /** Display label; the region grouping uses the key itself. */
+  label: string;
+  /** Component aliases carrying this key, in document order. */
+  memberAliases: string[];
+}
+
+/**
+ * Derive process boundary regions — one per distinct non-empty `process`
+ * value, in first-appearance order. The rollup boundary verification reads:
+ * a process key is a deployment-unit claim, and every claim is a boundary
+ * someone can accept a container for.
+ */
+export function getSubsystemProcessRegions(
+  doc: Pick<SubsystemModelDocument, 'components'>,
+): SubsystemRegionGroup[] {
+  const byProcess = new Map<string, string[]>();
+  for (const c of doc.components) {
+    const p = c.process?.trim();
+    if (!p) continue;
+    const list = byProcess.get(p) ?? [];
+    list.push(c.alias);
+    byProcess.set(p, list);
+  }
+  return [...byProcess.entries()].map(([key, memberAliases]) => ({
+    key,
+    label: key,
+    memberAliases,
+  }));
+}
+
+/**
+ * Derive module boundary regions — one per distinct non-empty `module`
+ * value, in first-appearance order. Label is the module path (file).
+ */
+export function getSubsystemModuleRegions(
+  doc: Pick<SubsystemModelDocument, 'components'>,
+): SubsystemRegionGroup[] {
+  const byModule = new Map<string, string[]>();
+  for (const c of doc.components) {
+    const m = c.module?.trim();
+    if (!m) continue;
+    const list = byModule.get(m) ?? [];
+    list.push(c.alias);
+    byModule.set(m, list);
+  }
+  return [...byModule.entries()].map(([key, memberAliases]) => ({
+    key,
+    label: key,
+    memberAliases,
+  }));
 }
 
 /**

@@ -442,9 +442,7 @@ export function resolveRepoRootForComponent(
  * informational — never blocks create/update.
  */
 export async function verifyModelFiles(
-	doc: SubsystemDocumentBody & {
-		trails?: SubsystemTrail[];
-	},
+	doc: Pick<SubsystemModelDocument, "components" | "trails">,
 ): Promise<SubsystemModelVerification> {
 	const missing: Array<{ componentAlias: string; file: string }> = [];
 	const symbolsMissing: Array<{ componentAlias: string; symbol: string; file: string }> = [];
