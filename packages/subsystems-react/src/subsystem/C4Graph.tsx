@@ -725,13 +725,27 @@ function Inner({ model, onSelectNode, onToggleContainer, onOpenContainer, onClos
   const morphTargetsRef = useRef<Set<string>>(new Set());
 
   /**
-   * Frame the whole system. Fit the SYSTEM node explicitly rather than the drawn
-   * nodes: on a drill-down those are just the opened containers and their
-   * components, so fitting them would zoom to a container instead of the system.
+   * Frame the whole diagram: the system boundary *and* everything drawn outside
+   * it.
+   *
+   * Named explicitly rather than left to the drawn nodes, because on a drill-down
+   * those include the opened container's components — fitting all of them would
+   * zoom past the boundary into one container's contents. But naming only the
+   * boundary is the other half of the mistake: externals and people sit outside
+   * it by definition, so fitting the frame alone crops exactly the things the
+   * boundary is drawn in contrast to.
    */
   const fitSystem = useCallback(() => {
-    fitView({ padding: 0.15, duration: CAMERA_MS, maxZoom: 1, nodes: [{ id: model.system.id }] });
-  }, [fitView, model.system.id]);
+    const outside = model.nodes
+      .filter((n) => n.kind === 'external-system' || n.kind === 'person')
+      .map((n) => ({ id: n.id }));
+    fitView({
+      padding: 0.15,
+      duration: CAMERA_MS,
+      maxZoom: 1,
+      nodes: [{ id: model.system.id }, ...outside],
+    });
+  }, [fitView, model.system.id, model.nodes]);
 
   /**
    * The one drill-down verb. `onToggleContainer` says which container changed, so
