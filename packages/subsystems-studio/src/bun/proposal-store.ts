@@ -339,6 +339,62 @@ async function processBackingError(
 	return null;
 }
 
+/**
+ * One boundary, one open decision. A `c4-container` proposal is refused when:
+ *
+ * - a PENDING proposal already proposes a container for the same process key
+ *   — the human has it in front of them; a second card is the same question;
+ * - the boundary already reads `verified` (an accepted container claims the
+ *   key in the element store) — the box exists.
+ *
+ * A REJECTED proposal does NOT block: re-proposing against a rejection with
+ * new evidence is legitimate — that is why rejections live in the history the
+ * proposing agent reads. `excludeProposalId` scopes the pending check on the
+ * accept path (a proposal never duplicates itself).
+ */
+async function duplicateContainerError(
+	graphId: string,
+	changes: SubsystemModelProposalChange[],
+	excludeProposalId?: string,
+): Promise<string | null> {
+	const containers = changes
+		.filter(
+			(ch): ch is Extract<SubsystemModelProposalChange, { target: "c4-container" }> =>
+				ch.target === "c4-container",
+		)
+		.map((ch) => ({ purl: ch.purl, process: ch.container.process?.trim() }))
+		.filter((c) => c.process);
+	if (containers.length === 0) return null;
+
+	const doc = await readFile(graphId);
+	for (const c of containers) {
+		const pending = doc.proposals.find(
+			(p) =>
+				p.id !== excludeProposalId &&
+				p.status === "pending" &&
+				p.changes.some(
+					(ch) =>
+						ch.target === "c4-container" &&
+						ch.container.process?.trim() === c.process,
+				),
+		);
+		if (pending) {
+			return `a pending proposal (${pending.id}) already proposes a container for process ${JSON.stringify(c.process)} — one open decision per boundary`;
+		}
+		const set = await readC4ElementSet(c.purl ?? "");
+		const verified = set.elements.find(
+			(e) =>
+				e.kind === "container" &&
+				e.state === "accepted" &&
+				e.process?.trim() === c.process,
+		);
+		if (verified) {
+			return `process ${JSON.stringify(c.process)} is already verified by container ${JSON.stringify(verified.id)} — the boundary needs no second box`;
+		}
+	}
+	return null;
+}
+
 function validateChanges(
 	graph: StoredSubsystemModel,
 	changes: SubsystemModelProposalChange[],
@@ -855,6 +911,8 @@ export async function createSubsystemModelProposal(input: {
 	if (invalid) return { ok: false, error: invalid };
 	const unbacked = await processBackingError(graph, input.changes);
 	if (unbacked) return { ok: false, error: unbacked };
+	const duplicate = await duplicateContainerError(input.graphId, input.changes);
+	if (duplicate) return { ok: false, error: duplicate };
 
 	const proposal: SubsystemModelProposal = {
 		id: newProposalId(),
@@ -897,9 +955,16 @@ export async function acceptSubsystemModelProposal(
 	const invalid = validateChanges(graph, proposal.changes);
 	if (invalid) return { ok: false, error: invalid };
 	// Re-checked at accept: a container backing the claim may have been
-	// rejected (or the store emptied) since the proposal was created.
+	// rejected (or the store emptied) since the proposal was created, and a
+	// sibling proposal may have landed a duplicate in the meantime.
 	const unbacked = await processBackingError(graph, proposal.changes);
 	if (unbacked) return { ok: false, error: unbacked };
+	const duplicate = await duplicateContainerError(
+		graphId,
+		proposal.changes,
+		proposal.id,
+	);
+	if (duplicate) return { ok: false, error: duplicate };
 
 	const patch = applyChangesToGraph(graph, proposal.changes);
 	if (patch) {

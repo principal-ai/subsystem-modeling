@@ -46,8 +46,11 @@ Assess every process boundary with exactly two questions:
    *similarly named* container (`subsystems-studio/host` vs
    `principal-studio/host`) may be the same unit under a different spelling —
    that is your judgement to make, not a string rule. Also check the proposal
-   store's rejected history: a prior rejection of the same container is a fact
-   worth reasoning against before proposing it again.
+   store via the brief's proposals curl: a PENDING proposal for the same
+   boundary means the human already has the decision in front of them — do
+   not propose again (the store refuses duplicates anyway); a prior
+   REJECTION is a fact worth reasoning against before proposing again with
+   new evidence.
 2. **Can the boundary be discerned into a container?** Code that never runs
    cannot be — a boundary whose members are all `interface` / `type_alias` /
    `store` / `external` is library-shaped and gets **no proposal**. A singleton
@@ -127,6 +130,9 @@ the surviving key so the unit gets verified in the same pass.
 ## Rules
 
 - One element, one repo: a container belongs to exactly one repo key.
+- One open decision per boundary: the store refuses a container proposal when
+  a pending one targets the same process key or the boundary already reads
+  verified — don't fight it, list proposals and move on.
 - No `library` containers — a non-deployable package is a review comment, not
   an element.
 - Skip over proposing when unsure — an `unassigned` boundary is an honest

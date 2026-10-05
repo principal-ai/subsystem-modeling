@@ -24,6 +24,7 @@ import {
   ReactFlowProvider,
   useReactFlow,
   useViewport,
+  ViewportPortal,
 } from '@xyflow/react';
 import { useTheme } from '@principal-ade/industry-theme';
 import { Box, Minimize2 } from 'lucide-react';
@@ -62,36 +63,19 @@ function C4NodeView(
   >,
 ) {
   const { element, selected, componentCount, onExpand } = props.data;
-  // TEMP: measured size per card, to size squares against real content.
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (el && typeof console !== 'undefined') {
-      const r = el.getBoundingClientRect();
-      const first = el.firstElementChild as HTMLElement | null;
-      console.log(
-        '[c4-size]', element.kind, element.id,
-        'screen=', Math.round(r.width) + '×' + Math.round(r.height),
-        'layout=', (el.offsetWidth || 0) + '×' + (el.offsetHeight || 0),
-        'cardLayout=', (first?.offsetWidth || 0) + '×' + (first?.offsetHeight || 0),
-      );
-    }
-  }, [element.id, element.kind, element.label, element.description]);
   return (
-    <div ref={ref}>
-      <C4NodeCard
-        node={element}
-        selected={selected}
-        componentCount={componentCount ?? 0}
-        onExpand={onExpand}
-        handles={
-          <>
-            <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
-            <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
-          </>
-        }
-      />
-    </div>
+    <C4NodeCard
+      node={element}
+      selected={selected}
+      componentCount={componentCount ?? 0}
+      onExpand={onExpand}
+      handles={
+        <>
+          <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
+          <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+        </>
+      }
+    />
   );
 }
 
@@ -305,16 +289,84 @@ const nodeTypes = {
   'c4-node': C4NodeView,
   'c4-group': C4GroupView,
 };
+
+/**
+ * Box→frame morph for the drill-down. Rendered inside the React Flow viewport
+ * (flow coordinates), so it tracks the graph as the camera also glides: a
+ * translucent rectangle grows from the container's box rect to its frame rect.
+ * Flow space — not screen space — because the camera moves during the swap.
+ */
+function C4MorphOverlay({ morph, onDone }: { morph: MorphState; onDone: () => void }) {
+  const [at, setAt] = useState(morph.from);
+  useEffect(() => {
+    setAt(morph.from);
+    const raf = requestAnimationFrame(() => setAt(morph.to));
+    return () => cancelAnimationFrame(raf);
+  }, [morph.from, morph.to]);
+  return (
+    <ViewportPortal>
+      <div
+        aria-hidden
+        onTransitionEnd={onDone}
+        style={{
+          position: 'absolute',
+          left: at.x,
+          top: at.y,
+          width: at.width,
+          height: at.height,
+          zIndex: 0,
+          pointerEvents: 'none',
+          boxSizing: 'border-box',
+          borderRadius: 8,
+          border: `2px solid ${morph.color}`,
+          background: morph.color,
+          opacity: 0.16,
+          transition: `left ${MORPH_MS}ms ease-out, top ${MORPH_MS}ms ease-out, width ${MORPH_MS}ms ease-out, height ${MORPH_MS}ms ease-out`,
+        }}
+      />
+    </ViewportPortal>
+  );
+}
 const edgeTypes = {
   'c4-edge': C4EdgeView,
 };
 
-/** Drill-down camera glide, in ms (see `afterLayout`). */
-const FLIP_MS = 240;
+/** Drill-down animation durations, in ms. */
+const MORPH_MS = 420;
+const CAMERA_MS = 520;
+
+/** A fully laid-out open state: the RF nodes/edges and label anchors. */
+interface Rendered {
+  nodes: Node[];
+  edges: Edge[];
+  labelPositions: Map<string, { x: number; y: number }>;
+  groupBounds: Map<string, { x: number; y: number; width: number; height: number }>;
+}
+
+/** Flow-space rect of a box node or a frame, for the drill-down morph. */
+interface FlowRect { x: number; y: number; width: number; height: number }
+
+/** A transient morph overlay: the container's flow rect from → to. */
+interface MorphState { id: string; from: FlowRect; to: FlowRect; color: string }
+
+/** The container's rect in a laid-out state: its box node, or its frame bounds. */
+function containerRect(layout: Rendered | undefined, id: string): FlowRect | null {
+  if (!layout) return null;
+  const frame = layout.groupBounds.get(id);
+  if (frame) return { x: frame.x, y: frame.y, width: frame.width, height: frame.height };
+  const node = layout.nodes.find((n) => n.id === id);
+  if (!node) return null;
+  return {
+    x: node.position.x,
+    y: node.position.y,
+    width: node.width ?? 0,
+    height: node.height ?? 0,
+  };
+}
 
 function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter = 28 }: C4GraphProps) {
   const { theme } = useTheme();
-  const { fitView, getViewport } = useReactFlow();
+  const { fitView } = useReactFlow();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const [nodes, setNodes] = useState<Node[]>([]);
   const [rfEdges, setRfEdges] = useState<Edge[]>([]);
@@ -324,10 +376,14 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
     () => new Map(),
   );
 
-  const derivedGroups = useMemo(() => deriveC4Groups(model), [model]);
-
   /** Set by the layout effect; consumed by the `ready` effect to run the fit. */
   const pendingFitRef = useRef(false);
+  /** Prefetched layouts, keyed by open-container id ('' = closed). */
+  const layoutCache = useRef(new Map<string, Rendered>());
+  /** The open id rendered last, so a change can morph between the two layouts. */
+  const prevOpenRef = useRef<string | null>(null);
+  /** A transient box→frame morph overlay, in flow space (see `C4MorphOverlay`). */
+  const [morph, setMorph] = useState<MorphState | null>(null);
 
   // Fit the camera AFTER the new nodes are committed (when `ready` flips true),
   // so `fitView` measures the real geometry. Fit the SYSTEM frame explicitly:
@@ -336,22 +392,11 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
   useEffect(() => {
     if (!ready || !pendingFitRef.current) return;
     pendingFitRef.current = false;
-    if (typeof console !== 'undefined') console.log('[c4-fit] firing fitView, nodes=', model.nodes.length);
-    fitView({ padding: 0.15, duration: FLIP_MS, maxZoom: 1, nodes: [{ id: model.system.id }] });
-    if (typeof console !== 'undefined') {
-      setTimeout(() => {
-        const vp = getViewport?.();
-        console.log('[c4-fit] viewport after fit', vp);
-      }, FLIP_MS + 50);
-    }
+    fitView({ padding: 0.15, duration: CAMERA_MS, maxZoom: 1, nodes: [{ id: model.system.id }] });
   }, [ready, model.system.id, fitView]);
 
   /** Called once the new layout is committed, from the layout effect. */
   const afterLayout = () => {
-    // The camera fit runs from a `ready`-keyed effect (see below), after React
-    // has committed the new nodes — fitting earlier measures stale geometry and
-    // the camera just snaps.
-    if (typeof console !== 'undefined') console.log('[c4-fit] afterLayout, queued');
     pendingFitRef.current = true;
   };
 
@@ -359,39 +404,28 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
     () =>
       [
         ...model.nodes.map((n) => `${n.id}\0${n.parentId ?? ''}\0${n.label}`).sort(),
-        ...derivedGroups.map((g) => `${g.id}\0${g.parentId ?? ''}\0${g.memberIds.length}`).sort(),
         ...model.edges.map((e) => `${e.id}\0${e.count}`).sort(),
         `open:${model.openContainerId ?? ''}`,
       ].join('\n'),
-    [model, derivedGroups],
+    [model],
   );
 
-  useEffect(() => {
-    let alive = true;
-    setReady(false);
-    if (typeof console !== 'undefined') console.log('[c4-fit] layout effect, open=', model.openContainerId);
-    setSelectedId(null);
-
+  /**
+   * Build the React Flow inputs for a given open state — everything ELK needs,
+   * independent of whether a layout has been run yet. Pure over `openId`, so it
+   * serves both the rendered state and the background prefetch.
+   */
+  const buildInputs = (openId: string | null) => {
     // Draw only the elements for this view. A container diagram shows the
     // runtime units (containers, externals, people); components belong to the
-    // component view — or to a container that has been opened. Components are
-    // always carried on the model (see the side panel), just not drawn here.
+    // component view — or to a container that has been opened.
     const inView = (n: C4Element): boolean => {
       if (model.view === 'component') return n.kind !== 'container';
-      if (n.kind === 'component') {
-        // Show a component only when its container is the opened one.
-        return (n.container ?? n.parentId) === model.openContainerId;
-      }
-      if (n.kind === 'container') {
-        // An opened container is drawn as a frame, not a box — so it must not
-        // also paint as a node, or the box sits inside its own frame.
-        return n.id !== model.openContainerId;
-      }
+      if (n.kind === 'component') return (n.container ?? n.parentId) === openId;
+      if (n.kind === 'container') return n.id !== openId;
       return true;
     };
 
-    // How many components each container groups — computed once here because
-    // the card only receives its own element, not the model.
     const childComponentCount = new Map<string, number>();
     for (const n of model.nodes) {
       if (n.kind !== 'component') continue;
@@ -399,16 +433,11 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
       if (parent) childComponentCount.set(parent, (childComponentCount.get(parent) ?? 0) + 1);
     }
 
-    // Layout against the true card size, so ELK's ports sit on the card's
-    // border — an inflated box leaves the line starting short of the card edge.
-    // The `gutter` becomes ELK spacing instead (see `nodeSpacing` below).
     const rfNodes: Node[] = model.nodes.filter(inView).map((n, i) => {
       const size = nodeSize(n);
       return {
         id: n.id,
         type: 'c4-node',
-        // Fallback grid pitch uses the container box — the largest, so the
-        // pre-layout positions never overlap. ELK replaces them on success.
         position: { x: (i % 5) * (NODE_W + 44), y: Math.floor(i / 5) * (NODE_H + 44) },
         width: size.width,
         height: size.height,
@@ -417,7 +446,6 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
           element: n,
           selected: false,
           componentCount: childComponentCount.get(n.id) ?? 0,
-          // Only a container with components can be opened.
           ...(n.kind === 'container' && (childComponentCount.get(n.id) ?? 0) > 0 && onOpenContainer
             ? { onExpand: () => onOpenContainer?.(n.id) }
             : {}),
@@ -425,199 +453,235 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
       };
     });
 
-    const groups = derivedGroups.map((g) => ({
+    const groupsForOpen = deriveC4Groups({ ...model, openContainerId: openId });
+    const groups = groupsForOpen.map((g) => ({
       id: g.id,
       memberIds: g.memberIds,
       ...(g.parentId ? { parentId: g.parentId } : {}),
     }));
 
-    // Band nodes so a flat layout still reads as C4 and frames can't interleave.
-    //
-    // Flat mode has no ELK parents, so without bands ELK mixes members of
-    // different frames across the whole graph — their synthesized bounding
-    // boxes then overlap. A partition per frame keeps each frame's members
-    // contiguous; people lead, externals trail.
-    //
-    // Order (ascending = earlier in the layout direction): people, then each
-    // frame in model order, then external systems.
-    const frameIds = derivedGroups.map((g) => g.id);
+    const frameIds = groupsForOpen.map((g) => g.id);
     const frameIndex = new Map(frameIds.map((id, i) => [id, i]));
     const partitionByNode = new Map<string, number>(
       model.nodes.map((n) => {
         if (n.kind === 'person') return [n.id, 0];
         if (n.kind === 'external-system') return [n.id, frameIds.length + 1];
-        // A node inside a frame shares its frame's band; a frame-less node
-        // (a container at container view) gets its own by id order.
         const band = n.parentId ? (frameIndex.get(n.parentId) ?? 0) : (frameIndex.get(n.id) ?? 0);
         return [n.id, 1 + band];
       }),
     );
 
-    // Only draw an edge whose BOTH endpoints are on screen. A hidden component
-    // (a closed container's children) must not be an edge endpoint: ELK throws
-    // on an edge to a node that isn't in the graph, and React Flow would draw a
-    // line to nowhere.
     const drawnIds = new Set(rfNodes.map((n) => n.id));
     const rfEdges: Edge[] = model.edges
       .filter((e) => drawnIds.has(e.source) && drawnIds.has(e.target))
       .map((e) => {
-        // Colour keys off the protocol, not the trail verb: on a container
-        // diagram the transport is what a reader distinguishes at a glance.
         const color = protocolColor(e.protocol);
         return {
           id: e.id,
           type: 'c4-edge',
           source: e.source,
           target: e.target,
-          // The reserved label box and the chip must agree on size, so ELK is
-          // given the same text the chip draws (protocol first, then label). The
-          // chip itself is the C4EdgeLabels overlay, not this field.
           label: e.protocol ?? e.label,
           markerEnd: { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
           data: { edge: e, color, path: '' },
         };
       });
 
-    void computeElkLayout(rfNodes, rfEdges, {
+    return { rfNodes, rfEdges, groups, partitionByNode, groupsForOpen };
+  };
+
+  /**
+   * Run ELK for one open state and turn the result into React Flow nodes /
+   * edges. The heavy step the prefetch caches.
+   */
+  const layoutFor = async (
+    openId: string | null,
+    inputs: ReturnType<typeof buildInputs>,
+  ): Promise<Rendered> => {
+    const { rfNodes, rfEdges, groups, partitionByNode, groupsForOpen } = inputs;
+    const result = await computeElkLayout(rfNodes, rfEdges, {
       direction: 'RIGHT',
       preserveNodePositions: false,
       groups,
       keepSingletonGroups: true,
       edgeLabels: { enabled: true, placement: 'CENTER', width: C4_LABEL_WIDTH, measure: estimateEdgeLabelWidth },
-      // The gutter that used to inflate each node box is now real spacing, so
-      // the ports still sit on the card edge.
       nodeSpacing: gutter * 2,
       edgeNodeSpacing: gutter,
-      // Between-layer/between-partition gap. This is what keeps the external
-      // band clear of the system frame's padding — ELK gives partitions zero
-      // default separation. It stacks on top of ELK's reserved label layer, so
-      // it is kept modest.
       interLayerSpacing: 40,
-      // Draw the system frame as a decoration around the boxes rather than an
-      // ELK parent. Nesting made in-frame edges inherit the frame's padding and
-      // spacing, so they ran longer than a root-level edge touching the same
-      // nodes; flattening gives every edge one spacing.
       flatGroups: true,
       partitionByNode,
-    })
-      .then((result) => {
+    });
+
+    const positioned = new Map(result.nodes.map((n) => [n.id, n]));
+    const labelPositions = new Map<string, { x: number; y: number }>();
+    const withPaths = rfEdges.map((e) => {
+      const pts = result.edgePathPoints?.get(e.id);
+      if (!pts || pts.length === 0) return e;
+      labelPositions.set(e.id, pointAlongPath(pts, 0.5));
+      return { ...e, data: { ...e.data, path: pointsToSmoothPath(pts, 12) } };
+    });
+
+    const builtGroups = new Set(result.groupBounds.keys());
+    const groupById = new Map(groupsForOpen.map((g) => [g.id, g]));
+    const depthOf = (id: string): number => {
+      let d = 0;
+      let g = groupById.get(id);
+      while (g?.parentId) {
+        d += 1;
+        g = groupById.get(g.parentId);
+      }
+      return d;
+    };
+
+    const shellAbs = new Map(result.groupBounds);
+    const shellOrigin = (id: string | undefined): { x: number; y: number } => {
+      if (!id) return { x: 0, y: 0 };
+      const b = shellAbs.get(id);
+      return b ? { x: b.x, y: b.y } : { x: 0, y: 0 };
+    };
+
+    const shells: Node[] = [...result.groupBounds.entries()]
+      .sort((a, b) => depthOf(a[0]) - depthOf(b[0]))
+      .map(([id, b]) => {
+        const def = groupById.get(id);
+        const parentId = def?.parentId && builtGroups.has(def.parentId) ? def.parentId : undefined;
+        const origin = shellOrigin(parentId);
+        const element = model.nodes.find((n) => n.id === id);
+        const frameColor =
+          def?.kind === 'system'
+            ? (theme.colors.text ?? '#888')
+            : element
+              ? nodeStyle(element, theme).color
+              : (theme.colors.accent ?? theme.colors.info);
+        return {
+          id,
+          type: 'c4-group',
+          position: { x: b.x - origin.x, y: b.y - origin.y },
+          width: Math.max(200, b.width),
+          height: Math.max(120, b.height),
+          draggable: false,
+          selectable: false,
+          ...(parentId ? { parentId } : {}),
+          data: {
+            label: def?.label ?? id,
+            kind: def?.kind ?? 'container',
+            color: frameColor,
+            ...(def?.kind !== 'system' && element
+              ? { brand: technologyBrand('technology' in element ? element.technology : undefined) }
+              : {}),
+            ...(def?.kind === 'container' && openId === id && onCloseContainer
+              ? { onCollapse: () => onCloseContainer?.() }
+              : {}),
+          },
+        };
+      });
+
+    const leaves = rfNodes.map((n) => {
+      const p = positioned.get(n.id);
+      const abs = p ? p.position : n.position;
+      let parentId: string | undefined;
+      if (n.data && typeof n.data === 'object') {
+        const modelNode = (n.data as { element?: C4Element }).element;
+        if (modelNode?.parentId && builtGroups.has(modelNode.parentId)) parentId = modelNode.parentId;
+      }
+      const origin = shellOrigin(parentId);
+      const node = { ...n, position: { x: abs.x - origin.x, y: abs.y - origin.y } };
+      return (parentId ? { ...node, parentId } : { ...node, parentId: undefined }) as Node;
+    });
+
+    return { nodes: [...shells, ...leaves], edges: withPaths, labelPositions, groupBounds: result.groupBounds };
+  };
+
+  const renderLayout = (r: Rendered) => {
+    setNodes(injectGrow(r.nodes, morphSpan));
+    setRfEdges(r.edges);
+    setLabelPositions(r.labelPositions);
+    setReady(true);
+    afterLayout();
+  };
+
+  // Render the current open state. Uses the prefetched layout when present
+  // (instant swap), else computes it now.
+  useEffect(() => {
+    let alive = true;
+    setReady(false);
+    setSelectedId(null);
+    const openId = model.openContainerId ?? null;
+    const prevOpen = prevOpenRef.current;
+    const inputs = buildInputs(openId);
+
+    /** If the open state changed, arm the box↔frame morph from the two layouts. */
+    const armMorph = (next: Rendered) => {
+      if (prevOpen === openId) return;
+      const id = openId ?? prevOpen;
+      const el = id ? model.nodes.find((n) => n.id === id) : undefined;
+      if (!id || !el) return;
+      const fromLayout = prevOpen === null ? layoutCache.current.get('') : layoutCache.current.get(prevOpen);
+      const from = containerRect(fromLayout, id);
+      const to = containerRect(next, id);
+      if (from && to) {
+        setMorph({ id, from, to, color: nodeStyle(el, theme).color });
+      }
+    };
+
+    const cached = layoutCache.current.get(openId ?? '');
+    if (cached) {
+      armMorph(cached);
+      prevOpenRef.current = openId;
+      renderLayout(cached);
+      return () => {
+        alive = false;
+      };
+    }
+    void layoutFor(openId, inputs)
+      .then((r) => {
         if (!alive) return;
-        const positioned = new Map(result.nodes.map((n) => [n.id, n]));
-        // Draw each edge along ELK's routed polyline and place its label from
-        // the same points — one geometry for the line and the chip.
-        const labelPositions = new Map<string, { x: number; y: number }>();
-        const withPaths = rfEdges.map((e) => {
-          const pts = result.edgePathPoints?.get(e.id);
-          if (!pts || pts.length === 0) return e;
-          labelPositions.set(e.id, pointAlongPath(pts, 0.5));
-          // Rounded corners on ELK's orthogonal route — gentler than raw right
-          // angles, and still the exact polyline the label is placed on.
-          return { ...e, data: { ...e.data, path: pointsToSmoothPath(pts, 12) } };
-        });
-        setLabelPositions(labelPositions);
-        const builtGroups = new Set(result.groupBounds.keys());
-        const groupById = new Map(derivedGroups.map((g) => [g.id, g]));
-
-        const depthOf = (id: string): number => {
-          let d = 0;
-          let g = groupById.get(id);
-          while (g?.parentId) {
-            d += 1;
-            g = groupById.get(g.parentId);
-          }
-          return d;
-        };
-
-        // Shell positions from flat synthesis are absolute. React Flow reads a
-        // child's `position` as relative to its parent, so a shell nested in
-        // another shell must be made relative to it.
-        const shellAbs = new Map(result.groupBounds);
-        const shellOrigin = (id: string | undefined): { x: number; y: number } => {
-          if (!id) return { x: 0, y: 0 };
-          const b = shellAbs.get(id);
-          return b ? { x: b.x, y: b.y } : { x: 0, y: 0 };
-        };
-
-        const shells: Node[] = [...result.groupBounds.entries()]
-          .sort((a, b) => depthOf(a[0]) - depthOf(b[0]))
-          .map(([id, b]) => {
-            const def = groupById.get(id);
-            const parentId = def?.parentId && builtGroups.has(def.parentId) ? def.parentId : undefined;
-            const origin = shellOrigin(parentId);
-            // A container frame borrows its container node's border colour, so a
-            // frame and the box it wraps read as the same thing. Falls back to
-            // the accent when no element matches (e.g. a hand-authored group id).
-            const element = model.nodes.find((n) => n.id === id);
-            const frameColor =
-              def?.kind === 'system'
-                ? (theme.colors.text ?? '#888')
-                : element
-                  ? nodeStyle(element, theme).color
-                  : (theme.colors.accent ?? theme.colors.info);
-            return {
-              id,
-              type: 'c4-group',
-              position: { x: b.x - origin.x, y: b.y - origin.y },
-              width: Math.max(200, b.width),
-              height: Math.max(120, b.height),
-              draggable: false,
-              selectable: false,
-              ...(parentId ? { parentId } : {}),
-              data: {
-                label: def?.label ?? id,
-                kind: def?.kind ?? 'container',
-                color: frameColor,
-                // A container frame shows its technology mark, so the boundary
-                // says what it is built with (matching the node's tech row).
-                ...(def?.kind !== 'system' && element
-                  ? { brand: technologyBrand('technology' in element ? element.technology : undefined) }
-                  : {}),
-                // An opened container frame can be collapsed by the host.
-                ...(def?.kind === 'container' && model.openContainerId === id && onCloseContainer
-                  ? { onCollapse: () => onCloseContainer?.() }
-                  : {}),
-              },
-            };
-          });
-
-        const leaves = rfNodes.map((n) => {
-          const p = positioned.get(n.id);
-          // Absolute flow position from the flat layout.
-          const abs = p ? p.position : n.position;
-          // Re-parent to the shell this node sits in, if any: a component's
-          // container, or a container's system frame. React Flow positions a
-          // child relative to its parent, so subtract the shell origin.
-          let parentId: string | undefined;
-          if (n.data && typeof n.data === 'object') {
-            const modelNode = (n.data as { element?: C4Element }).element;
-            if (modelNode?.parentId && builtGroups.has(modelNode.parentId)) parentId = modelNode.parentId;
-          }
-          const origin = shellOrigin(parentId);
-          const node = { ...n, position: { x: abs.x - origin.x, y: abs.y - origin.y } };
-          return (parentId ? { ...node, parentId } : { ...node, parentId: undefined }) as Node;
-        });
-
-        setNodes([...shells, ...leaves]);
-        setRfEdges(withPaths);
-        setReady(true);
-        afterLayout();
+        layoutCache.current.set(openId ?? '', r);
+        armMorph(r);
+        prevOpenRef.current = openId;
+        renderLayout(r);
       })
       .catch((err) => {
         if (!alive) return;
         console.warn('[c4-graph] ELK layout failed, using grid:', err);
-        // No shells in the fallback, so a `parentId` would point at a node that
-        // isn't in the array — React Flow refuses to position it.
-        setNodes(rfNodes.map((n) => ({ ...n, parentId: undefined })));
-        setRfEdges(rfEdges);
+        setNodes(inputs.rfNodes.map((n) => ({ ...n, parentId: undefined })));
+        setRfEdges(inputs.rfEdges);
         setReady(true);
         afterLayout();
       });
-
     return () => {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layoutKey]);
+
+  // After the first paint, prefetch the opened layout for every container, so a
+  // click swaps to a cached result instead of waiting on ELK.
+  useEffect(() => {
+    if (model.view !== 'container') return;
+    let alive = true;
+    const containers = model.nodes.filter(
+      (n) => n.kind === 'container' && model.nodes.some((c) => c.kind === 'component' && (c.container ?? c.parentId) === n.id),
+    );
+    void (async () => {
+      for (const c of containers) {
+        if (!alive) return;
+        if (layoutCache.current.has(c.id)) continue;
+        try {
+          const inputs = buildInputs(c.id);
+          const r = await layoutFor(c.id, inputs);
+          if (!alive) return;
+          layoutCache.current.set(c.id, r);
+        } catch {
+          // Prefetch is best-effort; a miss just falls back to compute-on-click.
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layoutKey, model.view]);
 
   const selected = useMemo(
     () => model.nodes.find((n) => n.id === selectedId) ?? null,
@@ -679,6 +743,7 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
         style={{ width: '100%', height: '100%' }}
       >
         <GraphChrome />
+        {morph && <C4MorphOverlay morph={morph} onDone={() => setMorph(null)} />}
       </ReactFlow>
       {ready && labelPositions.size > 0 && (
         <C4EdgeLabels positions={labelPositions} edges={model.edges} />

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
 	acceptSubsystemModelProposal,
 	createSubsystemModelProposal,
+	rejectSubsystemModelProposal,
 } from "./proposal-store";
 import { createSubsystemModel, getSubsystemModel } from "./subsystem-model-store";
 import { readC4ElementSet } from "./c4-element-store";
@@ -91,6 +92,18 @@ async function createModel(): Promise<string> {
 	});
 	return created.id;
 }
+
+const containerChange = (process: string) => ({
+	target: "c4-container" as const,
+	purl: KEY,
+	container: {
+		id: `container:${process}`,
+		label: "Studio host",
+		containerKind: "application" as const,
+		technology: "Bun",
+		process,
+	},
+});
 
 describe("c4-container proposal change", () => {
 	test("accept upserts the element store — the model is untouched", async () => {
@@ -238,6 +251,12 @@ describe("consolidation proposal change", () => {
 });
 
 describe("container-first: component process claims need a verified key", () => {
+	// The element store is per-repo and SHARED across this file's tests (one
+	// tmp home), so every test here uses its own key — a key verified by an
+	// earlier test must not leak into this one's fixtures.
+	let keySeq = 0;
+	const freshKey = () => `dup/host-${++keySeq}`;
+
 	const processChange = (value: string | null) => [
 		{
 			target: "component" as const,
@@ -253,7 +272,7 @@ describe("container-first: component process claims need a verified key", () => 
 			graphId,
 			rationale: "r",
 			author: "runtime-topology-verifier",
-			changes: processChange("subsystems-studio/host"),
+			changes: processChange(freshKey()),
 		});
 		expect(created.ok).toBe(false);
 		if (!created.ok) expect(created.error).toContain("no accepted container");
@@ -272,6 +291,7 @@ describe("container-first: component process claims need a verified key", () => 
 
 	test("once a container is accepted, claims to its key pass — create AND accept", async () => {
 		const graphId = await createModel();
+		const key = freshKey();
 		const container = await createSubsystemModelProposal({
 			graphId,
 			rationale: "the host is one deployable unit",
@@ -280,11 +300,11 @@ describe("container-first: component process claims need a verified key", () => 
 					target: "c4-container",
 					purl: KEY,
 					container: {
-						id: "container:studio/host",
+						id: `container:${key}`,
 						label: "Studio host",
 						containerKind: "application",
 						technology: "Bun",
-						process: "studio/host",
+						process: key,
 					},
 				},
 			],
@@ -297,7 +317,7 @@ describe("container-first: component process claims need a verified key", () => 
 			graphId,
 			rationale: "main runs in the accepted host process",
 			author: "runtime-topology-verifier",
-			changes: processChange("studio/host"),
+			changes: processChange(key),
 		});
 		expect(claim.ok).toBe(true);
 		if (!claim.ok) return;
@@ -305,13 +325,89 @@ describe("container-first: component process claims need a verified key", () => 
 		expect(accepted.ok).toBe(true);
 
 		const after = await getSubsystemModel(graphId);
-		expect(after?.components.find((c) => c.alias === "main")?.process).toBe("studio/host");
+		expect(after?.components.find((c) => c.alias === "main")?.process).toBe(key);
+	});
+
+	test("a second container proposal for the same pending boundary is refused", async () => {
+		const graphId = await createModel();
+		const key = freshKey();
+		const first = await createSubsystemModelProposal({
+			graphId,
+			rationale: "r",
+			changes: [containerChange(key)],
+		});
+		expect(first.ok).toBe(true);
+
+		const second = await createSubsystemModelProposal({
+			graphId,
+			rationale: "r",
+			changes: [
+				{
+					target: "c4-container",
+					purl: KEY,
+					container: {
+						id: `container:${key}-2`,
+						label: "Studio host (again)",
+						containerKind: "application",
+						technology: "Bun",
+						process: key,
+					},
+				},
+			],
+		});
+		expect(second.ok).toBe(false);
+		if (!second.ok) expect(second.error).toContain("one open decision per boundary");
+	});
+
+	test("a boundary that already reads verified needs no second box", async () => {
+		const graphId = await createModel();
+		const key = freshKey();
+		const first = await createSubsystemModelProposal({
+			graphId,
+			rationale: "r",
+			changes: [containerChange(key)],
+		});
+		expect(first.ok).toBe(true);
+		if (!first.ok) return;
+		await acceptSubsystemModelProposal(graphId, first.proposal.id);
+
+		// The pending duplicate is gone — this one is refused on verified-ness.
+		const second = await createSubsystemModelProposal({
+			graphId,
+			rationale: "r",
+			changes: [containerChange(key)],
+		});
+		expect(second.ok).toBe(false);
+		if (!second.ok) expect(second.error).toContain("needs no second box");
+	});
+
+	test("a REJECTED proposal does not block re-proposing the boundary", async () => {
+		// Rejections live in history for the agent to reason against — they are
+		// a known "no", not a wall. New evidence may justify a new proposal.
+		const graphId = await createModel();
+		const key = freshKey();
+		const first = await createSubsystemModelProposal({
+			graphId,
+			rationale: "r",
+			changes: [containerChange(key)],
+		});
+		expect(first.ok).toBe(true);
+		if (!first.ok) return;
+		await rejectSubsystemModelProposal(graphId, first.proposal.id);
+
+		const second = await createSubsystemModelProposal({
+			graphId,
+			rationale: "new evidence: the bun signal covers both members",
+			changes: [containerChange(key)],
+		});
+		expect(second.ok).toBe(true);
 	});
 
 	test("a container accepted-then-rejected store state re-blocks the claim at accept", async () => {
 		// Store keeps only accepted elements, so "rejected later" reads as
 		// absent: the pending claim loses its backing and accept refuses.
 		const graphId = await createModel();
+		const key = freshKey();
 		const container = await createSubsystemModelProposal({
 			graphId,
 			rationale: "r",
@@ -320,11 +416,11 @@ describe("container-first: component process claims need a verified key", () => 
 					target: "c4-container",
 					purl: KEY,
 					container: {
-						id: "container:studio/host",
+						id: `container:${key}`,
 						label: "Studio host",
 						containerKind: "application",
 						technology: "Bun",
-						process: "studio/host",
+						process: key,
 					},
 				},
 			],
@@ -337,7 +433,7 @@ describe("container-first: component process claims need a verified key", () => 
 			graphId,
 			rationale: "r",
 			author: "runtime-topology-verifier",
-			changes: processChange("studio/host"),
+			changes: processChange(key),
 		});
 		expect(claim.ok).toBe(true);
 		if (!claim.ok) return;
