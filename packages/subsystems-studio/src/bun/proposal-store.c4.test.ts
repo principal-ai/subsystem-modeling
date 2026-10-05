@@ -102,6 +102,7 @@ const containerChange = (process: string) => ({
 		containerKind: "application" as const,
 		technology: "Bun",
 		process,
+		description: "One Bun process hosting the studio host.",
 	},
 });
 
@@ -122,6 +123,7 @@ describe("c4-container proposal change", () => {
 						containerKind: "application",
 						technology: "Bun",
 						process: "studio/host",
+						description: "Boots the host and owns retained session state.",
 					},
 				},
 			],
@@ -159,6 +161,7 @@ describe("c4-container proposal change", () => {
 						containerKind: "queue" as never,
 						technology: "Bun",
 						process: "studio/host",
+						description: "d",
 					},
 				},
 			],
@@ -179,12 +182,34 @@ describe("c4-container proposal change", () => {
 						containerKind: "application",
 						technology: "Bun",
 						process: "  ",
+						description: "d",
 					},
 				},
 			],
 		});
 		expect(blankProcess.ok).toBe(false);
 		if (!blankProcess.ok) expect(blankProcess.error).toContain("process");
+
+		const blankDescription = await createSubsystemModelProposal({
+			graphId,
+			rationale: "r",
+			changes: [
+				{
+					target: "c4-container",
+					purl: KEY,
+					container: {
+						id: "c",
+						label: "c",
+						containerKind: "application",
+						technology: "Bun",
+						process: "studio/host",
+						description: "  ",
+					},
+				},
+			],
+		});
+		expect(blankDescription.ok).toBe(false);
+		if (!blankDescription.ok) expect(blankDescription.error).toContain("description");
 	});
 });
 
@@ -305,6 +330,7 @@ describe("container-first: component process claims need a verified key", () => 
 						containerKind: "application",
 						technology: "Bun",
 						process: key,
+						description: "One Bun process hosting the studio host.",
 					},
 				},
 			],
@@ -351,6 +377,7 @@ describe("container-first: component process claims need a verified key", () => 
 						containerKind: "application",
 						technology: "Bun",
 						process: key,
+						description: "A second card for the same boundary — refused.",
 					},
 				},
 			],
@@ -458,6 +485,7 @@ describe("container-first: component process claims need a verified key", () => 
 						containerKind: "application",
 						technology: "Bun",
 						process: key,
+						description: "One Bun process hosting the studio host.",
 					},
 				},
 			],

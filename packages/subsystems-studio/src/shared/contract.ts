@@ -1106,7 +1106,14 @@ export type SubsystemModelProposalChange =
 				technology: string;
 				/** The model `process` key this container verifies, exact match. */
 				process: string;
-				description?: string;
+				/**
+				 * What the unit is — required, not optional: the reviewer's
+				 * decision needs it, and the C4 card flags its absence
+				 * (`nodeMissing`). Distinct from the proposal's `rationale`
+				 * (the agent's argument); this is element content that lives
+				 * in the store and reads in every C4 view.
+				 */
+				description: string;
 			};
 	  }
 	| {

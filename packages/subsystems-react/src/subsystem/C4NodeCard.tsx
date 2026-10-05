@@ -239,9 +239,26 @@ export interface C4NodeCardProps {
    * this — the drill-down trigger. Only containers with components pass it.
    */
   onExpand?: () => void;
+  /**
+   * Explicit box size, overriding the kind's default. Lets a host animate the
+   * card (the drill-down grow) without the card owning that state.
+   */
+  width?: number;
+  height?: number;
+  /**
+   * Show the description line under the label. Off when the card is grown to
+   * host components — the internals occupy that space.
+   * @default true
+   */
+  showDescription?: boolean;
+  /**
+   * Content drawn below the header (label / technology / description). Used by
+   * the grown card to host its component cards.
+   */
+  children?: React.ReactNode;
 }
 
-export function C4NodeCard({ node, selected = false, handles, onClick, componentCount = 0, onExpand }: C4NodeCardProps) {
+export function C4NodeCard({ node, selected = false, handles, onClick, componentCount = 0, onExpand, width, height, showDescription = true, children }: C4NodeCardProps) {
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const style = nodeStyle(node, theme, selected);
@@ -261,8 +278,9 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
       onClick={onClick}
       style={{
         position: 'relative',
-        width: size.width,
-        minHeight: size.height,
+        width: width ?? size.width,
+        minHeight: height ?? size.height,
+        transition: 'width 420ms ease-out, min-height 420ms ease-out',
         boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
@@ -289,7 +307,7 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
         style={{
           display: 'flex',
           alignItems: 'flex-start',
-          justifyContent: centered ? 'center' : 'flex-start',
+          justifyContent: centered ? 'center' : 'space-between',
           gap: 6,
           height: LABEL_SLOT_H,
           minWidth: 0,
@@ -377,7 +395,7 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
           </span>
         )}
       </span>
-      {subtitle && (
+      {showDescription && subtitle && (
         <span
           style={{
             fontFamily: theme.fonts.monospace,
@@ -392,6 +410,7 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
           {subtitle}
         </span>
       )}
+      {children}
       {/* Drill-down affordance: bottom-right, its own hit target so the card's
           own click (select) is unaffected. */}
       {onExpand && (

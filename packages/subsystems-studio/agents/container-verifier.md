@@ -100,6 +100,11 @@ yours: what the unit is, why the technology, what you are unsure of.
   queue or topic is a `data-store`; the bus itself is not an element.
 - `technology` is required (C4 requires it on every container). Use the
   framework signal from the diagram; never invent one.
+- `description` is **required** — what the unit IS, in one or two sentences.
+  The reviewer is deciding on your description; a bare label makes them guess.
+  Distinct from the proposal's `rationale` (your argument for proposing): the
+  description is element content that lives in the store and reads in every
+  C4 view.
 - `process` is matched **exactly** against model keys. A near-miss spelling is
   not a claim — it is either a consolidation or an `unassigned` boundary.
 

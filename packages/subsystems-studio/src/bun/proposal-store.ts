@@ -452,6 +452,9 @@ function validateChanges(
 			if (c.containerKind !== "application" && c.containerKind !== "data-store") {
 				return `unknown containerKind: ${String(c.containerKind)}`;
 			}
+			if (!c.description?.trim()) {
+				return "container description is required — the reviewer is deciding what the unit IS, not just its name";
+			}
 		} else if (ch.target === "consolidation") {
 			if (!Array.isArray(ch.processKeys) || ch.processKeys.length < 2) {
 				return "consolidation requires at least two processKeys";
