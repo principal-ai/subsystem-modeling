@@ -716,6 +716,28 @@ export function planCompoundGroups(
 }
 
 /**
+ * The four side ports every node in the graph carries, named
+ * `<id>_top|_right|_bottom|_left` — the ids `getPortSide` resolves an edge
+ * endpoint to.
+ *
+ * Shared by leaves and compound parents on purpose. A parent is still an ELK
+ * *node* that outside edges terminate on, and ELK rejects the whole graph if an
+ * edge names a port that was never declared: `JsonImportException: Referenced
+ * shape does not exist`. Declaring ports only on leaves silently works right up
+ * until the first edge crosses into a node that later becomes a group — which is
+ * why the drill-down only broke once a container was opened *and* something
+ * outside the boundary pointed at it.
+ */
+function cardinalPorts(id: string) {
+  return [
+    { id: `${id}_top`, properties: { 'port.side': 'NORTH' } },
+    { id: `${id}_right`, properties: { 'port.side': 'EAST' } },
+    { id: `${id}_bottom`, properties: { 'port.side': 'SOUTH' } },
+    { id: `${id}_left`, properties: { 'port.side': 'WEST' } },
+  ];
+}
+
+/**
  * Compute ELK layout for nodes and edges
  *
  * @param nodes - xyflow nodes
@@ -774,12 +796,7 @@ export async function computeElkLayout(
       x: node.position.x,
       y,
       // Add ports on each side for edge connections
-      ports: [
-        { id: `${node.id}_top`, properties: { 'port.side': 'NORTH' } },
-        { id: `${node.id}_right`, properties: { 'port.side': 'EAST' } },
-        { id: `${node.id}_bottom`, properties: { 'port.side': 'SOUTH' } },
-        { id: `${node.id}_left`, properties: { 'port.side': 'WEST' } },
-      ],
+      ports: cardinalPorts(node.id),
       properties: {
         'portConstraints': 'FIXED_SIDE',
         ...(layer !== undefined ? { 'layering.layer': String(layer) } : {}),
@@ -999,6 +1016,12 @@ export async function computeElkLayout(
     builtGroups.set(g.id, {
       id: g.id,
       children,
+      // Same side ports a leaf gets. An edge from outside the group terminates
+      // on the group, and ELK throws on a port reference it cannot resolve.
+      // Deliberately NOT `portConstraints: FIXED_SIDE` the way leaves are: each
+      // port already names its own `port.side`, which is what routes the edge,
+      // and pinning a parent could fight the layout of the children it holds.
+      ports: cardinalPorts(g.id),
       layoutOptions:
         Object.keys(sizeOptions).length > 0
           ? { ...compoundLayoutOptions, ...sizeOptions }

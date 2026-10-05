@@ -86,13 +86,13 @@ const EDGES: C4Edge[] = [
   edge('e:proposals-store', 'component:maintain-proposals', 'component:model-store', 'fs · JSON'),
 ];
 
-function Demo() {
+function Demo({ nodes, edges }: { nodes: C4Element[]; edges: C4Edge[] }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
 
   const model = useMemo<C4Model>(
-    () => ({ view: 'container', system: SYSTEM, nodes: NODES, edges: EDGES, openContainerId: openId }),
-    [openId],
+    () => ({ view: 'container', system: SYSTEM, nodes, edges, openContainerId: openId }),
+    [openId, nodes, edges],
   );
 
   return (
@@ -128,5 +128,75 @@ function Demo() {
 }
 
 export const DrillDown: Story = {
-  render: () => <Demo />,
+  render: () => <Demo nodes={NODES} edges={EDGES} />,
+};
+
+// ---------------------------------------------------------------------------
+// Two containers in the boundary, and an external system outside it.
+//
+// The single-container story cannot show what a drill-down does to the *rest* of
+// the diagram, because there is no rest. Here the system holds two containers
+// and there is an external system wired to both, so opening one box has to
+// answer for three things at once:
+//
+//   - the sibling container has to stay a card and get pushed clear of the
+//     growth, rather than being absorbed into it;
+//   - the external system has to stay outside the boundary while the boundary
+//     grows around a column that is not its own;
+//   - either container can be opened while the other is closed, so the grow has
+//     to work from a sibling-present layout as well as a lone one.
+//
+// The external system is the thing to watch. Band separation was the suspected
+// weak spot of an opened container becoming a compound parent under
+// INCLUDE_CHILDREN — the concern was that an external would collapse *below* the
+// frame union instead of holding its own column beside it. Measured through real
+// ELK, it holds: with the external partitioned one band right of the boundary it
+// stays right of the frame in both open states. What this topology did expose is
+// a crash — an edge crossing the boundary into an opened container named a port
+// the group never declared, and ELK rejected the graph. The sibling container is
+// also openable on its own, so opening the *lower* of the two is the case where
+// the growth is not downward from the top card.
+// ---------------------------------------------------------------------------
+
+const CLI = 'container:principal-cli';
+
+const SIBLING_NODES: C4Element[] = [
+  container({ id: HOST, label: 'Subsystem Studio — host', technology: 'Bun + Electrobun', description: 'The Electron main process.' }),
+  component({ id: 'component:audit-verification', label: 'Audit & verification', container: HOST, description: 'Checks a model, reports problems.' }),
+  component({ id: 'component:maintain-proposals', label: 'Maintain & proposals', container: HOST, description: 'Runs the maintain agent, records proposals.' }),
+  component({ id: 'component:model-store', label: 'Model store I/O', container: HOST, technology: 'Bun fs', description: 'Reads and writes model JSON.' }),
+
+  // The second container in the same boundary, and openable on its own terms.
+  // A data-store, so opening it also exercises the second container kind.
+  container({
+    id: CLI,
+    label: 'Principal CLI',
+    containerKind: 'data-store',
+    technology: 'Bun + SQLite',
+    description: 'Creates and renders subsystem models.',
+  }),
+  component({ id: 'component:model-reader', label: 'Model reader', container: CLI, description: 'Parses a model document.' }),
+  component({ id: 'component:diagram-writer', label: 'Diagram writer', container: CLI, description: 'Emits ELK-ready nodes and edges.' }),
+
+  // No `parentId`: this one is outside the boundary, which is the point of it.
+  {
+    kind: 'external-system',
+    id: 'external:github',
+    label: 'GitHub',
+    technology: 'REST',
+    state: 'accepted',
+    description: 'Repositories and pull requests.',
+  },
+];
+
+const SIBLING_EDGES: C4Edge[] = [
+  edge('e:github-host', 'external:github', HOST, 'HTTPS'),
+  edge('e:cli-github', CLI, 'external:github', 'HTTPS'),
+  edge('e:audit-store', 'component:audit-verification', 'component:model-store', 'fs · JSON'),
+  edge('e:proposals-store', 'component:maintain-proposals', 'component:model-store', 'fs · JSON'),
+  edge('e:reader-writer', 'component:model-reader', 'component:diagram-writer', 'in-process'),
+];
+
+export const SiblingAndExternal: Story = {
+  render: () => <Demo nodes={SIBLING_NODES} edges={SIBLING_EDGES} />,
 };
