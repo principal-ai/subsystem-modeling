@@ -170,23 +170,23 @@ export interface C4Group {
  * Derive the frames to draw from the elements and the current scope.
  *
  * A container becomes a frame whenever its components are on screen — in the
- * component view, or when it is the opened container. The system frame wraps
- * whichever containers are drawn. No frame is authored; this is the view of the
- * element set, so a container's identity (id, label, technology, colour) lives
- * only on the element.
+ * component view, or when it is one of the opened containers. The system frame
+ * wraps whichever containers are drawn. No frame is authored; this is the view
+ * of the element set, so a container's identity (id, label, technology, colour)
+ * lives only on the element.
  */
 export function deriveC4Groups(
-  model: Pick<C4Model, 'view' | 'system' | 'nodes' | 'openContainerId'>,
+  model: Pick<C4Model, 'view' | 'system' | 'nodes'> & OpenState,
 ): C4Group[] {
   const groups: C4Group[] = [];
   const containers = model.nodes.filter((n): n is C4Container => n.kind === 'container');
   const components = model.nodes.filter((n): n is C4Component => n.kind === 'component');
 
-  const opened = model.openContainerId ?? null;
+  const opened = new Set(openContainerSet(model));
   // Component view shows every container's components; container view shows a
   // container's components only when it is opened.
   const framing = (containerId: string): boolean =>
-    model.view === 'component' || opened === containerId;
+    model.view === 'component' || opened.has(containerId);
 
   const framedContainers: string[] = [];
   for (const c of containers) {
@@ -294,7 +294,7 @@ export function protocolColor(protocol: string | undefined): string {
  * A drawable C4 projection. Authored: the boxes and lines, nothing drawn for
  * you. Frames are derived by the renderer from the elements' `parentId` chains
  * — a container is a frame when its components are being shown (component view,
- * or opened via `openContainerId`), never a separately-authored thing.
+ * or opened via `openContainerIds`), never a separately-authored thing.
  */
 export interface C4Model {
   view: C4View;
@@ -302,11 +302,50 @@ export interface C4Model {
   nodes: C4Element[];
   edges: C4Edge[];
   /**
-   * Drill-down scope: the id of a container whose components should be shown
-   * inside it as a frame. Absent/null → the container is drawn as a box and its
-   * components are hidden. The renderer derives the frames either way.
+   * Drill-down scope: the containers whose components are shown nested inside
+   * them as a grown card. Absent/empty → every container is drawn as a plain box
+   * and all components are hidden. The renderer derives the frames either way.
+   *
+   * Several may be open at once: each is an independent ELK parent, and opening
+   * one never closes another. Order is not significant — {@link openContainerSet}
+   * normalizes it, so two permutations of the same set are one layout.
+   */
+  openContainerIds?: readonly string[];
+  /**
+   * Single-container shorthand for {@link C4Model.openContainerIds}, folded into
+   * it by {@link openContainerSet}. Kept because `C4Model` is a published type
+   * and removing the field would break every caller at once; prefer the plural,
+   * which is what the drill-down actually means now.
+   *
+   * @deprecated Use {@link C4Model.openContainerIds}.
    */
   openContainerId?: string | null;
+}
+
+/** Anything that can say which containers are open, however it says it. */
+type OpenState = Pick<C4Model, 'openContainerId' | 'openContainerIds'>;
+
+/**
+ * The open containers as a deduplicated, **sorted** list.
+ *
+ * Sorted on purpose: this doubles as the layout cache key, and two callers that
+ * open the same containers in a different order are in the same state — one
+ * layout, not two. A plain `Set` iteration order would follow insertion, so
+ * `[a, b]` and `[b, a]` would each compute their own ELK run for a diagram that
+ * did not change.
+ */
+export function openContainerSet(state: OpenState): string[] {
+  const ids = new Set<string>(state.openContainerIds ?? []);
+  if (state.openContainerId) ids.add(state.openContainerId);
+  return [...ids].sort();
+}
+
+/**
+ * Cache key for one open state. `''` is the closed diagram, which is why it is a
+ * join and not a count.
+ */
+export function openStateKey(openIds: readonly string[]): string {
+  return openIds.join(',');
 }
 
 /**

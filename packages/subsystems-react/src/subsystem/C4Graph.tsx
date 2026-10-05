@@ -36,17 +36,36 @@ import { TechMark, technologyBrand } from './techIcons';
 import type { TechBrand } from './techIcons';
 import { GRAPH_CANVAS_CLASS, GRAPH_NAV_PROPS, GraphChrome, GraphLayerStyle } from './graphChrome';
 import type { C4Element, C4Model } from './c4';
+import { openContainerSet, openStateKey } from './c4';
 
 export interface C4GraphProps {
   model: C4Model;
   onSelectNode?: (id: string | null) => void;
   /**
-   * Drill-down. Called from the expand affordance on a container card; the host
-   * sets `openContainerId` on the model to swap the box for a frame with its
-   * components inside.
+   * Drill-down: add `id` to `model.openContainerIds`, or remove it if it is
+   * already open. One verb for both directions, because with several containers
+   * open at once "close" is ambiguous — the affordance on an open card has to
+   * close *that* card without disturbing the others.
+   *
+   * This is the verb to use. The two below remain for callers written against
+   * the single-container drill-down, and are only consulted when this is absent.
+   */
+  onToggleContainer?: (id: string) => void;
+  /**
+   * Drill-down. Called from the expand affordance on a *closed* container card;
+   * the host adds `id` to `model.openContainerIds` to swap the box for a grown
+   * card with its components inside.
+   *
+   * @deprecated Prefer {@link C4GraphProps.onToggleContainer}, which also covers
+   * the open case.
    */
   onOpenContainer?: (id: string) => void;
-  /** Called from the collapse affordance inside an opened container frame. */
+  /**
+   * Called from the collapse affordance on an opened container card. Closes
+   * everything when several containers are open, because it carries no id.
+   *
+   * @deprecated Prefer {@link C4GraphProps.onToggleContainer}, which closes one.
+   */
   onCloseContainer?: () => void;
   /**
    * Breathing room around each card, in flow px, applied as ELK spacing (not by
@@ -472,17 +491,32 @@ export function rebaseGroupBoundsAbsolute(
  * the frame is the origin its contents are laid out from — as a sibling, or as a
  * flat union, the frame has no stable corner and the whole boundary slides as
  * ELK re-places its members.
+ *
+ * Each opened container becomes its own ELK parent, so any number of them can be
+ * open at once. They are emitted in sorted order (the order `openContainerSet`
+ * gives) purely so the group list — and therefore the layout — is deterministic
+ * for a given set.
  */
 export function c4GroupDefs(
   model: C4Model,
-  openId: string | null,
+  openIds?: readonly string[],
 ): { frames: C4Group[]; groups: CompoundGroupDef[] } {
+  // Normalized here rather than trusted from the caller. This function's output is
+  // cached under the open *set*, so a repeated id would emit the same group twice
+  // (ELK rejects a duplicate id) and a different order would produce a different
+  // group list for a diagram that did not change. An explicit argument wins over
+  // the model's own field, so a caller driving a state the model does not describe
+  // gets exactly that state.
+  const resolved = openContainerSet(
+    openIds !== undefined ? { openContainerIds: openIds } : model,
+  );
+  const opened = new Set(resolved);
   // Every frame this layout draws: the system boundary, plus a container frame per
   // container whose components are in view (the component view leans on these).
-  // The *opened* container's frame is dropped — it is drawn as a grown card
+  // Each *opened* container's frame is dropped — it is drawn as a grown card
   // instead, as an ELK parent below.
-  const frames = deriveC4Groups({ ...model, openContainerId: openId }).filter(
-    (g) => g.id !== openId,
+  const frames = deriveC4Groups({ ...model, openContainerIds: resolved }).filter(
+    (g) => !opened.has(g.id),
   );
   const groups: CompoundGroupDef[] = frames.map((g) => ({
     id: g.id,
@@ -494,28 +528,28 @@ export function c4GroupDefs(
   // components — the "layout B" the closed layout transitions to. Only in the
   // container view: that is where a container is a card, and where the drill-down
   // is offered.
-  const openMembers =
-    model.view === 'container' && openId
-      ? model.nodes
-          .filter((n) => n.kind === 'component' && (n.container ?? n.parentId) === openId)
-          .map((n) => n.id)
-      : [];
-  if (openId && openMembers.length > 0) {
-    groups.push({
-      id: openId,
-      memberIds: openMembers,
-      // INSIDE the system frame, not beside it. The boundary *is* the system, so a
-      // sibling here would draw the opened container outside the very boundary it
-      // belongs to.
-      parentId: model.system.id,
-      // Never narrower than the closed card, so opening only ever grows the box.
-      minWidth: NODE_W,
-      // Room for the container's own label slot + technology row.
-      padTop: OPEN_HEADER_PAD,
-      // Drawn as a card, laid out as a group — both are needed, and only ELK knows
-      // which one a bare member id means.
-      drawnAsCard: true,
-    });
+  if (model.view === 'container') {
+    for (const openId of resolved) {
+      const openMembers = model.nodes
+        .filter((n) => n.kind === 'component' && (n.container ?? n.parentId) === openId)
+        .map((n) => n.id);
+      if (openMembers.length === 0) continue;
+      groups.push({
+        id: openId,
+        memberIds: openMembers,
+        // INSIDE the system frame, not beside it. The boundary *is* the system, so
+        // a sibling here would draw the opened container outside the very boundary
+        // it belongs to.
+        parentId: model.system.id,
+        // Never narrower than the closed card, so opening only ever grows the box.
+        minWidth: NODE_W,
+        // Room for the container's own label slot + technology row.
+        padTop: OPEN_HEADER_PAD,
+        // Drawn as a card, laid out as a group — both are needed, and only ELK
+        // knows which one a bare member id means.
+        drawnAsCard: true,
+      });
+    }
   }
 
   return { frames, groups };
@@ -571,7 +605,32 @@ function useFlip(from: FlowRect | undefined, to: FlowRect | undefined) {
   };
 }
 
-function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter = 28 }: C4GraphProps) {
+/**
+ * Whether a nested component is withheld while the diagram is mid-morph.
+ *
+ * Only for a component whose *own* container is opening or closing right now.
+ * A container that was already open is not mid-grow — it is gliding to a new slot
+ * because ELK re-flowed the diagram around a different change, and React Flow
+ * carries its children along with it. Blanking its components anyway is what
+ * makes a multi-container drill-down read as a reset on every click, which is the
+ * opposite of the state it is meant to keep.
+ *
+ * `openIds` and `morphTargets` are sets because both are read once per node per
+ * render; a list would be a scan per node.
+ */
+export function hidesComponentDuringMorph(
+  owner: string | undefined,
+  openIds: ReadonlySet<string>,
+  morphTargets: ReadonlySet<string>,
+  settled: boolean,
+): boolean {
+  // Settled: nothing is withheld. No owner: not nested under a container at all.
+  // Not open: its container is a closed card, so there is nothing to sit inside.
+  if (settled || !owner || !openIds.has(owner)) return false;
+  return morphTargets.has(owner);
+}
+
+function Inner({ model, onSelectNode, onToggleContainer, onOpenContainer, onCloseContainer, gutter = 28 }: C4GraphProps) {
   const { theme } = useTheme();
   const { fitView } = useReactFlow();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -584,8 +643,33 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
   );
   /** Set by the layout effect; consumed by the `ready` effect to run the fit. */
   const pendingFitRef = useRef(false);
-  /** Prefetched layouts, keyed by open-container id ('' = closed). */
+  /**
+   * Prefetched layouts, keyed by {@link openStateKey} of the open set ('' =
+   * closed).
+   *
+   * Capped because the key space grew: with one container open at a time there
+   * were exactly N+1 states, but a drill-down that keeps containers open reaches
+   * a different set on every click, and the prefetch fans out one step further
+   * from each. Map preserves insertion order, so the first key is the oldest —
+   * evicting it drops a layout that is furthest from the current state, which is
+   * the one least likely to be needed next.
+   */
   const layoutCache = useRef(new Map<string, Rendered>());
+  /** How many layouts to keep. Sized for a large diagram, not a typical one. */
+  const LAYOUT_CACHE_MAX = 64;
+  const cacheLayout = (key: string, layout: Rendered) => {
+    const cache = layoutCache.current;
+    // Re-insert so a cache hit counts as recent use and survives eviction.
+    cache.delete(key);
+    cache.set(key, layout);
+    for (const oldest of cache.keys()) {
+      if (cache.size <= LAYOUT_CACHE_MAX) break;
+      // Never evict what is on screen: a re-layout of the current state mid-morph
+      // would swap the geometry out from under the transition.
+      if (oldest === openStateKey(openIds)) continue;
+      cache.delete(oldest);
+    }
+  };
   /**
    * False while the drill-down grow/shrink is in flight. It gates the whole reveal:
    * the opened container's components stay hidden, every card drops its
@@ -604,17 +688,54 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** The post-morph re-frame; see `CAMERA_AFTER_MORPH_MS`. */
   const cameraTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** The open id rendered last, so a change can morph between the two layouts. */
-  const prevOpenRef = useRef<string | null>(null);
+  /**
+   * The open set rendered last, so a change can morph between the two layouts.
+   * The array, not just its key, because the morph needs to know *which*
+   * containers changed — see `morphTargetsRef`.
+   */
+  const prevOpenRef = useRef<string[]>([]);
+  /**
+   * Containers whose open state is changing *right now* — the symmetric
+   * difference of the previous and next open sets.
+   *
+   * This is what keeps an already-open container from blinking when a second one
+   * is opened. The grow is gated per container, not globally: ELK re-lays out the
+   * whole diagram, so every root card glides, but only the one being opened or
+   * closed has components that are genuinely arriving or leaving. Hiding every
+   * nested component for the length of the morph would make each open look like a
+   * wholesale reset of the drill-down, which is the opposite of the state the
+   * drill-down is supposed to be keeping.
+   */
+  const morphTargetsRef = useRef<Set<string>>(new Set());
 
   /**
    * Frame the whole system. Fit the SYSTEM node explicitly rather than the drawn
-   * nodes: on a drill-down those are just the opened container and its components,
-   * so fitting them would zoom to the container instead of the system.
+   * nodes: on a drill-down those are just the opened containers and their
+   * components, so fitting them would zoom to a container instead of the system.
    */
   const fitSystem = useCallback(() => {
     fitView({ padding: 0.15, duration: CAMERA_MS, maxZoom: 1, nodes: [{ id: model.system.id }] });
   }, [fitView, model.system.id]);
+
+  /**
+   * The one drill-down verb. `onToggleContainer` says which container changed, so
+   * the host can add or remove exactly that one; the deprecated pair carries no
+   * id on the close side, so it can only close everything — correct for the
+   * single-container drill-down it was written for, and the reason it is not the
+   * preferred spelling.
+   */
+  const canToggle = !!(onToggleContainer || onOpenContainer);
+  const toggle = useCallback(
+    (id: string) => {
+      if (onToggleContainer) {
+        onToggleContainer(id);
+        return;
+      }
+      if (openContainerSet(model).includes(id)) onCloseContainer?.();
+      else onOpenContainer?.(id);
+    },
+    [onToggleContainer, onOpenContainer, onCloseContainer, model],
+  );
 
   // Fit the camera AFTER the new nodes are committed (when `ready` flips true),
   // so `fitView` measures the real geometry.
@@ -629,28 +750,36 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
     pendingFitRef.current = shouldRefitCamera(grows);
   };
 
+  // Normalized once and shared by everything downstream — the cache key, the
+  // membership tests, and the prefetch. Derived per model rather than inlined,
+  // because a permutation of the same set is the same diagram and must not read
+  // as a change.
+  const openIds = useMemo(() => openContainerSet(model), [model]);
+  const openKey = openStateKey(openIds);
+
   const layoutKey = useMemo(
     () =>
       [
         ...model.nodes.map((n) => `${n.id}\0${n.parentId ?? ''}\0${n.label}`).sort(),
         ...model.edges.map((e) => `${e.id}\0${e.count}`).sort(),
-        `open:${model.openContainerId ?? ''}`,
+        `open:${openKey}`,
       ].join('\n'),
-    [model],
+    [model, openKey],
   );
 
   /**
    * Build the React Flow inputs for a given open state — everything ELK needs,
-   * independent of whether a layout has been run yet. Pure over `openId`, so it
+   * independent of whether a layout has been run yet. Pure over `openIds`, so it
    * serves both the rendered state and the background prefetch.
    */
-  const buildInputs = (openId: string | null) => {
+  const buildInputs = (openIds: readonly string[]) => {
+    const opened = new Set(openIds);
     // Draw only the elements for this view. A container diagram shows the
     // runtime units (containers, externals, people); components belong to the
     // component view — or to a container that has been opened.
     const inView = (n: C4Element): boolean => {
       if (model.view === 'component') return n.kind !== 'container';
-      if (n.kind === 'component') return (n.container ?? n.parentId) === openId;
+      if (n.kind === 'component') return opened.has(n.container ?? n.parentId ?? '');
       // A container is always drawn — it is a card either way. Opened, it grows
       // and nests its components; closed, it is the bare box.
       return true;
@@ -665,10 +794,14 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
 
     const rfNodes: Node[] = model.nodes.filter(inView).map((n, i) => {
       const size = nodeSize(n);
-      // A component of the opened container nests under it (a React Flow child),
-      // so edges between components can be drawn later. Everything else keeps its
-      // authored parentId.
-      const nested = n.kind === 'component' && openId ? openId : undefined;
+      // A component of an opened container nests under *its own* container (a
+      // React Flow child), so edges between components can be drawn later.
+      // Everything else keeps its authored parentId. The parent is this
+      // component's own container, not "the" open one — with several open at once
+      // there is no single open one, and nesting everything under the first would
+      // put one container's components inside the other.
+      const owner = n.kind === 'component' ? (n.container ?? n.parentId) : undefined;
+      const nested = owner && opened.has(owner) ? owner : undefined;
       const parentId = nested ?? n.parentId;
       return {
         id: n.id,
@@ -687,20 +820,14 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
           componentCount: childComponentCount.get(n.id) ?? 0,
           // A container with components opens; the same affordance closes it
           // again, so the toggle lives in one place.
-          ...(n.kind === 'container' && (childComponentCount.get(n.id) ?? 0) > 0 && onOpenContainer
-            ? {
-                onExpand: () => {
-                  if (n.id === openId) onCloseContainer?.();
-                  else onOpenContainer?.(n.id);
-                },
-                open: n.id === openId,
-              }
+          ...(n.kind === 'container' && (childComponentCount.get(n.id) ?? 0) > 0 && canToggle
+            ? { onExpand: () => toggle(n.id), open: opened.has(n.id) }
             : {}),
         },
       };
     });
 
-    const { frames, groups } = c4GroupDefs(model, openId);
+    const { frames, groups } = c4GroupDefs(model, openIds);
 
     // Bands come from the *frames* only. The opened container is an ELK parent,
     // not a band — treating it as one would push it into its own layer, away from
@@ -740,10 +867,11 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
    * edges. The heavy step the prefetch caches.
    */
   const layoutFor = async (
-    openId: string | null,
+    openIds: readonly string[],
     inputs: ReturnType<typeof buildInputs>,
   ): Promise<Rendered> => {
     const { rfNodes, rfEdges, groups, partitionByNode, frames } = inputs;
+    const opened = new Set(openIds);
     // The system boundary is a REAL ELK parent: its containers lay out *inside* it,
     // so ELK owns both the frame's origin and its size. That is what holds the
     // boundary's top-left corner steady between the two layouts, which is the whole
@@ -786,12 +914,12 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
     // reads it as absolute, so normalize it once at the boundary.
     const groupBounds = rebaseGroupBoundsAbsolute(result);
     const builtGroups = new Set(groupBounds.keys());
-    // The opened container comes back from ELK as a parent, so it lands in
-    // `groupBounds` — but it is drawn as a grown *card*, not a frame. Drop it
-    // from the shells; keep it in `groupBounds` so nested children can take
-    // their coordinates relative to it.
+    // The opened containers come back from ELK as parents, so they land in
+    // `groupBounds` — but each is drawn as a grown *card*, not a frame. Drop them
+    // all from the shells; keep them in `groupBounds` so their nested children can
+    // take their coordinates relative to them.
     const shellBounds = new Map(groupBounds);
-    if (openId) shellBounds.delete(openId);
+    for (const openId of openIds) shellBounds.delete(openId);
 
     const groupById = new Map(frames.map((g) => [g.id, g]));
     const depthOf = (id: string): number => {
@@ -847,8 +975,8 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
             ...(def?.kind !== 'system' && element
               ? { brand: technologyBrand('technology' in element ? element.technology : undefined) }
               : {}),
-            ...(def?.kind === 'container' && openId === id && onCloseContainer
-              ? { onCollapse: () => onCloseContainer?.() }
+            ...(def?.kind === 'container' && opened.has(id)
+              ? { onCollapse: () => toggle(id) }
               : {}),
           },
         };
@@ -858,14 +986,13 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
       let parentId: string | undefined;
       if (n.data && typeof n.data === 'object') {
         const modelNode = (n.data as { element?: C4Element }).element;
-        // Only the opened container's own components nest under it — the sibling
-        // containers and out-of-boundary nodes in the same layout must not.
-        const nested =
-          modelNode?.kind === 'component' &&
-          openId &&
-          (modelNode.container ?? modelNode.parentId) === openId
-            ? openId
-            : undefined;
+        // A component nests under its own container when that container is open —
+        // the sibling containers and out-of-boundary nodes in the same layout must
+        // not. Reads the component's own owner rather than a single open id,
+        // because several containers can be open at once.
+        const owner =
+          modelNode?.kind === 'component' ? (modelNode.container ?? modelNode.parentId) : undefined;
+        const nested = owner && opened.has(owner) ? owner : undefined;
         const candidate = nested ?? modelNode?.parentId;
         if (candidate && builtGroups.has(candidate)) parentId = candidate;
       }
@@ -875,9 +1002,9 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
         flowPositionOf(result, n.id, parentId) ??
         positioned.get(n.id)?.position ??
         n.position;
-      // The opened container is an ELK parent, so its box is whatever ELK fitted
+      // An opened container is an ELK parent, so its box is whatever ELK fitted
       // to the nested components — `nodeSize` only knows the closed card.
-      const fitted = openId === n.id ? groupBounds.get(openId) : undefined;
+      const fitted = opened.has(n.id) ? groupBounds.get(n.id) : undefined;
       const node = {
         ...n,
         position: { x: abs.x, y: abs.y },
@@ -922,15 +1049,31 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
     let alive = true;
     setReady(false);
     setSelectedId(null);
-    const openId = model.openContainerId ?? null;
+    const openKeyNow = openStateKey(openIds);
     const prevOpen = prevOpenRef.current;
-    const inputs = buildInputs(openId);
+    const inputs = buildInputs(openIds);
 
     // Only a real open-state change animates; the first paint is already at rest.
-    if (paintedRef.current && prevOpen !== openId) {
+    if (paintedRef.current && openStateKey(prevOpen) !== openKeyNow) {
+      // The containers in one set and not the other are the ones whose components
+      // actually arrive or leave. Recorded as a ref rather than state: it is read
+      // during the next render (to decide what to hide) but must not itself
+      // schedule a render.
+      const before = new Set(prevOpen);
+      const after = new Set(openIds);
+      morphTargetsRef.current = new Set([
+        ...prevOpen.filter((id) => !after.has(id)),
+        ...openIds.filter((id) => !before.has(id)),
+      ]);
       setSettled(false);
       if (settleTimer.current) clearTimeout(settleTimer.current);
-      settleTimer.current = setTimeout(() => setSettled(true), MORPH_MS);
+      settleTimer.current = setTimeout(() => {
+        setSettled(true);
+        // The morph is over. Clearing the targets matters: an unrelated re-render
+        // afterwards must not find a container still marked mid-morph and hide
+        // components that are merely sitting still.
+        morphTargetsRef.current = new Set();
+      }, MORPH_MS);
       // Re-frame once the grow has landed, not while it is running. The drill-down
       // more than doubles the boundary, so the extent the camera was fitted to no
       // longer contains the content — but moving *during* the morph compounds with
@@ -950,13 +1093,12 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
      * Frames alone are not enough: ELK re-lays out the whole diagram, so every
      * root card moves too. Without a card in this set it keeps its new slot the
      * instant the layout swaps — a teleport, which is the most visible part of a
-     * bad morph. Child nodes are excluded: they are hidden until the box settles,
-     * so there is nothing to animate, and a transform on them would only fight
-     * the parent's.
+     * bad morph. Child nodes are excluded: a transform on them would only fight
+     * the parent's, which carries the same movement.
      */
     const growsFor = (next: Rendered): Map<string, FrameGrow> | null => {
-      if (prevOpen === openId) return null;
-      const prevLayout = layoutCache.current.get(prevOpen ?? '');
+      if (openStateKey(prevOpen) === openKeyNow) return null;
+      const prevLayout = layoutCache.current.get(openStateKey(prevOpen));
       if (!prevLayout) return null;
       const grows = new Map<string, FrameGrow>();
       const rootCardIds = (l: Rendered) =>
@@ -984,20 +1126,20 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
       return grows.size > 0 ? grows : null;
     };
 
-    const cached = layoutCache.current.get(openId ?? '');
+    const cached = layoutCache.current.get(openKeyNow);
     if (cached) {
-      prevOpenRef.current = openId;
+      prevOpenRef.current = openIds;
       renderLayout(cached, growsFor(cached));
       return () => {
         alive = false;
       };
     }
-    void layoutFor(openId, inputs)
+    void layoutFor(openIds, inputs)
       .then((r) => {
         if (!alive) return;
-        layoutCache.current.set(openId ?? '', r);
+        cacheLayout(openKeyNow, r);
         const span = growsFor(r);
-        prevOpenRef.current = openId;
+        prevOpenRef.current = openIds;
         renderLayout(r, span);
       })
       .catch((err) => {
@@ -1031,18 +1173,31 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
   useEffect(() => {
     if (model.view !== 'container') return;
     let alive = true;
-    const containers = model.nodes.filter(
+    const openable = model.nodes.filter(
       (n) => n.kind === 'container' && model.nodes.some((c) => c.kind === 'component' && (c.container ?? c.parentId) === n.id),
     );
+    // One click ahead, and only one: opening `c` next means the current set plus
+    // `c`. From the closed diagram that is just "open c", so the same rule covers
+    // the first click on any container and every one after it — no separate path
+    // for "nothing is open yet".
+    //
+    // Deliberately not the full power set. With N containers that would be 2^N
+    // ELK runs and most of them unreachable; N-1 runs per visited state keeps the
+    // next click instant, which is the only reason this exists. The cache is
+    // capped below because the reachable states now grow with the states visited
+    // rather than staying at N.
+    const targets = openable
+      .filter((c) => !openIds.includes(c.id))
+      .map((c) => [...openIds, c.id].sort());
     void (async () => {
-      for (const c of containers) {
+      for (const target of targets) {
         if (!alive) return;
-        if (layoutCache.current.has(c.id)) continue;
+        const key = openStateKey(target);
+        if (layoutCache.current.has(key)) continue;
         try {
-          const inputs = buildInputs(c.id);
-          const r = await layoutFor(c.id, inputs);
+          const r = await layoutFor(target, buildInputs(target));
           if (!alive) return;
-          layoutCache.current.set(c.id, r);
+          cacheLayout(key, r);
         } catch {
           // Prefetch is best-effort; a miss just falls back to compute-on-click.
         }
@@ -1077,28 +1232,33 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
     [model, selected],
   );
 
-  /** The container currently opened for drill-down, if any. */
-  const openContainerId = model.openContainerId ?? null;
+  /** The containers open for drill-down, normalized. */
+  const openContainerIds = useMemo(() => new Set(openIds), [openIds]);
 
   const displayNodes = useMemo(
     () =>
       nodes.map((n) => {
         if (n.type !== 'c4-node') return n;
         const element = (n.data as { element?: C4Element } | undefined)?.element;
-        // The nested components are already positioned inside the grown card,
-        // but they only *appear* once the grow settles — otherwise they are
-        // squeezed and clipped mid-animation.
-        const nested =
-          element?.kind === 'component' &&
-          openContainerId != null &&
-          (element.container ?? element.parentId) === openContainerId;
+        const owner = element?.kind === 'component' ? (element.container ?? element.parentId) : undefined;
+        // `hidesComponentDuringMorph` owns the rule; see there for why it is
+        // per-container rather than global.
+        const hidden = hidesComponentDuringMorph(
+          owner,
+          openContainerIds,
+          morphTargetsRef.current,
+          settled,
+        );
         return {
           ...n,
-          ...(nested ? { hidden: !settled } : {}),
+          ...(hidden ? { hidden: true } : {}),
           data: { ...n.data, selected: n.id === selectedId, settled },
         };
       }),
-    [nodes, selectedId, settled, openContainerId],
+    // `morphTargetsRef` is a ref, so it cannot be a dependency; `settled` covers
+    // it, because the two always change together — targets are written in the same
+    // tick that clears `settled`, and cleared in the same tick that restores it.
+    [nodes, selectedId, settled, openContainerIds],
   );
 
   /**

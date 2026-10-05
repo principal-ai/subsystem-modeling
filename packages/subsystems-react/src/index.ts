@@ -247,7 +247,14 @@ export { TechMark, technologyBrand, TECH_BRANDS } from './subsystem/techIcons';
 export type { TechBrand } from './subsystem/techIcons';
 export type { C4NodeCardProps, NodeStyle, NodeShape, C4ShapeKind } from './subsystem/C4NodeCard';
 // --- C4 elements: authored, not derived -------------------------------
-export { labelFromPurl, protocolColor, PROTOCOL_COLOR, PROTOCOL_COLOR_FALLBACK } from './subsystem/c4';
+export {
+  labelFromPurl,
+  protocolColor,
+  PROTOCOL_COLOR,
+  PROTOCOL_COLOR_FALLBACK,
+  openContainerSet,
+  openStateKey,
+} from './subsystem/c4';
 export type {
   C4View,
   C4Group,

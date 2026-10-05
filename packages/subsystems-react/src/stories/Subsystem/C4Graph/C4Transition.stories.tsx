@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import '@xyflow/react/dist/style.css';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
@@ -30,11 +30,18 @@ type Story = StoryObj<typeof meta>;
 // element is an ELK parent — so ELK sizes it to hold its own components, and they
 // arrive as nested cards. The same affordance closes it again.
 //
+// The open state is a *set*, not a single id: each opened container is its own ELK
+// parent, and opening one never closes another. So in the second story you can have
+// both containers open at once, and the state accumulates — [] → [host] →
+// [cli, host] → [host] → []. Closing one leaves the other exactly as it was.
+//
 // Nothing is a frame here: the container stays a card and grows (its own
 // width/height transition), and the system frame around it grows with it — also
 // by size, since it is a real ELK parent and ELK owns both its origin and its fit.
-// Components stay hidden until the grow settles, and the card's description
-// returns only after the shrink — hence the two settled states below.
+// A card's own components stay hidden while *that card* is growing, and its
+// description returns only after a shrink — hence the two settled states below.
+// A container that was already open keeps its components on screen while a
+// different one opens, even though the whole diagram re-flows around it.
 //
 // The story also carries component→component edges, which the nested layout
 // routes inside the parent.
@@ -87,23 +94,28 @@ const EDGES: C4Edge[] = [
 ];
 
 function Demo({ nodes, edges }: { nodes: C4Element[]; edges: C4Edge[] }) {
-  const [openId, setOpenId] = useState<string | null>(null);
+  // The drill-down is a *set*, not a single id: opening one container never closes
+  // another. Held sorted so the model the graph sees is the same set whichever
+  // order the cards were clicked — the graph normalizes this too, but the story
+  // should not be the thing testing it.
+  const [openIds, setOpenIds] = useState<string[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
 
   const model = useMemo<C4Model>(
-    () => ({ view: 'container', system: SYSTEM, nodes, edges, openContainerId: openId }),
-    [openId, nodes, edges],
+    () => ({ view: 'container', system: SYSTEM, nodes, edges, openContainerIds: openIds }),
+    [openIds, nodes, edges],
   );
+
+  // One verb for both directions, which is the only way a collapse can mean
+  // "close *this* one" once several are open.
+  const toggle = useCallback((id: string) => {
+    setOpenIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id].sort()));
+  }, []);
 
   return (
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-        <C4Graph
-          model={model}
-          onSelectNode={setSelected}
-          onOpenContainer={setOpenId}
-          onCloseContainer={() => setOpenId(null)}
-        />
+        <C4Graph model={model} onSelectNode={setSelected} onToggleContainer={toggle} />
       </div>
       <div
         style={{
@@ -117,10 +129,13 @@ function Demo({ nodes, edges }: { nodes: C4Element[]; edges: C4Edge[] }) {
           borderTop: '1px solid #333',
         }}
       >
-        <span>{openId ? `opened: ${openId}` : 'closed'}</span>
+        <span>{openIds.length ? `opened: ${openIds.join(', ')}` : 'closed'}</span>
         <span>selected: {selected ?? '(none)'}</span>
+        <button onClick={() => setOpenIds([])} disabled={!openIds.length}>
+          close all
+        </button>
         <span style={{ color: '#777' }}>
-          the expand icon (bottom-right of the container) opens it, and closes it again
+          the expand icon (bottom-right of a container) opens it, and closes just that one
         </span>
       </div>
     </div>
@@ -136,15 +151,20 @@ export const DrillDown: Story = {
 //
 // The single-container story cannot show what a drill-down does to the *rest* of
 // the diagram, because there is no rest. Here the system holds two containers
-// and there is an external system wired to both, so opening one box has to
-// answer for three things at once:
+// and there is an external system wired to both, so the open state has to answer
+// for three things at once:
 //
 //   - the sibling container has to stay a card and get pushed clear of the
 //     growth, rather than being absorbed into it;
 //   - the external system has to stay outside the boundary while the boundary
 //     grows around a column that is not its own;
-//   - either container can be opened while the other is closed, so the grow has
-//     to work from a sibling-present layout as well as a lone one.
+//   - both containers can be open at once, and each keeps its own components
+//     while the other opens, closes, or grows.
+//
+// Open them both, then close one: the survivor must not blink. It is still
+// gliding to a new slot — the diagram re-flows — but its components stay put
+// relative to it, because only the container actually changing open state
+// withholds its components during the morph.
 //
 // The external system is the thing to watch. Band separation was the suspected
 // weak spot of an opened container becoming a compound parent under
@@ -153,9 +173,7 @@ export const DrillDown: Story = {
 // ELK, it holds: with the external partitioned one band right of the boundary it
 // stays right of the frame in both open states. What this topology did expose is
 // a crash — an edge crossing the boundary into an opened container named a port
-// the group never declared, and ELK rejected the graph. The sibling container is
-// also openable on its own, so opening the *lower* of the two is the case where
-// the growth is not downward from the top card.
+// the group never declared, and ELK rejected the graph.
 // ---------------------------------------------------------------------------
 
 const CLI = 'container:principal-cli';
