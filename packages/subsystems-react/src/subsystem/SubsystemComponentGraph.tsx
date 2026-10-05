@@ -1140,15 +1140,18 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
     [trails],
   );
 
-  // Per-node diagnostics badge: fold each component-targeted finding that maps
-  // to a verification rung into one badge per node — worst severity wins, the
-  // chip shows the earliest failing rung, and the count tallies the findings.
+  // Per-node diagnostics badge: fold each component-targeted finding into one
+  // badge per node — worst severity wins, the chip shows the earliest failing
+  // rung, and the count tallies the findings. A finding with no construct rung
+  // still badges the node when it carries a dedicated kind icon (e.g. a C4
+  // process gap): the chip wears the kind's icon instead of a rung's, so the
+  // node says "diagnostics here" for every finding the sidebar lists.
   const issueBadgeByAlias = useMemo(() => {
     const map = new Map<string, SubsystemNodeIssue>();
     if (!issues?.length) return map;
     for (const issue of issues) {
       const rung = issueRung(issue.kind);
-      if (!rung) continue;
+      if (!rung && !ISSUE_KIND_ICON[issue.kind]) continue;
       const comp = issueComponent(issue);
       if (!comp) continue;
       const prev = map.get(comp.alias);
@@ -1158,11 +1161,26 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
             ? 'error'
             : 'info',
         rung:
-          prev != null && ISSUE_RUNG_ORDER[prev.rung] <= ISSUE_RUNG_ORDER[rung]
-            ? prev.rung
-            : rung,
+          rung == null
+            ? prev?.rung
+            : prev?.rung != null &&
+                ISSUE_RUNG_ORDER[prev.rung] <= ISSUE_RUNG_ORDER[rung]
+              ? prev.rung
+              : rung,
         count: (prev?.count ?? 0) + 1,
       });
+    }
+    // A rung finding wins the chip; only rung-less nodes wear a kind icon —
+    // the first kind-iconed finding the sidebar lists for that node.
+    for (const [alias, badge] of map) {
+      if (badge.rung != null) continue;
+      const kinded = issues.find(
+        (i) =>
+          !issueRung(i.kind) &&
+          ISSUE_KIND_ICON[i.kind] &&
+          issueComponent(i)?.alias === alias,
+      );
+      if (kinded) map.set(alias, { ...badge, kind: kinded.kind });
     }
     return map;
   }, [issues, issueComponent]);

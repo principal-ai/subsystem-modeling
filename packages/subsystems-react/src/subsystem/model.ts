@@ -1135,8 +1135,19 @@ export type SubsystemIssueRung =
 export interface SubsystemNodeIssue {
   /** Worst severity on the node — `error` (contradicts source) beats `info`. */
   severity: 'error' | 'info';
-  /** Earliest failing rung across the node's findings. */
-  rung: SubsystemIssueRung;
+  /**
+   * Earliest failing rung across the node's findings. Absent when none of the
+   * node's findings sit on the construct ladder — a rung-less finding (e.g. a
+   * process gap) carries its audit `kind` instead.
+   */
+  rung?: SubsystemIssueRung;
+  /**
+   * The audit kind of the node's finding when that finding has no construct
+   * rung: the chip wears the kind's icon (`ISSUE_KIND_ICON`) rather than a
+   * rung's. Set only when `rung` is absent — a rung finding is more specific
+   * about where the construct fails, so it wins the chip.
+   */
+  kind?: string;
   /** Total findings on this node. */
   count: number;
 }

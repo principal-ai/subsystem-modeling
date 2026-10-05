@@ -46,6 +46,7 @@ import {
 import { componentColor } from '../pierre/constructColors';
 import { resolvePierreSyntaxThemeName } from '../pierre/pierreSyntaxTheme';
 import { ISSUE_KIND_ICON, ISSUE_RUNG_ICON } from './IssueList';
+import { Search } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export const CONSTRUCT_LABEL: Record<string, string> = {
@@ -122,11 +123,13 @@ function useSubsystemCallbacks(): SubsystemGraphCallbacks {
 
 /**
  * The diagnostics overlay for a component node: the node's own border turns
- * dotted (see the node's `borderStyle`) and an earliest-failing-rung corner
- * chip (file → symbol → declaration → type → signature) carries the severity
- * color, with a count when the node has more than one finding. The chip is
- * purely additive and non-interactive; the border stays construct-colored, so
- * severity never has to compete with the construct palette.
+ * dotted (see the node's `borderStyle`) and a severity-colored corner chip
+ * carries the count. The chip's icon is the earliest-failing construct rung
+ * (file → symbol → declaration → type → signature); a finding with no rung
+ * (e.g. a C4 process gap) wears its kind icon instead — see
+ * `SubsystemNodeIssue.kind`. The chip is purely additive and non-interactive;
+ * the border stays construct-colored, so severity never has to compete with
+ * the construct palette.
  */
 function NodeIssueOverlay({ issue }: { issue: SubsystemNodeIssue }) {
   const { theme } = useTheme();
@@ -134,10 +137,15 @@ function NodeIssueOverlay({ issue }: { issue: SubsystemNodeIssue }) {
   const color = isError
     ? (theme.colors.error ?? '#e5534b')
     : (theme.colors.warning ?? '#d4a017');
+  const Icon = issue.rung
+    ? ISSUE_RUNG_ICON[issue.rung]
+    : issue.kind
+      ? (ISSUE_KIND_ICON[issue.kind] ?? Search)
+      : Search;
   return (
     <IssueChip
       color={color}
-      Icon={ISSUE_RUNG_ICON[issue.rung]}
+      Icon={Icon}
       count={issue.count}
       anchor={{ right: -9, bottom: -8 }}
     />
