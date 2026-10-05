@@ -242,7 +242,7 @@ export type {
 // --- C4 projection -----------------------------------------------------
 export { C4Graph } from './subsystem/C4Graph';
 export type { C4GraphProps } from './subsystem/C4Graph';
-export { C4NodeCard, nodeStyle, nodeSubtitle, nodeTag, nodeKindIcon, nodeTopLabel, nodeShape, nodeSize, nodeMissing, NODE_W, NODE_H, COMPONENT_SIZE } from './subsystem/C4NodeCard';
+export { C4NodeCard, nodeStyle, nodeSubtitle, nodeTag, nodeKindIcon, nodeTopLabel, nodeShape, nodeSize, nodeMissing, NODE_W, NODE_H, COMPONENT_SIZE, COMPONENT_W, COMPONENT_H, COMPONENT_ASPECT } from './subsystem/C4NodeCard';
 export { TechMark, technologyBrand, TECH_BRANDS } from './subsystem/techIcons';
 export type { TechBrand } from './subsystem/techIcons';
 export type { C4NodeCardProps, NodeStyle, NodeShape, C4ShapeKind } from './subsystem/C4NodeCard';

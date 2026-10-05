@@ -27,20 +27,45 @@ export const NODE_W = 250;
 export const NODE_H = 150;
 
 /**
- * A component is a proper square — equal sides, and visibly smaller than the
- * container it sits inside. Square-vs-rectangle is the clearest signal that
- * these are different C4 levels, and it survives grayscale and colour-blind
- * reading where a border-weight difference alone does not.
+ * A component has to *read* as a square, and equal sides do not manage that.
+ *
+ * A literally square box is perceived as tall: the eye measures it against the
+ * upright frame and the surrounding boxes, not against an abstract 1:1, so it
+ * lands looking narrower than it is. The correction is to make the real thing
+ * wider than it is tall, which is what this is for.
+ *
+ * 8:7 is further than the textbook 5%, and deliberately: the card's height is a
+ * `minHeight`, so a long description grows the drawn box past the height
+ * reserved here (see the probe below). 160 buys the square reading against a
+ * *rendered* height that runs past 140, not just against the nominal one.
+ *
+ * The level signal survives it: 8:7 is still unmistakably the square member of
+ * the set against the container's 5:3, and still beats a border-weight
+ * difference alone under grayscale and colour-blind reading.
  */
-export const COMPONENT_SIZE = 140;
+export const COMPONENT_ASPECT = 8 / 7;
+
+/** Short side of a component card — the height, and a hard ceiling on the drawn box. */
+export const COMPONENT_H = 140;
+
+/** Long side — the optically corrected one. 160, derived so the ratio is the constant. */
+export const COMPONENT_W = Math.round(COMPONENT_H * COMPONENT_ASPECT);
 
 /**
- * Per-level box size. The graph lays out against these, so a square component
- * and a rectangular container do not collide at a shared nominal width.
+ * Nominal edge of a component card, for callers that sized a box off a single
+ * number. It is the *short* side; the width the graph lays out against is
+ * `COMPONENT_W`, not this.
+ */
+export const COMPONENT_SIZE = COMPONENT_H;
+
+/**
+ * Per-level box size. The graph lays out against these, so a near-square
+ * component and a rectangular container do not collide at a shared nominal
+ * width.
  */
 export function nodeSize(node: C4Element): { width: number; height: number } {
   return node.kind === 'component'
-    ? { width: COMPONENT_SIZE, height: COMPONENT_SIZE }
+    ? { width: COMPONENT_W, height: COMPONENT_H }
     : { width: NODE_W, height: NODE_H };
 }
 
@@ -186,6 +211,13 @@ export interface NodeShape {
   kind: C4ShapeKind;
   /** Corner radius, for the shapes that use one. */
   radius: number;
+  /**
+   * Horizontal text alignment. This is a level cue, not a typographic
+   * preference: a column of left-aligned containers beside a set of centred
+   * ones reads as two kinds without comparing box sizes, and unlike the aspect
+   * ratio it survives a crop or a narrow viewport.
+   */
+  align: 'left' | 'center';
 }
 
 /**
@@ -195,24 +227,30 @@ export interface NodeShape {
  * The convention:
  *
  *   container        wide rectangle, slight radius — a runtime boundary
- *   component        square — a part inside one (see `nodeSize`)
- *   external system  wide rectangle, no radius    — someone else's system
- *   person           pill                          — not a box at all
+ *   component        square, text centred       — a part inside one
+ *   external system  wide rectangle, no radius   — someone else's system
+ *   person           pill, text centred          — not a box at all
+ *
+ * `square` here is a corner treatment, not a claim about the dimensions: a
+ * component's box is optically 8:7 (see `COMPONENT_ASPECT`) and still reads as
+ * this shape.
  *
  * A container keeps a slight radius; an external system is drawn with none, so
  * the two are distinguishable by corner treatment as well as by the kind icon
- * and frame position. The border dash stays spent on proposed-vs-accepted.
+ * and frame position. Alignment is the third, cheapest cue — it needs no
+ * comparison against anything. The border dash stays spent on
+ * proposed-vs-accepted.
  */
 export function nodeShape(node: C4Element): NodeShape {
   switch (node.kind) {
     case 'person':
-      return { kind: 'pill', radius: NODE_H / 2 };
+      return { kind: 'pill', radius: NODE_H / 2, align: 'center' };
     case 'external-system':
-      return { kind: 'rect', radius: 0 };
+      return { kind: 'rect', radius: 0, align: 'left' };
     case 'component':
-      return { kind: 'square', radius: 6 };
+      return { kind: 'square', radius: 6, align: 'center' };
     case 'container':
-      return { kind: 'rect', radius: 4 };
+      return { kind: 'rect', radius: 4, align: 'left' };
   }
 }
 
@@ -280,9 +318,12 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
   const subtitle = nodeSubtitle(node);
 
   const size = nodeSize(node);
-  // A pill (a person) has no straight left edge, so left-aligned text reads as
-  // spilling out of the oval. Centre the text and inset it from the curve.
-  const centered = shape.kind === 'pill';
+  const centered = shape.align === 'center';
+  // The pill's inset is a separate concern from alignment, and a centred
+  // component must not inherit it: 30px of each side would leave a 160-wide box
+  // 100px of text, which wraps the description into exactly the extra lines
+  // that grow the box past the height the layout reserved.
+  const pillInset = shape.kind === 'pill';
 
   return (
     <div
@@ -300,7 +341,7 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
         // height on every card. In a graph grid that makes the row unscannable.
         justifyContent: 'flex-start',
         gap: 3,
-        padding: centered ? '10px 30px' : '10px 12px',
+        padding: pillInset ? '10px 30px' : '10px 12px',
         borderRadius: shape.radius,
         background: theme.colors.backgroundSecondary ?? theme.colors.background,
         border: `${style.width}px ${style.dash} ${style.color}`,

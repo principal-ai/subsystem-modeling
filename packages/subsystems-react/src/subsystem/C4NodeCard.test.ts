@@ -11,6 +11,8 @@ import {
   NODE_H,
   nodeSize,
   COMPONENT_SIZE,
+  COMPONENT_W,
+  COMPONENT_ASPECT,
 } from './C4NodeCard';
 import type { C4Element, C4Container } from './c4';
 
@@ -190,6 +192,19 @@ describe('nodeShape — kind without relying on colour or dash', () => {
     expect(s.radius).toBeGreaterThanOrEqual(NODE_H / 2);
   });
 
+  test('a component centres its text, a container does not', () => {
+    // Alignment is the cheapest level cue there is: it needs no comparison
+    // against anything else, so it survives a crop or a narrow viewport where
+    // the aspect ratio stops being readable.
+    expect(nodeShape(node({ kind: 'component' })).align).toBe('center');
+    expect(nodeShape(node()).align).toBe('left');
+  });
+
+  test('a person centres its text too, but for its own reason', () => {
+    // Not a level cue — a pill has no straight edge for text to sit against.
+    expect(nodeShape(node({ kind: 'person' })).align).toBe('center');
+  });
+
   test('shape does not depend on confirmation state', () => {
     expect(nodeShape(node({ state: 'proposed' })).kind).toBe(
       nodeShape(node({ state: 'accepted' })).kind,
@@ -250,10 +265,19 @@ describe('nodeMissing', () => {
   });
 });
 
-describe('nodeSize — a component is a proper square', () => {
-  test('a component has equal width and height', () => {
+describe('nodeSize — a component reads as a square', () => {
+  test('a component is wider than it is tall, by the optical correction', () => {
+    // Equal sides get perceived as tall, so the box is built 8:7 to land on the
+    // square we actually want. Pinned both ways: the ratio the layout gets, and
+    // a ceiling on how far the correction may go — the upper bound is there to
+    // stop the box drifting toward the container's 5:3, which would cost the
+    // level signal this aspect exists to carry.
     const s = nodeSize(node({ kind: 'component' }));
-    expect(s.width).toBe(s.height);
+    expect(s.width).toBeGreaterThan(s.height);
+    expect(s.width / s.height).toBeCloseTo(COMPONENT_ASPECT, 2);
+    expect(COMPONENT_ASPECT).toBeGreaterThan(1);
+    expect(COMPONENT_ASPECT).toBeLessThanOrEqual(1.25);
+    expect(COMPONENT_ASPECT).toBeLessThan(NODE_W / NODE_H);
   });
 
   test('a container is wider than it is tall', () => {
@@ -268,9 +292,19 @@ describe('nodeSize — a component is a proper square', () => {
     expect(c.height).toBeLessThan(k.height);
   });
 
-  test('the square still fits its three lines of text', () => {
+  test('the two levels are not the same shape', () => {
+    // The reason a separate constant exists at all: a component is the
+    // square-ish member of the set, not a miniature container.
+    const c = nodeSize(node({ kind: 'component' }));
+    const k = nodeSize(node());
+    expect(c.width / c.height).toBeLessThan(1.2);
+    expect(k.width / k.height).toBeGreaterThan(1.5);
+  });
+
+  test('the box still fits its three lines of text', () => {
     // tag + 2-line label slot + subtitle + 10px padding x2. Without this the
-    // square clips its own subtitle.
+    // component clips its own subtitle. The optical correction is applied to
+    // the width only, so this still holds at 140 tall.
     const s = nodeSize(node({ kind: 'component' }));
     const content = 16 + 40 + 16 + 20;
     expect(s.height).toBeGreaterThanOrEqual(content);
@@ -289,9 +323,14 @@ describe('card metrics', () => {
     expect(NODE_H).toBe(150);
   });
 
-  test('COMPONENT_SIZE is a square, not just a smaller rectangle', () => {
-    expect(COMPONENT_SIZE).toBe(nodeSize(node({ kind: 'component' })).width);
-    expect(COMPONENT_SIZE).toBe(nodeSize(node({ kind: 'component' })).height);
+  test('COMPONENT_SIZE is the short side, not the width', () => {
+    // Kept for callers that size off a single number. It is the height; the
+    // width the graph lays out against is COMPONENT_W, and collapsing the two
+    // back into one number would delete the optical correction.
+    const s = nodeSize(node({ kind: 'component' }));
+    expect(COMPONENT_SIZE).toBe(s.height);
+    expect(COMPONENT_SIZE).not.toBe(s.width);
+    expect(COMPONENT_W).toBe(s.width);
   });
 
   test('is near-square, not a wide strip', () => {

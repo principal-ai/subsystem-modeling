@@ -164,7 +164,7 @@ const VARIANTS: Array<{ group: string; note: string; node: C4Element }> = [
   },
   {
     group: '',
-    note: 'A component is a real square, not a smaller rectangle. Border weight drops to 1px as a second signal, so the level survives grayscale.',
+    note: 'A component reads as a square, but is drawn wider than it is tall (8:7, from COMPONENT_ASPECT) — equal sides get perceived as tall, so the optical correction is what makes it land. Further than a textbook 5% on purpose: height is a minimum, so a long description grows the drawn box, and the correction has to hold against the rendered height. Not a smaller rectangle: border weight also drops to 1px and the text centres, so the level survives grayscale and reads on a single card.',
     node: node({
       id: 'b3',
       label: 'Boundary layout builder',
