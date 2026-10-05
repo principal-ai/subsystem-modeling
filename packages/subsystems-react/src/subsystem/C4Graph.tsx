@@ -24,7 +24,6 @@ import {
   ReactFlowProvider,
   useReactFlow,
   useViewport,
-  ViewportPortal,
 } from '@xyflow/react';
 import { useTheme } from '@principal-ade/industry-theme';
 import { Box, Minimize2 } from 'lucide-react';
@@ -197,6 +196,9 @@ function C4GroupView(
       color: string;
       onCollapse?: () => void;
       brand?: TechBrand;
+      /** FLIP: absolute flow rects — where to grow from, and the frame's own. */
+      growFrom?: FlowRect;
+      frameRect?: FlowRect;
     }>
   >,
 ) {
@@ -205,6 +207,23 @@ function C4GroupView(
   const isSystem = props.data.kind === 'system';
   const onCollapse = props.data.onCollapse;
   const brand = props.data.brand;
+  const { growFrom, frameRect } = props.data;
+
+  // FLIP the real frame: start it transformed back onto the box's rect, then
+  // release to identity so it grows into place. `transform-origin: top left`
+  // makes the scale anchor match the absolute rects.
+  const [grown, setGrown] = useState(!growFrom || !frameRect);
+  useEffect(() => {
+    if (!growFrom || !frameRect) return;
+    setGrown(false);
+    const raf = requestAnimationFrame(() => setGrown(true));
+    return () => cancelAnimationFrame(raf);
+  }, [growFrom, frameRect]);
+  const dx = growFrom && frameRect ? growFrom.x - frameRect.x : 0;
+  const dy = growFrom && frameRect ? growFrom.y - frameRect.y : 0;
+  const sx = growFrom && frameRect && frameRect.width ? growFrom.width / frameRect.width : 1;
+  const sy = growFrom && frameRect && frameRect.height ? growFrom.height / frameRect.height : 1;
+
   // A container frame shows its technology mark (React/Bun/Node…) so the
   // boundary says what it is built with, same as the node it wraps. The system
   // frame has no single technology, so it keeps a neutral `Box`.
@@ -219,6 +238,9 @@ function C4GroupView(
         border: `2px dashed ${color}`,
         background: 'transparent',
         pointerEvents: 'none',
+        transformOrigin: 'top left',
+        transform: grown ? 'none' : `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`,
+        transition: grown ? `transform ${MORPH_MS}ms ease-out` : 'none',
       }}
     >
       <span
@@ -289,44 +311,6 @@ const nodeTypes = {
   'c4-node': C4NodeView,
   'c4-group': C4GroupView,
 };
-
-/**
- * Box→frame morph for the drill-down. Rendered inside the React Flow viewport
- * (flow coordinates), so it tracks the graph as the camera also glides: a
- * translucent rectangle grows from the container's box rect to its frame rect.
- * Flow space — not screen space — because the camera moves during the swap.
- */
-function C4MorphOverlay({ morph, onDone }: { morph: MorphState; onDone: () => void }) {
-  const [at, setAt] = useState(morph.from);
-  useEffect(() => {
-    setAt(morph.from);
-    const raf = requestAnimationFrame(() => setAt(morph.to));
-    return () => cancelAnimationFrame(raf);
-  }, [morph.from, morph.to]);
-  return (
-    <ViewportPortal>
-      <div
-        aria-hidden
-        onTransitionEnd={onDone}
-        style={{
-          position: 'absolute',
-          left: at.x,
-          top: at.y,
-          width: at.width,
-          height: at.height,
-          zIndex: 0,
-          pointerEvents: 'none',
-          boxSizing: 'border-box',
-          borderRadius: 8,
-          border: `2px solid ${morph.color}`,
-          background: morph.color,
-          opacity: 0.16,
-          transition: `left ${MORPH_MS}ms ease-out, top ${MORPH_MS}ms ease-out, width ${MORPH_MS}ms ease-out, height ${MORPH_MS}ms ease-out`,
-        }}
-      />
-    </ViewportPortal>
-  );
-}
 const edgeTypes = {
   'c4-edge': C4EdgeView,
 };
@@ -346,8 +330,8 @@ interface Rendered {
 /** Flow-space rect of a box node or a frame, for the drill-down morph. */
 interface FlowRect { x: number; y: number; width: number; height: number }
 
-/** A transient morph overlay: the container's flow rect from → to. */
-interface MorphState { id: string; from: FlowRect; to: FlowRect; color: string }
+/** A frame's growth for the drill-down morph: its flow rect before → after. */
+interface FrameGrow { from: FlowRect; to: FlowRect }
 
 /** The container's rect in a laid-out state: its box node, or its frame bounds. */
 function containerRect(layout: Rendered | undefined, id: string): FlowRect | null {
@@ -382,8 +366,6 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
   const layoutCache = useRef(new Map<string, Rendered>());
   /** The open id rendered last, so a change can morph between the two layouts. */
   const prevOpenRef = useRef<string | null>(null);
-  /** A transient box→frame morph overlay, in flow space (see `C4MorphOverlay`). */
-  const [morph, setMorph] = useState<MorphState | null>(null);
 
   // Fit the camera AFTER the new nodes are committed (when `ready` flips true),
   // so `fitView` measures the real geometry. Fit the SYSTEM frame explicitly:
@@ -592,8 +574,22 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
     return { nodes: [...shells, ...leaves], edges: withPaths, labelPositions, groupBounds: result.groupBounds };
   };
 
-  const renderLayout = (r: Rendered) => {
-    setNodes(injectGrow(r.nodes, morphSpan));
+  /**
+   * Stamp each growing frame's span onto its shell node, so its view can FLIP
+   * from the old rect to its own. `grows` is keyed by frame id, flow-space.
+   */
+  const injectGrow = (nodes: Node[], grows: Map<string, FrameGrow> | null): Node[] => {
+    if (!grows || grows.size === 0) return nodes;
+    return nodes.map((n) => {
+      const g = grows.get(n.id);
+      return n.type === 'c4-group' && g
+        ? { ...n, data: { ...n.data, growFrom: g.from, frameRect: g.to } }
+        : n;
+    });
+  };
+
+  const renderLayout = (r: Rendered, grows: Map<string, FrameGrow> | null) => {
+    setNodes(injectGrow(r.nodes, grows));
     setRfEdges(r.edges);
     setLabelPositions(r.labelPositions);
     setReady(true);
@@ -610,25 +606,38 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
     const prevOpen = prevOpenRef.current;
     const inputs = buildInputs(openId);
 
-    /** If the open state changed, arm the box↔frame morph from the two layouts. */
-    const armMorph = (next: Rendered) => {
-      if (prevOpen === openId) return;
-      const id = openId ?? prevOpen;
-      const el = id ? model.nodes.find((n) => n.id === id) : undefined;
-      if (!id || !el) return;
-      const fromLayout = prevOpen === null ? layoutCache.current.get('') : layoutCache.current.get(prevOpen);
-      const from = containerRect(fromLayout, id);
-      const to = containerRect(next, id);
-      if (from && to) {
-        setMorph({ id, from, to, color: nodeStyle(el, theme).color });
+    /**
+     * Every frame whose rect changes between the previous and new layouts, so
+     * all boundaries can grow/shrink together (container frames *and* the
+     * system frame). Empty when nothing changed (e.g. the initial paint).
+     */
+    const growsFor = (next: Rendered): Map<string, FrameGrow> | null => {
+      if (prevOpen === openId) return null;
+      const prevLayout = layoutCache.current.get(prevOpen ?? '');
+      if (!prevLayout) return null;
+      const grows = new Map<string, FrameGrow>();
+      const ids = new Set([...prevLayout.groupBounds.keys(), ...next.groupBounds.keys()]);
+      for (const id of ids) {
+        const fromRect = containerRect(prevLayout, id);
+        const to = containerRect(next, id);
+        if (!fromRect || !to) continue;
+        if (
+          fromRect.x === to.x &&
+          fromRect.y === to.y &&
+          fromRect.width === to.width &&
+          fromRect.height === to.height
+        ) {
+          continue;
+        }
+        grows.set(id, { from: fromRect, to });
       }
+      return grows.size > 0 ? grows : null;
     };
 
     const cached = layoutCache.current.get(openId ?? '');
     if (cached) {
-      armMorph(cached);
       prevOpenRef.current = openId;
-      renderLayout(cached);
+      renderLayout(cached, growsFor(cached));
       return () => {
         alive = false;
       };
@@ -637,9 +646,9 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
       .then((r) => {
         if (!alive) return;
         layoutCache.current.set(openId ?? '', r);
-        armMorph(r);
+        const span = growsFor(r);
         prevOpenRef.current = openId;
-        renderLayout(r);
+        renderLayout(r, span);
       })
       .catch((err) => {
         if (!alive) return;
@@ -743,7 +752,6 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
         style={{ width: '100%', height: '100%' }}
       >
         <GraphChrome />
-        {morph && <C4MorphOverlay morph={morph} onDone={() => setMorph(null)} />}
       </ReactFlow>
       {ready && labelPositions.size > 0 && (
         <C4EdgeLabels positions={labelPositions} edges={model.edges} />

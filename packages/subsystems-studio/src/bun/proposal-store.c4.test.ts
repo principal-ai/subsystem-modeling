@@ -381,6 +381,43 @@ describe("container-first: component process claims need a verified key", () => 
 		if (!second.ok) expect(second.error).toContain("needs no second box");
 	});
 
+	test("a pending proposal in ANOTHER model blocks the same key — the decision is repo-wide", async () => {
+		// The element store is the umbrella over models, so the container
+		// decision is a repo decision: a second model's queue must not hold a
+		// second open card for the same boundary.
+		const graphA = await createModel();
+		const graphB = await createModel();
+		const key = freshKey();
+
+		const first = await createSubsystemModelProposal({
+			graphId: graphA,
+			rationale: "r",
+			changes: [containerChange(key)],
+		});
+		expect(first.ok).toBe(true);
+		if (!first.ok) return;
+
+		const second = await createSubsystemModelProposal({
+			graphId: graphB,
+			rationale: "r",
+			changes: [containerChange(key)],
+		});
+		expect(second.ok).toBe(false);
+		if (!second.ok) expect(second.error).toContain("one open decision per boundary");
+
+		// Accepting the first is correct — and is what then refuses the
+		// sibling: model B now sees a verified boundary.
+		const acceptedFirst = await acceptSubsystemModelProposal(graphA, first.proposal.id);
+		expect(acceptedFirst.ok).toBe(true);
+		const afterFirst = await createSubsystemModelProposal({
+			graphId: graphB,
+			rationale: "r",
+			changes: [containerChange(key)],
+		});
+		expect(afterFirst.ok).toBe(false);
+		if (!afterFirst.ok) expect(afterFirst.error).toContain("needs no second box");
+	});
+
 	test("a REJECTED proposal does not block re-proposing the boundary", async () => {
 		// Rejections live in history for the agent to reason against — they are
 		// a known "no", not a wall. New evidence may justify a new proposal.

@@ -340,22 +340,27 @@ async function processBackingError(
 }
 
 /**
- * One boundary, one open decision. A `c4-container` proposal is refused when:
+ * One boundary, one open decision — repo-wide. The element store is the
+ * umbrella over models, so a container decision is a REPO decision: a
+ * `c4-container` proposal is refused when
  *
- * - a PENDING proposal already proposes a container for the same process key
- *   — the human has it in front of them; a second card is the same question;
+ * - a PENDING proposal in ANY model's proposal doc already proposes a
+ *   container for the same process key in the same repo — the human has the
+ *   decision in front of them once; a second card (in another model's list)
+ *   is the same question twice; or
  * - the boundary already reads `verified` (an accepted container claims the
- *   key in the element store) — the box exists.
+ *   key in the repo's element set) — the box exists.
  *
  * A REJECTED proposal does NOT block: re-proposing against a rejection with
  * new evidence is legitimate — that is why rejections live in the history the
- * proposing agent reads. `excludeProposalId` scopes the pending check on the
- * accept path (a proposal never duplicates itself).
+ * proposing agent reads.
+ *
+ * The pending scan runs at CREATE only. At accept, only the verified check
+ * matters: accepting the first of two pending siblings is correct, and it is
+ * exactly what then refuses the second.
  */
 async function duplicateContainerError(
-	graphId: string,
 	changes: SubsystemModelProposalChange[],
-	excludeProposalId?: string,
 ): Promise<string | null> {
 	const containers = changes
 		.filter(
@@ -366,21 +371,54 @@ async function duplicateContainerError(
 		.filter((c) => c.process);
 	if (containers.length === 0) return null;
 
-	const doc = await readFile(graphId);
 	for (const c of containers) {
-		const pending = doc.proposals.find(
-			(p) =>
-				p.id !== excludeProposalId &&
-				p.status === "pending" &&
-				p.changes.some(
-					(ch) =>
-						ch.target === "c4-container" &&
-						ch.container.process?.trim() === c.process,
-				),
-		);
-		if (pending) {
-			return `a pending proposal (${pending.id}) already proposes a container for process ${JSON.stringify(c.process)} — one open decision per boundary`;
+		// Pending anywhere — any model's proposal doc, same repo + key.
+		let root: string;
+		try {
+			root = proposalsRoot();
+		} catch {
+			root = "";
 		}
+		if (root) {
+			let files: string[] = [];
+			try {
+				files = (await fs.readdir(root)).filter((f) => f.endsWith(".json"));
+			} catch {
+				/* no docs yet — nothing pending anywhere */
+			}
+			for (const f of files) {
+				let doc: ProposalFile;
+				try {
+					doc = JSON.parse(await fs.readFile(join(root, f), "utf8"));
+				} catch {
+					/* skip files that cannot be parsed */
+					continue;
+				}
+				const other = (doc.proposals ?? []).find(
+					(p) =>
+						p.status === "pending" &&
+						p.changes.some(
+							(ch) =>
+								ch.target === "c4-container" &&
+								ch.purl === c.purl &&
+								ch.container.process?.trim() === c.process,
+						),
+				);
+				if (other) {
+					return `a pending proposal (${other.id} on ${other.graphId}) already proposes a container for process ${JSON.stringify(c.process)} in this repo — one open decision per boundary`;
+				}
+			}
+		}
+	}
+	return verifiedContainerError(containers);
+}
+
+/** The repo's element set already holds an accepted container for the key. */
+async function verifiedContainerError(
+	containers: Array<{ purl?: string; process?: string }>,
+): Promise<string | null> {
+	for (const c of containers) {
+		if (!c.process) continue;
 		const set = await readC4ElementSet(c.purl ?? "");
 		const verified = set.elements.find(
 			(e) =>
@@ -911,7 +949,7 @@ export async function createSubsystemModelProposal(input: {
 	if (invalid) return { ok: false, error: invalid };
 	const unbacked = await processBackingError(graph, input.changes);
 	if (unbacked) return { ok: false, error: unbacked };
-	const duplicate = await duplicateContainerError(input.graphId, input.changes);
+	const duplicate = await duplicateContainerError(input.changes);
 	if (duplicate) return { ok: false, error: duplicate };
 
 	const proposal: SubsystemModelProposal = {
@@ -956,15 +994,22 @@ export async function acceptSubsystemModelProposal(
 	if (invalid) return { ok: false, error: invalid };
 	// Re-checked at accept: a container backing the claim may have been
 	// rejected (or the store emptied) since the proposal was created, and a
-	// sibling proposal may have landed a duplicate in the meantime.
+	// sibling model's pending proposal may have been accepted first, flipping
+	// the boundary to verified. The pending scan does NOT run here: accepting
+	// the first of two pending siblings is correct, and is what refuses the
+	// second.
 	const unbacked = await processBackingError(graph, proposal.changes);
 	if (unbacked) return { ok: false, error: unbacked };
-	const duplicate = await duplicateContainerError(
-		graphId,
-		proposal.changes,
-		proposal.id,
-	);
-	if (duplicate) return { ok: false, error: duplicate };
+	const containers = proposal.changes
+		.filter(
+			(ch): ch is Extract<SubsystemModelProposalChange, { target: "c4-container" }> =>
+				ch.target === "c4-container",
+		)
+		.map((ch) => ({ purl: ch.purl, process: ch.container.process?.trim() }))
+		.filter((c) => c.process);
+	const verifiedDup =
+		containers.length > 0 ? await verifiedContainerError(containers) : null;
+	if (verifiedDup) return { ok: false, error: verifiedDup };
 
 	const patch = applyChangesToGraph(graph, proposal.changes);
 	if (patch) {
