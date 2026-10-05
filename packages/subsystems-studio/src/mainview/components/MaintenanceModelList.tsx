@@ -16,13 +16,13 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
 	Ban,
 	Boxes,
+	AppWindow,
 	Check,
 	Component,
 	Copy,
 	Loader2,
 	Network,
 	Route,
-	Server,
 	Wrench,
 	type LucideIcon,
 } from "lucide-react";
@@ -70,7 +70,8 @@ export const AGENT_META: Array<{ agent: string; label: string; Icon: LucideIcon 
 	// Icon = the agent's lane (construct / static-topology / dynamic-topology),
 	// so the badge reads as "which lane"; the name distinguishes the workers
 	// within a lane. Mirrors the lane icons: construct→Component,
-	// static-topology→Network, dynamic-topology→Server.
+	// static-topology→Network, dynamic-topology→AppWindow (the C4 container
+	// icon — the lane is about the containers).
 	{ agent: "construct-fixer", label: "Construct Fixer", Icon: Component },
 	{
 		agent: "package-module-fixer",
@@ -86,12 +87,12 @@ export const AGENT_META: Array<{ agent: string; label: string; Icon: LucideIcon 
 	{
 		agent: "runtime-topology-verifier",
 		label: "Runtime Topology Verifier",
-		Icon: Server,
+		Icon: AppWindow,
 	},
 	{
 		agent: "container-verifier",
 		label: "Container Verifier",
-		Icon: Server,
+		Icon: AppWindow,
 	},
 	{ agent: "trail-verifier", label: "Trail Verifier", Icon: Route },
 ];
@@ -357,7 +358,7 @@ export const LANE_META: Array<{
 }> = [
 	{ lane: "construct", label: "Construct", Icon: Component },
 	{ lane: "static-topology", label: "Static topology", Icon: Network },
-	{ lane: "dynamic-topology", label: "Dynamic topology", Icon: Server },
+	{ lane: "dynamic-topology", label: "Dynamic topology", Icon: AppWindow },
 	{ lane: "trail", label: "Trail", Icon: Route },
 ];
 

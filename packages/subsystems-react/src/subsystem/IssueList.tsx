@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
+  AppWindow,
   ChevronDown,
   ChevronRight,
   CircleCheck,
@@ -32,7 +33,6 @@ import {
   Network,
   Route,
   Search,
-  Server,
   Shapes,
   Sigma,
   Split,
@@ -82,7 +82,7 @@ export const SUBSYSTEM_ISSUE_CATEGORY_ICON: Record<
   repo: FolderGit2,
   construct: Component,
   'static-topology': Network,
-  'dynamic-topology': Server,
+  'dynamic-topology': AppWindow,
   trail: Route,
 };
 
