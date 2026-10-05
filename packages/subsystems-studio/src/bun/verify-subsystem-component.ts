@@ -56,6 +56,7 @@ import {
 	auditBoundaryFields,
 	auditProcessVerification,
 	auditProcessBacking,
+	dropUnbackedMissing,
 } from "./boundary-audit";
 import type { C4Element } from "@principal-ai/subsystems-react";
 import { readC4ElementSet } from "./c4-element-store";
@@ -1462,17 +1463,6 @@ export async function auditSubsystemModel(
 	const boundary = auditBoundaryFields(graph.components, {
 		augmentedModuleAliases,
 	});
-	for (const f of boundary.findings) {
-		findings.push({
-			kind: f.kind,
-			severity: f.severity,
-			componentAlias: f.componentAlias,
-			componentName: f.componentName,
-			moduleKey: f.moduleKey,
-			processKey: f.processKey,
-			message: f.message,
-		});
-	}
 
 	// Process-boundary verification — read the accepted element set(s) for the
 	// repos this model references. Same read the renderer's issues list does,
@@ -1490,24 +1480,29 @@ export async function auditSubsystemModel(
 		graph.components,
 		[...backingSets.values()].flat(),
 	);
-	for (const f of processVerification.findings) {
-		findings.push({
-			kind: f.kind,
-			severity: f.severity,
-			processKey: f.processKey,
-			message: f.message,
-		});
-	}
 	boundary.checks.push(...processVerification.checks);
 
 	// Container-first rule: a process gap with no accepted container to assign
 	// from stays open until the container-verifier gets one accepted.
-	for (const f of auditProcessBacking(graph.components, backingSets)) {
+	const backingFindings = auditProcessBacking(graph.components, backingSets);
+	// One finding per claim-less component: an unbacked gap subsumes the plain
+	// missing finding for the same component (see the helper). All three
+	// boundary passes merge here so the dedupe sees every missing emitter —
+	// the boundary pass emits missing, verification emits unassigned/
+	// proposed/rejected, backing emits unbacked.
+	const processFindings = dropUnbackedMissing([
+		...boundary.findings,
+		...processVerification.findings,
+		...backingFindings,
+	]);
+	for (const f of processFindings) {
 		findings.push({
 			kind: f.kind,
 			severity: f.severity,
+			processKey: f.processKey,
 			componentAlias: f.componentAlias,
 			componentName: f.componentName,
+			moduleKey: f.moduleKey,
 			message: f.message,
 		});
 	}

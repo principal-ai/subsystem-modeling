@@ -3,6 +3,7 @@ import type { SubsystemComponent } from "@principal-ai/subsystems-core";
 import {
 	auditBoundaryFields,
 	auditProcessVerification,
+	dropUnbackedMissing,
 	moduleAgreesWithFile,
 	normalizeBoundaryPath,
 } from "./boundary-audit";
@@ -369,5 +370,59 @@ describe("auditProcessVerification", () => {
 		]);
 		expect(findings).toHaveLength(1);
 		expect(findings[0]!.kind).toBe("boundary_process_rejected");
+	});
+});
+
+describe("dropUnbackedMissing", () => {
+	const finding = (
+		kind: string,
+		componentAlias?: string,
+	) =>
+		({
+			kind,
+			severity: "info" as const,
+			...(componentAlias != null ? { componentAlias } : {}),
+			message: kind,
+		});
+
+	test("an unbacked component loses its duplicate missing finding", () => {
+		// Both passes fire for a claim-less component with no accepted
+		// container: missing says "propose a claim", unbacked says "no container
+		// to propose it from". The second story is the actionable one.
+		const out = dropUnbackedMissing([
+			finding("boundary_process_missing", "openTouch"),
+			finding("boundary_process_unbacked", "openTouch"),
+		]);
+		expect(out.map((f) => f.kind)).toEqual(["boundary_process_unbacked"]);
+	});
+
+	test("missing survives when the component is not unbacked", () => {
+		// A backed gap keeps the missing finding — the claim-writer CAN act.
+		const out = dropUnbackedMissing([
+			finding("boundary_process_missing", "backed"),
+			finding("boundary_process_unbacked", "other"),
+		]);
+		expect(out.map((f) => f.kind)).toEqual([
+			"boundary_process_missing",
+			"boundary_process_unbacked",
+		]);
+	});
+
+	test("unbacked without an alias never suppresses anything", () => {
+		// A malformed unbacked finding (no component named) must not silently
+		// blanket-drop missing findings.
+		const out = dropUnbackedMissing([
+			finding("boundary_process_missing", "a"),
+			finding("boundary_process_unbacked"),
+		]);
+		expect(out).toHaveLength(2);
+	});
+
+	test("findings with no process kinds pass through untouched", () => {
+		const out = dropUnbackedMissing([
+			finding("missing_file", "a"),
+			finding("step_unconfirmed"),
+		]);
+		expect(out).toHaveLength(2);
 	});
 });

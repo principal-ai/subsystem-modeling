@@ -382,6 +382,38 @@ export function auditProcessBacking(
 }
 
 /**
+ * One finding per claim-less component. The verification pass reports every
+ * claim-less runtime component as `boundary_process_missing`; the backing pass
+ * reports the subset with no accepted container as `boundary_process_unbacked`.
+ * Emitting both repeats one gap with two stories, and the missing story
+ * ("propose a process claim") is one container-first rules forbid the
+ * maintainer from taking yet. This drops the missing finding for any component
+ * the backing pass already named as unbacked — missing survives only for
+ * backed gaps, where the claim-writer CAN act.
+ *
+ * Pure over its inputs; returns a new array. Works on the report-level finding
+ * shape (a superset of the boundary finding's routing fields).
+ */
+export function dropUnbackedMissing<F extends { kind: string; componentAlias?: string | null }>(
+	findings: readonly F[],
+): F[] {
+	const unbackedAliases = new Set(
+		findings
+			.filter((f) => f.kind === "boundary_process_unbacked" && f.componentAlias != null)
+			.map((f) => f.componentAlias as string),
+	);
+	if (unbackedAliases.size === 0) return [...findings];
+	return findings.filter(
+		(f) =>
+			!(
+				f.kind === "boundary_process_missing" &&
+				f.componentAlias != null &&
+				unbackedAliases.has(f.componentAlias)
+			),
+	);
+}
+
+/**
  * Process-boundary verification against the C4 element store — the same read
  * the renderer's issues list does (`verifyProcessBoundaries` over the process
  * rollup), so the audit and the UI speak one vocabulary:
