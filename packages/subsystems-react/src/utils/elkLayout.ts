@@ -602,6 +602,14 @@ export interface CompoundGroupDef {
    * Falls back to the same default padding as the other three sides.
    */
   padBottom?: number;
+  /**
+   * Space reserved to the left *and* right of the children, in px. One number for
+   * both sides because a parent that insets its contents does so symmetrically —
+   * there is no chrome that lives on one side only.
+   *
+   * Falls back to the default padding.
+   */
+  padX?: number;
 }
 
 /** Which groups ELK builds, and which it drops. */
@@ -616,6 +624,7 @@ export interface CompoundGroupPlan {
     minWidth?: number;
     padTop?: number;
     padBottom?: number;
+    padX?: number;
   }>;
   /**
    * Dropped groups. Their members are promoted into the nearest built
@@ -719,6 +728,7 @@ export function planCompoundGroups(
         // these into ELK layout options on the parent node.
         padTop: g.padTop,
         padBottom: g.padBottom,
+        padX: g.padX,
       });
     }
     if (!progress) {
@@ -1024,13 +1034,13 @@ export async function computeElkLayout(
       sizeOptions['elk.nodeSize.constraints'] = 'MINIMUM_SIZE';
       sizeOptions['elk.nodeSize.minimum'] = `(${g.minWidth},0)`;
     }
-    if (g.padTop != null || g.padBottom != null) {
+    if (g.padTop != null || g.padBottom != null || g.padX != null) {
       // Reserving the parent's own chrome. Children then sit inside it, and the
-      // parent's height still comes from ELK's fit. Each side falls back to the
-      // default padding, so setting only the footer keeps the other three as they
-      // were rather than collapsing them to zero.
+      // parent's size still comes from ELK's fit. Each side falls back to the
+      // default padding, so setting only one side keeps the others as they were
+      // rather than collapsing them to zero.
       sizeOptions['elk.padding'] =
-        `[top=${g.padTop ?? 12},left=12,bottom=${g.padBottom ?? 12},right=12]`;
+        `[top=${g.padTop ?? 12},left=${g.padX ?? 12},bottom=${g.padBottom ?? 12},right=${g.padX ?? 12}]`;
     }
     builtGroups.set(g.id, {
       id: g.id,

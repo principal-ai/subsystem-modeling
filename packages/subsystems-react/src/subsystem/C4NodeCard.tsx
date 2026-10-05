@@ -76,15 +76,81 @@ export function nodeSize(node: C4Element): { width: number; height: number } {
 const LABEL_SLOT_H = 40;
 
 /**
+ * The technology row's height, pinned for the same reason as the label slot: the
+ * row is a line of text plus an optional 16px brand mark, so its natural height
+ * depends on which of those are present. Pinning it makes the card's chrome a
+ * known quantity, which is what lets `descriptionLineBudget` below say how many
+ * description lines fit — and lets the footer pad and the header pad agree about
+ * where the card's content actually ends.
+ */
+const TECH_SLOT_H = 18;
+
+/** The card's own vertical padding (`padding: '10px 12px'`). */
+const CARD_PAD_Y = 10;
+
+/** The card's flex `gap`, between each of its rows. */
+const CARD_GAP = 3;
+
+/** The description's line height, as a multiple of its font size. */
+const DESC_LINE_HEIGHT = 1.35;
+
+/**
  * Space a *grown* container reserves above its nested components: the card's own
- * top padding + the label slot + the row gap + the technology row, plus a little
- * air. The description is hidden while grown, so it is not part of this.
+ * padding, its label slot, its technology row, and the gaps between them. The
+ * description is hidden while grown, so it is not part of this.
+ *
+ * Derived from the same constants the card is built from, rather than written as
+ * a literal, so it cannot drift from `descriptionLineBudget` — which subtracts
+ * exactly this chrome to decide how much description a closed card can show.
+ * Those two disagreeing is how a card ends up taller than the box ELK laid out
+ * for it.
  *
  * The graph hands this to ELK as the compound parent's top padding rather than
  * nudging the children down itself — so the parent's size and the children's
  * placement are still one ELK fit, not our arithmetic layered on top of it.
  */
-export const OPEN_HEADER_PAD = 84;
+export const OPEN_HEADER_PAD =
+  CARD_PAD_Y * 2 + LABEL_SLOT_H + CARD_GAP + TECH_SLOT_H + CARD_GAP;
+
+/**
+ * How many description lines fit in a card of this height before the drawn box
+ * would grow past the box the layout reserved for it.
+ *
+ * A card's height is a contract with the layout: ELK sized the node, the system
+ * frame and every edge against it. The description is the one part of a card whose
+ * length the layout cannot know, so it is clamped to what fits rather than allowed
+ * to push the border out past the frame drawn around it. Height is a *minimum* on
+ * the card, so without this a long description silently grows the drawn box while
+ * ELK — and therefore the boundary and the edge endpoints — keeps the old size.
+ *
+ * `hasTechRow` matters because an empty technology row is zero-height: a person
+ * card has one more line of room than a container. The row is pinned to
+ * `TECH_SLOT_H` when it has content, so this is exact rather than approximate.
+ */
+export function descriptionLineBudget(opts: {
+  reservedHeight: number;
+  lineHeight: number;
+  /** The card's border, which sits above the content and varies by kind. */
+  borderWidth: number;
+  hasTechRow: boolean;
+  /** Whether a collapse affordance is drawn at the bottom-right. */
+  reservesFooter: boolean;
+}): number {
+  const { reservedHeight, lineHeight, borderWidth, hasTechRow, reservesFooter } = opts;
+  if (lineHeight <= 0) return 0;
+  const topChrome =
+    borderWidth + CARD_PAD_Y + LABEL_SLOT_H + CARD_GAP + (hasTechRow ? TECH_SLOT_H : 0) + CARD_GAP;
+  // Reserving the footer is not the same as the card's own bottom padding. The
+  // toggle is `position: absolute` inset from the *padding* box, so it reaches
+  // `inset + size` up from the content box's bottom edge — and a description that
+  // only cleared the padding would still have its last line drawn through the
+  // button. Measured: the last line lands in the bottom ~26px band, and the toggle
+  // occupies the bottom 28 of it.
+  const bottomChrome = reservesFooter
+    ? Math.max(CARD_PAD_Y, TOGGLE_INSET + TOGGLE_SIZE)
+    : CARD_PAD_Y;
+  return Math.max(0, Math.floor((reservedHeight - topChrome - bottomChrome) / lineHeight));
+}
 
 /**
  * The drill-down affordance, in the card's own box. Extracted from the button's
@@ -105,6 +171,19 @@ const TOGGLE_INSET = 6;
  * something we nudge afterwards.
  */
 export const OPEN_FOOTER_PAD = TOGGLE_INSET + TOGGLE_SIZE + 8;
+
+/**
+ * Space a *grown* container reserves to the left and right of its nested
+ * components.
+ *
+ * Deliberately the footer's number rather than its own: the nested cards should
+ * sit in one uniform inset, not a wider one at the bottom than at the sides. Both
+ * are wider than the card's own 12px text inset — the label and technology row are
+ * the container's chrome and sit flush with its padding, while the nested cards
+ * are separate boxes it contains, and at the same inset they read as part of that
+ * chrome rather than held inside it.
+ */
+export const OPEN_SIDE_PAD = OPEN_FOOTER_PAD;
 
 type Theme = ReturnType<typeof useTheme>['theme'];
 
@@ -338,6 +417,22 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
   const subtitle = nodeSubtitle(node);
 
   const size = nodeSize(node);
+  // The height the layout reserved for this card — what the system frame and the
+  // edge endpoints were placed against. Everything below sizes to this, not to
+  // whatever the content would like.
+  const reservedHeight = height ?? size.height;
+  // A container always has a technology row (at minimum the member count); a
+  // person never does.
+  const hasTechRow = !!topLabel || node.kind === 'container';
+  const descLineHeightPx = theme.fontSizes[0] * DESC_LINE_HEIGHT;
+  const descLines = descriptionLineBudget({
+    reservedHeight,
+    lineHeight: descLineHeightPx,
+    borderWidth: style.width,
+    hasTechRow,
+    // The affordance is drawn exactly when the card can be expanded or collapsed.
+    reservesFooter: !!onExpand,
+  });
   const centered = shape.align === 'center';
   // The pill's inset is a separate concern from alignment, and a centred
   // component must not inherit it: 30px of each side would leave a 160-wide box
@@ -351,8 +446,15 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
       style={{
         position: 'relative',
         width: width ?? size.width,
-        minHeight: height ?? size.height,
-        transition: 'width 420ms ease-out, min-height 420ms ease-out',
+        // A hard height, not a minimum. The card *is* the box the layout reserved
+        // — the system frame is fitted around it and every edge endpoint is placed
+        // against it — so it must not be able to grow itself. `overflow: hidden`
+        // makes that structural: if the content ever exceeds the box, it is clipped
+        // rather than drawn outside the boundary. The description is clamped above
+        // so that clipping is never what you actually see.
+        height: reservedHeight,
+        transition: 'width 420ms ease-out, height 420ms ease-out',
+        overflow: 'hidden',
         boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
@@ -360,7 +462,7 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
         // marker is conditional), and centring pushes the tag to a different
         // height on every card. In a graph grid that makes the row unscannable.
         justifyContent: 'flex-start',
-        gap: 3,
+        gap: CARD_GAP,
         padding: pillInset ? '10px 30px' : '10px 12px',
         borderRadius: shape.radius,
         background: theme.colors.backgroundSecondary ?? theme.colors.background,
@@ -382,6 +484,10 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
           justifyContent: centered ? 'center' : 'space-between',
           gap: 6,
           height: LABEL_SLOT_H,
+          // Without this the slot shrinks when the content exceeds the card's fixed
+          // height, and `descriptionLineBudget`'s chrome stops being the chrome —
+          // measured at 39.11px instead of 40 the moment the description ran long.
+          flexShrink: 0,
           minWidth: 0,
         }}
       >
@@ -434,6 +540,10 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
           letterSpacing: 0.5,
           textTransform: 'uppercase',
           minWidth: 0,
+          // Pinned, like the label slot above it: an empty row would otherwise be
+          // zero-height and the description budget would have to guess which cards
+          // have a technology row. Empty stays zero — a person has no technology.
+          ...(hasTechRow ? { height: TECH_SLOT_H, flexShrink: 0 } : {}),
         }}
       >
         {topLabel && (
@@ -467,16 +577,25 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
           </span>
         )}
       </span>
-      {showDescription && subtitle && (
+      {showDescription && subtitle && descLines > 0 && (
         <span
           style={{
             fontFamily: theme.fonts.monospace,
             fontSize: theme.fontSizes[0],
             color: muted,
-            lineHeight: 1.35,
+            lineHeight: DESC_LINE_HEIGHT,
             whiteSpace: 'normal',
             overflowWrap: 'anywhere',
             textAlign: centered ? 'center' : 'left',
+            // Clamped to the room the layout left for it. The card's height is a
+            // contract with ELK — the boundary and every edge endpoint are placed
+            // against it — so the description cannot be allowed to grow the box.
+            // Same mechanism the label uses above; the count is derived from the
+            // reserved height rather than tuned by hand.
+            display: '-webkit-box',
+            WebkitLineClamp: descLines,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
           }}
         >
           {subtitle}

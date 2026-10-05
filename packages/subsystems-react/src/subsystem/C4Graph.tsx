@@ -37,6 +37,7 @@ import {
   NODE_W,
   OPEN_FOOTER_PAD,
   OPEN_HEADER_PAD,
+  OPEN_SIDE_PAD,
   nodeSize,
   nodeStyle,
 } from './C4NodeCard';
@@ -557,6 +558,9 @@ export function c4GroupDefs(
         // takes no space in the card's flow. Without it the fitted height stops at
         // the last component row and that row is drawn through the button.
         padBottom: OPEN_FOOTER_PAD,
+        // Breathing room at the sides, so the nested cards read as held inside the
+        // container rather than flush with the chrome above them.
+        padX: OPEN_SIDE_PAD,
         // Drawn as a card, laid out as a group — both are needed, and only ELK
         // knows which one a bare member id means.
         drawnAsCard: true,

@@ -171,17 +171,18 @@ describe('planCompoundGroups', () => {
     expect(plan.skipped).toEqual(['proc']);
   });
 
-  test('carries the parent chrome padding through, both ends', () => {
+  test('carries the parent chrome padding through, all three pads', () => {
     // `computeElkLayout` turns these into ELK's `elk.padding` on the parent. If
     // they stop here the parent is fitted to its children alone, and chrome drawn
-    // at either end — the grown container's label slot, its collapse affordance —
-    // lands on top of the first or last component row.
+    // around the content — the grown container's label slot, its collapse
+    // affordance, the inset that separates nested cards from its edges — is lost.
     const plan = planCompoundGroups(
-      [{ id: 'host', memberIds: ['a', 'b'], padTop: 84, padBottom: 36 }],
+      [{ id: 'host', memberIds: ['a', 'b'], padTop: 84, padBottom: 36, padX: 36 }],
       ['a', 'b'],
     );
     expect(plan.built[0]!.padTop).toBe(84);
     expect(plan.built[0]!.padBottom).toBe(36);
+    expect(plan.built[0]!.padX).toBe(36);
   });
 
   test('leaves the padding unset when the group asks for none', () => {
@@ -190,6 +191,7 @@ describe('planCompoundGroups', () => {
     const plan = planCompoundGroups([{ id: 'proc', memberIds: ['a', 'b'] }], ['a', 'b']);
     expect(plan.built[0]!.padTop).toBeUndefined();
     expect(plan.built[0]!.padBottom).toBeUndefined();
+    expect(plan.built[0]!.padX).toBeUndefined();
   });
 
   test('counts leaves through nested groups', () => {

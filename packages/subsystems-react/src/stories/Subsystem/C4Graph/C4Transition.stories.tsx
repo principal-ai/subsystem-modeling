@@ -166,6 +166,11 @@ export const DrillDown: Story = {
 // relative to it, because only the container actually changing open state
 // withholds its components during the morph.
 //
+// Principal CLI carries a deliberately long description, as the fixture for the
+// card's height contract: a card *is* the box the layout reserved, so a long
+// description is clamped to the lines that fit rather than allowed to grow the
+// border out past the boundary ELK drew around it.
+//
 // The external system is the thing to watch. Band separation was the suspected
 // weak spot of an opened container becoming a compound parent under
 // INCLUDE_CHILDREN — the concern was that an external would collapse *below* the
@@ -186,12 +191,20 @@ const SIBLING_NODES: C4Element[] = [
 
   // The second container in the same boundary, and openable on its own terms.
   // A data-store, so opening it also exercises the second container kind.
+  //
+  // Its description is deliberately long, and stays long: it is the fixture for
+  // the card's height contract. Closed, it clamps to the two lines that fit above
+  // the collapse affordance, with an ellipsis. Before that it grew the drawn box
+  // 49px past the 150 the layout reserved — escaping the system boundary by 25px
+  // and running the last line through the button. If this ever stops ending in an
+  // ellipsis at the same card height as its neighbours, that contract has broken.
   container({
     id: CLI,
     label: 'Principal CLI',
     containerKind: 'data-store',
     technology: 'Bun + SQLite',
-    description: 'Creates and renders subsystem models.',
+    description:
+      'A command-line front end for creating and rendering subsystem models: it resolves a repository, derives the element set, runs the layout, and writes the model document back out.',
   }),
   component({ id: 'component:model-reader', label: 'Model reader', container: CLI, description: 'Parses a model document.' }),
   component({ id: 'component:diagram-writer', label: 'Diagram writer', container: CLI, description: 'Emits ELK-ready nodes and edges.' }),

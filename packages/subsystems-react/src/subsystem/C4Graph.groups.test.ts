@@ -13,7 +13,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { c4GroupDefs, hidesComponentDuringMorph, rebaseGroupBoundsAbsolute, showDescriptionFor } from './C4Graph';
-import { OPEN_FOOTER_PAD } from './C4NodeCard';
+import { OPEN_FOOTER_PAD, OPEN_SIDE_PAD } from './C4NodeCard';
 import { openContainerSet, openStateKey } from './c4';
 import type { C4Element, C4Model } from './c4';
 
@@ -117,6 +117,17 @@ describe('c4GroupDefs — the opened container', () => {
     expect(open.padBottom).toBe(OPEN_FOOTER_PAD);
     // And it is enough: the toggle's top edge is inset + size above the card bottom.
     expect(open.padBottom!).toBeGreaterThanOrEqual(6 + 22);
+  });
+
+  test('reserves the same inset at the sides as at the footer', () => {
+    // One uniform inset around the nested cards, rather than a wider one at the
+    // bottom than at the sides.
+    const open = groupById(c4GroupDefs(base, [HOST]).groups).get(HOST)!;
+    expect(open.padX).toBe(OPEN_SIDE_PAD);
+    expect(open.padX).toBe(open.padBottom);
+    // And it is a real inset, wider than the card's own 12px text padding — the
+    // reason it exists is that matching that padding read as too tight.
+    expect(open.padX!).toBeGreaterThan(12);
   });
 
   test('a container that is not open reserves no footer', () => {
