@@ -95,22 +95,34 @@ const CARD_GAP = 3;
 const DESC_LINE_HEIGHT = 1.35;
 
 /**
+ * Breathing room between a grown container's own chrome and the components nested
+ * inside it.
+ *
+ * The description is hidden while grown, so the components land where the
+ * description would have been — immediately under the technology row. Without
+ * this the gap is the width of one row gap, which reads as the components being
+ * crowded against the header while the sides and footer sit `OPEN_SIDE_PAD` away.
+ * This is not chrome: nothing is drawn in it.
+ */
+const OPEN_HEADER_AIR = 16;
+
+/**
  * Space a *grown* container reserves above its nested components: the card's own
- * padding, its label slot, its technology row, and the gaps between them. The
- * description is hidden while grown, so it is not part of this.
+ * padding, its label slot, its technology row, the gaps between them, and a little
+ * air. The description is hidden while grown, so it is not part of this.
  *
  * Derived from the same constants the card is built from, rather than written as
  * a literal, so it cannot drift from `descriptionLineBudget` — which subtracts
- * exactly this chrome to decide how much description a closed card can show.
- * Those two disagreeing is how a card ends up taller than the box ELK laid out
- * for it.
+ * exactly this chrome (and no air) to decide how much description a closed card
+ * can show. Those two disagreeing is how a card ends up taller than the box ELK
+ * laid out for it.
  *
  * The graph hands this to ELK as the compound parent's top padding rather than
  * nudging the children down itself — so the parent's size and the children's
  * placement are still one ELK fit, not our arithmetic layered on top of it.
  */
 export const OPEN_HEADER_PAD =
-  CARD_PAD_Y * 2 + LABEL_SLOT_H + CARD_GAP + TECH_SLOT_H + CARD_GAP;
+  CARD_PAD_Y * 2 + LABEL_SLOT_H + CARD_GAP + TECH_SLOT_H + CARD_GAP + OPEN_HEADER_AIR;
 
 /**
  * How many description lines fit in a card of this height before the drawn box
