@@ -30,6 +30,7 @@ import {
   History,
   Link2Off,
   MapPin,
+  Minus,
   Network,
   Route,
   Search,
@@ -658,6 +659,17 @@ export interface SubsystemIssueListProps {
    */
   focusCategory?: SubsystemIssueCategory;
   /**
+   * Per-layer verification status from the host's lane summary — the same
+   * derivation the maintainer's lane icons use. The list only sees findings,
+   * so without this a layer with nothing to check (no module claims, say)
+   * is indistinguishable from a verified-clean one and renders a green check.
+   * A layer whose status here is `'none'` renders muted instead: not
+   * applicable, nothing was verified.
+   */
+  laneStatus?: Partial<
+    Record<SubsystemIssueCategory, 'verified' | 'partial' | 'issues' | 'blocked' | 'none'>
+  >;
+  /**
    * Fires whenever the expanded-layer set changes. Publishers use it to focus
    * the canvas on the layer's findings — dimming everything the expanded
    * layers do not implicate. Emits [] when every layer is collapsed.
@@ -673,6 +685,7 @@ export function SubsystemIssueList({
   onHoverIssue,
   focusCategory,
   onExpandedCategoriesChange,
+  laneStatus,
 }: SubsystemIssueListProps) {
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -740,11 +753,18 @@ export function SubsystemIssueList({
     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
       {categories.map((category) => {
         // A layer with no findings renders its happy state: a green check in
-        // the header, no count, no cards.
+        // the header, no count, no cards. A layer the host reports as 'none'
+        // had nothing to verify at all (e.g. no module claims) — it renders
+        // muted, same as the maintainer's grey lane icon, because a green
+        // check would claim a verification that never ran.
         const clean = category.count === 0;
-        const accent = category.severity
-          ? severityColor(category.severity, theme.colors)
-          : theme.colors.success;
+        const notApplicable = clean && laneStatus?.[category.category] === 'none';
+        const accent =
+          category.severity
+            ? severityColor(category.severity, theme.colors)
+            : notApplicable
+              ? muted
+              : theme.colors.success;
         const isCollapsed = collapsed.has(category.category);
         const isHovered = hovered === category.category;
         return (
@@ -810,7 +830,12 @@ export function SubsystemIssueList({
                 {category.label}
               </span>
               {clean ? (
-                <CircleCheck size={13} color={accent} style={{ flexShrink: 0 }} />
+                notApplicable ? (
+                  // A muted dash: nothing was checked, so nothing passed.
+                  <Minus size={13} color={accent} style={{ flexShrink: 0 }} />
+                ) : (
+                  <CircleCheck size={13} color={accent} style={{ flexShrink: 0 }} />
+                )
               ) : (
                 <span
                   style={{

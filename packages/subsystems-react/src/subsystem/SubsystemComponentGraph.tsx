@@ -74,6 +74,7 @@ import {
   issueRung,
   ISSUE_KIND_ICON,
   ISSUE_RUNG_ORDER,
+  type SubsystemIssueListProps,
   type SubsystemIssue,
   type SubsystemIssueCategory,
 } from './IssueList';
@@ -355,6 +356,13 @@ export interface SubsystemComponentGraphProps {
    */
   focusIssueCategory?: SubsystemIssueCategory;
   /**
+   * Per-layer verification status from the host's lane summary (the same
+   * derivation the maintainer's lane icons use). Forwarded to the issues
+   * list so a layer with nothing to verify renders muted ("not applicable")
+   * instead of a green check for a verification that never ran.
+   */
+  laneStatus?: SubsystemIssueListProps['laneStatus'];
+  /**
    * Click an issue. The graph first focuses the target on the canvas itself —
    * a component target is selected and framed (any edge / trail focus
    * that would hide it is cleared), and a
@@ -528,7 +536,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, trails, graphifyRelations, orderByLine, initialTrailId, onReorderTrails, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, title, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
+function Inner({ components, trails, graphifyRelations, orderByLine, initialTrailId, onReorderTrails, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, title, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
   const { theme } = useTheme();
   const { fitView, fitBounds, screenToFlowPosition } = useReactFlow();
   const viewport = useViewport();
@@ -2778,6 +2786,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
                       <SubsystemIssueList
                         issues={issues ?? []}
                         focusCategory={focusIssueCategory}
+                        laneStatus={laneStatus}
                         onSelectIssue={focusIssueTarget}
                         onDeselectIssue={unfocusIssueTarget}
                         onApplyFix={onApplyIssueFix}
@@ -2790,6 +2799,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
                   <SubsystemIssueList
                     issues={issues ?? []}
                     focusCategory={focusIssueCategory}
+                    laneStatus={laneStatus}
                     onSelectIssue={focusIssueTarget}
                     onDeselectIssue={unfocusIssueTarget}
                     onApplyFix={onApplyIssueFix}

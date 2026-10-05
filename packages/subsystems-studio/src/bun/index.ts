@@ -47,6 +47,7 @@ import {
 	deleteSubsystemModelAudit,
 	getSubsystemModelAuditListSummary,
 	loadSubsystemModelAudit,
+	summarizeLanes,
 } from "./audit-report-store";
 import {
 	acceptSubsystemModelProposal as acceptProposalInStore,
@@ -2189,6 +2190,12 @@ const requests: RequestHandlers = {
 					fingerprint: saved.fingerprint,
 					checkedAt: saved.report.checkedAt,
 					stale: saved.fingerprint !== live,
+					// The per-lane statuses the maintainer shows — the issues list
+					// renders the same statuses so a layer with nothing to verify
+					// reads "not applicable" (grey), not "verified" (green).
+					lanes: summarizeLanes(saved.report, {
+						hasTrails: (full.trails?.length ?? 0) > 0,
+					}),
 				};
 			},
 			getSubsystemModelNextRoute: async ({ graphId }) => {

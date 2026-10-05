@@ -27,6 +27,7 @@ import {
 	type TrailViewerContext,
 } from "@principal-ai/subsystems-react";
 import { electrobun, maintainLivePanelSubscribers, opencodeLiveFeedSubscribers, reloadSubscribers, subsystemModelChangeSubscribers, subsystemModelMaintainChangeSubscribers } from "../rpc";
+import type { SubsystemVerificationLane, VerificationLaneStatus } from "../../shared/contract";
 import { CenteredMessage } from "../ui";
 import {
 	auditReportToIssues,
@@ -107,6 +108,9 @@ export function SubsystemModelView({
 	const [excalidrawOpen, setExcalidrawOpen] = useState(false);
 	const [selection, setSelection] = useState<ExcalidrawSelectionInfo | null>(null);
 	const [auditReport, setAuditReport] = useState<SubsystemModelAuditReport | null>(null);
+	// Per-lane statuses from the same derivation the maintainer shows — the
+	// issues list uses them to tell "verified clean" from "nothing to verify".
+	const [auditLanes, setAuditLanes] = useState<Record<SubsystemVerificationLane, VerificationLaneStatus> | null>(null);
 	const [auditStale, setAuditStale] = useState(false);
 	/** Diagnostics list shown in the sidebar (toggled by the header chip).
 	 *  Seeded open when the tab was opened with the issues view requested, else
@@ -166,10 +170,12 @@ export function SubsystemModelView({
 			.getSubsystemModelAudit({ graphId })
 			.then((res) => {
 				setAuditReport(res.ok && res.report ? res.report : null);
+				setAuditLanes(res.ok && res.lanes ? res.lanes : null);
 				setAuditStale(res.stale === true);
 			})
 			.catch(() => {
 				setAuditReport(null);
+				setAuditLanes(null);
 				setAuditStale(false);
 			});
 	}, [graphId]);
@@ -715,6 +721,7 @@ export function SubsystemModelView({
 				onInspectSymbol={onInspectSymbol}
 				diagnostic={diagnostic}
 				issues={auditIssues}
+				laneStatus={auditLanes ?? undefined}
 				showIssues={showIssues}
 				focusIssueCategory={focusIssueCategory as SubsystemIssueCategory | undefined}
 				onApplyIssueFix={onApplyIssueFix}

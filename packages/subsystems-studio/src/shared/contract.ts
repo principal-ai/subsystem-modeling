@@ -1929,6 +1929,9 @@ export type StudioRequests = {
 			stale?: boolean;
 			fingerprint?: string;
 			checkedAt?: string;
+			/** Per-lane statuses (same derivation the maintainer shows) so the
+			 * issues list can tell "verified clean" from "nothing to verify". */
+			lanes?: Record<SubsystemVerificationLane, VerificationLaneStatus>;
 		};
 	};
 	/**
