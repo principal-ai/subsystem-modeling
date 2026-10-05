@@ -171,6 +171,27 @@ describe('planCompoundGroups', () => {
     expect(plan.skipped).toEqual(['proc']);
   });
 
+  test('carries the parent chrome padding through, both ends', () => {
+    // `computeElkLayout` turns these into ELK's `elk.padding` on the parent. If
+    // they stop here the parent is fitted to its children alone, and chrome drawn
+    // at either end — the grown container's label slot, its collapse affordance —
+    // lands on top of the first or last component row.
+    const plan = planCompoundGroups(
+      [{ id: 'host', memberIds: ['a', 'b'], padTop: 84, padBottom: 36 }],
+      ['a', 'b'],
+    );
+    expect(plan.built[0]!.padTop).toBe(84);
+    expect(plan.built[0]!.padBottom).toBe(36);
+  });
+
+  test('leaves the padding unset when the group asks for none', () => {
+    // Unset, not zero: `computeElkLayout` falls back to the default 12px, so a
+    // group that never asked for chrome keeps the padding it always had.
+    const plan = planCompoundGroups([{ id: 'proc', memberIds: ['a', 'b'] }], ['a', 'b']);
+    expect(plan.built[0]!.padTop).toBeUndefined();
+    expect(plan.built[0]!.padBottom).toBeUndefined();
+  });
+
   test('counts leaves through nested groups', () => {
     // process → module(one leaf) is still a single leaf, so both drop by
     // default even though the process lists one member id.

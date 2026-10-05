@@ -13,6 +13,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { c4GroupDefs, hidesComponentDuringMorph, rebaseGroupBoundsAbsolute, showDescriptionFor } from './C4Graph';
+import { OPEN_FOOTER_PAD } from './C4NodeCard';
 import { openContainerSet, openStateKey } from './c4';
 import type { C4Element, C4Model } from './c4';
 
@@ -105,6 +106,23 @@ describe('c4GroupDefs — the opened container', () => {
     expect(open.padTop).toBeGreaterThan(0);
     // Never narrower than the closed card: opening only grows the box.
     expect(open.minWidth).toBeGreaterThan(0);
+  });
+
+  test('reserves the footer too, so components clear the collapse toggle', () => {
+    // The toggle is absolutely positioned, so it takes no space in the card's flow
+    // and ELK cannot see it. Without the footer the parent's fit stops at the last
+    // component row and that row is drawn straight through the button — measured at
+    // 12px of clearance against the 28px the button occupies.
+    const open = groupById(c4GroupDefs(base, [HOST]).groups).get(HOST)!;
+    expect(open.padBottom).toBe(OPEN_FOOTER_PAD);
+    // And it is enough: the toggle's top edge is inset + size above the card bottom.
+    expect(open.padBottom!).toBeGreaterThanOrEqual(6 + 22);
+  });
+
+  test('a container that is not open reserves no footer', () => {
+    // The padding is a property of being *grown*. A closed container is a plain
+    // leaf and ELK never applies it, so asking for it would be misleading.
+    expect(groupById(c4GroupDefs(base, []).groups).has(HOST)).toBe(false);
   });
 
   test('is absent when nothing is open, so the closed card stays a leaf', () => {

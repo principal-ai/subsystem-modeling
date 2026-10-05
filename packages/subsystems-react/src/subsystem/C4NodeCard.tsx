@@ -86,6 +86,26 @@ const LABEL_SLOT_H = 40;
  */
 export const OPEN_HEADER_PAD = 84;
 
+/**
+ * The drill-down affordance, in the card's own box. Extracted from the button's
+ * style so the reserved footer below cannot drift from the thing it is reserving
+ * for — the two numbers are the same number.
+ */
+const TOGGLE_SIZE = 22;
+const TOGGLE_INSET = 6;
+
+/**
+ * Space a *grown* container reserves below its nested components, so the last row
+ * does not sit under the collapse affordance.
+ *
+ * The toggle is absolutely positioned, so it takes no space in the card's flow and
+ * ELK knows nothing about it: without this the parent is fitted to its children
+ * alone and the final row is drawn straight through the button. Reserving the
+ * toggle's own reach plus a little air keeps that an ELK fit too, rather than
+ * something we nudge afterwards.
+ */
+export const OPEN_FOOTER_PAD = TOGGLE_INSET + TOGGLE_SIZE + 8;
+
 type Theme = ReturnType<typeof useTheme>['theme'];
 
 export interface NodeStyle {
@@ -475,13 +495,13 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
           aria-label="Show components"
           style={{
             position: 'absolute',
-            right: 6,
-            bottom: 6,
+            right: TOGGLE_INSET,
+            bottom: TOGGLE_INSET,
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: 22,
-            height: 22,
+            width: TOGGLE_SIZE,
+            height: TOGGLE_SIZE,
             padding: 0,
             borderRadius: 4,
             border: `1px solid ${style.color}`,

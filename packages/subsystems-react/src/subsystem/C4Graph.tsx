@@ -31,7 +31,15 @@ import { absoluteBoundsOf, computeElkLayout, flowPositionOf, pointAlongPath, poi
 import type { CompoundGroupDef, ElkLayoutResult } from '../utils/elkLayout';
 import { EDGE_LABEL_FONT_SIZE, EDGE_LABEL_HEIGHT, C4_LABEL_WIDTH, estimateEdgeLabelWidth } from '../utils/edgeLabel';
 import { deriveC4Groups, protocolColor, type C4Group } from './c4';
-import { C4NodeCard, NODE_H, NODE_W, OPEN_HEADER_PAD, nodeSize, nodeStyle } from './C4NodeCard';
+import {
+  C4NodeCard,
+  NODE_H,
+  NODE_W,
+  OPEN_FOOTER_PAD,
+  OPEN_HEADER_PAD,
+  nodeSize,
+  nodeStyle,
+} from './C4NodeCard';
 import { TechMark, technologyBrand } from './techIcons';
 import type { TechBrand } from './techIcons';
 import { GRAPH_CANVAS_CLASS, GRAPH_NAV_PROPS, GraphChrome, GraphLayerStyle } from './graphChrome';
@@ -545,6 +553,10 @@ export function c4GroupDefs(
         minWidth: NODE_W,
         // Room for the container's own label slot + technology row.
         padTop: OPEN_HEADER_PAD,
+        // Room for the collapse affordance, which is absolutely positioned and so
+        // takes no space in the card's flow. Without it the fitted height stops at
+        // the last component row and that row is drawn through the button.
+        padBottom: OPEN_FOOTER_PAD,
         // Drawn as a card, laid out as a group — both are needed, and only ELK
         // knows which one a bare member id means.
         drawnAsCard: true,

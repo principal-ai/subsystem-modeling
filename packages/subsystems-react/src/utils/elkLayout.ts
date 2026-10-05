@@ -593,6 +593,15 @@ export interface CompoundGroupDef {
    * partition set on the parent itself is ignored.
    */
   padTop?: number;
+  /**
+   * Space reserved below the last child, in px — the `padTop` of the other end.
+   * Set it when the parent draws chrome at the bottom that its children must clear,
+   * e.g. the drill-down's absolutely-positioned collapse affordance, which takes
+   * no space in flow and so is invisible to ELK unless it is reserved here.
+   *
+   * Falls back to the same default padding as the other three sides.
+   */
+  padBottom?: number;
 }
 
 /** Which groups ELK builds, and which it drops. */
@@ -601,7 +610,13 @@ export interface CompoundGroupPlan {
    * Built groups in build order — a group's children always appear before it,
    * so callers can map ids to shells in one forward pass.
    */
-  built: Array<{ id: string; childIds: string[]; minWidth?: number; padTop?: number }>;
+  built: Array<{
+    id: string;
+    childIds: string[];
+    minWidth?: number;
+    padTop?: number;
+    padBottom?: number;
+  }>;
   /**
    * Dropped groups. Their members are promoted into the nearest built
    * ancestor, so callers must clear those members' `parentId`.
@@ -703,6 +718,7 @@ export function planCompoundGroups(
         // Carried through, not just validated here: the caller turns each of
         // these into ELK layout options on the parent node.
         padTop: g.padTop,
+        padBottom: g.padBottom,
       });
     }
     if (!progress) {
@@ -1008,10 +1024,13 @@ export async function computeElkLayout(
       sizeOptions['elk.nodeSize.constraints'] = 'MINIMUM_SIZE';
       sizeOptions['elk.nodeSize.minimum'] = `(${g.minWidth},0)`;
     }
-    if (g.padTop != null) {
-      // Reserving the parent's own chrome. Children then start below it, and
-      // the parent's height still comes from ELK's fit.
-      sizeOptions['elk.padding'] = `[top=${g.padTop},left=12,bottom=12,right=12]`;
+    if (g.padTop != null || g.padBottom != null) {
+      // Reserving the parent's own chrome. Children then sit inside it, and the
+      // parent's height still comes from ELK's fit. Each side falls back to the
+      // default padding, so setting only the footer keeps the other three as they
+      // were rather than collapsing them to zero.
+      sizeOptions['elk.padding'] =
+        `[top=${g.padTop ?? 12},left=12,bottom=${g.padBottom ?? 12},right=12]`;
     }
     builtGroups.set(g.id, {
       id: g.id,
