@@ -20,12 +20,14 @@ import {
   CircleDashed,
   CircleEllipsis,
   CircleHelp,
+  CircleSlash,
   CircleX,
   Component,
   FileX,
   FolderGit2,
   Footprints,
   History,
+  Link2Off,
   MapPin,
   Network,
   Route,
@@ -112,9 +114,11 @@ const KIND_CATEGORY: Record<string, SubsystemIssueCategory> = {
   // C4 process verification (verifyProcessBoundaries): a boundary whose
   // container claim is not an accepted one. `verified` reports nothing —
   // the audit reports absence only.
+  boundary_process_missing: 'dynamic-topology',
   boundary_process_unassigned: 'dynamic-topology',
   boundary_process_proposed: 'dynamic-topology',
   boundary_process_rejected: 'dynamic-topology',
+  boundary_process_unbacked: 'dynamic-topology',
   trail: 'trail',
   step_unconfirmed: 'trail',
   step_stale: 'trail',
@@ -180,9 +184,12 @@ export const ISSUE_KIND_ICON: Record<string, LucideIcon> = {
   boundary_process_nest_disagree: Split,
   // C4 process verification: unclaimed = no container at all, proposed = an
   // agent scaffold awaits a decision, rejected = a container was declined.
+  boundary_process_missing: CircleSlash,
   boundary_process_unassigned: CircleEllipsis,
   boundary_process_proposed: CircleDashed,
   boundary_process_rejected: CircleX,
+  // Container-first gate: a claim cites a key no accepted container owns.
+  boundary_process_unbacked: Link2Off,
   // Trail step verification: unconfirmed = no augmentation yet, stale = code changed
   step_unconfirmed: CircleHelp,
   step_stale: History,
@@ -267,9 +274,11 @@ const KIND_LABEL: Record<string, string> = {
   boundary_process_nest_disagree: 'Module spans multiple process contexts',
   // C4 process verification (labels read as boundary states, since the layer
   // scopes them to process frames).
+  boundary_process_missing: 'Process claim missing',
   boundary_process_unassigned: 'Process boundary unclaimed',
   boundary_process_proposed: 'Container awaiting decision',
   boundary_process_rejected: 'Container rejected',
+  boundary_process_unbacked: 'Process claim unbacked',
   trail: 'Step issue',
   step_unconfirmed: 'Call site not verified',
   step_stale: 'Call site changed',
@@ -304,9 +313,11 @@ const KIND_ORDER: Record<string, number> = {
   boundary_module_file_mismatch: 23,
   // Runtime topology — process containment
   boundary_process_nest_disagree: 30,
-  boundary_process_unassigned: 31,
-  boundary_process_proposed: 32,
-  boundary_process_rejected: 33,
+  boundary_process_missing: 31,
+  boundary_process_unassigned: 32,
+  boundary_process_unbacked: 33,
+  boundary_process_proposed: 34,
+  boundary_process_rejected: 35,
   // Trail — mechanical issues first, then step verification
   trail: 40,
   step_unconfirmed: 41,

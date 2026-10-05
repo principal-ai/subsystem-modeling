@@ -1,6 +1,6 @@
 {
   "name": "@principal-ai/subsystems-react",
-  "version": "0.53.0",
+  "version": "0.53.1",
   "description": "React UI for Subsystem Models — graph, Pierre code views, and session-event feeds",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
