@@ -399,6 +399,18 @@ npx -y @principal-ai/principal-studio-cli subsystem-model list
 npx -y @principal-ai/principal-studio-cli subsystem-model get <id>
 ```
 
+### Re-creating is idempotent
+
+`create` folds onto an existing model when the payload has the same
+**normalized title** (case- and whitespace-insensitive) *and* the same set of
+referenced purls (fragment stripped) as a stored one: it updates that record in
+place — keeping its `id` and `createdAt` — and reports
+`Updated subsystem model <id>` (`"reused": true` on stdout). So a retry after a
+lost id, or re-deriving the same subsystem, won't leave a second copy.
+
+Pass `--force` (or `"force": true` in the HTTP body) when you intentionally want
+a distinct record over the same title + purls. Prefer omitting it.
+
 While Subsystems Studio is running, the HTTP bridge still supports update/delete:
 
 ```bash
