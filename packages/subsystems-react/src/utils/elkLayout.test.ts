@@ -16,9 +16,125 @@ import {
   fractionAlongPath,
   planCompoundGroups,
   getElkOptions,
+  absoluteBoundsOf,
+  flowPositionOf,
   type Point,
 } from './elkLayout';
 import { EDGE_LABEL_WIDTH, EDGE_LABEL_SIDE_PADDING } from './edgeLabel';
+
+/**
+ * A synthetic laid-out result standing in for the drill-down's open layout: a
+ * compound parent at (12,12) with two children, a sibling container, and a
+ * flattened frame that never enters the ELK tree.
+ */
+function syntheticResult() {
+  const rect = (x: number, y: number, width: number, height: number) => ({
+    x, y, width, height,
+  });
+  return {
+    absoluteRects: new Map([
+      ['container:host', rect(12, 12, 508, 416)],
+      ['cmp:a', rect(24, 96, 140, 140)],
+      ['cmp:b', rect(24, 276, 140, 140)],
+      ['container:api', rect(576, 218, 250, 150)],
+    ]),
+    // A nested group's entry is parent-relative — the trap `flowPositionOf` avoids.
+    groupBounds: new Map([
+      ['container:host', rect(12, 12, 508, 416)],
+      ['container:api', rect(576, 218, 250, 150)],
+      ['system:acme', rect(-12, -52, 1152, 504)],
+    ]),
+  };
+}
+
+describe('absolute coordinate space', () => {
+  test('a root node keeps its absolute position', () => {
+    const r = syntheticResult();
+    expect(flowPositionOf(r, 'container:host')).toEqual({ x: 12, y: 12 });
+    expect(flowPositionOf(r, 'container:api')).toEqual({ x: 576, y: 218 });
+  });
+
+  // The bug this guards: a child's own position is already parent-relative, so
+  // subtracting the parent's absolute origin again pushed it out of its card.
+  test('a child is relative to its parent, offset exactly once', () => {
+    const r = syntheticResult();
+    expect(flowPositionOf(r, 'cmp:a', 'container:host')).toEqual({ x: 12, y: 84 });
+    expect(flowPositionOf(r, 'cmp:b', 'container:host')).toEqual({ x: 12, y: 264 });
+  });
+
+  test('children land inside the parent box they are nested in', () => {
+    const r = syntheticResult();
+    const box = absoluteBoundsOf(r, 'container:host')!;
+    for (const id of ['cmp:a', 'cmp:b']) {
+      const p = flowPositionOf(r, id, 'container:host')!;
+      const own = r.absoluteRects.get(id)!;
+      expect(p.x).toBeGreaterThanOrEqual(0);
+      expect(p.y).toBeGreaterThanOrEqual(0);
+      expect(p.x + own.width).toBeLessThanOrEqual(box.width);
+      expect(p.y + own.height).toBeLessThanOrEqual(box.height);
+    }
+  });
+
+  // A compound parent has no `result.nodes` entry at all, so anything reading
+  // positions from there leaves it on its authored slot.
+  test('a compound parent gets a real position, not a fallback', () => {
+    const r = syntheticResult();
+    expect(flowPositionOf(r, 'container:host')).not.toBeUndefined();
+    expect(flowPositionOf(r, 'container:host')).toEqual(
+      r.absoluteRects.get('container:host') && { x: 12, y: 12 },
+    );
+  });
+
+  test('a flattened frame resolves from the synthesized bounds', () => {
+    // Not in absoluteRects — it never entered the ELK tree.
+    expect(syntheticResult().absoluteRects.has('system:acme')).toBe(false);
+    expect(absoluteBoundsOf(syntheticResult(), 'system:acme')).toEqual({
+      x: -12, y: -52, width: 1152, height: 504,
+    });
+  });
+
+  test('an unknown id has no position rather than a silent zero', () => {
+    expect(flowPositionOf(syntheticResult(), 'nope')).toBeUndefined();
+    expect(absoluteBoundsOf(syntheticResult(), 'nope')).toBeUndefined();
+  });
+
+  test('an unknown parent falls back to absolute, not to a wrong origin', () => {
+    expect(flowPositionOf(syntheticResult(), 'cmp:a', 'nope')).toEqual({ x: 24, y: 96 });
+  });
+});
+
+/**
+ * A card's FLIP offset is the difference between where it was and where the new
+ * layout puts it. If this is computed in the wrong space the card slides to a
+ * plausible-looking wrong place, which is what "the anchors shift" looks like.
+ */
+describe('morph offsets', () => {
+  interface Rect { x: number; y: number; width: number; height: number }
+  const offsetTo = (from: Rect, to: Rect) => ({
+    x: from.x - to.x,
+    y: from.y - to.y,
+  });
+
+  test('a card that moves is offset by exactly the move', () => {
+    // Closed: (330,182) 250x150. Open: the compound parent ELK fitted at (12,12).
+    const closed = { x: 330, y: 182, width: 250, height: 150 };
+    const open = { x: 12, y: 12, width: 508, height: 416 };
+    expect(offsetTo(closed, open)).toEqual({ x: 318, y: 170 });
+  });
+
+  test('a card that does not move gets no offset', () => {
+    const same = { x: 576, y: 218, width: 250, height: 150 };
+    expect(offsetTo(same, same)).toEqual({ x: 0, y: 0 });
+  });
+
+  test('an offset ignores size, because the card transitions its own size', () => {
+    // Growing in place must not shift the anchor: the card's width/height
+    // transition handles the size, a translate must stay 0.
+    const before = { x: 12, y: 12, width: 250, height: 150 };
+    const after = { x: 12, y: 12, width: 508, height: 416 };
+    expect(offsetTo(before, after)).toEqual({ x: 0, y: 0 });
+  });
+});
 
 describe('planCompoundGroups', () => {
   test('drops a single-leaf group by default and promotes its member', () => {
@@ -129,6 +245,21 @@ describe('planCompoundGroups', () => {
       ['a', 'b'],
     );
     expect(plan.built[0]!.minWidth).toBe(220);
+  });
+
+  // `padTop` only reaches ELK if the plan carries it; when it was dropped here
+  // the parent's own header was silently overlaid by its first child.
+  test('carries padTop through to the plan', () => {
+    const plan = planCompoundGroups(
+      [{ id: 'mod', memberIds: ['a', 'b'], padTop: 84 }],
+      ['a', 'b'],
+    );
+    expect(plan.built[0]!.padTop).toBe(84);
+  });
+
+  test('leaves padTop unset when the group does not reserve chrome', () => {
+    const plan = planCompoundGroups([{ id: 'mod', memberIds: ['a', 'b'] }], ['a', 'b']);
+    expect(plan.built[0]!.padTop).toBeUndefined();
   });
 });
 

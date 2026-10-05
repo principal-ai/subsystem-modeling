@@ -50,6 +50,17 @@ export function nodeSize(node: C4Element): { width: number; height: number } {
  */
 const LABEL_SLOT_H = 40;
 
+/**
+ * Space a *grown* container reserves above its nested components: the card's own
+ * top padding + the label slot + the row gap + the technology row, plus a little
+ * air. The description is hidden while grown, so it is not part of this.
+ *
+ * The graph hands this to ELK as the compound parent's top padding rather than
+ * nudging the children down itself — so the parent's size and the children's
+ * placement are still one ELK fit, not our arithmetic layered on top of it.
+ */
+export const OPEN_HEADER_PAD = 84;
+
 type Theme = ReturnType<typeof useTheme>['theme'];
 
 export interface NodeStyle {

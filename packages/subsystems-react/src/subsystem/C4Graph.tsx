@@ -11,7 +11,7 @@
  * drawers, no trail playback.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Edge,
   EdgeProps,
@@ -27,10 +27,11 @@ import {
 } from '@xyflow/react';
 import { useTheme } from '@principal-ade/industry-theme';
 import { Box, Minimize2 } from 'lucide-react';
-import { computeElkLayout, pointAlongPath, pointsToSmoothPath } from '../utils/elkLayout';
+import { absoluteBoundsOf, computeElkLayout, flowPositionOf, pointAlongPath, pointsToSmoothPath } from '../utils/elkLayout';
+import type { CompoundGroupDef, ElkLayoutResult } from '../utils/elkLayout';
 import { EDGE_LABEL_FONT_SIZE, EDGE_LABEL_HEIGHT, C4_LABEL_WIDTH, estimateEdgeLabelWidth } from '../utils/edgeLabel';
-import { deriveC4Groups, protocolColor } from './c4';
-import { C4NodeCard, NODE_H, NODE_W, nodeSize, nodeStyle } from './C4NodeCard';
+import { deriveC4Groups, protocolColor, type C4Group } from './c4';
+import { C4NodeCard, NODE_H, NODE_W, OPEN_HEADER_PAD, nodeSize, nodeStyle } from './C4NodeCard';
 import { TechMark, technologyBrand } from './techIcons';
 import type { TechBrand } from './techIcons';
 import { GRAPH_CANVAS_CLASS, GRAPH_NAV_PROPS, GraphChrome, GraphLayerStyle } from './graphChrome';
@@ -58,23 +59,71 @@ export interface C4GraphProps {
 
 function C4NodeView(
   props: NodeProps<
-    Node<{ element: C4Element; selected: boolean; componentCount?: number; onExpand?: () => void }>
+    Node<{
+      element: C4Element;
+      selected: boolean;
+      componentCount?: number;
+      onExpand?: () => void;
+      /** This container is the open one: ELK sized the box to hold its components. */
+      open?: boolean;
+      /**
+       * False while the drill-down grow/shrink is in flight. The description is
+       * hidden for the whole animation and only returns once the box settles.
+       */
+      settled?: boolean;
+      /** FLIP: absolute flow rects — where this card was, and where it now is. */
+      growFrom?: FlowRect;
+      frameRect?: FlowRect;
+    }>
   >,
 ) {
-  const { element, selected, componentCount, onExpand } = props.data;
+  const { element, selected, componentCount, onExpand, open, settled, growFrom, frameRect } =
+    props.data;
+  const grown = open === true;
+
+  // Position-only FLIP. The card resizes through its own `width`/`height`
+  // transition, so scaling here would distort the text and fight that transition.
+  // A card that only changed *size* has nothing to slide — no transform and no
+  // transition, so its resize is the card's own and nothing competes with it.
+  const { flipping, placed, dx, dy } = useFlip(growFrom, frameRect);
+  const sliding = flipping && (dx !== 0 || dy !== 0);
+  // The card takes its box from the React Flow node rather than from its own
+  // `nodeSize`, so on the opened container ELK's fitted size drives it — and
+  // because the element persists across the swap, the card's own width/height
+  // transition *is* the grow. No FLIP needed, and no text distortion.
+  //
+  // While grown it is taken out of flow: the node box already carries the layout
+  // (and is what sibling containers and edges are positioned against), so the
+  // card must not compete with it.
   return (
-    <C4NodeCard
-      node={element}
-      selected={selected}
-      componentCount={componentCount ?? 0}
-      onExpand={onExpand}
-      handles={
-        <>
-          <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
-          <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
-        </>
-      }
-    />
+    <div
+      style={{
+        ...(grown
+          ? { position: 'absolute', top: 0, left: 0, width: props.width, height: props.height }
+          : {}),
+        // Position only — the card's own transition owns the size, so these two
+        // compose without either fighting the other.
+        transformOrigin: 'top left',
+        transform: sliding && !placed ? `translate(${dx}px, ${dy}px)` : 'none',
+        transition: sliding && placed ? `transform ${MORPH_MS}ms ease-out` : 'none',
+      }}
+    >
+      <C4NodeCard
+        node={element}
+        selected={selected}
+        componentCount={componentCount ?? 0}
+        onExpand={onExpand}
+        width={props.width}
+        height={props.height}
+        showDescription={showDescriptionFor(open, settled)}
+        handles={
+          <>
+            <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
+            <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+          </>
+        }
+      />
+    </div>
   );
 }
 
@@ -209,20 +258,12 @@ function C4GroupView(
   const brand = props.data.brand;
   const { growFrom, frameRect } = props.data;
 
-  // FLIP the real frame: start it transformed back onto the box's rect, then
-  // release to identity so it grows into place. `transform-origin: top left`
-  // makes the scale anchor match the absolute rects.
-  const [grown, setGrown] = useState(!growFrom || !frameRect);
-  useEffect(() => {
-    if (!growFrom || !frameRect) return;
-    setGrown(false);
-    const raf = requestAnimationFrame(() => setGrown(true));
-    return () => cancelAnimationFrame(raf);
-  }, [growFrom, frameRect]);
-  const dx = growFrom && frameRect ? growFrom.x - frameRect.x : 0;
-  const dy = growFrom && frameRect ? growFrom.y - frameRect.y : 0;
-  const sx = growFrom && frameRect && frameRect.width ? growFrom.width / frameRect.width : 1;
-  const sy = growFrom && frameRect && frameRect.height ? growFrom.height / frameRect.height : 1;
+  // Position-only FLIP, same as the cards. The frame resizes through its own
+  // width/height transition below, so scaling here would fight it *and* distort
+  // what it draws: a scaled dashed border changes weight as it grows, and the
+  // label chip's border and text scale with it.
+  const { flipping, placed, dx, dy } = useFlip(growFrom, frameRect);
+  const sliding = flipping && (dx !== 0 || dy !== 0);
 
   // A container frame shows its technology mark (React/Bun/Node…) so the
   // boundary says what it is built with, same as the node it wraps. The system
@@ -231,16 +272,27 @@ function C4GroupView(
   return (
     <div
       style={{
-        width: '100%',
-        height: '100%',
+        // ELK's own fitted size, as numbers — the same trick the cards use. At
+        // `100%` this element inherits the React Flow node box, which snaps to
+        // each new layout, and only a scale could disguise that. Transitioning the
+        // numbers grows and shrinks the boundary for real, in both directions, and
+        // keeps the dashed border a constant weight throughout.
+        width: props.width ?? '100%',
+        height: props.height ?? '100%',
+        // Size is always transitioned; the transform only while sliding, and
+        // `transform: none` needs no transition.
+        transition: [
+          'width 420ms ease-out',
+          'height 420ms ease-out',
+          ...(sliding && placed ? [`transform ${MORPH_MS}ms ease-out`] : []),
+        ].join(', '),
         boxSizing: 'border-box',
         borderRadius: 12,
         border: `2px dashed ${color}`,
         background: 'transparent',
         pointerEvents: 'none',
         transformOrigin: 'top left',
-        transform: grown ? 'none' : `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`,
-        transition: grown ? `transform ${MORPH_MS}ms ease-out` : 'none',
+        transform: sliding && !placed ? `translate(${dx}px, ${dy}px)` : 'none',
       }}
     >
       <span
@@ -318,6 +370,16 @@ const edgeTypes = {
 /** Drill-down animation durations, in ms. */
 const MORPH_MS = 420;
 const CAMERA_MS = 520;
+/**
+ * When to re-frame the camera after a drill-down: the morph, plus a beat.
+ *
+ * The extra 60ms is not padding for looks. `fitView` reads the system frame's
+ * *measured* size, and that frame's own height transition runs on the same
+ * MORPH_MS clock — so asking on the same tick reads it mid-flight and fits to a
+ * height that never existed. The beat is for React Flow's resize observer to
+ * report the final geometry.
+ */
+const CAMERA_AFTER_MORPH_MS = MORPH_MS + 60;
 
 /** A fully laid-out open state: the RF nodes/edges and label anchors. */
 interface Rendered {
@@ -332,6 +394,132 @@ interface FlowRect { x: number; y: number; width: number; height: number }
 
 /** A frame's growth for the drill-down morph: its flow rect before → after. */
 interface FrameGrow { from: FlowRect; to: FlowRect }
+
+/**
+ * Whether committing a layout should also move the camera.
+ *
+ * A morph — a commit that has rects to FLIP from — must not. Every element
+ * already on screen is sliding from the rect the reader last saw it at, and that
+ * anchoring *is* the morph; a viewport move on top of it makes each card's
+ * on-screen path the sum of two independent animations, so nothing lands where
+ * the FLIP said it would. `CAMERA_MS` also outlasts `MORPH_MS`, so the camera
+ * would still be drifting for 100ms after the cards had settled — which is what
+ * reads as the cards "still moving".
+ *
+ * A commit with no `grows` is a genuine change: the first paint, a new system, a
+ * different element set, or the grid fallback after an ELK failure. There is no
+ * continuity to preserve there and the content may genuinely not be on screen, so
+ * fit.
+ *
+ * An *empty* map fits for the same reason — no element is anchoring, so there is
+ * nothing a camera move could contradict. Testing the size rather than the
+ * identity keeps that total over the whole input domain instead of leaning on a
+ * caller convention (`growsFor` happens to hand back `null` rather than an empty
+ * map, but nothing forces it to).
+ *
+ * @param grows the rects to animate from, exactly as `injectGrow` received them.
+ */
+export function shouldRefitCamera(grows: Map<string, FrameGrow> | null): boolean {
+  return !grows || grows.size === 0;
+}
+
+/**
+ * Whether a card shows its description line.
+ *
+ * Off for the whole morph: the card is resizing under it, so the line would slide
+ * across a moving box.
+ *
+ * And off for good once the container is grown, which is the half that is easy to
+ * get wrong. `settled` alone is not enough — the line comes back the moment the
+ * grow finishes, straight into the space the components now occupy. ELK reserves
+ * header chrome only (`padTop`), never a description, so the returning line does
+ * not push the internals down; it lands on top of the first component.
+ */
+export function showDescriptionFor(open: boolean | undefined, settled: boolean | undefined): boolean {
+  return settled === true && open !== true;
+}
+
+/**
+ * `groupBounds` with every entry in absolute flow coordinates.
+ *
+ * `result.groupBounds` is absolute for a root-level group and *parent-relative*
+ * for a nested one — two spaces in one map, which is the same trap as
+ * `result.nodes`. The opened container is nested (inside the system frame), and
+ * `containerRect` reads this map before the node box, so an unrebased entry would
+ * be handed to the morph offset by the frame's origin: the container would glide
+ * to a place it was never drawn.
+ */
+export function rebaseGroupBoundsAbsolute(
+  result: Pick<ElkLayoutResult, 'absoluteRects' | 'groupBounds'>,
+): Map<string, { x: number; y: number; width: number; height: number }> {
+  const rebased = new Map<string, { x: number; y: number; width: number; height: number }>();
+  for (const [id, b] of result.groupBounds) {
+    // A flat frame has no node of its own, so `absoluteRects` has no entry and
+    // `absoluteBoundsOf` falls back to the entry — already absolute, since it was
+    // synthesized from absolute member bounds.
+    const abs = absoluteBoundsOf(result, id) ?? b;
+    rebased.set(id, { ...b, x: abs.x, y: abs.y });
+  }
+  return rebased;
+}
+
+/**
+ * The compound groups one open state hands to ELK: the frames it draws, and the
+ * group defs that make ELK lay them out.
+ *
+ * Exported because the nesting here is the load-bearing part and it is invisible
+ * from the rendered output. The opened container sits *inside* the system frame, so
+ * the frame is the origin its contents are laid out from — as a sibling, or as a
+ * flat union, the frame has no stable corner and the whole boundary slides as
+ * ELK re-places its members.
+ */
+export function c4GroupDefs(
+  model: C4Model,
+  openId: string | null,
+): { frames: C4Group[]; groups: CompoundGroupDef[] } {
+  // Every frame this layout draws: the system boundary, plus a container frame per
+  // container whose components are in view (the component view leans on these).
+  // The *opened* container's frame is dropped — it is drawn as a grown card
+  // instead, as an ELK parent below.
+  const frames = deriveC4Groups({ ...model, openContainerId: openId }).filter(
+    (g) => g.id !== openId,
+  );
+  const groups: CompoundGroupDef[] = frames.map((g) => ({
+    id: g.id,
+    memberIds: g.memberIds,
+    ...(g.parentId ? { parentId: g.parentId } : {}),
+  }));
+
+  // Opened: the container becomes a real ELK parent so it is sized to hold its
+  // components — the "layout B" the closed layout transitions to. Only in the
+  // container view: that is where a container is a card, and where the drill-down
+  // is offered.
+  const openMembers =
+    model.view === 'container' && openId
+      ? model.nodes
+          .filter((n) => n.kind === 'component' && (n.container ?? n.parentId) === openId)
+          .map((n) => n.id)
+      : [];
+  if (openId && openMembers.length > 0) {
+    groups.push({
+      id: openId,
+      memberIds: openMembers,
+      // INSIDE the system frame, not beside it. The boundary *is* the system, so a
+      // sibling here would draw the opened container outside the very boundary it
+      // belongs to.
+      parentId: model.system.id,
+      // Never narrower than the closed card, so opening only ever grows the box.
+      minWidth: NODE_W,
+      // Room for the container's own label slot + technology row.
+      padTop: OPEN_HEADER_PAD,
+      // Drawn as a card, laid out as a group — both are needed, and only ELK knows
+      // which one a bare member id means.
+      drawnAsCard: true,
+    });
+  }
+
+  return { frames, groups };
+}
 
 /** The container's rect in a laid-out state: its box node, or its frame bounds. */
 function containerRect(layout: Rendered | undefined, id: string): FlowRect | null {
@@ -348,6 +536,41 @@ function containerRect(layout: Rendered | undefined, id: string): FlowRect | nul
   };
 }
 
+/**
+ * FLIP between two absolute flow rects: render transformed back onto `from`,
+ * then release onto `to`.
+ *
+ * The step back **must** happen while rendering, not in an effect. An effect runs
+ * after the browser has already painted, so the element is painted at its new
+ * position for one frame and only then jumps back — a visible teleport, which is
+ * the exact thing this hook exists to remove. Adjusting state during render lets
+ * React apply the transform in the same commit, so the new position is never
+ * painted untransformed.
+ *
+ * The rects are keyed by value: `injectGrow` mints fresh objects each layout, so
+ * comparing identity would re-fire the whole morph on unrelated re-renders.
+ */
+function useFlip(from: FlowRect | undefined, to: FlowRect | undefined) {
+  const key = from && to ? `${from.x},${from.y},${to.x},${to.y}` : '';
+  const [lastKey, setLastKey] = useState(key);
+  const [placed, setPlaced] = useState(!key);
+  if (key !== lastKey) {
+    setLastKey(key);
+    setPlaced(false);
+  }
+  useEffect(() => {
+    if (!key) return;
+    const raf = requestAnimationFrame(() => setPlaced(true));
+    return () => cancelAnimationFrame(raf);
+  }, [key]);
+  return {
+    flipping: key !== '',
+    placed,
+    dx: from && to ? from.x - to.x : 0,
+    dy: from && to ? from.y - to.y : 0,
+  };
+}
+
 function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter = 28 }: C4GraphProps) {
   const { theme } = useTheme();
   const { fitView } = useReactFlow();
@@ -359,27 +582,51 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
   const [labelPositions, setLabelPositions] = useState<Map<string, { x: number; y: number }>>(
     () => new Map(),
   );
-
   /** Set by the layout effect; consumed by the `ready` effect to run the fit. */
   const pendingFitRef = useRef(false);
   /** Prefetched layouts, keyed by open-container id ('' = closed). */
   const layoutCache = useRef(new Map<string, Rendered>());
+  /**
+   * False while the drill-down grow/shrink is in flight. It gates the whole reveal:
+   * the opened container's components stay hidden, every card drops its
+   * description, and the edges and their labels are withheld — all returning
+   * together once the box settles.
+   *
+   * Driven by one timer keyed to MORPH_MS rather than `transitionend`: the grow
+   * is the card's own width/height transition *and* the system frame's
+   * transform, so a DOM event would fire twice per open and gate on the wrong
+   * property.
+   */
+  const [settled, setSettled] = useState(true);
+  /** Set once the first layout has rendered, so only a real change animates. */
+  const paintedRef = useRef(false);
+  /** The in-flight settle timer; cancelled if the open state changes again. */
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The post-morph re-frame; see `CAMERA_AFTER_MORPH_MS`. */
+  const cameraTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** The open id rendered last, so a change can morph between the two layouts. */
   const prevOpenRef = useRef<string | null>(null);
 
+  /**
+   * Frame the whole system. Fit the SYSTEM node explicitly rather than the drawn
+   * nodes: on a drill-down those are just the opened container and its components,
+   * so fitting them would zoom to the container instead of the system.
+   */
+  const fitSystem = useCallback(() => {
+    fitView({ padding: 0.15, duration: CAMERA_MS, maxZoom: 1, nodes: [{ id: model.system.id }] });
+  }, [fitView, model.system.id]);
+
   // Fit the camera AFTER the new nodes are committed (when `ready` flips true),
-  // so `fitView` measures the real geometry. Fit the SYSTEM frame explicitly:
-  // on a drill-down the drawn nodes are just the opened container's contents,
-  // so fitting them would zoom to the container, not the whole system.
+  // so `fitView` measures the real geometry.
   useEffect(() => {
     if (!ready || !pendingFitRef.current) return;
     pendingFitRef.current = false;
-    fitView({ padding: 0.15, duration: CAMERA_MS, maxZoom: 1, nodes: [{ id: model.system.id }] });
-  }, [ready, model.system.id, fitView]);
+    fitSystem();
+  }, [ready, fitSystem]);
 
   /** Called once the new layout is committed, from the layout effect. */
-  const afterLayout = () => {
-    pendingFitRef.current = true;
+  const afterLayout = (grows: Map<string, FrameGrow> | null) => {
+    pendingFitRef.current = shouldRefitCamera(grows);
   };
 
   const layoutKey = useMemo(
@@ -404,7 +651,8 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
     const inView = (n: C4Element): boolean => {
       if (model.view === 'component') return n.kind !== 'container';
       if (n.kind === 'component') return (n.container ?? n.parentId) === openId;
-      if (n.kind === 'container') return n.id !== openId;
+      // A container is always drawn — it is a card either way. Opened, it grows
+      // and nests its components; closed, it is the bare box.
       return true;
     };
 
@@ -417,32 +665,47 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
 
     const rfNodes: Node[] = model.nodes.filter(inView).map((n, i) => {
       const size = nodeSize(n);
+      // A component of the opened container nests under it (a React Flow child),
+      // so edges between components can be drawn later. Everything else keeps its
+      // authored parentId.
+      const nested = n.kind === 'component' && openId ? openId : undefined;
+      const parentId = nested ?? n.parentId;
       return {
         id: n.id,
         type: 'c4-node',
         position: { x: (i % 5) * (NODE_W + 44), y: Math.floor(i / 5) * (NODE_H + 44) },
         width: size.width,
         height: size.height,
-        ...(n.parentId ? { parentId: n.parentId } : {}),
+        ...(parentId ? { parentId } : {}),
+        // Nested cards are separate node divs in the viewport, so they must be
+        // told to paint above the grown container they sit inside — DOM order
+        // follows the model, not the containment.
+        ...(nested ? { zIndex: 2 } : {}),
         data: {
           element: n,
           selected: false,
           componentCount: childComponentCount.get(n.id) ?? 0,
+          // A container with components opens; the same affordance closes it
+          // again, so the toggle lives in one place.
           ...(n.kind === 'container' && (childComponentCount.get(n.id) ?? 0) > 0 && onOpenContainer
-            ? { onExpand: () => onOpenContainer?.(n.id) }
+            ? {
+                onExpand: () => {
+                  if (n.id === openId) onCloseContainer?.();
+                  else onOpenContainer?.(n.id);
+                },
+                open: n.id === openId,
+              }
             : {}),
         },
       };
     });
 
-    const groupsForOpen = deriveC4Groups({ ...model, openContainerId: openId });
-    const groups = groupsForOpen.map((g) => ({
-      id: g.id,
-      memberIds: g.memberIds,
-      ...(g.parentId ? { parentId: g.parentId } : {}),
-    }));
+    const { frames, groups } = c4GroupDefs(model, openId);
 
-    const frameIds = groupsForOpen.map((g) => g.id);
+    // Bands come from the *frames* only. The opened container is an ELK parent,
+    // not a band — treating it as one would push it into its own layer, away from
+    // the containers it belongs beside.
+    const frameIds = frames.map((g) => g.id);
     const frameIndex = new Map(frameIds.map((id, i) => [id, i]));
     const partitionByNode = new Map<string, number>(
       model.nodes.map((n) => {
@@ -469,7 +732,7 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
         };
       });
 
-    return { rfNodes, rfEdges, groups, partitionByNode, groupsForOpen };
+    return { rfNodes, rfEdges, groups, partitionByNode, frames };
   };
 
   /**
@@ -480,7 +743,23 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
     openId: string | null,
     inputs: ReturnType<typeof buildInputs>,
   ): Promise<Rendered> => {
-    const { rfNodes, rfEdges, groups, partitionByNode, groupsForOpen } = inputs;
+    const { rfNodes, rfEdges, groups, partitionByNode, frames } = inputs;
+    // The system boundary is a REAL ELK parent: its containers lay out *inside* it,
+    // so ELK owns both the frame's origin and its size. That is what holds the
+    // boundary's top-left corner steady between the two layouts, which is the whole
+    // point of the drill-down. Measured, not assumed — with the frame as a parent,
+    // ELK holds the frame at (12,12) and the opened container at (12,202) across
+    // both layouts, the container growing 150 -> 556 *downward* while its siblings
+    // reflow around it.
+    //
+    // Synthesized as a flat union instead, the boundary had no position of its own:
+    // it inherited its members' top edge, so it slid 206px the moment ELK re-placed
+    // one of them, and the FLIP dutifully animated the slide. A union means we own
+    // the boundary's geometry; a parent means ELK does.
+    //
+    // The component view keeps every frame flat. Its container frames nest *inside*
+    // the system frame, and flattening a group whose parent is a real group would
+    // leave that parent holding a reference to a group ELK never sees.
     const result = await computeElkLayout(rfNodes, rfEdges, {
       direction: 'RIGHT',
       preserveNodePositions: false,
@@ -490,7 +769,7 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
       nodeSpacing: gutter * 2,
       edgeNodeSpacing: gutter,
       interLayerSpacing: 40,
-      flatGroups: true,
+      flatGroups: model.view === 'component' ? true : new Set<string>(),
       partitionByNode,
     });
 
@@ -503,8 +782,18 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
       return { ...e, data: { ...e.data, path: pointsToSmoothPath(pts, 12) } };
     });
 
-    const builtGroups = new Set(result.groupBounds.keys());
-    const groupById = new Map(groupsForOpen.map((g) => [g.id, g]));
+    // `result.groupBounds` mixes coordinate spaces; everything downstream here
+    // reads it as absolute, so normalize it once at the boundary.
+    const groupBounds = rebaseGroupBoundsAbsolute(result);
+    const builtGroups = new Set(groupBounds.keys());
+    // The opened container comes back from ELK as a parent, so it lands in
+    // `groupBounds` — but it is drawn as a grown *card*, not a frame. Drop it
+    // from the shells; keep it in `groupBounds` so nested children can take
+    // their coordinates relative to it.
+    const shellBounds = new Map(groupBounds);
+    if (openId) shellBounds.delete(openId);
+
+    const groupById = new Map(frames.map((g) => [g.id, g]));
     const depthOf = (id: string): number => {
       let d = 0;
       let g = groupById.get(id);
@@ -515,19 +804,26 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
       return d;
     };
 
-    const shellAbs = new Map(result.groupBounds);
-    const shellOrigin = (id: string | undefined): { x: number; y: number } => {
+    // Node positions must live in the same space as the edges and the frames:
+    // absolute. `flowPositionOf` does the one conversion (and the shells below use
+    // the same absolute origin), so nodes, edges and frames cannot disagree.
+    const absBoundsOf = (id: string) => absoluteBoundsOf(result, id);
+    const parentOriginOf = (id: string | undefined): { x: number; y: number } => {
       if (!id) return { x: 0, y: 0 };
-      const b = shellAbs.get(id);
-      return b ? { x: b.x, y: b.y } : { x: 0, y: 0 };
+      const r = absBoundsOf(id);
+      return r ? { x: r.x, y: r.y } : { x: 0, y: 0 };
     };
 
-    const shells: Node[] = [...result.groupBounds.entries()]
-      .sort((a, b) => depthOf(a[0]) - depthOf(b[0]))
-      .map(([id, b]) => {
+    // Only the system frame is emitted today (the drill-down's container frames
+    // became grown cards), but the mapping stays keyed off the derived group so a
+    // container frame can come back without reshaping this.
+    const shells: Node[] = [...shellBounds.keys()]
+      .sort((a, b) => depthOf(a) - depthOf(b))
+      .map((id) => {
         const def = groupById.get(id);
         const parentId = def?.parentId && builtGroups.has(def.parentId) ? def.parentId : undefined;
-        const origin = shellOrigin(parentId);
+        const origin = parentOriginOf(parentId);
+        const b = absBoundsOf(id) ?? { x: 0, y: 0, width: 0, height: 0 };
         const element = model.nodes.find((n) => n.id === id);
         const frameColor =
           def?.kind === 'system'
@@ -559,30 +855,54 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
       });
 
     const leaves = rfNodes.map((n) => {
-      const p = positioned.get(n.id);
-      const abs = p ? p.position : n.position;
       let parentId: string | undefined;
       if (n.data && typeof n.data === 'object') {
         const modelNode = (n.data as { element?: C4Element }).element;
-        if (modelNode?.parentId && builtGroups.has(modelNode.parentId)) parentId = modelNode.parentId;
+        // Only the opened container's own components nest under it — the sibling
+        // containers and out-of-boundary nodes in the same layout must not.
+        const nested =
+          modelNode?.kind === 'component' &&
+          openId &&
+          (modelNode.container ?? modelNode.parentId) === openId
+            ? openId
+            : undefined;
+        const candidate = nested ?? modelNode?.parentId;
+        if (candidate && builtGroups.has(candidate)) parentId = candidate;
       }
-      const origin = shellOrigin(parentId);
-      const node = { ...n, position: { x: abs.x - origin.x, y: abs.y - origin.y } };
+      // `flowPositionOf` covers every node ELK placed; the fallback is for the
+      // pathological case of a node ELK did not return at all.
+      const abs =
+        flowPositionOf(result, n.id, parentId) ??
+        positioned.get(n.id)?.position ??
+        n.position;
+      // The opened container is an ELK parent, so its box is whatever ELK fitted
+      // to the nested components — `nodeSize` only knows the closed card.
+      const fitted = openId === n.id ? groupBounds.get(openId) : undefined;
+      const node = {
+        ...n,
+        position: { x: abs.x, y: abs.y },
+        ...(fitted ? { width: fitted.width, height: fitted.height } : {}),
+      };
       return (parentId ? { ...node, parentId } : { ...node, parentId: undefined }) as Node;
     });
 
-    return { nodes: [...shells, ...leaves], edges: withPaths, labelPositions, groupBounds: result.groupBounds };
+    // `groupBounds`, not `result.groupBounds`: the rebased one. `Rendered` readers
+    // all assume absolute.
+    return { nodes: [...shells, ...leaves], edges: withPaths, labelPositions, groupBounds };
   };
 
   /**
-   * Stamp each growing frame's span onto its shell node, so its view can FLIP
-   * from the old rect to its own. `grows` is keyed by frame id, flow-space.
+   * Stamp each growing element's span onto its node, so its view can FLIP from the
+   * old rect to its own. `grows` is keyed by element id, flow-space.
    */
   const injectGrow = (nodes: Node[], grows: Map<string, FrameGrow> | null): Node[] => {
     if (!grows || grows.size === 0) return nodes;
     return nodes.map((n) => {
       const g = grows.get(n.id);
-      return n.type === 'c4-group' && g
+      // A child is hidden until the morph settles, and its absolute position also
+      // moves with its parent — one transform on the parent covers both.
+      if (!g || n.parentId) return n;
+      return n.type === 'c4-group' || n.type === 'c4-node'
         ? { ...n, data: { ...n.data, growFrom: g.from, frameRect: g.to } }
         : n;
     });
@@ -593,7 +913,7 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
     setRfEdges(r.edges);
     setLabelPositions(r.labelPositions);
     setReady(true);
-    afterLayout();
+    afterLayout(grows);
   };
 
   // Render the current open state. Uses the prefetched layout when present
@@ -606,17 +926,47 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
     const prevOpen = prevOpenRef.current;
     const inputs = buildInputs(openId);
 
+    // Only a real open-state change animates; the first paint is already at rest.
+    if (paintedRef.current && prevOpen !== openId) {
+      setSettled(false);
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+      settleTimer.current = setTimeout(() => setSettled(true), MORPH_MS);
+      // Re-frame once the grow has landed, not while it is running. The drill-down
+      // more than doubles the boundary, so the extent the camera was fitted to no
+      // longer contains the content — but moving *during* the morph compounds with
+      // the FLIP glide, and every card then travels the sum of two animations
+      // instead of the one the FLIP specified (see `shouldRefitCamera`). Waiting
+      // out the morph is the honest way to get both.
+      if (cameraTimer.current) clearTimeout(cameraTimer.current);
+      cameraTimer.current = setTimeout(fitSystem, CAMERA_AFTER_MORPH_MS);
+    }
+    paintedRef.current = true;
+
     /**
-     * Every frame whose rect changes between the previous and new layouts, so
-     * all boundaries can grow/shrink together (container frames *and* the
-     * system frame). Empty when nothing changed (e.g. the initial paint).
+     * Every element whose rect changes between the previous and new layouts, so
+     * boundaries *and* cards grow/shrink and slide together. Empty when nothing
+     * changed (e.g. the initial paint).
+     *
+     * Frames alone are not enough: ELK re-lays out the whole diagram, so every
+     * root card moves too. Without a card in this set it keeps its new slot the
+     * instant the layout swaps — a teleport, which is the most visible part of a
+     * bad morph. Child nodes are excluded: they are hidden until the box settles,
+     * so there is nothing to animate, and a transform on them would only fight
+     * the parent's.
      */
     const growsFor = (next: Rendered): Map<string, FrameGrow> | null => {
       if (prevOpen === openId) return null;
       const prevLayout = layoutCache.current.get(prevOpen ?? '');
       if (!prevLayout) return null;
       const grows = new Map<string, FrameGrow>();
-      const ids = new Set([...prevLayout.groupBounds.keys(), ...next.groupBounds.keys()]);
+      const rootCardIds = (l: Rendered) =>
+        l.nodes.filter((n) => !n.parentId).map((n) => n.id);
+      const ids = new Set([
+        ...prevLayout.groupBounds.keys(),
+        ...next.groupBounds.keys(),
+        ...rootCardIds(prevLayout),
+        ...rootCardIds(next),
+      ]);
       for (const id of ids) {
         const fromRect = containerRect(prevLayout, id);
         const to = containerRect(next, id);
@@ -656,10 +1006,22 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
         setNodes(inputs.rfNodes.map((n) => ({ ...n, parentId: undefined })));
         setRfEdges(inputs.rfEdges);
         setReady(true);
-        afterLayout();
+        // A grid's geometry is arbitrary and nothing FLIPped from the previous
+        // layout, so this commit genuinely needs a fit.
+        afterLayout(null);
       });
     return () => {
       alive = false;
+      if (settleTimer.current) {
+        clearTimeout(settleTimer.current);
+        settleTimer.current = null;
+      }
+      // Same for the re-frame: it outlives the effect that armed it, and firing
+      // into an unmounted React Flow instance is a wasted camera move at best.
+      if (cameraTimer.current) {
+        clearTimeout(cameraTimer.current);
+        cameraTimer.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layoutKey]);
@@ -715,14 +1077,39 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
     [model, selected],
   );
 
+  /** The container currently opened for drill-down, if any. */
+  const openContainerId = model.openContainerId ?? null;
+
   const displayNodes = useMemo(
     () =>
-      nodes.map((n) =>
-        n.type === 'c4-node'
-          ? { ...n, data: { ...n.data, selected: n.id === selectedId } }
-          : n,
-      ),
-    [nodes, selectedId],
+      nodes.map((n) => {
+        if (n.type !== 'c4-node') return n;
+        const element = (n.data as { element?: C4Element } | undefined)?.element;
+        // The nested components are already positioned inside the grown card,
+        // but they only *appear* once the grow settles — otherwise they are
+        // squeezed and clipped mid-animation.
+        const nested =
+          element?.kind === 'component' &&
+          openContainerId != null &&
+          (element.container ?? element.parentId) === openContainerId;
+        return {
+          ...n,
+          ...(nested ? { hidden: !settled } : {}),
+          data: { ...n.data, selected: n.id === selectedId, settled },
+        };
+      }),
+    [nodes, selectedId, settled, openContainerId],
+  );
+
+  /**
+   * An edge's polyline is routed for the *settled* layout, so while the cards are
+   * gliding between the two slots the old lines would visibly point at the wrong
+   * boxes. Hiding them for the morph is honest and cheap; interpolating the
+   * polylines to match is not.
+   */
+  const displayEdges = useMemo(
+    () => (settled ? rfEdges : rfEdges.map((e) => ({ ...e, hidden: true }))),
+    [rfEdges, settled],
   );
 
   return (
@@ -730,7 +1117,7 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
       <GraphLayerStyle />
       <ReactFlow
         nodes={displayNodes}
-        edges={rfEdges}
+        edges={displayEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         className={GRAPH_CANVAS_CLASS}
@@ -753,7 +1140,11 @@ function Inner({ model, onSelectNode, onOpenContainer, onCloseContainer, gutter 
       >
         <GraphChrome />
       </ReactFlow>
-      {ready && labelPositions.size > 0 && (
+      {/* Gated on `settled`, like the edges themselves: a chip is anchored to the
+          *settled* midpoint of its edge, so showing one while the cards glide leaves
+          it pointing at the space between two layouts. It rejoins them, the nested
+          components and the descriptions in one reveal. */}
+      {ready && settled && labelPositions.size > 0 && (
         <C4EdgeLabels positions={labelPositions} edges={model.edges} />
       )}
       {!ready && (

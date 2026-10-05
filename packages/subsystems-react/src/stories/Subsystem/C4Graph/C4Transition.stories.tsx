@@ -23,15 +23,21 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 // ---------------------------------------------------------------------------
-// Drill-down, instant swap.
+// Drill-down: two layouts, one transition.
 //
-// One container, drawn as a box. Its expand affordance (bottom-right) opens it:
-// the SAME element re-renders as a frame, its components appear inside. The
-// collapse affordance on the frame badge closes it back to a box.
+// Closed, the container is a box. Its expand affordance (bottom-right) opens it,
+// and the graph swaps to a *second, already-computed* layout in which the same
+// element is an ELK parent — so ELK sizes it to hold its own components, and they
+// arrive as nested cards. The same affordance closes it again.
 //
-// The container is one element in `nodes`; "box vs frame" is a view of it, not
-// a different object. Frames are derived (`deriveC4Groups`), so the transition
-// changes the container's presentation, not its identity.
+// Nothing is a frame here: the container stays a card and grows (its own
+// width/height transition), and the system frame around it grows with it — also
+// by size, since it is a real ELK parent and ELK owns both its origin and its fit.
+// Components stay hidden until the grow settles, and the card's description
+// returns only after the shrink — hence the two settled states below.
+//
+// The story also carries component→component edges, which the nested layout
+// routes inside the parent.
 // ---------------------------------------------------------------------------
 
 const SYSTEM = { id: 'system:acme', label: 'Subsystem Modeling', repoKey: 'pkg:github/acme/subsystem-modeling' };
@@ -114,7 +120,7 @@ function Demo() {
         <span>{openId ? `opened: ${openId}` : 'closed'}</span>
         <span>selected: {selected ?? '(none)'}</span>
         <span style={{ color: '#777' }}>
-          the expand icon (bottom-right of the container) opens it; the frame badge collapses
+          the expand icon (bottom-right of the container) opens it, and closes it again
         </span>
       </div>
     </div>

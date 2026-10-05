@@ -126,7 +126,7 @@ export interface ElkLayoutOptions {
    * nests this group under another group; omit for a root-level frame.
    * Members reference their immediate parent via React Flow `parentId`.
    */
-  groups?: Array<{ id: string; memberIds: string[]; parentId?: string; minWidth?: number }>;
+  groups?: CompoundGroupDef[];
 
   /**
    * Keep groups that hold a single leaf instead of dropping them and
@@ -150,9 +150,16 @@ export interface ElkLayoutOptions {
    * decoration drawn around wherever the members landed.
    *
    * Only for groups whose members need no parent-relative positioning (C4's
-   * system frame). @default false
+   * system frame).
+   *
+   * A set names specific groups to flatten, leaving the rest as real ELK
+   * parents — the drill-down needs this, because the opened container must be
+   * *sized by ELK to fit its nested components* while the system frame around
+   * it stays decorative. Descendants of a flattened group are flattened too.
+   *
+   * @default false
    */
-  flatGroups?: boolean;
+  flatGroups?: boolean | ReadonlySet<string>;
 
   /**
    * ELK partition per node id. Nodes are banded by `partition` — ELK places all
@@ -186,6 +193,46 @@ export interface ElkLayoutResult {
    * route without mixing coordinate systems.
    */
   absoluteRects: Map<string, { x: number; y: number; width: number; height: number }>;
+}
+
+/**
+ * A node's rect in absolute (root) coordinates — the space `edgePathPoints` and
+ * the synthesized frame bounds are in.
+ *
+ * `absoluteRects` is the only map that is absolute for *every* node ELK placed.
+ * The alternatives each have a hole: `result.nodes` is parent-relative for a real
+ * group's children and has **no entry at all** for the group itself, and
+ * `groupBounds` is parent-relative for a nested group (and is the only source for
+ * a flattened group, which never enters the ELK tree).
+ */
+export function absoluteBoundsOf(
+  result: Pick<ElkLayoutResult, 'absoluteRects' | 'groupBounds'>,
+  id: string,
+): { x: number; y: number; width: number; height: number } | undefined {
+  return result.absoluteRects.get(id) ?? result.groupBounds.get(id);
+}
+
+/**
+ * Where a node belongs in React Flow coordinates: a root node keeps its absolute
+ * position, a child is expressed relative to its parent.
+ *
+ * Convert in exactly one place, from the absolute space, subtracting the parent's
+ * absolute origin **once**. The two failure modes here are silent — a child
+ * double-offset by its parent's origin lands outside its own card, and a compound
+ * parent with no `result.nodes` entry silently keeps the authored position it was
+ * built with, so the container drifts away from its siblings, its frame and its
+ * edges while everything around it uses ELK's answer.
+ */
+export function flowPositionOf(
+  result: Pick<ElkLayoutResult, 'absoluteRects' | 'groupBounds'>,
+  id: string,
+  parentId?: string,
+): { x: number; y: number } | undefined {
+  const abs = result.absoluteRects.get(id);
+  if (!abs) return undefined;
+  if (!parentId) return { x: abs.x, y: abs.y };
+  const origin = absoluteBoundsOf(result, parentId);
+  return origin ? { x: abs.x - origin.x, y: abs.y - origin.y } : { x: abs.x, y: abs.y };
 }
 
 /** Point in 2D space */
@@ -519,7 +566,33 @@ export function getElkOptions(options: ElkLayoutOptions): LayoutOptions {
 export interface CompoundGroupDef {
   id: string;
   memberIds: string[];
+  /** Nested inside another group. Omitted for a root-level group. */
+  parentId?: string;
   minWidth?: number;
+  /**
+   * This id is *also* a drawn node — a card that hosts a group. Set it when the
+   * element is drawn as a card but must be laid out as a parent: the drill-down's
+   * opened container.
+   *
+   * The node and the group are not alternatives. The node is how the group is
+   * *drawn*, and the group is how it is *laid out* — so this says which one wins
+   * when a member id could be either. Without it the frame takes the bare leaf box
+   * and the group is built but never referenced, leaving its components laid out
+   * nowhere: the container reads as closed, at its 250x150 card size, whatever
+   * ELK was told about its children.
+   */
+  drawnAsCard?: boolean;
+  /**
+   * Space reserved above the first child, in px. Set it when the parent draws
+   * its own chrome at the top (C4's grown container draws a label slot and a
+   * technology row) so ELK still owns the fit — it pads the parent by this and
+   * the children land below the chrome rather than under it.
+   *
+   * Note: there is deliberately no per-group partition. `partitionByNode` bands
+   * leaves, and ELK derives a compound node's band from its children, so a
+   * partition set on the parent itself is ignored.
+   */
+  padTop?: number;
 }
 
 /** Which groups ELK builds, and which it drops. */
@@ -528,7 +601,7 @@ export interface CompoundGroupPlan {
    * Built groups in build order — a group's children always appear before it,
    * so callers can map ids to shells in one forward pass.
    */
-  built: Array<{ id: string; childIds: string[]; minWidth?: number }>;
+  built: Array<{ id: string; childIds: string[]; minWidth?: number; padTop?: number }>;
   /**
    * Dropped groups. Their members are promoted into the nearest built
    * ancestor, so callers must clear those members' `parentId`.
@@ -623,7 +696,14 @@ export function planCompoundGroups(
         continue;
       }
 
-      built.push({ id: g.id, childIds, minWidth: g.minWidth });
+      built.push({
+        id: g.id,
+        childIds,
+        minWidth: g.minWidth,
+        // Carried through, not just validated here: the caller turns each of
+        // these into ELK layout options on the parent node.
+        padTop: g.padTop,
+      });
     }
     if (!progress) {
       // Cycle or unresolved refs — leave the rest unbuilt.
@@ -860,32 +940,69 @@ export async function computeElkLayout(
   const plan = planCompoundGroups(groupDefs, elkById.keys(), keepSingletonGroups);
   const skippedGroups = new Set(plan.skipped);
   const builtGroups = new Map<string, ElkNode>();
+  // Ids that are drawn as a card *and* laid out as a group. Such an id is in
+  // `elkById` too, so this is what says which of the two an enclosing frame takes.
+  const drawnAsCardIds = new Set(groupDefs.filter((g) => g.drawnAsCard).map((g) => g.id));
   // Flat groups are not ELK parents at all: their members lay out at the root,
   // and the frame is synthesized from the members' bounds after layout. This
   // keeps every edge on one spacing instead of inheriting a nested frame's.
   const flatGroupIds = new Set<string>();
-  if (flatGroups) {
+  if (flatGroups === true) {
     for (const g of plan.built) flatGroupIds.add(g.id);
+  } else if (flatGroups) {
+    for (const g of plan.built) if (flatGroups.has(g.id)) flatGroupIds.add(g.id);
+    // A group inside a flat frame can't be an ELK parent either — its members
+    // lay out at the root alongside the frame's other members.
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const g of plan.built) {
+        if (flatGroupIds.has(g.id)) continue;
+        const parentId = groupById.get(g.id)?.parentId;
+        if (parentId && flatGroupIds.has(parentId)) {
+          flatGroupIds.add(g.id);
+          grew = true;
+        }
+      }
+    }
   }
   for (const g of plan.built) {
-    if (flatGroups) break;
+    if (flatGroupIds.has(g.id)) continue;
     const children: ElkNode[] = [];
     for (const cid of g.childIds) {
-      const leaf = elkById.get(cid);
-      if (leaf) children.push(leaf);
+      // A member id can be a drawn node *and* a built group. Preferring the leaf —
+      // which is what this did unconditionally — silently drops the group: the
+      // frame ends up holding a bare 250x150 box, nothing references the group, and
+      // its components are laid out nowhere. So the card ids take the group, and
+      // everything else keeps the leaf. (For those, `builtGroups` has no entry
+      // anyway: flat groups are skipped above, and a nested group has no node.)
+      const nested = builtGroups.get(cid);
+      if (nested && drawnAsCardIds.has(cid)) children.push(nested);
       else {
-        const nested = builtGroups.get(cid);
-        if (nested) children.push(nested);
+        const leaf = elkById.get(cid);
+        if (leaf) children.push(leaf);
+        else if (nested) children.push(nested);
       }
+    }
+    const sizeOptions: Record<string, string> = {};
+    if (g.minWidth != null) {
+      // MINIMUM_SIZE, not a forced size: ELK grows the parent past it when the
+      // children need more, but never shrinks it below it.
+      sizeOptions['elk.nodeSize.constraints'] = 'MINIMUM_SIZE';
+      sizeOptions['elk.nodeSize.minimum'] = `(${g.minWidth},0)`;
+    }
+    if (g.padTop != null) {
+      // Reserving the parent's own chrome. Children then start below it, and
+      // the parent's height still comes from ELK's fit.
+      sizeOptions['elk.padding'] = `[top=${g.padTop},left=12,bottom=12,right=12]`;
     }
     builtGroups.set(g.id, {
       id: g.id,
       children,
-      layoutOptions: g.minWidth == null ? compoundLayoutOptions : {
-        ...compoundLayoutOptions,
-        'elk.nodeSize.constraints': 'MINIMUM_SIZE',
-        'elk.nodeSize.minimum': `(${g.minWidth},0)`,
-      },
+      layoutOptions:
+        Object.keys(sizeOptions).length > 0
+          ? { ...compoundLayoutOptions, ...sizeOptions }
+          : compoundLayoutOptions,
     });
   }
 
