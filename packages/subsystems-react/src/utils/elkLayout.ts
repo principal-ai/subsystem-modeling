@@ -959,16 +959,18 @@ export async function computeElkLayout(
     // edge by ~13px) plus a gap before the first child.
     'elk.padding': '[top=64,left=24,bottom=24,right=24]',
     'elk.spacing.nodeNode': '40',
-    // Edges inside a frame host labels too, so the frame's own layout has to
-    // reserve the same room the root does — otherwise a nested graph (C4 puts
-    // every box in the system frame) lays its edges out with the label space
-    // ignored, and a 140px chip overflows a ~72px gap. `EDGE_LABEL_EDGE_GAP` is
-    // the full reserved width (label box + clearance at each end); labels off
+    // Edges inside a frame host labels too, so the frame reserves the same
+    // between-layer clearance the root does — the caller's `interLayerSpacing`.
+    //
+    // The reserved label box already carries the chip width plus
+    // `EDGE_LABEL_SIDE_PADDING` at each end (see `elkEdge.labels` below), and
+    // CENTER_LAYER applies this spacing on *both* sides of that label layer.
+    // Setting the full `width + 2 * padding` here therefore stacked a second
+    // box on top of the first: the same two nodes measured a 612px gap inside a
+    // process frame vs 268px at the root. Per-side clearance only; labels off
     // falls back to a plain between-layer gap.
     'elk.layered.spacing.nodeNodeBetweenLayers': String(
-      edgeLabels?.enabled === false
-        ? 40
-        : (edgeLabels?.width ?? EDGE_LABEL_WIDTH) + EDGE_LABEL_SIDE_PADDING * 2,
+      edgeLabels?.enabled === false ? 40 : (options.interLayerSpacing ?? 0),
     ),
   };
   // Match the root's inline-label reservation, so ELK inside the frame leaves a
