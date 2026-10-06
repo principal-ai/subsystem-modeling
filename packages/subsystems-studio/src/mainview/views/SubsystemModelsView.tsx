@@ -11,8 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Boxes, Check, Component as ComponentIcon, Copy, Info, LayoutGrid, List, Loader2, Route as RouteIcon, Share2 } from "lucide-react";
-import { DocumentView } from "themed-markdown";
+import { LayoutDashboard, LayoutGrid, List, Loader2, Trash2 } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
 	buildRepoGroups,
@@ -35,6 +34,15 @@ import {
 	drilldownRepoKey,
 	type RepoFileCoverage,
 } from "../components/FilesDrilldown";
+import { SubsystemModelCard } from "../components/SubsystemModelCard";
+import {
+	Modal,
+	ModalBody,
+	ModalButton,
+	ModalFooter,
+	ModalHeader,
+} from "../components/Modal";
+import { firstReferencedLine, graphReferencesFile } from "../subsystemModelFiles";
 import { ComposedGraphPane } from "./ComposedGraphPane";
 import { SubsystemReposMap } from "./SubsystemReposMap";
 import { CenteredMessage } from "../ui";
@@ -145,7 +153,7 @@ function SubsystemEmptyState({
 						border: `1px solid ${theme.colors.primary}44`,
 					}}
 				>
-					<Boxes size={26} strokeWidth={1.5} />
+					<LayoutDashboard size={26} strokeWidth={1.5} />
 				</div>
 				<div
 					style={{
@@ -200,190 +208,6 @@ function SubsystemEmptyState({
 function openedSortTime(graph: SubsystemModelSummary): number {
 	const opened = graph.lastOpenedAt ? Date.parse(graph.lastOpenedAt) : NaN;
 	return Number.isFinite(opened) ? opened : 0;
-}
-
-/**
- * Trails of a graph with a step site in the given file. Step files
- * are in component-`file` form; repo attribution comes from the step
- * endpoint's purl (host-derived). Purl-less steps match any repo.
- */
-function trailsUsingFile(
-	graph: SubsystemModelSummary,
-	repoKey: string | undefined,
-	displayPath: string,
-): NonNullable<SubsystemModelSummary["trails"]> {
-	return (graph.trails ?? []).filter((w) =>
-		w.files.some(
-			(f) =>
-				f.file === displayPath &&
-				((f.purl ?? "") === "" ||
-					(repoKey ?? "") === "" ||
-					purlRepoKey(f.purl) === repoKey),
-		),
-	);
-}
-
-/**
- * Whether a graph references a file — via its component anchors or any
- * trail step site. Same repo-aware matching as the expansion helpers:
- * purl-less entries match any repo. Drives the open-file list filter.
- */
-function graphReferencesFile(
-	graph: SubsystemModelSummary,
-	repoKey: string | undefined,
-	displayPath: string,
-): boolean {
-	const match = (file: string, purl?: string) =>
-		file === displayPath &&
-		((purl ?? "") === "" ||
-			(repoKey ?? "") === "" ||
-			purlRepoKey(purl) === repoKey);
-	if ((graph.files ?? []).some((f) => match(f.file, f.purl))) return true;
-	return (graph.trails ?? []).some((w) =>
-		w.files.some((f) => match(f.file, f.purl)),
-	);
-}
-
-/**
- * Components declared in the given file (host-derived per file anchor).
- * This is the whole reason a trail-less file is in the model.
- */
-function componentsInFile(
-	graph: SubsystemModelSummary,
-	repoKey: string | undefined,
-	displayPath: string,
-): Array<{ alias: string; name: string; construct: string; startLine?: number }> {
-	const entry = (graph.files ?? []).find(
-		(f) =>
-			f.file === displayPath &&
-			((f.purl ?? "") === "" ||
-				(repoKey ?? "") === "" ||
-				purlRepoKey(f.purl) === repoKey),
-	);
-	return entry?.components ?? [];
-}
-
-/**
- * First 1-based line the graph references in the given file: the topmost of
- * its component declaration lines and trail step lines. Drives preview
- * focus when a row is clicked while a file is open. Null when the graph has
- * no line data for the file (or doesn't reference it at all).
- */
-function firstReferencedLine(
-	graph: SubsystemModelSummary,
-	repoKey: string | undefined,
-	displayPath: string,
-): number | null {
-	const lines: number[] = [];
-	for (const m of componentsInFile(graph, repoKey, displayPath)) {
-		if (m.startLine != null && Number.isFinite(m.startLine) && m.startLine > 0) {
-			lines.push(m.startLine);
-		}
-	}
-	for (const w of trailsUsingFile(graph, repoKey, displayPath)) {
-		for (const f of w.files) {
-			if (f.file !== displayPath) continue;
-			for (const line of f.lines ?? []) lines.push(line);
-		}
-	}
-	if (lines.length === 0) return null;
-	return Math.min(...lines);
-}
-
-type SummaryTrail = NonNullable<
-	SubsystemModelSummary["trails"]
->[number];
-
-/** Whether one trail step is sited in the open file (repo-aware). */
-function stepReferencesFile(
-	step: { file: string; purl?: string },
-	openFile: { repoKey: string | undefined; displayPath: string },
-): boolean {
-	return (
-		step.file === openFile.displayPath &&
-		((step.purl ?? "") === "" ||
-			(openFile.repoKey ?? "") === "" ||
-			purlRepoKey(step.purl) === openFile.repoKey)
-	);
-}
-
-/**
- * One trail row: wrapping title plus a step-bar strip (one segment per
- * step) underneath. Segments sited in the open file light up in primary;
- * the rest stay muted. Clicking opens the graph with this trail selected.
- */
-function TrailButton({
-	graphTitle,
-	trail,
-	openFile,
-	onOpen,
-}: {
-	graphTitle: string;
-	trail: SummaryTrail;
-	openFile: { repoKey: string | undefined; displayPath: string } | null;
-	onOpen: () => void;
-}) {
-	const { theme } = useTheme();
-	const inactive = theme.colors.border ?? "#333";
-	const [hover, setHover] = useState(false);
-	return (
-		<button
-			type="button"
-			onClick={(e) => {
-				e.stopPropagation();
-				onOpen();
-			}}
-			onMouseEnter={() => setHover(true)}
-			onMouseLeave={() => setHover(false)}
-			aria-label={`Open ${graphTitle} · ${trail.title}`}
-			style={{
-				border: "none",
-				background: hover ? (theme.colors.border ?? "#333") : "transparent",
-				padding: "6px 4px",
-				borderRadius: 4,
-				cursor: "pointer",
-				color: "inherit",
-				font: "inherit",
-				textAlign: "left",
-				width: "100%",
-				display: "flex",
-				flexDirection: "column",
-				alignItems: "stretch",
-				gap: 4,
-				fontSize: theme.fontSizes[1],
-				transition: "background 120ms ease",
-			}}
-		>
-			<span
-				style={{
-					whiteSpace: "normal",
-					overflowWrap: "break-word",
-					wordBreak: "break-word",
-				}}
-			>
-				{trail.title}
-			</span>
-			{trail.steps.length > 0 && (
-				<span style={{ display: "flex", gap: 3 }} aria-hidden="true">
-					{trail.steps.map((s, i) => {
-						const active = openFile != null && stepReferencesFile(s, openFile);
-						return (
-							<span
-								key={i}
-								style={{
-									flex: "1 1 0",
-									minWidth: 4,
-									height: 4,
-									borderRadius: 2,
-									background: active ? theme.colors.primary : inactive,
-								}}
-							/>
-						);
-					})}
-				</span>
-			)}
-		</button>
-	);
 }
 
 function SubsystemsTabHeader({
@@ -939,10 +763,6 @@ export function SubsystemModelsView({
 	const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(
 		() => new Set(),
 	);
-	/** Rows showing their model description (info button toggles). */
-	const [descIds, setDescIds] = useState<ReadonlySet<string>>(
-		() => new Set(),
-	);
 	/** Clicked file driving row expansion (trails using it). */
 	const [selectedFile, setSelectedFile] = useState<{
 		graphId: string;
@@ -1084,14 +904,11 @@ export function SubsystemModelsView({
 	}, [previewDrag]);
 
 	const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-	/** Defers row expand so a double-click can open instead. */
-	const rowClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 
 	useEffect(
 		() => () => {
 			if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-			if (rowClickTimerRef.current) clearTimeout(rowClickTimerRef.current);
 		},
 		[],
 	);
@@ -1240,26 +1057,21 @@ export function SubsystemModelsView({
 	);
 
 	/**
-	 * Single click expands (deferred so a double-click can open instead);
-	 * double click opens the graph in a tab.
+	 * Single click expands immediately; a double-click opens the graph in a tab.
+	 * The expand is not deferred: waiting to tell the two apart made every row
+	 * feel laggy. The second click of a double-click (`detail > 1`) is ignored
+	 * so it does not toggle the row back before the tab opens.
 	 */
 	const onRowClick = useCallback(
-		(graph: SubsystemModelSummary) => {
-			if (rowClickTimerRef.current) clearTimeout(rowClickTimerRef.current);
-			rowClickTimerRef.current = setTimeout(() => {
-				rowClickTimerRef.current = null;
-				onToggleExpand(graph);
-			}, 250);
+		(graph: SubsystemModelSummary, e?: React.MouseEvent) => {
+			if (e && e.detail > 1) return;
+			onToggleExpand(graph);
 		},
 		[onToggleExpand],
 	);
 
 	const onRowDoubleClick = useCallback(
 		(graph: SubsystemModelSummary) => {
-			if (rowClickTimerRef.current) {
-				clearTimeout(rowClickTimerRef.current);
-				rowClickTimerRef.current = null;
-			}
 			void onOpen(graph);
 		},
 		[onOpen],
@@ -1326,8 +1138,7 @@ export function SubsystemModelsView({
 
 
 	const onCopyPath = useCallback(
-		async (e: React.MouseEvent, graph: SubsystemModelSummary) => {
-			e.stopPropagation();
+		async (graph: SubsystemModelSummary) => {
 			try {
 				await navigator.clipboard.writeText(graph.path);
 				setCopiedId(graph.id);
@@ -1341,8 +1152,7 @@ export function SubsystemModelsView({
 	);
 
 	const onShareGist = useCallback(
-		async (e: React.MouseEvent, graph: SubsystemModelSummary) => {
-			e.stopPropagation();
+		async (graph: SubsystemModelSummary) => {
 			setSharingId(graph.id);
 			setMessage(null);
 			setError(null);
@@ -1377,36 +1187,43 @@ export function SubsystemModelsView({
 		[refresh],
 	);
 
-	const onDelete = useCallback(
-		async (e: React.MouseEvent, graph: SubsystemModelSummary) => {
-			e.stopPropagation();
-			if (confirmId !== graph.id) {
-				setConfirmId(graph.id);
-				return;
-			}
-			setConfirmId(null);
-			try {
-				await electrobun.rpc!.request.deleteSubsystemModel({ graphId: graph.id });
-				setGraphs((prev) => prev?.filter((g) => g.id !== graph.id) ?? null);
-				setExpandedIds((current) => {
-					if (!current.has(graph.id)) return current;
-					const next = new Set(current);
-					next.delete(graph.id);
-					return next;
-				});
-				setSelectedFile((current) =>
-					current?.graphId === graph.id ? null : current,
-				);
-				setPreviewFile((current) =>
-					current?.graphId === graph.id ? null : current,
-				);
-				setSelectedId((current) => (current === graph.id ? null : current));
-			} catch (err) {
-				setError(err instanceof Error ? err.message : String(err));
-			}
-		},
-		[confirmId],
-	);
+	/** Arm the delete confirmation modal for a model. */
+	const requestDelete = useCallback((graph: SubsystemModelSummary) => {
+		setConfirmId(graph.id);
+	}, []);
+
+	/** Delete the model the confirmation is armed for, then close the modal. */
+	const confirmDelete = useCallback(async () => {
+		const graph = confirmId
+			? graphs?.find((g) => g.id === confirmId)
+			: undefined;
+		setConfirmId(null);
+		if (!graph) return;
+		try {
+			await electrobun.rpc!.request.deleteSubsystemModel({ graphId: graph.id });
+			setGraphs((prev) => prev?.filter((g) => g.id !== graph.id) ?? null);
+			setExpandedIds((current) => {
+				if (!current.has(graph.id)) return current;
+				const next = new Set(current);
+				next.delete(graph.id);
+				return next;
+			});
+			setSelectedFile((current) =>
+				current?.graphId === graph.id ? null : current,
+			);
+			setPreviewFile((current) =>
+				current?.graphId === graph.id ? null : current,
+			);
+			setSelectedId((current) => (current === graph.id ? null : current));
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		}
+	}, [confirmId, graphs]);
+
+	/** The model whose deletion is awaiting confirmation. */
+	const pendingDelete = confirmId
+		? (graphs?.find((g) => g.id === confirmId) ?? null)
+		: null;
 
 	if (error && graphs === null) {
 		return (
@@ -1546,368 +1363,49 @@ windowedGraphs.length === 0 ? (
 			) : (
 			<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
 				{sortedGraphs.map((graph) => {
-					const isExpanded = selectedFile?.graphId === graph.id;
-					const isRowExpanded = expandedIds.has(graph.id) && !isExpanded;
-					const isOpen = isExpanded || expandedIds.has(graph.id);
-					const fileTrails =
-						isExpanded && selectedFile
-							? trailsUsingFile(
-									graph,
-									selectedFile.repoKey,
-									selectedFile.displayPath,
-								)
-							: [];
-					const fileComponents =
-						isExpanded && selectedFile && fileTrails.length === 0
-							? componentsInFile(
-									graph,
-									selectedFile.repoKey,
-									selectedFile.displayPath,
-								)
-							: [];
-
+					const rowSelectedFile =
+						selectedFile?.graphId === graph.id ? selectedFile : null;
 					return (
-						<div
+						<SubsystemModelCard
 							key={graph.id}
-							data-subsystem-row={graph.id}
-							onClick={() => onRowClick(graph)}
-							onDoubleClick={() => onRowDoubleClick(graph)}
-							onMouseEnter={(e) => {
-								e.currentTarget.style.borderColor = theme.colors.textMuted ?? "#555";
+							graph={graph}
+							selectedFile={
+								rowSelectedFile
+									? {
+											repoKey: rowSelectedFile.repoKey,
+											displayPath: rowSelectedFile.displayPath,
+										}
+									: null
+							}
+							openFile={
+								previewFile
+									? {
+											repoKey: previewFile.repoKey,
+											displayPath: previewFile.displayPath,
+										}
+									: null
+							}
+							rowExpanded={expandedIds.has(graph.id)}
+							copied={copiedId === graph.id}
+							sharing={sharingId === graph.id}
+							onRowClick={(e) => onRowClick(graph, e)}
+							onRowDoubleClick={() => onRowDoubleClick(graph)}
+							onOpen={() => void onOpen(graph)}
+							onCopyPath={() => void onCopyPath(graph)}
+							onShareGist={() => void onShareGist(graph)}
+							onDelete={() => requestDelete(graph)}
+							onOpenTrail={(trailId) => void onOpen(graph, trailId)}
+							onOpenComponent={(m) => {
+								setSelectedId(graph.id);
+								setListOverlay(true);
+								setPreviewFile({
+									graphId: graph.id,
+									repoKey: rowSelectedFile?.repoKey,
+									displayPath: rowSelectedFile?.displayPath ?? "",
+									focusLine: m.startLine ?? null,
+								});
 							}}
-							onMouseLeave={(e) => {
-								e.currentTarget.style.borderColor =
-									theme.colors.border ?? "#333";
-							}}
-							style={{
-								display: "flex",
-								flexDirection: "column",
-								alignItems: "stretch",
-								gap: isOpen || descIds.has(graph.id) ? 8 : 0,
-								padding: "8px 12px",
-								borderRadius: 4,
-								border: `1px solid ${theme.colors.border ?? "#333"}`,
-								background: theme.colors.backgroundSecondary ?? "transparent",
-								cursor: "pointer",
-								fontSize: theme.fontSizes[2],
-								transition: "border-color 0.15s ease",
-							}}
-						>
-							<div
-								style={{
-									display: "flex",
-									alignItems: "center",
-									flexWrap: "wrap",
-									gap: 8,
-									rowGap: 8,
-								}}
-							>
-							<div style={{ flex: "1 1 180px", minWidth: 0 }}>
-								<div
-									style={{
-										whiteSpace: "normal",
-										overflowWrap: "break-word",
-										wordBreak: "break-word",
-									}}
-								>
-									{graph.title}
-								</div>
-							</div>
-							{graph.description && (
-								<button
-									type="button"
-									onClick={(e) => {
-										e.stopPropagation();
-										setDescIds((current) => {
-											const next = new Set(current);
-											if (next.has(graph.id)) next.delete(graph.id);
-											else next.add(graph.id);
-											return next;
-										});
-									}}
-									title={
-										descIds.has(graph.id)
-											? "Hide description"
-											: "Show description"
-									}
-									aria-label={`Show description for ${graph.title}`}
-									aria-pressed={descIds.has(graph.id)}
-									style={{
-										flexShrink: 0,
-										display: "inline-flex",
-										alignItems: "center",
-										justifyContent: "center",
-										width: 22,
-										height: 22,
-										padding: 0,
-										border: "none",
-										borderRadius: 4,
-										background: descIds.has(graph.id)
-											? `${theme.colors.primary}22`
-											: "transparent",
-										color: descIds.has(graph.id)
-											? theme.colors.primary
-											: muted,
-										cursor: "pointer",
-									}}
-								>
-									<Info size={13} />
-								</button>
-							)}
-							<button
-								type="button"
-								onClick={(e) => void onCopyPath(e, graph)}
-								title={`Copy path: ${graph.path}`}
-								aria-label={`Copy path for ${graph.title}`}
-								style={{
-									flexShrink: 0,
-									display: "inline-flex",
-									alignItems: "center",
-									gap: 4,
-									padding: "4px 8px",
-									borderRadius: 4,
-									border: `1px solid ${
-										copiedId === graph.id
-											? theme.colors.primary
-											: (theme.colors.border ?? "#333")
-									}`,
-									background:
-										copiedId === graph.id
-											? theme.colors.primary
-											: "transparent",
-									color:
-										copiedId === graph.id
-											? theme.colors.background
-											: muted,
-									cursor: "pointer",
-									fontSize: theme.fontSizes[0],
-									fontFamily: theme.fonts.body,
-								}}
-							>
-								{copiedId === graph.id ? <Check size={12} /> : <Copy size={12} />}
-								{copiedId === graph.id ? "Copied" : "Copy path"}
-							</button>
-							<button
-								type="button"
-								onClick={(e) => void onShareGist(e, graph)}
-								disabled={sharingId === graph.id}
-								title={
-									graph.gist
-										? `Update gist ${graph.gist.id}`
-										: "Share as a public GitHub gist"
-								}
-								aria-label={
-									graph.gist
-										? `Update gist for ${graph.title}`
-										: `Share ${graph.title} as gist`
-								}
-								style={{
-									flexShrink: 0,
-									display: "inline-flex",
-									alignItems: "center",
-									gap: 4,
-									padding: "4px 8px",
-									borderRadius: 4,
-									border: `1px solid ${theme.colors.border ?? "#333"}`,
-									background: "transparent",
-									color: muted,
-									cursor: sharingId === graph.id ? "default" : "pointer",
-									fontSize: theme.fontSizes[0],
-									fontFamily: theme.fonts.body,
-									opacity: sharingId === graph.id ? 0.7 : 1,
-								}}
-							>
-								<Share2 size={12} />
-								{sharingId === graph.id
-									? "Sharing…"
-									: graph.gist
-										? "Update gist"
-										: "Gist"}
-							</button>
-							<button
-								type="button"
-								onClick={(e) => onDelete(e, graph)}
-								title={
-									confirmId === graph.id
-										? "Click again to delete"
-										: `Delete ${graph.title}`
-								}
-								aria-label={
-									confirmId === graph.id
-										? `Confirm delete ${graph.title}`
-										: `Delete ${graph.title}`
-								}
-								style={{
-									flexShrink: 0,
-									border: "none",
-									background: "transparent",
-									color:
-										confirmId === graph.id
-											? "#e5534b"
-											: muted,
-									fontWeight: confirmId === graph.id ? 600 : 400,
-									cursor: "pointer",
-									fontSize: theme.fontSizes[1],
-									lineHeight: 1,
-									padding: "2px 6px",
-									borderRadius: 4,
-								}}
-							>
-								{confirmId === graph.id ? "delete?" : "✕"}
-							</button>
-							</div>
-							{descIds.has(graph.id) && graph.description && (
-								<div
-									onClick={(e) => e.stopPropagation()}
-									style={{
-										fontSize: theme.fontSizes[1],
-									}}
-								>
-									<DocumentView
-										content={graph.description}
-										theme={theme}
-										transparentBackground
-										maxWidth="100%"
-									/>
-								</div>
-							)}
-							{isExpanded && selectedFile && (
-								<div
-									onClick={(e) => e.stopPropagation()}
-									style={{
-										borderTop: `1px solid ${theme.colors.border ?? "#333"}`,
-										paddingTop: 6,
-										display: "flex",
-										flexDirection: "column",
-										gap: 2,
-									}}
-								>
-									<div
-										style={{
-											display: "flex",
-											alignItems: "center",
-											gap: 6,
-											fontSize: theme.fontSizes[0],
-											color: muted,
-										}}
-									>
-										{fileTrails.length > 0 ? (
-											<RouteIcon size={12} style={{ flexShrink: 0 }} aria-hidden="true" />
-										) : (
-											<ComponentIcon size={12} style={{ flexShrink: 0 }} aria-hidden="true" />
-										)}
-										{fileTrails.length > 0 ? `Trails` : `Component`}
-									</div>
-									{fileTrails.length === 0 && fileComponents.length === 0 ? (
-										<div
-											style={{
-												fontSize: theme.fontSizes[1],
-												color: muted,
-											}}
-										>
-											No trails use this file.
-										</div>
-									) : fileTrails.length > 0 ? (
-										fileTrails.map((w) => (
-											<TrailButton
-												key={w.id}
-												graphTitle={graph.title}
-												trail={w}
-												openFile={previewFile}
-												onOpen={() => void onOpen(graph, w.id)}
-											/>
-										))
-									) : (
-										fileComponents.map((m) => (
-											<button
-												key={m.alias}
-												type="button"
-												onClick={(e) => {
-													e.stopPropagation();
-													setSelectedId(graph.id);
-													setListOverlay(true);
-													setPreviewFile({
-														graphId: graph.id,
-														repoKey: selectedFile.repoKey,
-														displayPath: selectedFile.displayPath,
-														focusLine: m.startLine ?? null,
-													});
-												}}
-												onMouseEnter={(e) => {
-													e.currentTarget.style.background =
-														theme.colors.border ?? "#333";
-												}}
-												onMouseLeave={(e) => {
-													e.currentTarget.style.background = "transparent";
-												}}
-												style={{
-													border: "none",
-													background: "transparent",
-													padding: "2px 4px",
-													cursor: "pointer",
-													color: "inherit",
-													font: "inherit",
-													textAlign: "left",
-													fontSize: theme.fontSizes[1],
-													whiteSpace: "nowrap",
-													overflow: "hidden",
-													textOverflow: "ellipsis",
-													borderRadius: 4,
-												}}
-											>
-												{m.name}
-												<span style={{ color: muted }}> · {m.construct}</span>
-											</button>
-										))
-									)}
-								</div>
-							)}
-							{isRowExpanded && (
-								<div
-									onClick={(e) => e.stopPropagation()}
-									style={{
-										borderTop: `1px solid ${theme.colors.border ?? "#333"}`,
-										paddingTop: 6,
-										display: "flex",
-										flexDirection: "column",
-										gap: 2,
-									}}
-								>
-									<div
-										style={{
-											display: "flex",
-											alignItems: "center",
-											gap: 6,
-											fontSize: theme.fontSizes[0],
-											color: muted,
-										}}
-									>
-										<RouteIcon size={12} style={{ flexShrink: 0 }} aria-hidden="true" />
-										Trails
-									</div>
-									{(graph.trails ?? []).length === 0 ? (
-										<div
-											style={{
-												fontSize: theme.fontSizes[1],
-												color: muted,
-											}}
-										>
-											No trails yet.
-										</div>
-									) : (
-										(graph.trails ?? []).map((w) => (
-											<TrailButton
-												key={w.id}
-												graphTitle={graph.title}
-												trail={w}
-												openFile={previewFile}
-												onOpen={() => void onOpen(graph, w.id)}
-											/>
-										))
-									)}
-								</div>
-							)}
-						</div>
+						/>
 					);
 				})}
 			</div>
@@ -2086,7 +1584,7 @@ windowedGraphs.length === 0 ? (
 							letterSpacing: 0.3,
 						}}
 					>
-						<Boxes size={12} style={{ flexShrink: 0 }} aria-hidden="true" />
+						<LayoutDashboard size={12} style={{ flexShrink: 0 }} aria-hidden="true" />
 						Subsystems
 					</span>
 					<span style={{ flex: 1 }} />
@@ -2207,6 +1705,32 @@ windowedGraphs.length === 0 ? (
 				)}
 				</div>
 			</SubsystemsTabBody>
+			)}
+			{pendingDelete && (
+				<Modal
+					ariaLabel="Delete subsystem model"
+					onClose={() => setConfirmId(null)}
+				>
+					<ModalHeader
+						icon={Trash2}
+						tone="danger"
+						title="Delete subsystem model?"
+					/>
+					<ModalBody>
+						This permanently deletes <strong>{pendingDelete.title}</strong> and
+						its audit history. This can&rsquo;t be undone.
+					</ModalBody>
+					<ModalFooter>
+						<ModalButton onClick={() => setConfirmId(null)}>Cancel</ModalButton>
+						<ModalButton
+							variant="danger"
+							icon={Trash2}
+							onClick={() => void confirmDelete()}
+						>
+							Delete
+						</ModalButton>
+					</ModalFooter>
+				</Modal>
 			)}
 		</SubsystemsTabShell>
 	);

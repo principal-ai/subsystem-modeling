@@ -11,15 +11,15 @@
 
 import { useState } from "react";
 import {
+	AppWindow,
+	Box,
 	Check,
 	ChevronDown,
 	ChevronRight,
-	Component,
 	Copy,
 	Loader2,
 	Network,
 	Route,
-	Server,
 	type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
@@ -52,9 +52,9 @@ export const LANE_LABEL: Record<SubsystemVerificationLane, string> = {
 
 /** Lane icons — mirrors MaintenancePanel's LANE_META (layer → mark). */
 export const LANE_ICON: Record<SubsystemVerificationLane, LucideIcon> = {
-	construct: Component,
+	construct: Box,
 	"static-topology": Network,
-	"dynamic-topology": Server,
+	"dynamic-topology": AppWindow,
 	trail: Route,
 };
 

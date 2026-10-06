@@ -7,7 +7,7 @@
  * when the dialog must escape a stacking/clipping context.
  *
  *   <Modal ariaLabel="Run maintenance">
- *     <ModalHeader icon={Wrench} title="Run maintenance?" subtitle="…" />
+ *     <ModalHeader icon={Wrench} title="Run maintenance?" />
  *     <ModalBody>…</ModalBody>
  *     <ModalFooter>…buttons…</ModalFooter>
  *   </Modal>
@@ -89,7 +89,6 @@ export function ModalHeader({
 	icon: Icon,
 	iconColor,
 	title,
-	subtitle,
 	tone = "default",
 	onClose,
 }: {
@@ -97,7 +96,6 @@ export function ModalHeader({
 	/** Overrides the icon colour (e.g. error red for destructive dialogs). */
 	iconColor?: string;
 	title: ReactNode;
-	subtitle?: ReactNode;
 	/** `danger` tints the icon red when no explicit `iconColor` is given. */
 	tone?: "default" | "danger";
 	/** Close handler for the × button. Omit to hide the button (e.g. when the
@@ -109,9 +107,9 @@ export function ModalHeader({
 	const resolvedIconColor =
 		iconColor ??
 		(tone === "danger" ? (theme.colors.error ?? "#e5534b") : theme.colors.primary);
-	// Default header shape: title left, × right, no
-	// icon/subtitle. An icon or subtitle switches to the taller stacked header.
-	const stacked = Icon != null || subtitle != null;
+	// Default header shape: title left, × right, no icon. An icon switches to
+	// the taller stacked header.
+	const stacked = Icon != null;
 	return (
 		<div
 			style={{
@@ -144,18 +142,6 @@ export function ModalHeader({
 							)}
 							<span style={{ minWidth: 0 }}>{title}</span>
 						</div>
-						{subtitle != null && (
-							<div
-								style={{
-									marginTop: 6,
-									fontSize: theme.fontSizes[1],
-									color: muted,
-									lineHeight: 1.55,
-								}}
-							>
-								{subtitle}
-							</div>
-						)}
 					</>
 				) : (
 					<span style={{ fontSize: theme.fontSizes[3], fontWeight: 600 }}>

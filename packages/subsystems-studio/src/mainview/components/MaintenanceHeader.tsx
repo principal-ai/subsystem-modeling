@@ -14,8 +14,8 @@ import { useState } from "react";
 import {
 	BadgeCheck,
 	Bot,
-	Component,
 	Loader2,
+	Box,
 	ScanSearch,
 	Square,
 	Trash2,
@@ -34,7 +34,7 @@ export function LaneIconButton({
 }: {
 	lane: SubsystemVerificationLane;
 	label: string;
-	Icon: typeof Component;
+	Icon: typeof Box;
 	onOpen: (lane: SubsystemVerificationLane) => void;
 }) {
 	const { theme } = useTheme();

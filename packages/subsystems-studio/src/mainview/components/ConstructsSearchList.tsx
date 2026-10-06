@@ -18,7 +18,7 @@ import {
 	type ReactNode,
 } from 'react';
 import { useTheme } from '@principal-ade/industry-theme';
-import { Boxes, Search, X } from 'lucide-react';
+import { LayoutDashboard, Search, X } from 'lucide-react';
 import {
 	constructColorsFromPierreTheme,
 	resolvePierreSyntaxThemeName,
@@ -318,7 +318,7 @@ const Row = memo(function Row({
 							fontSize: theme.fontSizes[0] * 0.82,
 						}}
 					>
-					<Boxes size={11} />
+					<LayoutDashboard size={11} />
 					{item.modelCount}
 				</span>
 			) : null}

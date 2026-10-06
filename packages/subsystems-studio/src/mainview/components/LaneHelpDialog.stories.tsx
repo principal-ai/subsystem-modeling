@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { Component } from "lucide-react";
+import { Box } from "lucide-react";
 import { LaneHelpDialog } from "./LaneHelpDialog";
 
 const meta = {
@@ -7,7 +7,7 @@ const meta = {
   component: LaneHelpDialog,
   parameters: { layout: "fullscreen" },
   args: {
-    Icon: Component,
+    Icon: Box,
     name: "Construct verification",
     blurb:
       "Layer 1 — each component's source declaration: the file exists, the symbol is declared, the construct matches, and the signature types agree.",

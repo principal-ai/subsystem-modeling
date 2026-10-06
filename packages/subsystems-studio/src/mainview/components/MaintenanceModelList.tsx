@@ -15,14 +15,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
 	Ban,
-	Boxes,
+	LayoutDashboard,
 	AppWindow,
 	Check,
-	Component,
 	Copy,
 	Loader2,
 	Network,
 	Route,
+	Box,
 	Wrench,
 	type LucideIcon,
 } from "lucide-react";
@@ -69,16 +69,16 @@ export type FeedEntry = {
 export const AGENT_META: Array<{ agent: string; label: string; Icon: LucideIcon }> = [
 	// Icon = the agent's lane (construct / static-topology / dynamic-topology),
 	// so the badge reads as "which lane"; the name distinguishes the workers
-	// within a lane. Mirrors the lane icons: construct→Component,
+	// within a lane. Mirrors the lane icons: construct→Box,
 	// static-topology→Network, dynamic-topology→AppWindow (the C4 container
 	// icon — the lane is about the containers).
-	{ agent: "construct-fixer", label: "Construct Fixer", Icon: Component },
+	{ agent: "construct-fixer", label: "Construct Fixer", Icon: Box },
 	{
 		agent: "package-module-fixer",
 		label: "Package/Module Fixer",
 		Icon: Network,
 	},
-	{ agent: "construct-verifier", label: "Construct Verifier", Icon: Component },
+	{ agent: "construct-verifier", label: "Construct Verifier", Icon: Box },
 	{
 		agent: "package-module-verifier",
 		label: "Package/Module Verifier",
@@ -354,9 +354,9 @@ function RunRow({
 export const LANE_META: Array<{
 	lane: SubsystemVerificationLane;
 	label: string;
-	Icon: typeof Component;
+	Icon: typeof Box;
 }> = [
-	{ lane: "construct", label: "Construct", Icon: Component },
+	{ lane: "construct", label: "Construct", Icon: Box },
 	{ lane: "static-topology", label: "Static topology", Icon: Network },
 	{ lane: "dynamic-topology", label: "Dynamic topology", Icon: AppWindow },
 	{ lane: "trail", label: "Trail", Icon: Route },
@@ -710,7 +710,7 @@ export function MaintenanceModelCard({
 								flexShrink: 0,
 							}}
 						>
-							<Boxes size={14} color={tint} aria-hidden="true" />
+							<LayoutDashboard size={14} color={tint} aria-hidden="true" />
 						</span>
 					);
 				})()}
