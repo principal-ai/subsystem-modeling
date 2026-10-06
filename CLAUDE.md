@@ -25,6 +25,13 @@ When changing a package other packages depend on:
 3. Bump the version in dependents' `package.json`
 4. Install in dependents
 
+Step 3 is mechanical — let the guard do it:
+
+- `bun run check:internal-deps` fails when a dependent's internal ref does not
+  accept the sibling's on-disk version (also run by `bun run test`).
+- `bun run sync:internal-deps` rewrites drifted refs to `^<sibling version>`;
+  commit and republish the dependents it reports.
+
 ## Build order
 
 1. `packages/subsystems-core`
