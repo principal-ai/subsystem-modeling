@@ -3577,6 +3577,27 @@ if (bootSubsystemModelId) {
 // Window
 // ---------------------------------------------------------------------------
 
+/**
+ * True when this host is the `electrobun dev` build. Electrobun stamps the
+ * build channel into the bundle's `Resources/version.json`, and the host runs
+ * from `Contents/MacOS`, so that file sits one directory up. Release builds
+ * ("canary"/"stable") and any read failure report false, leaving activation on.
+ */
+function isDevBuild(): boolean {
+	try {
+		const raw = readFileSync(join("..", "Resources", "version.json"), "utf8");
+		return (JSON.parse(raw) as { channel?: string }).channel === "dev";
+	} catch {
+		return false;
+	}
+}
+
+// `electrobun dev --watch` rebuilds and relaunches this host on every change,
+// and each launch would otherwise activate the window and yank focus out of the
+// editor mid-keystroke. In dev we open it without activating; release builds
+// keep the normal focus-on-open behavior.
+const activateOnOpen = !isDevBuild();
+
 const browserWindow = new BrowserWindow({
 	title: "Principal AI",
 	url: "views://mainview/index.html",
@@ -3584,6 +3605,8 @@ const browserWindow = new BrowserWindow({
 	// Initial frame is just the fallback the window briefly opens at before we
 	// maximize it below; it's also what `unmaximize` restores to.
 	frame: { width: 1200, height: 800, x: 100, y: 100 },
+	// `activate: false` shows the window without stealing app focus.
+	activate: activateOnOpen,
 });
 
 // Open filling the screen's work area. We maximize rather than hardcode a size

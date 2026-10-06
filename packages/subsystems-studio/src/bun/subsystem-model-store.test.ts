@@ -8,7 +8,9 @@ import {
 	getSubsystemModel,
 	graphIdFromWatchFilename,
 	isRepoPurl,
+	modelIdentityKey,
 	normalizeDeclarationProvenance,
+	normalizeModelTitle,
 	purlRepoKey,
 	resolveRepoRootForComponent,
 	shouldRestampOpened,
@@ -18,6 +20,7 @@ import {
 	SUBSYSTEM_EDGE_MECHANISMS_COVER_PUBLISHED_UNION,
 	subsystemModelFilePath,
 	updateSubsystemModel,
+	upsertSubsystemModel,
 	verifyModelFiles,
 	type SubsystemComponent,
 	type SubsystemTrailStep,
@@ -365,6 +368,73 @@ describe("commit provenance", () => {
 		expect(read).not.toBeNull();
 		expect(read?.createdAtCommits).toBeUndefined();
 		expect(read?.verifiedAtCommits).toBeUndefined();
+	});
+});
+
+describe("model identity dedup", () => {
+	const A = "pkg:github/a/repo-a";
+	const B = "pkg:github/a/repo-b";
+	const comp = (purl: string, symbol: string): SubsystemComponent => ({
+		alias: symbol,
+		name: symbol,
+		construct: "function",
+		symbol,
+		file: "exists.ts",
+		purl: `${purl}#exists.ts`,
+	});
+
+	test("normalizes title case and whitespace", () => {
+		expect(normalizeModelTitle("  Audit   Flow ")).toBe("audit flow");
+	});
+
+	test("identity key is null only when no purl is referenced", () => {
+		expect(modelIdentityKey("x", [{ purl: "external:proposed" }])).toBe(
+			`x\u0000external:proposed`,
+		);
+		expect(modelIdentityKey("x", [{}])).toBeNull();
+	});
+
+	test("same title + same repo set folds onto the existing record", async () => {
+		const first = await upsertSubsystemModel({
+			title: "dedup subject",
+			components: [comp(A, "one")],
+		});
+		expect(first.action).toBe("created");
+
+		const second = await upsertSubsystemModel({
+			title: "  Dedup   Subject ",
+			components: [comp(A, "one"), comp(A, "two")],
+		});
+		expect(second.action).toBe("updated");
+		expect(second.record.id).toBe(first.record.id);
+		expect(second.record.createdAt).toBe(first.record.createdAt);
+		expect(second.record.components).toHaveLength(2);
+	});
+
+	test("different repo set does not fold", async () => {
+		const first = await upsertSubsystemModel({
+			title: "repo scoped",
+			components: [comp(A, "one")],
+		});
+		const second = await upsertSubsystemModel({
+			title: "repo scoped",
+			components: [comp(B, "one")],
+		});
+		expect(second.action).toBe("created");
+		expect(second.record.id).not.toBe(first.record.id);
+	});
+
+	test("force always creates a new record", async () => {
+		const first = await upsertSubsystemModel({
+			title: "forced",
+			components: [comp(A, "one")],
+		});
+		const second = await upsertSubsystemModel(
+			{ title: "forced", components: [comp(A, "one")] },
+			{ force: true },
+		);
+		expect(second.action).toBe("created");
+		expect(second.record.id).not.toBe(first.record.id);
 	});
 });
 

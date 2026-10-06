@@ -13,10 +13,10 @@ import { Command } from 'commander';
 import { tryResolveViewerLaunch } from '../lib/viewer-launch.js';
 import { handoffToRunning } from '../lib/viewer-ipc.js';
 import {
-  createSubsystemModel,
   getSubsystemModel,
   listSubsystemModels,
   subsystemModelFilePath,
+  upsertSubsystemModel,
   type StoredSubsystemModel,
 } from '../lib/subsystem-model-store.js';
 import { findSubsystemModelProblems } from '../lib/subsystem-model-validation.js';
@@ -73,7 +73,7 @@ async function studioHttpUp(): Promise<boolean> {
  */
 async function createViaHttp(
   body: Record<string, unknown>,
-): Promise<StoredSubsystemModel | null> {
+): Promise<{ record: StoredSubsystemModel; reused: boolean } | null> {
   try {
     const res = await fetch(`${studioHttpBase()}/api/subsystem-model`, {
       method: 'POST',
@@ -84,6 +84,7 @@ async function createViaHttp(
     const json = (await res.json()) as {
       ok?: boolean;
       graph?: StoredSubsystemModel;
+      reused?: boolean;
       error?: string;
     };
     if (!res.ok || !json.ok || !json.graph) {
@@ -92,7 +93,7 @@ async function createViaHttp(
       );
       process.exit(2);
     }
-    return json.graph;
+    return { record: json.graph, reused: json.reused === true };
   } catch {
     return null;
   }
@@ -168,6 +169,7 @@ async function createAction(options: {
   file?: string;
   open?: boolean;
   viewerDir?: string;
+  force?: boolean;
 }): Promise<void> {
   const parsed = await readPayload(options.file);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
@@ -181,22 +183,33 @@ async function createAction(options: {
     process.stderr.write(`invalid model: ${problems.join('; ')}\n`);
     process.exit(2);
   }
+  if (options.force) body['force'] = true;
 
   let record: StoredSubsystemModel | null = null;
+  let reused = false;
   if (await studioHttpUp()) {
-    record = await createViaHttp(body);
+    const viaHttp = await createViaHttp(body);
+    if (viaHttp) {
+      record = viaHttp.record;
+      reused = viaHttp.reused;
+    }
   }
   if (!record) {
-    record = await createSubsystemModel({
-      title: body['title'] as string,
-      description: typeof body['description'] === 'string' ? body['description'] : undefined,
-      components: body['components'] as unknown[],
-      trails: Array.isArray(body['trails']) ? body['trails'] : undefined,
-    });
+    const outcome = await upsertSubsystemModel(
+      {
+        title: body['title'] as string,
+        description: typeof body['description'] === 'string' ? body['description'] : undefined,
+        components: body['components'] as unknown[],
+        trails: Array.isArray(body['trails']) ? body['trails'] : undefined,
+      },
+      { force: options.force },
+    );
+    record = outcome.record;
+    reused = outcome.action === 'updated';
   }
 
   process.stderr.write(
-    `Created subsystem model ${record.id} → ${subsystemModelFilePath(record.id)}\n`,
+    `${reused ? 'Updated' : 'Created'} subsystem model ${record.id} → ${subsystemModelFilePath(record.id)}\n`,
   );
 
   // Commander `--no-open` flips `open` to false (default true).
@@ -216,7 +229,9 @@ async function createAction(options: {
     }
   }
 
-  process.stdout.write(JSON.stringify({ ok: true, graph: record }, null, 2) + '\n');
+  process.stdout.write(
+    JSON.stringify({ ok: true, reused, graph: record }, null, 2) + '\n',
+  );
 }
 
 async function openAction(
@@ -455,6 +470,10 @@ export function createSubsystemModelCommand(): Command {
     )
     .option('-f, --file <path>', 'Path to model JSON (default: stdin; use - for stdin)')
     .option('--no-open', 'Persist only; do not open Principal Studio')
+    .option(
+      '--force',
+      'Always create a new record, even when a model with the same title and repos already exists',
+    )
     .option(
       '--viewer-dir <path>',
       'Path to the @principal-ai/subsystems-studio package (overrides PRINCIPAL_STUDIO_DIR)',

@@ -415,6 +415,47 @@ export function isRepoPurl(purl: string | undefined): boolean {
 }
 
 /**
+ * Normalize a model title for identity comparison — case- and
+ * whitespace-insensitive, so "Audit flow" and "audit  flow" match.
+ */
+export function normalizeModelTitle(title: string | undefined): string {
+	return (title ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * The set of purls a model references, from its components (fragment
+ * stripped). Deduped and sorted. Empty when no component carries a purl.
+ * Includes `external:` pseudo-purls — they are stable identities too.
+ */
+export function modelPurlKeys(
+	components: ReadonlyArray<{ purl?: string }>,
+): string[] {
+	const purls = new Set<string>();
+	for (const c of components) {
+		const key = purlRepoKey(c.purl);
+		if (key) purls.add(key);
+	}
+	return [...purls].sort();
+}
+
+/**
+ * Identity of a model's subject: same normalized title AND same referenced
+ * purl set. A re-created model with this key folds onto the existing record
+ * instead of minting another `sg-` id. `null` when the model carries no purl
+ * at all — there is no identity to match on.
+ */
+export function modelIdentityKey(
+	title: string | undefined,
+	components: ReadonlyArray<{ purl?: string }>,
+): string | null {
+	const purls = modelPurlKeys(components);
+	if (purls.length === 0) return null;
+	const norm = normalizeModelTitle(title);
+	if (!norm) return null;
+	return [norm, ...purls].join("\u0000");
+}
+
+/**
  * Resolve a component's local root from Alexandria by its purl.
  *
  * The model does not store local paths — repo identity travels on each
@@ -713,6 +754,60 @@ export async function updateSubsystemModel(
 	await upsertIndexEntry(indexEntryFor(updated));
 	emitSubsystemModelChange({ graphId: id, reason: "updated" });
 	return updated;
+}
+
+/**
+ * Find the canonical existing model with the same subject identity
+ * (normalized title + referenced purl set). When duplicates already exist,
+ * the oldest `createdAt` wins — that is the id a re-create should fold into.
+ */
+export async function findSubsystemModelByIdentity(
+	title: string | undefined,
+	components: ReadonlyArray<{ purl?: string }>,
+): Promise<StoredSubsystemModel | null> {
+	const key = modelIdentityKey(title, components);
+	if (!key) return null;
+	const normTitle = normalizeModelTitle(title);
+	const candidates = (await listSubsystemModels())
+		.filter((e) => normalizeModelTitle(e.title) === normTitle)
+		.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+	for (const entry of candidates) {
+		const record = await getSubsystemModel(entry.id);
+		if (record && modelIdentityKey(record.title, record.components) === key) {
+			return record;
+		}
+	}
+	return null;
+}
+
+/**
+ * Create a model, or fold onto the existing one when a model with the same
+ * subject identity (normalized title + referenced purl set) is already stored.
+ * Makes create idempotent for the common retry: the same payload updates the
+ * original record rather than piling up a second copy. Pass `{ force: true }`
+ * to always mint a new record.
+ */
+export async function upsertSubsystemModel(
+	doc: SubsystemDocumentBody & {
+		title: string;
+		description?: string;
+		trails?: SubsystemTrail[];
+	},
+	options?: { force?: boolean },
+): Promise<{ record: StoredSubsystemModel; action: "created" | "updated" }> {
+	if (!options?.force) {
+		const existing = await findSubsystemModelByIdentity(doc.title, doc.components);
+		if (existing) {
+			const updated = await updateSubsystemModel(existing.id, {
+				title: doc.title,
+				description: doc.description,
+				components: doc.components,
+				trails: doc.trails,
+			});
+			return { record: updated ?? existing, action: "updated" };
+		}
+	}
+	return { record: await createSubsystemModel(doc), action: "created" };
 }
 
 /**

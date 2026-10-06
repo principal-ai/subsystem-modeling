@@ -22,7 +22,6 @@ import {
 	listGraphifyRepos,
 } from "./graphify-store";
 import {
-	createSubsystemModel,
 	getSubsystemModel,
 	isRepoPurl,
 	listSubsystemModels,
@@ -30,6 +29,7 @@ import {
 	purlRepoKey,
 	subsystemModelFilePath,
 	updateSubsystemModel,
+	upsertSubsystemModel,
 	type StoredSubsystemModel,
 	type SubsystemModelDocument,
 } from "./subsystem-model-store";
@@ -336,13 +336,19 @@ export async function handleSubsystemModelRequest(
 
 		registerSuppliedRoots(body);
 
-		const record = await createSubsystemModel({
-			title: body["title"] as string,
-			description: typeof body["description"] === "string" ? body["description"] : undefined,
-			components: body["components"] as SubsystemModelDocument["components"],
-			trails: body["trails"] as StoredSubsystemModel["trails"],
-		});
-		return json({ ok: true, graph: record }, 201);
+		// Fold a re-create onto the existing model when it has the same subject
+		// identity (normalized title + referenced purl set) instead of minting a
+		// duplicate. `force: true` opts out and always creates a new record.
+		const { record, action } = await upsertSubsystemModel(
+			{
+				title: body["title"] as string,
+				description: typeof body["description"] === "string" ? body["description"] : undefined,
+				components: body["components"] as SubsystemModelDocument["components"],
+				trails: body["trails"] as StoredSubsystemModel["trails"],
+			},
+			{ force: body["force"] === true },
+		);
+		return json({ ok: true, graph: record, reused: action === "updated" }, action === "created" ? 201 : 200);
 	}
 
 	// Verify all components of a graph (host-side verify machinery)

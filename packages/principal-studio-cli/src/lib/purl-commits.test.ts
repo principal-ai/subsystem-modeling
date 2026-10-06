@@ -12,7 +12,13 @@ import {
   purlRepoKey,
   registerProjectInAlexandria,
 } from './purl-commits.js';
-import { createSubsystemModel, updateSubsystemModel } from './subsystem-model-store.js';
+import {
+  createSubsystemModel,
+  modelIdentityKey,
+  normalizeModelTitle,
+  updateSubsystemModel,
+  upsertSubsystemModel,
+} from './subsystem-model-store.js';
 
 let tmp: string;
 let repo: string;
@@ -90,5 +96,45 @@ describe('createSubsystemModel', () => {
 
     const updated = await updateSubsystemModel(created.id, { description: 'edit' });
     expect(updated?.createdAtCommits).toEqual(created.createdAtCommits);
+  });
+});
+
+describe('upsertSubsystemModel (identity dedup)', () => {
+  const components = [
+    { alias: 'a', name: 'a', construct: 'function', file: 'x.ts', purl: `${KEY}#x.ts` },
+  ];
+
+  test('normalizes title and keys on purl set', () => {
+    expect(normalizeModelTitle('  Same   Model ')).toBe('same model');
+    expect(modelIdentityKey('same model', components)).toBe(`same model\u0000${KEY}`);
+    expect(modelIdentityKey('x', [{ purl: 'external:proposed' }])).toBe(
+      `x\u0000external:proposed`,
+    );
+    expect(modelIdentityKey('x', [{}])).toBeNull();
+  });
+
+  test('same title + repos updates in place instead of creating a copy', async () => {
+    const created = await upsertSubsystemModel({ title: 'cli dedup', components });
+    expect(created.action).toBe('created');
+
+    const again = await upsertSubsystemModel({
+      title: 'cli  DEDUP',
+      description: 'second attempt',
+      components,
+    });
+    expect(again.action).toBe('updated');
+    expect(again.record.id).toBe(created.record.id);
+    expect(again.record.createdAt).toBe(created.record.createdAt);
+    expect(again.record.description).toBe('second attempt');
+  });
+
+  test('force creates a distinct record', async () => {
+    const created = await upsertSubsystemModel({ title: 'cli force', components });
+    const forced = await upsertSubsystemModel(
+      { title: 'cli force', components },
+      { force: true },
+    );
+    expect(forced.action).toBe('created');
+    expect(forced.record.id).not.toBe(created.record.id);
   });
 });
