@@ -85,6 +85,8 @@ import { ComponentDeclaration } from './ComponentDeclaration';
 import type { ComponentVerificationState } from './ComponentDeclaration';
 import type { DeclarationSymbolRef, SymbolInspection } from './symbolRefs';
 import { FileDrawer, FILE_DRAWER_HEIGHT_MS } from './FileDrawer';
+import { GraphWithSidebar } from './GraphWithSidebar';
+import type { GraphSidebarTab } from './GraphSidebar';
 import { buildRepoGroups, repoAvatarUrl, type RepoGroup } from './paths';
 import { TrailsPanel, TRAIL_PLAY_PAUSE_MS } from './TrailsPanel';
 import {
@@ -152,6 +154,9 @@ interface PersistedViewState {
   expandedTrails?: string[];
   focusedTrailId?: string | null;
   focusedStepIndex?: number | null;
+  /** Sidebar width moved to the shared GraphWithSidebar chrome (persisted
+   *  under `principal.subsystems.sidebarWidth.<persistKey>`); reading the old
+   *  field still restores a width saved before that move. */
   sidebarWidth?: number;
   sidebarView?: 'files' | 'trails';
   diagnosticsTab?: 'issues' | 'agents';
@@ -219,6 +224,24 @@ export interface SubsystemComponentGraphProps {
    * graph.
    */
   initialTrailId?: string | null;
+  /**
+   * Reports trail focus changes from inside the graph — a trail (or step)
+   * clicked in the Trails panel, or focus cleared. This is the graph-driven
+   * mirror of `initialTrailId`: hosts that render a summary alongside the
+   * graph (e.g. a C4 view) can keep both in agreement. Fired on every focus
+   * change, including re-applying a host `initialTrailId` on mount — a host
+   * that itself drives the deep-link receives an idempotent echo of the same
+   * trail.
+   */
+  onTrailSelect?: (ref: { trailId: string; stepIndices?: number[] } | null) => void;
+  /**
+   * Reports which trail step is currently hovered in the Trails panel —
+   * the transient preview mirror of `onTrailSelect`. `null` when nothing is
+   * hovered (or a whole flow row is). Hosts rendering a summary (e.g. a C4
+   * view) can dim to a single step's participants while the pointer is over
+   * a step row, and fall back to the focused trail on leave.
+   */
+  onTrailStepHover?: (ref: { trailId: string; stepIndex: number } | null) => void;
   /**
    * Called with the next trail order after a drag in the sidebar's
    * flows panel. When set, each row grows a drag grip and a drop emits the
@@ -429,6 +452,15 @@ export interface SubsystemComponentGraphProps {
    * instead of accepting the hash. Unmapped regions keep the derived color.
    */
   boundaryColors?: Record<string, string>;
+  /**
+   * Process keys whose frames draw package chrome (dashed, rounded) instead
+   * of runtime chrome (solid, square): the claim groups code organisation —
+   * a library, an area, a proposal — not an accepted deployment unit. Hosts
+   * derive this from their accepted C4 element set (a process no element
+   * backs is code, not a box). Presentation only — ids, issue targeting and
+   * membership are unchanged. See `BoundaryFrameOptions.codeProcessKeys`.
+   */
+  codeProcessKeys?: ReadonlySet<string>;
 }
 
 const nodeTypes: NodeTypes = {
@@ -536,7 +568,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, trails, graphifyRelations, orderByLine, initialTrailId, onReorderTrails, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, title, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
+function Inner({ components, trails, graphifyRelations, orderByLine, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, title, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
   const { theme } = useTheme();
   const { fitView, fitBounds, screenToFlowPosition } = useReactFlow();
   const viewport = useViewport();
@@ -699,57 +731,14 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
   const [descToggleHover, setDescToggleHover] = useState(false);
   // `true` only when a description exists AND the user opened it.
   const showDesc = !!description && descriptionVisible;
-  // Sidebar width (px). Draggable via the resize handle between the sidebar
-  // and the graph canvas; clamps to sensible bounds while dragging. Restored
-  // from the persisted view state when a `persistKey` is set.
-  const [sidebarWidth, setSidebarWidth] = useState(persisted.sidebarWidth ?? 450);
-  const [sidebarDrag, setSidebarDrag] = useState(false);
-  const sidebarDragStartX = useRef(0);
-  const sidebarDragStartWidth = useRef(450);
-  // Mirror of `sidebarWidth` for the drag-end persist (the mouseup listener
-  // closes over the drag-start render).
-  const sidebarWidthRef = useRef(sidebarWidth);
-  sidebarWidthRef.current = sidebarWidth;
-  const sidebarMinWidth = 240;
+  // Sidebar width lives in the shared GraphWithSidebar chrome — draggable and
+  // persisted under `principal.subsystems.sidebarWidth.<persistKey>`. The graph
+  // only bounds how wide the panel may get so the canvas keeps room to breathe;
+  // a width saved under the old view-state key still seeds the panel once.
   const sidebarMaxWidth = useMemo(
-    () => Math.max(Math.min((_measured?.w ?? 680) * 0.5, 600), sidebarMinWidth),
+    () => Math.max(Math.min((_measured?.w ?? 680) * 0.5, 600), 240),
     [_measured?.w],
   );
-  // Resize drag: capture the drag state so document-level move/up listeners
-  // stay attached for the duration of the gesture, then release on mouseup.
-  const onSidebarResizeStart = useCallback(
-    (e: ReactMouseEvent) => {
-      e.preventDefault();
-      sidebarDragStartX.current = e.clientX;
-      sidebarDragStartWidth.current = sidebarWidth;
-      setSidebarDrag(true);
-    },
-    [sidebarWidth],
-  );
-  useEffect(() => {
-    if (!sidebarDrag) return;
-    const onMove = (e: globalThis.MouseEvent) => {
-      const delta = e.clientX - sidebarDragStartX.current;
-      const next = Math.min(
-        Math.max(sidebarDragStartWidth.current + delta, sidebarMinWidth),
-        sidebarMaxWidth,
-      );
-      setSidebarWidth(next);
-    };
-    const onUp = () => {
-      setSidebarDrag(false);
-      // Persist only on drag end — not on every mousemove.
-      writeViewState(persistKey, { sidebarWidth: sidebarWidthRef.current });
-      // Re-fit the canvas so the graph re-centers in the new available space.
-      requestAnimationFrame(() => fitView());
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-    return () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-  }, [sidebarDrag, sidebarMaxWidth, fitView, persistKey]);
   // Persist the trail working set per model. Each write merges into the
   // stored blob, so the three fields never clobber one another.
   useEffect(() => {
@@ -944,6 +933,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
       moduleNesting,
       graphifyRelations: graphifyRelationsRef.current,
       orderByLine,
+      codeProcessKeys,
     })
       .then(({ nodes, edges: e, absoluteRects }) => {
         if (!alive) return;
@@ -993,7 +983,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
     const gen = ++pass2GenRef.current;
     void buildSubsystemGraph(
       { components, trails },
-      { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights, showSingletonFrames, moduleNesting, graphifyRelations, orderByLine },
+      { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights, showSingletonFrames, moduleNesting, graphifyRelations, orderByLine, codeProcessKeys },
     )
       .then(({ nodes, edges: e, absoluteRects }) => {
         if (gen !== pass2GenRef.current) return;
@@ -2043,14 +2033,16 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
         setFocusedStepIndex(null);
         setFocusedTrailId(null);
         setDrawerTarget((prev) => (prev?.kind === 'trail' ? null : prev));
+        onTrailSelect?.(null);
         return;
       }
       setFocusedStepIndex(null);
       setFocusedTrailId(tl.id);
+      onTrailSelect?.({ trailId: tl.id });
       fitFocusBounds(new Set(tl.steps.map((s) => trailStepGraphEdgeId(s))));
       setDrawerTarget((prev) => (prev?.kind === 'trail' ? null : prev));
     },
-    [fitFocusBounds, trailStepMode],
+    [fitFocusBounds, trailStepMode, onTrailSelect],
   );
 
   const clearTrailFocus = useCallback(() => {
@@ -2058,7 +2050,8 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
     setFocusedStepIndex(null);
     setHoveredTrailStep(null);
     setDrawerTarget((prev) => (prev?.kind === 'trail' ? null : prev));
-  }, []);
+    onTrailSelect?.(null);
+  }, [onTrailSelect]);
 
   // Host deep-link: opening the graph from a trail row selects that
   // flow — expand its steps, focus its edges, and switch the sidebar to
@@ -2108,6 +2101,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
         setFocusedTrailId(null);
         setHoveredTrailStep({ trailId: tl.id, stepIndex });
         setDrawerTarget((prev) => (prev?.kind === 'trail' ? null : prev));
+        onTrailSelect?.(null);
         return;
       }
       // Toggle: clicking the selected step unselects it (back to whole flow).
@@ -2127,6 +2121,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
       setFocusedStepIndex(stepIndex);
       setFocusedTrailId(tl.id);
       setHoveredTrailStep(null);
+      onTrailSelect?.({ trailId: tl.id, stepIndices: [stepIndex] });
       // Open the drawer before fitting. If it was closed, wait for its height
       // transition so fitView uses the reduced canvas — not full height.
       const drawerWasOpen = drawerOpenRef.current;
@@ -2163,6 +2158,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
       focusedTrailId,
       renderTrailViewer,
       trailStepMode,
+      onTrailSelect,
     ],
   );
 
@@ -2616,323 +2612,221 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
     [],
   );
 
-  return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'row', userSelect: sidebarDrag ? 'none' : undefined }}>
-      {/* Sidebar: scrollable title/description on top, files or flows pinned below.
-          The description hides by default so files/flows get the room; the
-          title-row toggle reveals it, and the lower panel yields back to 50%. */}
-      {!hideSidebar && (title || description || diagnostic || issuesActive || sidebarExtra || sidebarAfterDescription || treeFilePaths.length > 0 || hasTrails) && (
-        <div
-          style={{
-            width: sidebarWidth,
-            minWidth: sidebarWidth,
-            borderRight: `1px solid ${theme.colors.border}`,
-            background: theme.colors.backgroundSecondary ?? theme.colors.background,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              flex: showDesc ? 1 : '0 0 auto',
-              minHeight: 0,
-              overflowY: 'auto',
-              padding: '16px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 12,
-            }}
-          >
-          {sidebarExtra}
-          {(title || description || diagnostic) && (
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-              {title && (
-                <h2
-                  style={{
-                    margin: 0,
-                    flex: 1,
-                    minWidth: 0,
-                    fontSize: theme.fontSizes[2],
-                    fontWeight: 600,
-                    color: theme.colors.text,
-                    fontFamily: theme.fonts.monospace,
-                  }}
-                >
-                  {title}
-                </h2>
-              )}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  flexShrink: 0,
-                  // Title's flex:1 already pushes this cluster right; without a
-                  // title, keep the actions flush right instead of flush-left.
-                  marginLeft: title ? undefined : 'auto',
-                }}
-              >
-                {diagnostic && (
-                  <SubsystemDiagnosticToggle
-                    {...diagnostic}
-                    active={issuesActive}
-                    onToggle={toggleIssues}
-                  />
-                )}
-                {description && (
-                  <button
-                    type="button"
-                    aria-expanded={descriptionVisible}
-                    aria-label={descriptionVisible ? 'Hide description' : 'Show description'}
-                    title={descriptionVisible ? 'Hide description' : 'Show description'}
-                    onMouseEnter={() => setDescToggleHover(true)}
-                    onMouseLeave={() => setDescToggleHover(false)}
-                    onClick={() => setDescriptionVisible((v) => !v)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                      width: 22,
-                      height: 22,
-                      padding: 0,
-                      border: 'none',
-                      borderRadius: 4,
-                      background: descriptionVisible || descToggleHover ? theme.colors.border : 'transparent',
-                      color: descriptionVisible || descToggleHover ? theme.colors.text : (theme.colors.textMuted ?? theme.colors.textSecondary),
-                      cursor: 'pointer',
-                      transition: 'background 120ms ease, color 120ms ease',
-                    }}
-                  >
-                    <FileText size={14} />
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-          {description && descriptionVisible && (
-            <div style={{ fontSize: theme.fontSizes[0], lineHeight: 1.5 }}>
-              <IndustryMarkdownSlide
-                content={description}
-                slideIdPrefix="subsystem-desc"
-                slideIndex={0}
-                isVisible={true}
-                theme={theme}
-                disableScroll={true}
-                disableBasePadding
-                enableKeyboardScrolling={false}
-                autoFocusOnVisible={false}
-              />
-            </div>
-          )}
-          {sidebarAfterDescription}
-          </div>
-          {(treeFilePaths.length > 0 || hasTrails || issuesActive) && (
-            <div
+  // Sidebar chrome — title/description header, Files/Trails (or Issues/Agents)
+  // tab strip, and the lower panels. Everything renders through the shared
+  // GraphWithSidebar; the graph keeps owning every bit of *state* (focused
+  // trail, active tab, description visibility) because the canvas dims from
+  // the same facts the sidebar renders.
+  const sidebarVisible =
+    !hideSidebar &&
+    (title || description || diagnostic || issuesActive || sidebarExtra || sidebarAfterDescription ||
+      treeFilePaths.length > 0 || hasTrails);
+  const sidebarBodyVisible = treeFilePaths.length > 0 || hasTrails || issuesActive;
+  const sidebarTabs: GraphSidebarTab[] | undefined = issuesActive
+    ? agentsPanel
+      ? [
+          { id: 'issues', label: 'Issues' },
+          { id: 'agents', label: 'Agents' },
+        ]
+      : undefined
+    : hasTrails
+      ? [
+          { id: 'trails', label: 'Trails' },
+          { id: 'files', label: 'Files' },
+        ]
+      : undefined;
+  const activeSidebarTab = issuesActive ? diagnosticsTab : sidebarView;
+  // Header block: the extras, then the title/actions row (diagnostic chip +
+  // description toggle), then the description that toggles out from under it.
+  const sidebarHeader = (
+    <>
+      {sidebarExtra}
+      {(title || description || diagnostic) && (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          {title && (
+            <h2
               style={{
-                ...(showDesc ? { height: '50%' as const } : { flex: 1, minHeight: 0 }),
-                minHeight: 160,
-                flexShrink: 0,
-                borderTop: `1px solid ${theme.colors.border}`,
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden',
+                margin: 0,
+                flex: 1,
+                minWidth: 0,
+                fontSize: theme.fontSizes[2],
+                fontWeight: 600,
+                color: theme.colors.text,
+                fontFamily: theme.fonts.monospace,
               }}
             >
-              {issuesActive ? (
-                agentsPanel ? (
-                  <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                    <div
-                      role="tablist"
-                      aria-label="Diagnostics view"
-                      style={{
-                        display: 'flex',
-                        width: '100%',
-                        flexShrink: 0,
-                        borderBottom: `1px solid ${theme.colors.border}`,
-                        background: theme.colors.backgroundSecondary ?? theme.colors.background,
-                      }}
-                    >
-                      {(['issues', 'agents'] as const).map((tab) => (
-                        <button
-                          key={tab}
-                          type="button"
-                          role="tab"
-                          aria-selected={diagnosticsTab === tab}
-                          onClick={() => setDiagnosticsTab(tab)}
-                          style={{
-                            flex: 1,
-                            minWidth: 0,
-                            padding: '8px 8px',
-                            border: 'none',
-                            borderRadius: 0,
-                            background: diagnosticsTab === tab ? theme.colors.background : 'transparent',
-                            color:
-                              diagnosticsTab === tab ? theme.colors.text : theme.colors.textSecondary,
-                            fontSize: theme.fontSizes[1],
-                            fontFamily: theme.fonts.monospace,
-                            textTransform: 'capitalize',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {tab === 'issues' ? 'Issues' : 'Agents'}
-                        </button>
-                      ))}
-                    </div>
-                    {diagnosticsTab === 'agents' ? (
-                      <SubsystemAgentsPanel {...agentsPanel} />
-                    ) : (
-                      <SubsystemIssueList
-                        issues={issues ?? []}
-                        focusCategory={focusIssueCategory}
-                        laneStatus={laneStatus}
-                        onSelectIssue={focusIssueTarget}
-                        onDeselectIssue={unfocusIssueTarget}
-                        onApplyFix={onApplyIssueFix}
-                        onHoverIssue={onHoverIssue}
-                        onExpandedCategoriesChange={handleExpandedCategoriesChange}
-                      />
-                    )}
-                  </div>
-                ) : (
-                  <SubsystemIssueList
-                    issues={issues ?? []}
-                    focusCategory={focusIssueCategory}
-                    laneStatus={laneStatus}
-                    onSelectIssue={focusIssueTarget}
-                    onDeselectIssue={unfocusIssueTarget}
-                    onApplyFix={onApplyIssueFix}
-                    onHoverIssue={onHoverIssue}
-                    onExpandedCategoriesChange={handleExpandedCategoriesChange}
-                  />
-                )
-              ) : (
-                <>
-              {hasTrails && (
-                <div
-                  role="tablist"
-                  aria-label="Sidebar view"
-                  style={{
-                    display: 'flex',
-                    width: '100%',
-                    flexShrink: 0,
-                    borderBottom: `1px solid ${theme.colors.border}`,
-                    background: theme.colors.backgroundSecondary ?? theme.colors.background,
-                  }}
-                >
-                  {(['trails', 'files'] as const).map((view) => (
-                    <button
-                      key={view}
-                      type="button"
-                      role="tab"
-                      aria-selected={sidebarView === view}
-                      onClick={() => changeSidebarView(view)}
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        padding: '8px 8px',
-                        border: 'none',
-                        borderRadius: 0,
-                        background: sidebarView === view ? theme.colors.background : 'transparent',
-                        color:
-                          sidebarView === view
-                            ? theme.colors.text
-                            : theme.colors.textSecondary,
-                        fontSize: theme.fontSizes[1],
-                        fontFamily: theme.fonts.monospace,
-                        textTransform: 'capitalize',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {view === 'trails' ? 'Trails' : 'Files'}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {sidebarView === 'trails' && trails && trails.length > 0 ? (
-                <TrailsPanel
-                  trails={trails}
-                  expandedTrails={expandedTrails}
-                  focusedTrailId={focusedTrailId}
-                  focusedStepIndex={focusedStepIndex}
-                  hoveredTrailStep={hoveredTrailStep}
-                  onToggleCollapsed={toggleTrailCollapsed}
-                  onFocusFlow={focusTrailEdges}
-                  onClearFocus={clearTrailFocus}
-                  onFocusStep={focusTrailStep}
-                  onHoverStep={(tl, i) =>
-                    setHoveredTrailStep({ trailId: tl.id, stepIndex: i })
-                  }
-                  onHoverFlow={(tl) =>
-                    setHoveredTrailStep({ trailId: tl.id, stepIndex: null })
-                  }
-                  onLeaveStep={() => setHoveredTrailStep(null)}
-                  onReorder={onReorderTrails}
-                  proposedAliases={proposedAliases}
-                />
-              ) : treeFilePaths.length > 0 ? (
-              <>
-              {repoGroups.groups.map((group, i) => {
-                const groupKey = group.repoKey ?? '__no-repo__';
-                const collapsed = collapsedRepos.has(groupKey);
-                return (
-                  <div
-                    key={groupKey}
-                    style={{
-                      flex: collapsed ? '0 0 auto' : 1,
-                      minHeight: collapsed ? 0 : undefined,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      borderTop: i > 0 ? `1px solid ${theme.colors.border}` : undefined,
-                    }}
-                  >
-                    {repoGroups.multiRepo && (
-                      <RepoGroupHeader
-                        group={group}
-                        collapsed={collapsed}
-                        onToggle={() => toggleRepoCollapsed(groupKey)}
-                      />
-                    )}
-                    {!collapsed && (
-                      <SubsystemFileTree
-                        files={group.entries.map((e) => e.displayPath)}
-                        selectedFile={selected?.file ?? openFile}
-                        hoveredFile={hoveredFile}
-                        onSelectFile={onTreeSelectFile}
-                        hoveredFolder={hoveredBoundaryPath}
-                        headerless={repoGroups.multiRepo}
-                      />
-                    )}
-                  </div>
-                );
-              })}
-              </>
-              ) : null}
-                </>
-              )}
-            </div>
+              {title}
+            </h2>
           )}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              flexShrink: 0,
+              // Title's flex:1 already pushes this cluster right; without a
+              // title, keep the actions flush right instead of flush-left.
+              marginLeft: title ? undefined : 'auto',
+            }}
+          >
+            {diagnostic && (
+              <SubsystemDiagnosticToggle
+                {...diagnostic}
+                active={issuesActive}
+                onToggle={toggleIssues}
+              />
+            )}
+            {description && (
+              <button
+                type="button"
+                aria-expanded={descriptionVisible}
+                aria-label={descriptionVisible ? 'Hide description' : 'Show description'}
+                title={descriptionVisible ? 'Hide description' : 'Show description'}
+                onMouseEnter={() => setDescToggleHover(true)}
+                onMouseLeave={() => setDescToggleHover(false)}
+                onClick={() => setDescriptionVisible((v) => !v)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  width: 22,
+                  height: 22,
+                  padding: 0,
+                  border: 'none',
+                  borderRadius: 4,
+                  background: descriptionVisible || descToggleHover ? theme.colors.border : 'transparent',
+                  color: descriptionVisible || descToggleHover ? theme.colors.text : (theme.colors.textMuted ?? theme.colors.textSecondary),
+                  cursor: 'pointer',
+                  transition: 'background 120ms ease, color 120ms ease',
+                }}
+              >
+                <FileText size={14} />
+              </button>
+            )}
+          </div>
         </div>
       )}
-      
-      {/* Drag handle between sidebar and canvas — resize the left panel. */}
-      {!hideSidebar && (title || description || diagnostic || issuesActive || sidebarExtra || sidebarAfterDescription || treeFilePaths.length > 0 || hasTrails) && (
-        <div
-          onMouseDown={onSidebarResizeStart}
-          aria-label="Resize sidebar"
-          title="Drag to resize"
-          style={{
-            width: 3,
-            flexShrink: 0,
-            cursor: 'col-resize',
-            background: theme.colors.border,
-            transition: 'background 120ms ease',
-            zIndex: 1,
-          }}
-        />
+      {description && descriptionVisible && (
+        <div style={{ fontSize: theme.fontSizes[0], lineHeight: 1.5 }}>
+          <IndustryMarkdownSlide
+            content={description}
+            slideIdPrefix="subsystem-desc"
+            slideIndex={0}
+            isVisible={true}
+            theme={theme}
+            disableScroll={true}
+            disableBasePadding
+            enableKeyboardScrolling={false}
+            autoFocusOnVisible={false}
+          />
+        </div>
       )}
-
+      {sidebarAfterDescription}
+    </>
+  );
+  // Lower panel: the Issues/Agents diagnostics stack, or the Files/Trails
+  // stack with the trail flow list / repo file tree.
+  const sidebarBody = issuesActive ? (
+    diagnosticsTab === 'agents' && agentsPanel ? (
+      <SubsystemAgentsPanel {...agentsPanel} />
+    ) : (
+      <SubsystemIssueList
+        issues={issues ?? []}
+        focusCategory={focusIssueCategory}
+        laneStatus={laneStatus}
+        onSelectIssue={focusIssueTarget}
+        onDeselectIssue={unfocusIssueTarget}
+        onApplyFix={onApplyIssueFix}
+        onHoverIssue={onHoverIssue}
+        onExpandedCategoriesChange={handleExpandedCategoriesChange}
+      />
+    )
+  ) : sidebarView === 'trails' && trails && trails.length > 0 ? (
+    <TrailsPanel
+      trails={trails}
+      expandedTrails={expandedTrails}
+      focusedTrailId={focusedTrailId}
+      focusedStepIndex={focusedStepIndex}
+      hoveredTrailStep={hoveredTrailStep}
+      onToggleCollapsed={toggleTrailCollapsed}
+      onFocusFlow={focusTrailEdges}
+      onClearFocus={clearTrailFocus}
+      onFocusStep={focusTrailStep}
+      onHoverStep={(tl, i) => {
+        setHoveredTrailStep({ trailId: tl.id, stepIndex: i });
+        onTrailStepHover?.({ trailId: tl.id, stepIndex: i });
+      }}
+      onHoverFlow={(tl) => {
+        setHoveredTrailStep({ trailId: tl.id, stepIndex: null });
+        onTrailStepHover?.(null);
+      }}
+      onLeaveStep={() => {
+        setHoveredTrailStep(null);
+        onTrailStepHover?.(null);
+      }}
+      onReorder={onReorderTrails}
+      proposedAliases={proposedAliases}
+    />
+  ) : treeFilePaths.length > 0 ? (
+    <>
+      {repoGroups.groups.map((group, i) => {
+        const groupKey = group.repoKey ?? '__no-repo__';
+        const collapsed = collapsedRepos.has(groupKey);
+        return (
+          <div
+            key={groupKey}
+            style={{
+              flex: collapsed ? '0 0 auto' : 1,
+              minHeight: collapsed ? 0 : undefined,
+              display: 'flex',
+              flexDirection: 'column',
+              borderTop: i > 0 ? `1px solid ${theme.colors.border}` : undefined,
+            }}
+          >
+            {repoGroups.multiRepo && (
+              <RepoGroupHeader
+                group={group}
+                collapsed={collapsed}
+                onToggle={() => toggleRepoCollapsed(groupKey)}
+              />
+            )}
+            {!collapsed && (
+              <SubsystemFileTree
+                files={group.entries.map((e) => e.displayPath)}
+                selectedFile={selected?.file ?? openFile}
+                hoveredFile={hoveredFile}
+                onSelectFile={onTreeSelectFile}
+                hoveredFolder={hoveredBoundaryPath}
+                headerless={repoGroups.multiRepo}
+              />
+            )}
+          </div>
+        );
+      })}
+    </>
+  ) : null;
+  return (
+    <GraphWithSidebar
+      hidden={!sidebarVisible}
+      bodyHidden={!sidebarBodyVisible}
+      stretchHeader={showDesc}
+      header={sidebarHeader}
+      tabs={sidebarTabs}
+      activeTab={activeSidebarTab}
+      onTabChange={(id) =>
+        issuesActive
+          ? setDiagnosticsTab(id as 'issues' | 'agents')
+          : changeSidebarView(id as 'files' | 'trails')
+      }
+      sidebarBody={sidebarBody}
+      tabListLabel={issuesActive ? 'Diagnostics view' : 'Sidebar view'}
+      defaultWidth={persisted.sidebarWidth ?? 450}
+      minWidth={240}
+      maxWidth={sidebarMaxWidth}
+      persistKey={persistKey}
+      onResizeEnd={() => requestAnimationFrame(() => fitView())}
+    >
       {/* Graph area */}
       <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {/* Canvas box — the edge-label overlay and legend anchor here, so
@@ -3413,7 +3307,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
       {canvasOverlay}
       {liveEvents ? <MaintainLivePanel {...liveEvents} /> : null}
       </div>
-    </div>
+    </GraphWithSidebar>
   );
 }
 

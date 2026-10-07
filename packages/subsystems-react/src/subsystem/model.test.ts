@@ -463,6 +463,30 @@ describe('subsystem graph model', () => {
     expect(nodes.find((n) => n.id === processGroupNodeId('app/lonely'))).toBeUndefined();
   });
 
+  test('codeProcessKeys marks a process region for package chrome without changing its identity', async () => {
+    const { regions, nodes } = await buildSubsystemGraph(
+      {
+        components: [
+          { alias: 'a', name: 'a', construct: 'function', file: 'a.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
+          { alias: 'b', name: 'b', construct: 'function', file: 'b.ts', purl: 'pkg:github/acme/app', process: 'app/host' },
+          // Singleton, kept — the component graph passes showSingletonFrames
+          // true, and the fixture's real singleton (`subsystems-react/ui`)
+          // is exactly the demotion case.
+          { alias: 'solo', name: 'solo', construct: 'function', file: 's.ts', purl: 'pkg:github/acme/app', process: 'lib/ui' },
+        ],
+        trails: [],
+      },
+      { showSingletonFrames: true, codeProcessKeys: new Set(['lib/ui']) },
+    );
+    const lib = regions.find((r) => r.key === 'lib/ui');
+    // Presentation only: kind stays 'process', so the group id and issue
+    // targeting still read the claim.
+    expect(lib?.kind).toBe('process');
+    expect(lib?.chrome).toBe('package');
+    expect(regions.find((r) => r.key === 'app/host')?.chrome).toBeUndefined();
+    expect(nodes.some((n) => n.id === processGroupNodeId('lib/ui'))).toBe(true);
+  });
+
   // NOTE: buildSubsystemGraph cannot assert ELK-built frames here — elkjs
   // constructs a Worker, which bun's test env lacks, so every call falls back
   // to manual positions. Frame existence is covered by planCompoundGroups

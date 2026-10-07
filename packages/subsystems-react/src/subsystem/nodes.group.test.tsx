@@ -63,6 +63,88 @@ describe('SubsystemGroupNode frame color', () => {
   });
 });
 
+describe('SubsystemGroupNode chrome', () => {
+  // Runtime chrome asserts "deployment unit": square, solid, tinted. A
+  // process region the host marked `chrome: 'package'` groups code
+  // organisation instead — a library, an area, a proposal — and draws as a
+  // package boundary: rounded, dashed, transparent.
+  test('a plain process region wears runtime chrome', () => {
+    const { container } = renderGroup({ region });
+    const frame = container.querySelector('div') as HTMLElement;
+    expect(frame.style.border).toContain('solid');
+    expect(frame.style.borderRadius).toBe('0px');
+    expect(frame.style.background).not.toBe('transparent');
+  });
+
+  test("chrome: 'package' draws the frame as a code boundary", () => {
+    const { container } = renderGroup({
+      region: { ...region, chrome: 'package' },
+    });
+    const frame = container.querySelector('div') as HTMLElement;
+    expect(frame.style.border).toContain('dashed');
+    expect(frame.style.borderRadius).toBe('12px');
+    expect(frame.style.background).toBe('transparent');
+  });
+
+  test('chrome does not change the region identity the frame renders', () => {
+    const { container } = renderGroup({
+      region: { ...region, chrome: 'package' },
+    });
+    // The badge still reads the label — kind is chrome's business alone.
+    expect(container.textContent).toContain('booking-web/server');
+  });
+});
+
+describe('SubsystemGroupNode package glyph', () => {
+  // A frame that renders as a package boundary wears the Package glyph: a
+  // real package (purl repo identity) or a process claim the host demoted to
+  // package chrome. Module/directory/plain-process frames stay text-only —
+  // the glyph is what tells the shared dashed chrome "code organisation, not
+  // a deployment unit".
+  test('a package-kind region wears the glyph', () => {
+    const { container } = renderGroup({
+      region: {
+        kind: 'package',
+        key: 'pkg:github/acme/app',
+        label: 'acme/app',
+        memberAliases: ['a', 'b'],
+      },
+    });
+    expect(container.querySelector('.lucide-package')).not.toBeNull();
+  });
+
+  test("a process region demoted to package chrome wears the glyph", () => {
+    const { container } = renderGroup({
+      region: { ...region, chrome: 'package' },
+    });
+    expect(container.querySelector('.lucide-package')).not.toBeNull();
+  });
+
+  test('plain process, module, and directory regions carry no glyph', () => {
+    expect(renderGroup({ region }).container.querySelector('.lucide-package')).toBeNull();
+    expect(
+      renderGroup({
+        region: {
+          kind: 'module',
+          key: 'src/bun/index.ts',
+          label: 'src/bun/index.ts',
+          memberAliases: ['a', 'b'],
+        },
+      }).container.querySelector('.lucide-package'),
+    ).toBeNull();
+    expect(
+      renderGroup({
+        region: {
+          kind: 'directory',
+          key: 'src/bun',
+          label: 'src/bun',
+          memberAliases: ['a', 'b'],
+        },
+      }).container.querySelector('.lucide-package'),
+    ).toBeNull();
+  });
+});
+
 describe('SubsystemGroupNode boundary badge', () => {
   // A boundary finding is a property of the region's shape, so it badges the
   // frame with its own icon rather than borrowing the verification-rung chips

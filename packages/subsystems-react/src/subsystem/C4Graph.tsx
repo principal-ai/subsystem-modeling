@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import {
   Edge,
   EdgeProps,
@@ -44,12 +45,43 @@ import {
 import { TechMark, technologyBrand } from './techIcons';
 import type { TechBrand } from './techIcons';
 import { GRAPH_CANVAS_CLASS, GRAPH_NAV_PROPS, GraphChrome, GraphLayerStyle } from './graphChrome';
-import type { C4Element, C4Model } from './c4';
+import type { C4Edge, C4Element, C4Model, C4TrailRef } from './c4';
 import { openContainerSet, openStateKey } from './c4';
 
 export interface C4GraphProps {
   model: C4Model;
   onSelectNode?: (id: string | null) => void;
+  /**
+   * Click an edge. Fires with the rolled-up line (and its `trailRefs`
+   * provenance when a builder supplied it), or `null` when the selection is
+   * cleared — pane click, or clicking a node. This is the drill-down
+   * affordance: the host switches the component graph to the contributing
+   * trails.
+   */
+  onSelectEdge?: (edge: C4Edge | null) => void;
+  /**
+   * Click a trail row in the edge inspector. Hands the ref back so the host
+   * can deep-link the component graph to that trail — e.g. via
+   * `SubsystemComponentGraph.initialTrailId`. Without this the refs render
+   * inert.
+   */
+  onTrailClick?: (ref: C4TrailRef) => void;
+  /**
+   * Element ids to fade — everything the focused trail does NOT touch. The
+   * host computes the set (trail step aliases → owning element via its
+   * membership map); this graph renders the named elements (and the lines
+   * between them) at low opacity so the players in the trail stay bright.
+   * `null` (or absent) renders everything at full weight.
+   */
+  dimmedElementIds?: ReadonlySet<string> | null;
+  /**
+   * Edge ids to fade beyond the endpoint rule — the host's line-level
+   * relevance set (edges that do NOT carry the focused trail / hovered step).
+   * A step entirely internal to a container folds into no line, so the host
+   * can dim every edge even though lit containers remain. Unioned with the
+   * own both-endpoints-dimmed rule; the selected edge never dims.
+   */
+  dimmedEdgeIds?: ReadonlySet<string> | null;
   /**
    * Drill-down: add `id` to `model.openContainerIds`, or remove it if it is
    * already open. One verb for both directions, because with several containers
@@ -102,10 +134,16 @@ function C4NodeView(
       /** FLIP: absolute flow rects — where this card was, and where it now is. */
       growFrom?: FlowRect;
       frameRect?: FlowRect;
+      /**
+       * True while the host's focused trail does not touch this element — the
+       * "players stay bright, the rest fades" emphasis layer. Applied to the
+       * whole card (badges and all), never to a single badge on it.
+       */
+      dimmed?: boolean;
     }>
   >,
 ) {
-  const { element, selected, componentCount, onExpand, open, settled, growFrom, frameRect } =
+  const { element, selected, componentCount, onExpand, open, settled, growFrom, frameRect, dimmed } =
     props.data;
   const grown = open === true;
 
@@ -136,21 +174,31 @@ function C4NodeView(
         transition: sliding && placed ? `transform ${MORPH_MS}ms ease-out` : 'none',
       }}
     >
-      <C4NodeCard
-        node={element}
-        selected={selected}
-        componentCount={componentCount ?? 0}
-        onExpand={onExpand}
-        width={props.width}
-        height={props.height}
-        showDescription={showDescriptionFor(open, settled)}
-        handles={
-          <>
-            <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
-            <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
-          </>
-        }
-      />
+      <div
+        style={{
+          // The dim is a view concern, deliberately below the FLIP transform
+          // (which owns position) so the two never fight. The whole card fades —
+          // if we ever want to keep a badge lit, that is a different element.
+          opacity: dimmed ? 0.22 : 1,
+          transition: 'opacity 220ms ease',
+        }}
+      >
+        <C4NodeCard
+          node={element}
+          selected={selected}
+          componentCount={componentCount ?? 0}
+          onExpand={onExpand}
+          width={props.width}
+          height={props.height}
+          showDescription={showDescriptionFor(open, settled)}
+          handles={
+            <>
+              <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
+              <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+            </>
+          }
+        />
+      </div>
     </div>
   );
 }
@@ -166,9 +214,13 @@ function C4NodeView(
 function C4EdgeLabels({
   positions,
   edges,
+  selectedEdgeId,
+  dimmedEdgeIds,
 }: {
   positions: Map<string, { x: number; y: number }>;
   edges: C4Model['edges'];
+  selectedEdgeId?: string | null;
+  dimmedEdgeIds?: ReadonlySet<string> | null;
 }) {
   const { theme } = useTheme();
   const viewport = useViewport();
@@ -190,6 +242,8 @@ function C4EdgeLabels({
         if (!edge) return null;
         const color = protocolColor(edge.protocol);
         const text = edge.protocol ?? edge.label;
+        const selected = edge.id === selectedEdgeId;
+        const dimmed = dimmedEdgeIds?.has(edge.id) === true;
         return (
           <div
             key={id}
@@ -206,6 +260,9 @@ function C4EdgeLabels({
               height: EDGE_LABEL_HEIGHT,
               boxSizing: 'border-box',
               padding: '7px 8px',
+              // Fades with its line, on the same beat.
+              opacity: dimmed ? 0.25 : 1,
+              transition: 'opacity 220ms ease',
             }}
           >
             <span
@@ -216,6 +273,8 @@ function C4EdgeLabels({
                 borderRadius: 4,
                 border: `0.5px solid ${color}`,
                 background: surface,
+                // The selected chip echoes the edge's heavier stroke.
+                outline: selected ? `1.5px solid ${color}` : 'none',
               }}
             />
             <span
@@ -228,7 +287,7 @@ function C4EdgeLabels({
                 fontSize: EDGE_LABEL_FONT_SIZE,
                 lineHeight: 1,
                 fontFamily: theme.fonts.monospace,
-                fontWeight: 500,
+                fontWeight: selected ? 700 : 500,
                 color,
               }}
             >
@@ -248,20 +307,38 @@ function C4EdgeLabels({
  * the same `elkPathPoints` this renders. React Flow's built-in edge would curve
  * between handles while the chip sat on ELK's orthogonal route, which is why
  * labels read as "off the line".
+ *
+ * Two strokes: an invisible wide hit path (the drawn line is 1px, hopeless to
+ * click) and the visible one. The selection emphasis is a heavier stroke on
+ * the same geometry, so the selected line reads without redrawing the route.
  */
-function C4EdgeView({ data, markerEnd }: EdgeProps<Edge<{ path?: string; color?: string }>>) {
+function C4EdgeView({
+  data,
+  markerEnd,
+}: EdgeProps<Edge<{ path?: string; color?: string; selected?: boolean; dimmed?: boolean }>>) {
   const path = data?.path ?? '';
   if (!path) return null;
+  const selected = data?.selected === true;
+  const dimmed = data?.dimmed === true;
   return (
-    <path
-      d={path}
-      fill="none"
-      stroke={data?.color}
-      strokeWidth={1}
-      strokeDasharray="6 4"
-      markerEnd={markerEnd}
-      style={{ pointerEvents: 'none' }}
-    />
+    <>
+      <path
+        d={path}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={14}
+        style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+      />
+      <path
+        d={path}
+        fill="none"
+        stroke={data?.color}
+        strokeWidth={selected ? 2.5 : 1}
+        strokeDasharray="6 4"
+        markerEnd={markerEnd}
+        style={{ pointerEvents: 'none', opacity: dimmed ? 0.18 : 1, transition: 'opacity 220ms ease' }}
+      />
+    </>
   );
 }
 
@@ -646,7 +723,7 @@ export function hidesComponentDuringMorph(
   return morphTargets.has(owner);
 }
 
-function Inner({ model, onSelectNode, onToggleContainer, onOpenContainer, onCloseContainer, gutter = 28 }: C4GraphProps) {
+function Inner({ model, onSelectNode, onSelectEdge, onTrailClick, onToggleContainer, onOpenContainer, onCloseContainer, gutter = 28, dimmedElementIds, dimmedEdgeIds }: C4GraphProps) {
   const { theme } = useTheme();
   const { fitView } = useReactFlow();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -654,6 +731,7 @@ function Inner({ model, onSelectNode, onToggleContainer, onOpenContainer, onClos
   const [rfEdges, setRfEdges] = useState<Edge[]>([]);
   const [ready, setReady] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [labelPositions, setLabelPositions] = useState<Map<string, { x: number; y: number }>>(
     () => new Map(),
   );
@@ -1244,6 +1322,12 @@ function Inner({ model, onSelectNode, onToggleContainer, onOpenContainer, onClos
     [model, selectedId],
   );
 
+  /** The rolled-up line under selection, when it is an edge. */
+  const selectedEdge = useMemo(
+    () => model.edges.find((e) => e.id === selectedEdgeId) ?? null,
+    [model, selectedEdgeId],
+  );
+
   /**
    * The components authored inside the selected element, if it is a container.
    * These are `C4Component`s whose `container` names the selected id (or, once
@@ -1282,13 +1366,20 @@ function Inner({ model, onSelectNode, onToggleContainer, onOpenContainer, onClos
         return {
           ...n,
           ...(hidden ? { hidden: true } : {}),
-          data: { ...n.data, selected: n.id === selectedId, settled },
+          data: {
+            ...n.data,
+            selected: n.id === selectedId,
+            settled,
+            dimmed: dimmedElementIds
+              ? (element ? dimmedElementIds.has(element.id) : false)
+              : false,
+          },
         };
       }),
     // `morphTargetsRef` is a ref, so it cannot be a dependency; `settled` covers
     // it, because the two always change together — targets are written in the same
     // tick that clears `settled`, and cleared in the same tick that restores it.
-    [nodes, selectedId, settled, openContainerIds],
+    [nodes, selectedId, settled, openContainerIds, dimmedElementIds],
   );
 
   /**
@@ -1296,14 +1387,63 @@ function Inner({ model, onSelectNode, onToggleContainer, onOpenContainer, onClos
    * gliding between the two slots the old lines would visibly point at the wrong
    * boxes. Hiding them for the morph is honest and cheap; interpolating the
    * polylines to match is not.
+   *
+   * The dim set is the union of
+   *   (a) the own endpoint rule — a line between two dimmed boxes fades with
+   *       them, a line into a lit container stays bright on its own; and
+   *   (b) the host's line-relevance set — edges that don't carry the focused
+   *       trail / hovered step (a step internal to a container folds into no
+   *       line at all, so even lines out of the lit container fade).
+   *
+   * The selected edge never dims: it is the inspector's subject.
    */
+  const dimmedEdgeIdSet = useMemo(() => {
+    if (!dimmedElementIds && !dimmedEdgeIds) return null;
+    const out = new Set<string>();
+    if (dimmedElementIds) {
+      for (const e of rfEdges) {
+        if (dimmedElementIds.has(e.source) && dimmedElementIds.has(e.target)) out.add(e.id);
+      }
+    }
+    if (dimmedEdgeIds) for (const id of dimmedEdgeIds) out.add(id);
+    if (selectedEdgeId) out.delete(selectedEdgeId);
+    return out;
+  }, [dimmedElementIds, dimmedEdgeIds, rfEdges, selectedEdgeId]);
+
   const displayEdges = useMemo(
-    () => (settled ? rfEdges : rfEdges.map((e) => ({ ...e, hidden: true }))),
-    [rfEdges, settled],
+    () =>
+      rfEdges.map((e) => ({
+        ...e,
+        ...(settled ? {} : { hidden: true }),
+        data: {
+          ...e.data,
+          selected: e.id === selectedEdgeId,
+          dimmed: dimmedEdgeIdSet?.has(e.id) === true,
+        },
+      })),
+    [rfEdges, settled, selectedEdgeId, dimmedEdgeIdSet],
   );
 
-  return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', background: theme.colors.background }}>
+  // The selection panel floats over the canvas in the top-right corner. A host
+  // that wants the panel (or anything else) beside the graph wraps the graph in
+  // `GraphWithSidebar` itself, so the graph stays overlay-only.
+  const selectionPanelStyle: CSSProperties = {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    // Above the edge-label overlay (zIndex 5), or chips paint over the panel.
+    zIndex: 10,
+    width: 280,
+    maxHeight: 'calc(100% - 24px)',
+    overflowY: 'auto',
+    background: theme.colors.backgroundSecondary ?? theme.colors.background,
+    border: `1px solid ${theme.colors.border ?? '#333'}`,
+    borderRadius: 8,
+    padding: '10px 12px',
+  };
+
+  const canvasRoot = (
+    <>
       <GraphLayerStyle />
       <ReactFlow
         nodes={displayNodes}
@@ -1316,11 +1456,24 @@ function Inner({ model, onSelectNode, onToggleContainer, onOpenContainer, onClos
           if (node.type !== 'c4-node') return;
           const next = node.id === selectedId ? null : node.id;
           setSelectedId(next);
+          setSelectedEdgeId(null);
           onSelectNode?.(next);
+          onSelectEdge?.(null);
+        }}
+        onEdgeClick={(_e, edge) => {
+          const next = edge.id === selectedEdgeId ? null : edge.id;
+          setSelectedEdgeId(next);
+          // An edge selection replaces the node panel — the two inspectors
+          // sharing the corner would fight for it.
+          setSelectedId(null);
+          onSelectNode?.(null);
+          onSelectEdge?.(next ? (model.edges.find((e) => e.id === next) ?? null) : null);
         }}
         onPaneClick={() => {
           setSelectedId(null);
+          setSelectedEdgeId(null);
           onSelectNode?.(null);
+          onSelectEdge?.(null);
         }}
         proOptions={{ hideAttribution: true }}
         // Pin the flow to its container. The label overlay is a sibling sized
@@ -1335,7 +1488,7 @@ function Inner({ model, onSelectNode, onToggleContainer, onOpenContainer, onClos
           it pointing at the space between two layouts. It rejoins them, the nested
           components and the descriptions in one reveal. */}
       {ready && settled && labelPositions.size > 0 && (
-        <C4EdgeLabels positions={labelPositions} edges={model.edges} />
+        <C4EdgeLabels positions={labelPositions} edges={model.edges} selectedEdgeId={selectedEdgeId} dimmedEdgeIds={dimmedEdgeIdSet} />
       )}
       {!ready && (
         <div
@@ -1354,24 +1507,12 @@ function Inner({ model, onSelectNode, onToggleContainer, onOpenContainer, onClos
           Laying out C4 view…
         </div>
       )}
+    </>
+  );
+  const selectionPanels = (
+    <>
       {selected && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 12,
-            right: 12,
-            // Above the edge-label overlay (zIndex 5), or chips paint over the
-            // panel.
-            zIndex: 10,
-            width: 280,
-            maxHeight: 'calc(100% - 24px)',
-            overflowY: 'auto',
-            background: theme.colors.backgroundSecondary ?? theme.colors.background,
-            border: `1px solid ${theme.colors.border ?? '#333'}`,
-            borderRadius: 8,
-            padding: '10px 12px',
-          }}
-        >
+        <div style={selectionPanelStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontFamily: theme.fonts.monospace, fontWeight: 600, color: theme.colors.text, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {selected.label}
@@ -1540,6 +1681,151 @@ function Inner({ model, onSelectNode, onToggleContainer, onOpenContainer, onClos
           )}
         </div>
       )}
+
+      {selectedEdge && ready && (
+        <div style={selectionPanelStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span
+              aria-hidden
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: protocolColor(selectedEdge.protocol),
+                flexShrink: 0,
+              }}
+            />
+            <span
+              style={{
+                fontFamily: theme.fonts.monospace,
+                fontWeight: 600,
+                color: theme.colors.text,
+                flex: 1,
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {selectedEdge.label}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedEdgeId(null);
+                onSelectEdge?.(null);
+              }}
+              aria-label="Clear selection"
+              style={{ border: 'none', background: 'transparent', color: muted, cursor: 'pointer', fontSize: theme.fontSizes[2], lineHeight: 1 }}
+            >
+              ×
+            </button>
+          </div>
+
+          {/* The rollup row: what this line folded up. The protocol color the
+              card already carries is enough — this is the count + verbs. */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              flexWrap: 'wrap',
+              marginTop: 6,
+              borderTop: `1px solid ${theme.colors.border ?? '#333'}`,
+              paddingTop: 6,
+            }}
+          >
+            {selectedEdge.mechanisms.map((m) => (
+              <span
+                key={m}
+                style={{
+                  fontFamily: theme.fonts.monospace,
+                  fontSize: theme.fontSizes[0],
+                  color: theme.colors.text,
+                  border: `1px solid ${theme.colors.border ?? '#333'}`,
+                  borderRadius: 4,
+                  padding: '1px 6px',
+                }}
+              >
+                {m}
+              </span>
+            ))}
+            <span style={{ fontFamily: theme.fonts.monospace, fontSize: theme.fontSizes[0], color: muted }}>
+              {selectedEdge.count} {selectedEdge.count === 1 ? 'step' : 'steps'}
+            </span>
+          </div>
+
+          {/* The drill-down list: the trails this line rolls up, each handed to
+              the host for a deep-link into the component graph. */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+              borderTop: `1px solid ${theme.colors.border ?? '#333'}`,
+              paddingTop: 6,
+              marginTop: 6,
+            }}
+          >
+            <span
+              style={{
+                fontFamily: theme.fonts.monospace,
+                fontSize: theme.fontSizes[0],
+                color: muted,
+                textTransform: 'uppercase',
+                letterSpacing: 0.5,
+              }}
+            >
+              Backed by trails
+            </span>
+            {(selectedEdge.trailRefs ?? []).length > 0 ? (
+              (selectedEdge.trailRefs ?? []).map((ref) => (
+                <button
+                  key={ref.trailId}
+                  type="button"
+                  onClick={() => onTrailClick?.(ref)}
+                  disabled={!onTrailClick}
+                  title={
+                    onTrailClick
+                      ? `Focus this trail in the component graph`
+                      : 'Trail drill-down needs onTrailClick'
+                  }
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    textAlign: 'left',
+                    border: 'none',
+                    background: 'transparent',
+                    padding: 0,
+                    cursor: onTrailClick ? 'pointer' : 'default',
+                    fontFamily: theme.fonts.monospace,
+                    fontSize: theme.fontSizes[0],
+                  }}
+                >
+                  <span style={{ color: theme.colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {ref.trailId}
+                  </span>
+                  <span style={{ color: muted, flexShrink: 0 }}>
+                    {ref.stepIndices.length} {ref.stepIndices.length === 1 ? 'step' : 'steps'}
+                    {ref.stepIndices.length > 0 ? ` · #${ref.stepIndices.map((i) => i + 1).join(', #')}` : ''}
+                  </span>
+                </button>
+              ))
+            ) : (
+              <span style={{ fontFamily: theme.fonts.monospace, fontSize: theme.fontSizes[0], color: muted }}>
+                Authored line — no trail provenance yet
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%', background: theme.colors.background }}>
+      {canvasRoot}
+      {selectionPanels}
     </div>
   );
 }

@@ -242,6 +242,10 @@ export type {
 // --- C4 projection -----------------------------------------------------
 export { C4Graph } from './subsystem/C4Graph';
 export type { C4GraphProps } from './subsystem/C4Graph';
+export { GraphSidebar } from './subsystem/GraphSidebar';
+export type { GraphSidebarProps, GraphSidebarTab } from './subsystem/GraphSidebar';
+export { GraphWithSidebar } from './subsystem/GraphWithSidebar';
+export type { GraphWithSidebarProps } from './subsystem/GraphWithSidebar';
 export { C4NodeCard, nodeStyle, nodeSubtitle, nodeTag, nodeKindIcon, nodeTopLabel, nodeShape, nodeSize, nodeMissing, NODE_W, NODE_H, COMPONENT_SIZE, COMPONENT_W, COMPONENT_H, COMPONENT_ASPECT } from './subsystem/C4NodeCard';
 export { TechMark, technologyBrand, TECH_BRANDS } from './subsystem/techIcons';
 export type { TechBrand } from './subsystem/techIcons';
@@ -268,6 +272,7 @@ export type {
   C4Element,
   C4ElementSet,
   C4ElementState,
+  C4TrailRef,
 } from './subsystem/c4';
 // --- Evidence an agent reads before proposing -------------------------
 export {

@@ -224,12 +224,33 @@ export function deriveC4Groups(
 }
 
 /**
+ * One trail contributing steps to a rolled-up C4 edge — the drill-down
+ * provenance that lets a line on the C4 diagram answer "which trail steps
+ * implement this?".
+ *
+ * Deliberately ids only: the host owns the trail document and can resolve
+ * titles, so this stays a pointer instead of duplicating content.
+ */
+export interface C4TrailRef {
+  /** Trail id in the subsystem model document, e.g. `tl-audit`. */
+  trailId: string;
+  /** Indices into `trail.steps` of the steps that cross this edge's endpoints. */
+  stepIndices: number[];
+}
+
+/**
  * A line between two elements. Authored, like the boxes.
  *
  * C4 asks a container-diagram line to say the *technology/protocol* of the
  * interaction (`protocol`), and the label is that plus the trail verbs where
  * known. `label` is what the chip shows; `protocol` and `mechanisms` are kept
  * separate so a caller can render either.
+ *
+ * `count` / `mechanisms` / `trailRefs` are the rolled-up view of the same line:
+ * how many component-level steps produced it (union of the referenced steps),
+ * which verbs they used, and — when a builder supplied provenance — exactly
+ * which trails/steps. All three are derived data riding an authored line, so
+ * they are optional: an authored edge may carry none until a rollup has run.
  */
 export interface C4Edge {
   id: string;
@@ -243,6 +264,12 @@ export interface C4Edge {
   mechanisms: string[];
   /** How many underlying steps this line rolled up. */
   count: number;
+  /**
+   * The trails whose steps cross this edge's endpoints. The drill-down bridge:
+   * a reader clicks the line, gets these refs, and jumps into the component
+   * graph's trail focus. Absent on an authored line no rollup has run over.
+   */
+  trailRefs?: C4TrailRef[];
 }
 
 /**

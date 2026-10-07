@@ -441,6 +441,15 @@ export interface SubsystemProcessRegion {
   label: string;
   /** Component ids that are members of this region. */
   memberAliases: string[];
+  /**
+   * Presentation override: `'package'` draws the frame with package chrome —
+   * rounded, dashed, transparent — instead of the solid runtime chrome
+   * process frames carry. For a process region the host judged code
+   * organisation (a library, an area, a proposal) rather than an accepted
+   * deployment unit. Presentation only: `kind`, node id, issue targeting and
+   * membership still read the claim as a process region.
+   */
+  chrome?: 'package';
 }
 
 /** Options for which boundary frames are kept. */
@@ -466,6 +475,15 @@ export interface BoundaryFrameOptions {
    *   and module frames.
    */
   moduleNesting?: 'exact' | 'path';
+  /**
+   * Process keys whose frames draw package chrome (rounded, dashed) instead
+   * of runtime chrome (square, solid) — the host's judgment that these claims
+   * group code organisation (a library, an area, a proposal), not an accepted
+   * deployment unit. Typically derived from the accepted C4 element set: a
+   * process no container or external backs is code, not a box. Presentation
+   * only — region identity and issue targeting are unchanged.
+   */
+  codeProcessKeys?: ReadonlySet<string>;
 }
 
 /** React Flow id for a process boundary group node. */
@@ -1894,6 +1912,7 @@ export async function buildSubsystemGraph(
     moduleNesting,
     graphifyRelations,
     orderByLine = false,
+    codeProcessKeys,
   } = opts;
   const frameOpts: BoundaryFrameOptions = {
     showSingletonFrames,
@@ -1904,6 +1923,16 @@ export async function buildSubsystemGraph(
   const edges = convertSubsystemToEdges(doc, graphifyRelations);
   // Nested boundary tree: package → process → module → leaves.
   const layoutGroups = buildBoundaryLayoutGroups(doc, frameOpts);
+  // Demote host-judged code regions after grouping (both nesting variants
+  // return through this call), keeping `kind` intact so ids and issue
+  // targeting still read the process claim.
+  if (codeProcessKeys?.size) {
+    for (const g of layoutGroups) {
+      if (g.region.kind === 'process' && codeProcessKeys.has(g.region.key)) {
+        g.region = { ...g.region, chrome: 'package' };
+      }
+    }
+  }
   const regions = layoutGroups.map((g) => g.region);
   const regionIds = new Set(layoutGroups.map((g) => g.id));
   const byAlias = new Map(doc.components.map((c) => [c.alias, c]));

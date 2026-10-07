@@ -46,7 +46,7 @@ import {
 import { componentColor } from '../pierre/constructColors';
 import { resolvePierreSyntaxThemeName } from '../pierre/pierreSyntaxTheme';
 import { ISSUE_KIND_ICON, ISSUE_RUNG_ICON } from './IssueList';
-import { Search } from 'lucide-react';
+import { Package, Search } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export const CONSTRUCT_LABEL: Record<string, string> = {
@@ -592,7 +592,18 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
   // Directory frames (path-derived nesting) render like modules — dashed,
   // collapsible path badge.
   const isModule = region?.kind === 'module' || region?.kind === 'directory';
-  const isProcess = region?.kind === 'process';
+  // Runtime chrome asserts "deployment unit" — a process region the host
+  // marked `chrome: 'package'` groups code organisation instead (a library,
+  // an area, a proposal) and forgoes it, drawing like a package frame.
+  // Presentation only: `kind` still says process, so ids and issue targets
+  // key off the claim unchanged.
+  const isProcess = region?.kind === 'process' && region?.chrome !== 'package';
+  // A frame renders as a package boundary two ways: it IS a package (repo
+  // identity from `purl`) or the host demoted a process claim to package
+  // chrome (a library, an area, a proposal). Both wear the Package glyph, so
+  // "code organisation, not a deployment unit" reads off the canvas instead
+  // of hiding in the shared rounded/dashed chrome.
+  const isPackageFrame = region?.kind === 'package' || region?.chrome === 'package';
   const expanded = isModule && expandedLabel === label;
   const availableBadgeWidth = Math.max(0, (width ?? 400) - MODULE_BADGE_INSET * 2 - 4);
   const collapsedLabel = isModule ? moduleBadgeLabel(label, availableBadgeWidth) : label;
@@ -707,8 +718,25 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
                 maxWidth: expanded ? undefined : availableBadgeWidth,
               }
             : undefined),
+          ...(isPackageFrame
+            ? {
+                // Icon + key on one row: the Package glyph leads the label
+                // so package chrome reads as code organisation at a glance.
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+              }
+            : undefined),
         }}
       >
+        {isPackageFrame && (
+          <Package
+            size={13}
+            strokeWidth={2}
+            aria-hidden="true"
+            style={{ flexShrink: 0 }}
+          />
+        )}
         {canToggle ? (
           <span style={{ whiteSpace: 'nowrap' }}>
             {expanded ? label : hover ? hoveredLabel : collapsedLabel}
