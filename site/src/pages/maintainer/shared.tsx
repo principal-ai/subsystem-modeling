@@ -12,8 +12,10 @@ export type CaseOutcome = 'pass' | 'issue' | 'gap' | 'neutral'
  * - deterministic — Studio Apply (finding.fix) with no agent
  * - construct-fixer / construct-verifier — construct lane
  * - package-module-fixer / package-module-verifier — static topology (containment)
- * - dynamic-topology-verifier — dynamic topology (process)
- * - none — report only; human edit or not yet wired (e.g. package-layer checks)
+ * - runtime-topology-verifier — dynamic topology (process membership)
+ * - container-verifier — dynamic topology (C4 container verification / consolidation)
+ * - trail-verifier — trail lane (step call sites)
+ * - none — report only; human edit, environment fix, or not yet wired
  */
 export type RemediationLane =
   | 'deterministic'
@@ -21,7 +23,9 @@ export type RemediationLane =
   | 'construct-verifier'
   | 'package-module-fixer'
   | 'package-module-verifier'
-  | 'dynamic-topology-verifier'
+  | 'runtime-topology-verifier'
+  | 'container-verifier'
+  | 'trail-verifier'
   | 'none'
 
 export type AuditCase = {
@@ -164,6 +168,13 @@ export const GRAPHIFY_CASES: AuditCase[] = [
     remediation: 'construct-verifier',
   },
   {
+    example: 'repo not cloned',
+    meaning:
+      'The component’s repo has no local checkout — nothing can be verified against source. An environment fix (clone the repo), not a model claim an agent rewrites.',
+    outcome: 'gap',
+    remediation: 'none',
+  },
+  {
     example: 'cache unavailable',
     meaning:
       'Graphify could not be ensured for this repo — symbol / construct / signature checks could not run.',
@@ -175,6 +186,47 @@ export const GRAPHIFY_CASES: AuditCase[] = [
     meaning: 'Graphify anchoring not applicable (external, no symbol, etc.).',
     outcome: 'neutral',
     remediation: 'none',
+  },
+]
+
+/**
+ * Construct declaration completeness — the retained-state grain. A store is a
+ * state declaration, so it declares the type it holds; Graphify neither checks
+ * nor requires this, so a missing or drifted store type is a gap the
+ * construct-verifier fills from source. `third_party_path` catches a claim
+ * anchored into an install root, which has no repo source to verify.
+ */
+export const CONSTRUCT_DECLARATION_CASES: AuditCase[] = [
+  {
+    example: 'store declares its value type',
+    meaning:
+      'In-memory store carries declaration.valueType (or named state members). Nothing to fill.',
+    outcome: 'pass',
+    remediation: 'none',
+  },
+  {
+    example: 'store type undeclared',
+    meaning:
+      'An in-memory store declares no type — no valueType and no named state members. construct-verifier reads the state declaration and proposes declaration.valueType exactly as written (e.g. Map<string, FeedState>).',
+    outcome: 'gap',
+    remediation: 'construct-verifier',
+    snippet: `const feeds = new Map<string, OpencodeLiveFeedState>()
+// store declares no valueType → store_type_undeclared`,
+  },
+  {
+    example: 'store type stale',
+    meaning:
+      'The store’s pinned declaration line moved, so its declared value type may be out of date. construct-verifier re-reads the declaration and re-proposes valueType only if the type actually changed — drift is a re-check prompt, not an automatic rewrite.',
+    outcome: 'gap',
+    remediation: 'construct-verifier',
+  },
+  {
+    example: 'installed dependency path',
+    meaning:
+      'Claimed file points into node_modules — an installed artifact whose layout depends on hoisting, not repo source. Reported by create/update and audit (third_party_path). Model the package as external with a pkg:npm purl and no file, or anchor the claim to the package’s real source.',
+    outcome: 'gap',
+    remediation: 'construct-verifier',
+    snippet: `"file": "node_modules/left-pad/index.js"  // ← not repo source`,
   },
 ]
 
@@ -257,7 +309,9 @@ export type MaintenanceAgent = {
     | 'construct-verifier'
     | 'package-module-fixer'
     | 'package-module-verifier'
-    | 'dynamic-topology-verifier'
+    | 'runtime-topology-verifier'
+    | 'container-verifier'
+    | 'trail-verifier'
   name: string
   runsOn: string
   summary: string
@@ -271,7 +325,7 @@ export const MAINTENANCE_AGENTS: MaintenanceAgent[] = [
     name: 'construct-fixer',
     runsOn: 'Verification failed',
     summary:
-      'Hard failures only — cases whose Remediation lane is construct-fixer. Investigates source, proposes field corrections; you confirm in Studio. Ignores gaps. Graphify inferred construct/signature is a hint — never auto-adopted.',
+      'Hard failures only — cases whose Remediation lane is construct-fixer. Investigates source, proposes field corrections (including deprecation when source is genuinely gone); you confirm in Studio. Ignores gaps. Graphify inferred construct/signature is a hint — never auto-adopted.',
     reviews: [
       {
         tag: 'file missing (ambiguous relocate)',
@@ -319,6 +373,11 @@ export const MAINTENANCE_AGENTS: MaintenanceAgent[] = [
         meaning:
           'Propose corrected component.symbol or component.file when the mismatch is really pointing at the wrong declaration.',
       },
+      {
+        tag: 'component deprecated',
+        meaning:
+          'Only when the source is genuinely gone (deleted, nothing replaced it): propose component.deprecated + removedIn from the last commit that touched it. A move or rename is a file/symbol fix, not a deprecation.',
+      },
     ],
   },
   {
@@ -326,7 +385,7 @@ export const MAINTENANCE_AGENTS: MaintenanceAgent[] = [
     name: 'construct-verifier',
     runsOn: 'Partially verified',
     summary:
-      'Confirmation holes only — cases whose Remediation lane is construct-verifier. Reads source and proposes fills (often augmentations); you confirm in Studio. Does not chase hard failures.',
+      'Confirmation holes only — cases whose Remediation lane is construct-verifier. Reads source and proposes fills (augmentations for construct/signature, declaration.valueType for a store, identity rewrites for a third-party path); you confirm in Studio. Does not chase hard failures.',
     reviews: [
       {
         tag: 'construct unclassified',
@@ -340,6 +399,24 @@ export const MAINTENANCE_AGENTS: MaintenanceAgent[] = [
           'No usable signature edges in Graphify for this function/method.',
         outcome: 'gap',
       },
+      {
+        tag: 'store type undeclared',
+        meaning:
+          'An in-memory store declares no valueType and no named state members.',
+        outcome: 'gap',
+      },
+      {
+        tag: 'store type stale',
+        meaning:
+          'The store’s declaration line moved; the declared value type may be out of date.',
+        outcome: 'gap',
+      },
+      {
+        tag: 'installed dependency path',
+        meaning:
+          'A claim is anchored into node_modules — no repo source to verify.',
+        outcome: 'gap',
+      },
     ],
     remediations: [
       {
@@ -351,6 +428,11 @@ export const MAINTENANCE_AGENTS: MaintenanceAgent[] = [
         tag: 'signature confirmed (augmented)',
         meaning:
           'Propose named param/return type bags from source. Accept writes the augmentation store — next audit treats the signature as confirmed.',
+      },
+      {
+        tag: 'store value type authored',
+        meaning:
+          'Propose declaration.valueType exactly as written at the state declaration (e.g. Map<string, FeedState>). Accept edits the model and marks the declaration authored.',
       },
     ],
   },
@@ -391,7 +473,7 @@ export const MODULE_MEMBERSHIP_CASES: AuditCase[] = [
   {
     example: 'module without file',
     meaning:
-      'module is set but file is empty on a non-external, non-proposed node. Audit issue (boundary_module_without_file). package-module-fixer proposes file and/or clears module.',
+      'module is set but file is empty on a non-external, non-proposed node — a hard containment failure (boundary_module_file_mismatch at error severity). package-module-fixer proposes file and/or clears module.',
     outcome: 'issue',
     remediation: 'package-module-fixer',
     snippet: `{
@@ -406,6 +488,11 @@ export const MODULE_MEMBERSHIP_CASES: AuditCase[] = [
 /**
  * Runtime process boundary — deployment-unit membership. Orthogonal to
  * package/module (source identity). Nesting: package → process → module → leaf.
+ *
+ * Two halves: membership (does a component's `process` claim hold together?) and
+ * container verification (does an accepted C4 container claim the boundary?).
+ * Container-first: process keys are only coined by accepting a container — a
+ * claim-writer never invents one.
  */
 export const PROCESS_BOUNDARY_CASES: AuditCase[] = [
   {
@@ -422,9 +509,9 @@ export const PROCESS_BOUNDARY_CASES: AuditCase[] = [
   {
     example: 'process nest disagrees',
     meaning:
-      'Members of the same module claim different process values. Unconfirmed (boundary_process_nest_disagree). dynamic-topology-verifier aligns process (or clears it).',
+      'Members of the same module claim different process values. Unconfirmed (boundary_process_nest_disagree). runtime-topology-verifier aligns process (or clears it).',
     outcome: 'gap',
-    remediation: 'dynamic-topology-verifier',
+    remediation: 'runtime-topology-verifier',
     snippet: `{ "id": "boot",  "module": "src/host/main.ts", "process": "host" }
 { "id": "create", "module": "src/host/main.ts", "process": "renderer" }
 // ← same module, two processes`,
@@ -441,11 +528,43 @@ export const PROCESS_BOUNDARY_CASES: AuditCase[] = [
   {
     example: 'process missing',
     meaning:
-      'A function / class / custom entity states no process. Unconfirmed (boundary_process_missing). Types (interface, type_alias), externals, stores and proposed components are exempt.',
+      'A function / class / custom entity states no process, and an accepted C4 container exists to assign one from. Unconfirmed (boundary_process_missing). runtime-topology-verifier proposes the process — but only to a container-verified key. Types (interface, type_alias), externals, stores and proposed components are exempt.',
     outcome: 'gap',
-    remediation: 'dynamic-topology-verifier',
+    remediation: 'runtime-topology-verifier',
     snippet: `{ "id": "boot", "file": "src/host/main.ts" }
 // ← runtime component, no deployment unit stated`,
+  },
+  {
+    example: 'process claim unbacked',
+    meaning:
+      'A runtime component states no process and no accepted container exists to assign one from — the container-first rule. The missing finding is replaced by boundary_process_unbacked, and container-verifier proposes the container before any component claim is coined.',
+    outcome: 'gap',
+    remediation: 'container-verifier',
+    snippet: `{ "id": "boot", "file": "src/host/main.ts" }
+// ← no process, and no accepted container for this repo`,
+  },
+  {
+    example: 'process boundary unclaimed',
+    meaning:
+      'A process boundary (a distinct process key in the model) has no accepted C4 container (boundary_process_unassigned). container-verifier reads the subsystem diagram and proposes the container that verifies it.',
+    outcome: 'gap',
+    remediation: 'container-verifier',
+    snippet: `process: "subsystems-studio/host"
+// ← boundary has no accepted container in the element store`,
+  },
+  {
+    example: 'container awaiting decision',
+    meaning:
+      'A container proposal claims the boundary and awaits a human decision (boundary_process_proposed). container-verifier treats it as an open decision and does not re-propose.',
+    outcome: 'gap',
+    remediation: 'container-verifier',
+  },
+  {
+    example: 'container rejected',
+    meaning:
+      'A container was declined for this boundary (boundary_process_rejected). The rejection is the decision — the boundary stays unclaimed by choice, and no agent re-proposes it. Report only.',
+    outcome: 'gap',
+    remediation: 'none',
   },
 ]
 
@@ -504,22 +623,72 @@ export const MODULE_MEMBERSHIP_AGENTS: MaintenanceAgent[] = [
 
 export const PROCESS_BOUNDARY_AGENTS: MaintenanceAgent[] = [
   {
-    id: 'dynamic-topology-verifier',
-    name: 'dynamic-topology-verifier',
-    runsOn: 'Process nest unconfirmed',
+    id: 'runtime-topology-verifier',
+    name: 'runtime-topology-verifier',
+    runsOn: 'Process membership unconfirmed',
     summary:
-      'When multi-member module members disagree on process, align or clear process so nesting stays coherent. Dynamic topology (process).',
+      'Dynamic topology (process membership): align or clear component process claims when module members disagree or a runtime component states none. Container-first — it may only propose a key an accepted C4 container already verifies; an unbacked gap routes to container-verifier instead.',
     reviews: [
       {
         tag: 'process nest disagrees',
         meaning: 'Same module, different process values.',
         outcome: 'gap',
       },
+      {
+        tag: 'process missing',
+        meaning:
+          'A runtime component (function / class / custom_entity) states no process.',
+        outcome: 'gap',
+      },
     ],
     remediations: [
       {
         tag: 'process aligned',
-        meaning: 'Propose a shared process (or clear process) across module members.',
+        meaning:
+          'Propose a shared process (or clear process) across module members — to an accepted container key only.',
+      },
+      {
+        tag: 'process assigned',
+        meaning:
+          'Assign a process from source, using a key an accepted C4 container verifies.',
+      },
+    ],
+  },
+  {
+    id: 'container-verifier',
+    name: 'container-verifier',
+    runsOn: 'Process boundary unverified',
+    summary:
+      'The C4 half of dynamic topology: reads the subsystem diagrams (not source) and proposes the container that verifies a process boundary — or a consolidation when two process keys are one deployable unit. Also the first mover for an unbacked gap. Accept writes the element store; a rejected boundary is never re-proposed.',
+    reviews: [
+      {
+        tag: 'process claim unbacked',
+        meaning:
+          'A runtime component states no process and no accepted container exists to assign one from — container-first.',
+        outcome: 'gap',
+      },
+      {
+        tag: 'process boundary unclaimed',
+        meaning: 'No accepted C4 container claims the process boundary.',
+        outcome: 'gap',
+      },
+      {
+        tag: 'container awaiting decision',
+        meaning:
+          'A proposed container claims the boundary and awaits a human accept/reject.',
+        outcome: 'gap',
+      },
+    ],
+    remediations: [
+      {
+        tag: 'container proposed (c4-container)',
+        meaning:
+          'Propose an application / data-store container (id, label, technology, process, description) that verifies the boundary; accept writes the element store.',
+      },
+      {
+        tag: 'process keys consolidated',
+        meaning:
+          'Propose a consolidation when two process keys are one deployable unit; accept rewrites the model’s process fields to the canonical key.',
       },
     ],
   },
@@ -546,6 +715,77 @@ export const TRAIL_MECHANICAL_CASES: AuditCase[] = [
       'Step file is gone under the repo root, or line is past EOF (or blank). Reported by create/update file verification.',
     outcome: 'issue',
     remediation: 'none',
+  },
+]
+
+/**
+ * Trail step call-site verification — the story-level check that a step's
+ * file:line seam still fires. Driven by accepted `callSite` augmentations; an
+ * agent reads the caller and pins the call span.
+ */
+export const TRAIL_STEP_CASES: AuditCase[] = [
+  {
+    example: 'call site verified',
+    meaning:
+      'An accepted callSite augmentation pins the step’s call span and its content hash still matches the live file.',
+    outcome: 'pass',
+    remediation: 'none',
+  },
+  {
+    example: 'call site not verified',
+    meaning:
+      'No accepted callSite augmentation exists for this step (step_unconfirmed). trail-verifier reads the caller file, locates the call to the target symbol, and proposes a callSite augmentation.',
+    outcome: 'gap',
+    remediation: 'trail-verifier',
+    snippet: `{
+  "from": "checkoutApi",
+  "to": "cartStore",
+  "mechanism": "writes",
+  "file": "src/checkout/api.ts"   // ← call not pinned yet
+}`,
+  },
+  {
+    example: 'call site changed',
+    meaning:
+      'An accepted augmentation exists, but the pinned span’s content changed (step_stale). trail-verifier re-reads the current lines and proposes a fresh span; the new augmentation replaces the stale one on accept.',
+    outcome: 'gap',
+    remediation: 'trail-verifier',
+  },
+]
+
+export const TRAIL_AGENTS: MaintenanceAgent[] = [
+  {
+    id: 'trail-verifier',
+    name: 'trail-verifier',
+    runsOn: 'Trail step call sites unconfirmed',
+    summary:
+      'Trail lane: verifies each step’s call site. Reads the caller file, locates the call to the target symbol, and proposes a callSite augmentation (line span, target, mechanism). Handles unconfirmed and stale steps; does not touch construct or topology claims.',
+    reviews: [
+      {
+        tag: 'call site not verified',
+        meaning:
+          'No accepted callSite augmentation exists for this step yet.',
+        outcome: 'gap',
+      },
+      {
+        tag: 'call site changed',
+        meaning:
+          'An accepted augmentation exists but the pinned span’s content changed.',
+        outcome: 'gap',
+      },
+    ],
+    remediations: [
+      {
+        tag: 'call site confirmed (augmented)',
+        meaning:
+          'Propose a callSite augmentation with the exact 1-based line span, target, and mechanism; accept writes the augmentation store.',
+      },
+      {
+        tag: 'call site re-pinned',
+        meaning:
+          'For a stale step, propose a fresh span for the current lines; the new augmentation replaces the stale one on accept.',
+      },
+    ],
   },
 ]
 
@@ -637,7 +877,9 @@ const REMEDIATION_LABEL: Record<RemediationLane, string> = {
   'construct-verifier': 'construct-verifier',
   'package-module-fixer': 'package-module-fixer',
   'package-module-verifier': 'package-module-verifier',
-  'dynamic-topology-verifier': 'dynamic-topology-verifier',
+  'runtime-topology-verifier': 'runtime-topology-verifier',
+  'container-verifier': 'container-verifier',
+  'trail-verifier': 'trail-verifier',
   none: '—',
 }
 

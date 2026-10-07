@@ -1,7 +1,5 @@
 export type MaintainerSectionId =
   | 'overview'
-  | 'states'
-  | 'issues'
   | 'construct'
   | 'static-topology'
   | 'dynamic-topology'
@@ -25,29 +23,13 @@ export const MAINTAINER_SECTIONS: MaintainerSection[] = [
     label: 'Overview',
   },
   {
-    id: 'states',
-    path: '/maintainer/states',
-    label: 'Model States',
-    shortLabel: 'States',
-    children: [
-      { id: 'verification-layers', label: 'Verification layers' },
-      { id: 'findings', label: 'Audit findings' },
-      { id: 'provenance', label: 'Commit provenance' },
-    ],
-  },
-  {
-    id: 'issues',
-    path: '/maintainer/issues',
-    label: 'Issues',
-    shortLabel: 'Issues & fixes',
-  },
-  {
     id: 'construct',
     path: '/maintainer/construct',
     label: 'Construct',
     children: [
       { id: 'source-checks', label: 'Source checks' },
       { id: 'graphify-checks', label: 'Graphify checks' },
+      { id: 'declaration-checks', label: 'Declaration & identity' },
       { id: 'construct-agents', label: 'Construct agents' },
     ],
   },
@@ -76,6 +58,8 @@ export const MAINTAINER_SECTIONS: MaintainerSection[] = [
     children: [
       { id: 'step-mechanisms', label: 'Step mechanisms' },
       { id: 'trail-mechanical-checks', label: 'Mechanical checks' },
+      { id: 'trail-step-checks', label: 'Step call sites' },
+      { id: 'trail-agents', label: 'Trail agent' },
       { id: 'how-to-inspect', label: 'How to inspect' },
     ],
   },

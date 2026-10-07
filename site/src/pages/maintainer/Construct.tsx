@@ -1,6 +1,7 @@
 import {
   AgentCard,
   CaseTable,
+  CONSTRUCT_DECLARATION_CASES,
   GRAPHIFY_CASES,
   MAINTENANCE_AGENTS,
   SectionPager,
@@ -31,6 +32,17 @@ export function MaintainerConstruct() {
           <em>fix</em> and the modal offers one-click Apply.
         </p>
         <CaseTable cases={GRAPHIFY_CASES} />
+
+        <h2 className="maintainer-subhead" id="declaration-checks">
+          Declaration &amp; identity checks
+        </h2>
+        <p className="maintainer-lede">
+          After the construct resolves, the declaration itself is checked for
+          completeness (a store’s declared value type) and for claims that point
+          at installed artifacts rather than repo source. Both are gaps the
+          construct-verifier fills from source.
+        </p>
+        <CaseTable cases={CONSTRUCT_DECLARATION_CASES} />
 
         <h2 className="maintainer-subhead" id="construct-agents">
           Construct agents

@@ -22,6 +22,13 @@ export function MaintainerDynamicTopology() {
           multi-member module nests under process, members must agree on process.
           Package and module containment live under static topology.
         </p>
+        <p className="maintainer-lede">
+          Two halves: <em>membership</em> (do a component’s process claims hold
+          together?) and <em>container verification</em> (does an accepted C4
+          container claim the boundary?). <strong>Container-first</strong>: a
+          process key is only coined by accepting a container — the membership
+          agent proposes only keys an accepted container already verifies.
+        </p>
 
         <h2 className="maintainer-subhead" id="process-boundary-checks">
           Process
@@ -32,8 +39,9 @@ export function MaintainerDynamicTopology() {
           Process agents
         </h2>
         <p className="maintainer-lede">
-          Reviews unconfirmed process membership (
-          <em>runtime-topology-verifier</em>). Propose; you confirm.
+          Membership corrections (<em>runtime-topology-verifier</em>) and
+          container verification (<em>container-verifier</em>). Propose; you
+          confirm.
         </p>
         <div className="maintainer-agents">
           {PROCESS_BOUNDARY_AGENTS.map((agent) => (

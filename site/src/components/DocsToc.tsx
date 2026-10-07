@@ -140,13 +140,11 @@ export function DocsLayout({
 }) {
   const { pathname } = useLocation()
   const onMaintainer = pathname === '/maintainer' || pathname.startsWith('/maintainer/')
-  const onIssues = pathname === '/maintainer/issues'
-  const activeHeadingId = useActiveInPageHeading(onMaintainer && !onIssues)
+  const activeHeadingId = useActiveInPageHeading(onMaintainer)
   const schemaCurrent = page === 'schema'
-  const layoutPage = onIssues ? 'issues' : page
 
   return (
-    <div className={`docs-layout docs-layout--${layoutPage}`}>
+    <div className={`docs-layout docs-layout--${page}`}>
       <nav className="docs-toc docs-toc--sidebar" aria-label="Contents">
         <TocLinks
           pathname={pathname}

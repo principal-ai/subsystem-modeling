@@ -30,8 +30,9 @@ export function MaintainerOverview() {
           but allows for more loose definitions.
         </p>
         <p>
-          Each layer can fail a check. See an issue and its fix{' '}
-          <Link to="/maintainer/issues">side by side</Link>.
+          Each layer can fail a check. Start with{' '}
+          <Link to="/maintainer/construct">Construct</Link> — and the layer pages
+          after it — to see each check and how it is remediated.
         </p>
       </header>
 

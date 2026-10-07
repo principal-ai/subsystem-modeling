@@ -21,12 +21,6 @@ const ModelMaintainer = lazy(() =>
 const MaintainerOverview = lazy(() =>
   import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerOverview })),
 )
-const MaintainerStates = lazy(() =>
-  import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerStates })),
-)
-const MaintainerIssues = lazy(() =>
-  import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerIssues })),
-)
 const MaintainerConstruct = lazy(() =>
   import('./pages/ModelMaintainer').then((m) => ({ default: m.MaintainerConstruct })),
 )
@@ -338,22 +332,6 @@ function App() {
               element={
                 <Suspense fallback={<DocsFallback />}>
                   <MaintainerOverview />
-                </Suspense>
-              }
-            />
-            <Route
-              path="states"
-              element={
-                <Suspense fallback={<DocsFallback />}>
-                  <MaintainerStates />
-                </Suspense>
-              }
-            />
-            <Route
-              path="issues"
-              element={
-                <Suspense fallback={<DocsFallback />}>
-                  <MaintainerIssues />
                 </Suspense>
               }
             />

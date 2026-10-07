@@ -28,16 +28,17 @@ export function MaintainerReference() {
             <strong>Audit</strong>
             <span>
               Four layers: construct → static topology → dynamic topology →
-              trail. Construct, module, and process field checks run in
-              Studio audit today; package-layer soft checks and trail audit
-              are next.
+              trail. Construct, module, process-membership, container-verification,
+              and trail step call-site checks run in Studio audit today;
+              package-layer soft checks are next.
             </span>
           </li>
           <li>
             <strong>Verdict</strong>
             <span>
-              Construct layer today: unverified → verification failed →
-              partially verified → fully verified.
+              Unverified → verification failed → partially verified → fully
+              verified, with a per-lane tally so each of the four layers reports
+              its own status.
             </span>
           </li>
           <li>
@@ -46,8 +47,8 @@ export function MaintainerReference() {
               Construct: <em>construct-fixer</em> / <em>construct-verifier</em>;
               static topology: <em>package-module-fixer</em> /{' '}
               <em>package-module-verifier</em>; dynamic topology:{' '}
-              <em>runtime-topology-verifier</em>. Trail Maintain is a later,
-              separate pass.
+              <em>runtime-topology-verifier</em> / <em>container-verifier</em>;
+              trail: <em>trail-verifier</em>.
             </span>
           </li>
         </ol>
@@ -58,8 +59,8 @@ export function MaintainerReference() {
         <p className="maintainer-lede">
           From not checked yet to fully confirmed. Only the three audited states
           mean checks actually ran — <em>unverified</em> means no verification
-          has happened. These verdicts are the <em>construct</em> layer today;
-          static/dynamic topology and trail get their own status later.
+          has happened. The verdict is model-level; a per-lane tally reports each
+          of the four layers separately.
         </p>
         <ul className="maintainer-verdicts">
           {VERDICTS.map((v) => (
@@ -94,8 +95,9 @@ export function MaintainerReference() {
               toward <em>partially verified</em>. Studio Maintain runs a{' '}
               <strong>verifier</strong> (<em>construct-verifier</em>,{' '}
               <em>package-module-verifier</em>,{' '}
-              <em>runtime-topology-verifier</em>) — judgment proposals, not
-              automatic rewrites.
+              <em>runtime-topology-verifier</em>, <em>container-verifier</em>,{' '}
+              <em>trail-verifier</em>) — judgment proposals, not automatic
+              rewrites.
             </p>
           </div>
         </div>
