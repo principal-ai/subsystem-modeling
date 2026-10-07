@@ -83,6 +83,16 @@ export interface C4GraphProps {
    */
   dimmedEdgeIds?: ReadonlySet<string> | null;
   /**
+   * Element ids to remove from the canvas entirely — the focused trail's cast,
+   * the C4 analogue of the component graph's opened-flow hide. Unlike
+   * `dimmedElementIds` (faded but still drawn), these boxes are not rendered at
+   * all, and a line touching one is hidden with it. `null`/absent draws
+   * everything. Hover previews dim; an expanded trail hides non-members.
+   */
+  hiddenElementIds?: ReadonlySet<string> | null;
+  /** Edge ids to remove entirely — lines the focused trail does not fold. */
+  hiddenEdgeIds?: ReadonlySet<string> | null;
+  /**
    * Drill-down: add `id` to `model.openContainerIds`, or remove it if it is
    * already open. One verb for both directions, because with several containers
    * open at once "close" is ambiguous — the affordance on an open card has to
@@ -216,11 +226,13 @@ function C4EdgeLabels({
   edges,
   selectedEdgeId,
   dimmedEdgeIds,
+  hiddenEdgeIds,
 }: {
   positions: Map<string, { x: number; y: number }>;
   edges: C4Model['edges'];
   selectedEdgeId?: string | null;
   dimmedEdgeIds?: ReadonlySet<string> | null;
+  hiddenEdgeIds?: ReadonlySet<string> | null;
 }) {
   const { theme } = useTheme();
   const viewport = useViewport();
@@ -240,6 +252,7 @@ function C4EdgeLabels({
       {[...positions].map(([id, p]) => {
         const edge = byId.get(id);
         if (!edge) return null;
+        if (hiddenEdgeIds?.has(edge.id)) return null;
         const color = protocolColor(edge.protocol);
         const text = edge.protocol ?? edge.label;
         const selected = edge.id === selectedEdgeId;
@@ -723,7 +736,7 @@ export function hidesComponentDuringMorph(
   return morphTargets.has(owner);
 }
 
-function Inner({ model, onSelectNode, onSelectEdge, onTrailClick, onToggleContainer, onOpenContainer, onCloseContainer, gutter = 28, dimmedElementIds, dimmedEdgeIds }: C4GraphProps) {
+function Inner({ model, onSelectNode, onSelectEdge, onTrailClick, onToggleContainer, onOpenContainer, onCloseContainer, gutter = 28, dimmedElementIds, dimmedEdgeIds, hiddenElementIds, hiddenEdgeIds }: C4GraphProps) {
   const { theme } = useTheme();
   const { fitView } = useReactFlow();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -1355,14 +1368,16 @@ function Inner({ model, onSelectNode, onSelectEdge, onTrailClick, onToggleContai
         if (n.type !== 'c4-node') return n;
         const element = (n.data as { element?: C4Element } | undefined)?.element;
         const owner = element?.kind === 'component' ? (element.container ?? element.parentId) : undefined;
-        // `hidesComponentDuringMorph` owns the rule; see there for why it is
-        // per-container rather than global.
-        const hidden = hidesComponentDuringMorph(
-          owner,
-          openContainerIds,
-          morphTargetsRef.current,
-          settled,
-        );
+        // `hidesComponentDuringMorph` owns the morph rule; see there for why it
+        // is per-container rather than global. A host `hiddenElementIds` (the
+        // focused-trail cast) removes the box outright.
+        const hidden =
+          hidesComponentDuringMorph(
+            owner,
+            openContainerIds,
+            morphTargetsRef.current,
+            settled,
+          ) || (element ? hiddenElementIds?.has(element.id) === true : false);
         return {
           ...n,
           ...(hidden ? { hidden: true } : {}),
@@ -1379,7 +1394,7 @@ function Inner({ model, onSelectNode, onSelectEdge, onTrailClick, onToggleContai
     // `morphTargetsRef` is a ref, so it cannot be a dependency; `settled` covers
     // it, because the two always change together — targets are written in the same
     // tick that clears `settled`, and cleared in the same tick that restores it.
-    [nodes, selectedId, settled, openContainerIds, dimmedElementIds],
+    [nodes, selectedId, settled, openContainerIds, dimmedElementIds, hiddenElementIds],
   );
 
   /**
@@ -1410,18 +1425,35 @@ function Inner({ model, onSelectNode, onSelectEdge, onTrailClick, onToggleContai
     return out;
   }, [dimmedElementIds, dimmedEdgeIds, rfEdges, selectedEdgeId]);
 
+  const hiddenEdgeIdSet = useMemo(() => {
+    if (!hiddenElementIds && !hiddenEdgeIds) return null;
+    const out = new Set<string>();
+    if (hiddenElementIds) {
+      // Either endpoint gone → the line has nothing to attach to, so it goes
+      // with the box (unlike the dim rule, which needs both endpoints dimmed).
+      for (const e of rfEdges) {
+        if (hiddenElementIds.has(e.source) || hiddenElementIds.has(e.target)) out.add(e.id);
+      }
+    }
+    if (hiddenEdgeIds) for (const id of hiddenEdgeIds) out.add(id);
+    return out;
+  }, [hiddenElementIds, hiddenEdgeIds, rfEdges]);
+
   const displayEdges = useMemo(
     () =>
-      rfEdges.map((e) => ({
-        ...e,
-        ...(settled ? {} : { hidden: true }),
-        data: {
-          ...e.data,
-          selected: e.id === selectedEdgeId,
-          dimmed: dimmedEdgeIdSet?.has(e.id) === true,
-        },
-      })),
-    [rfEdges, settled, selectedEdgeId, dimmedEdgeIdSet],
+      rfEdges.map((e) => {
+        const hidden = !settled || hiddenEdgeIdSet?.has(e.id) === true;
+        return {
+          ...e,
+          ...(hidden ? { hidden: true } : {}),
+          data: {
+            ...e.data,
+            selected: e.id === selectedEdgeId,
+            dimmed: dimmedEdgeIdSet?.has(e.id) === true,
+          },
+        };
+      }),
+    [rfEdges, settled, selectedEdgeId, dimmedEdgeIdSet, hiddenEdgeIdSet],
   );
 
   // The selection panel floats over the canvas in the top-right corner. A host
@@ -1488,7 +1520,7 @@ function Inner({ model, onSelectNode, onSelectEdge, onTrailClick, onToggleContai
           it pointing at the space between two layouts. It rejoins them, the nested
           components and the descriptions in one reveal. */}
       {ready && settled && labelPositions.size > 0 && (
-        <C4EdgeLabels positions={labelPositions} edges={model.edges} selectedEdgeId={selectedEdgeId} dimmedEdgeIds={dimmedEdgeIdSet} />
+        <C4EdgeLabels positions={labelPositions} edges={model.edges} selectedEdgeId={selectedEdgeId} dimmedEdgeIds={dimmedEdgeIdSet} hiddenEdgeIds={hiddenEdgeIdSet} />
       )}
       {!ready && (
         <div

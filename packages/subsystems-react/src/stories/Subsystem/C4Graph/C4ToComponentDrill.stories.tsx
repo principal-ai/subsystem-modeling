@@ -48,17 +48,20 @@ const CODE_PROCESS_KEYS = deriveCodeProcessKeys(
  *     jump;
  *   - the C4 edge inspector lists every backing trail; clicking one re-targets
  *     the component graph there;
- *   - focusing a trail dims every C4 element whose components don't appear in
- *     it — the two graphs converge on the same cast, and the lines between
- *     dimmed boxes fade with them. Focus can come from either side: a C4 edge
- *     or inspector trail row, or a trail clicked in the component graph's own
- *     Trails panel (reported back up through `onTrailSelect`);
- *   - hovering a *step* row in the Trails panel narrows the C4 dim to that
- *     single hop's `from → to` participants — elements AND lines: an edge
+ *   - focusing a trail HIDES every C4 element whose components don't appear in
+ *     it — the two graphs converge on the same cast, and lines touching a
+ *     hidden box go with it. It also OPENS the containers that hold the cast,
+ *     so the participating components come in at Level 3 instead of staying a
+ *     collapsed box. (The component graph's opened-flow hide, on the C4 view.)
+ *     Focus can come from either side: a C4 edge or inspector trail row, or a
+ *     trail clicked in the component graph's own Trails panel (reported back up
+ *     through `onTrailSelect`);
+ *   - hovering a *step* row in the Trails panel instead DIMS the C4 down to
+ *     that single hop's `from → to` participants — elements AND lines: an edge
  *     stays lit only if it folds this hop, so a step entirely internal to a
  *     container dims every line while the container stays bright (no drawn
- *     edge represents it). Transient: falls back to the focused trail's cast
- *     on leave (`onTrailStepHover`);
+ *     edge represents it). Transient: falls back to the focused-hide view on
+ *     leave (`onTrailStepHover`);
  *   - container cards still open their authored Level-3 components (the
  *     existing C4 drill-down) — orthogonal to the graph-to-graph jump;
  *   - frame chrome agrees too: a process claim the accepted element set
@@ -105,18 +108,13 @@ function Demo() {
   // fresh focus. A real host would wire a controlled focus instead.
   const [focusedTrailId, setFocusedTrailId] = useState<string | null>(null);
   const [graphEpoch, setGraphEpoch] = useState(0);
-  // C4 elements the current focus (or hovered step) does NOT touch — dimmed
-  // upstairs. The companion line-level set below keeps elements and lines in
-  // agreement: one source, two render sets.
-  const [dimmedElementIds, setDimmedElementIds] = useState<ReadonlySet<string> | null>(null);
-  // C4 lines the focus does NOT fold — an internal hop folds into no line,
-  // so this dims every edge while its container stays bright.
-  const [dimmedEdgeIds, setDimmedEdgeIds] = useState<ReadonlySet<string> | null>(null);
-  // The trail step currently hovered in the component graph's panel — its
-  // transient preview drives a narrower, step-scoped dim upstairs.
-  const [hoveredStep, setHoveredStep] = useState<{ trailId: string; stepIndex: number } | null>(
-    null,
-  );
+  // The trail (or step) currently hovered in either trails panel — its
+  // transient preview drives a step-scoped dim upstairs. `stepIndex: null`
+  // means the whole trail (a collapsed row hover).
+  const [hoveredStep, setHoveredStep] = useState<{
+    trailId: string;
+    stepIndex: number | null;
+  } | null>(null);
   // The C4 sidebar's own trails panel (composed by the story through
   // GraphWithSidebar): which rows have their steps expanded, and which step the
   // row shows focused. The focused trail itself is the shared state above.
@@ -148,98 +146,141 @@ function Demo() {
   );
 
   /**
-   * The single source of the C4 emphasis — elements AND lines from one focus
-   * (a hovered step wins over the focused trail):
-   *
-   *   elements — every box that owns no step endpoint dims;
-   *   edges    — every line that does NOT fold the focused trail/hop dims. A
-   *              step entirely internal to a container folds into no line at
-   *              all, so it dims every edge even though its container stays
-   *              bright: no drawn edge represents that hop.
-   *
-   * `null` clears both sets (nothing focused, nothing dimmed).
+   * The C4 containers that hold a component the trail touches — opened when the
+   * trail is focused so its cast comes in at Level 3 instead of staying a
+   * collapsed container box. A trail whose endpoints no container claims (the
+   * anti-library keys) opens nothing.
    */
-  const applyDim = useCallback(
-    (source: { trailId: string; stepIndex?: number } | null) => {
-      if (!source) {
-        setDimmedElementIds(null);
-        setDimmedEdgeIds(null);
-        return;
-      }
-      const trail = DRILLDOWN_TRAILS.find((t) => t.id === source.trailId);
+  const containersForTrail = useCallback((trailId: string): string[] => {
+    const trail = DRILLDOWN_TRAILS.find((t) => t.id === trailId);
+    if (!trail) return [];
+    const aliases = new Set<string>();
+    for (const s of trail.steps) {
+      aliases.add(s.from);
+      aliases.add(s.to);
+    }
+    const out: string[] = [];
+    for (const el of DRILLDOWN_C4_MODEL.nodes) {
+      if (el.kind !== 'container') continue;
+      const members = DRILLDOWN_MEMBERS[el.id] ?? [];
+      if (members.some((a) => aliases.has(a))) out.push(el.id);
+    }
+    return out;
+  }, []);
+
+  const openContainersForTrail = useCallback(
+    (trailId: string) => {
+      const ids = containersForTrail(trailId);
+      if (ids.length === 0) return;
+      setOpenIds((prev) => [...new Set([...prev, ...ids])].sort());
+    },
+    [containersForTrail],
+  );
+
+  /**
+   * The single source of the C4 emphasis, derived from the two focus facts —
+   * mirroring the component graph:
+   *
+   *   hidden — an EXPANDED/focused trail removes every element it does not
+   *            touch (the analogue of the component graph's opened-flow hide),
+   *            lines included; `null` when nothing is focused.
+   *   dimmed — the HOVER spotlight (a step, or a whole trail for a collapsed
+   *            row) fades everything outside it; `null` when nothing is hovered.
+   *
+   * A step internal to a container folds into no C4 line, so its hover dims
+   * every edge while the container stays bright — no drawn edge represents it.
+   */
+  const emphasis = useMemo(() => {
+    let hiddenElementIds: ReadonlySet<string> | null = null;
+    let hiddenEdgeIds: ReadonlySet<string> | null = null;
+    if (focusedTrailId) {
+      const trail = DRILLDOWN_TRAILS.find((t) => t.id === focusedTrailId);
+      const players = trail
+        ? deriveTrailPlayerElements(trail.steps, DRILLDOWN_MEMBERS)
+        : new Set<string>();
+      hiddenElementIds = new Set(allElementIds.filter((id) => !players.has(id)));
+      const lit = deriveLitC4Edges({ trailId: focusedTrailId }, DRILLDOWN_C4_MODEL.edges);
+      hiddenEdgeIds = new Set(allEdgeIds.filter((id) => !lit.has(id)));
+    }
+
+    let dimmedElementIds: ReadonlySet<string> | null = null;
+    let dimmedEdgeIds: ReadonlySet<string> | null = null;
+    if (hoveredStep) {
+      const trail = DRILLDOWN_TRAILS.find((t) => t.id === hoveredStep.trailId);
       const steps =
         !trail
           ? []
-          : source.stepIndex != null
-            ? trail.steps.slice(source.stepIndex, source.stepIndex + 1)
+          : hoveredStep.stepIndex != null
+            ? trail.steps.slice(hoveredStep.stepIndex, hoveredStep.stepIndex + 1)
             : trail.steps;
-      const players = deriveTrailPlayerElements(steps, DRILLDOWN_MEMBERS);
-      setDimmedElementIds(new Set(allElementIds.filter((id) => !players.has(id))));
-      const lit = deriveLitC4Edges(source, DRILLDOWN_C4_MODEL.edges);
-      setDimmedEdgeIds(new Set(allEdgeIds.filter((id) => !lit.has(id))));
-    },
-    [allElementIds, allEdgeIds],
-  );
+      const spotlight = deriveTrailPlayerElements(steps, DRILLDOWN_MEMBERS);
+      dimmedElementIds = new Set(allElementIds.filter((id) => !spotlight.has(id)));
+      const lit = deriveLitC4Edges(
+        {
+          trailId: hoveredStep.trailId,
+          ...(hoveredStep.stepIndex != null ? { stepIndex: hoveredStep.stepIndex } : {}),
+        },
+        DRILLDOWN_C4_MODEL.edges,
+      );
+      dimmedEdgeIds = new Set(allEdgeIds.filter((id) => !lit.has(id)));
+    }
 
-  /** Drop the component graph onto the trail, and dim every C4 element the
-   *  trail doesn't touch — the two graphs agreeing on the same focus. */
+    return { hiddenElementIds, hiddenEdgeIds, dimmedElementIds, dimmedEdgeIds };
+  }, [focusedTrailId, hoveredStep, allElementIds, allEdgeIds]);
+
+  /**
+   * Focus a trail: the C4 hides non-members, opens the containers that hold
+   * them (so the cast shows at Level 3), and the component graph deep-links.
+   */
   const focusTrail = useCallback(
     (trailId: string) => {
       setFocusedTrailId(trailId);
       setGraphEpoch((e) => e + 1);
-      applyDim({ trailId });
       setHoveredStep(null);
+      openContainersForTrail(trailId);
     },
-    [applyDim],
+    [openContainersForTrail],
   );
 
   /**
    * The component graph's own trail focus (its trails panel) reported back up.
-   * Mirrors the same agreement without a remount: the graph already focused
-   * itself, so the host only syncs the C4 dim + status line.
+   * The graph already focused itself, so the host only syncs the C4 hide,
+   * container expansion, and the status line.
    */
   const handleGraphTrailSelect = useCallback(
     (ref: { trailId: string; stepIndices?: number[] } | null) => {
       setFocusedTrailId(ref?.trailId ?? null);
-      applyDim(ref ? { trailId: ref.trailId } : null);
       setHoveredStep(null);
+      if (ref?.trailId) openContainersForTrail(ref.trailId);
     },
-    [applyDim],
+    [openContainersForTrail],
   );
 
   /**
-   * Step-level preview: while a step row is hovered the C4 dim narrows to
-   * that single hop's participants (from + to of the hovered step); leaving
-   * the row falls back to the focus-level cast — or all-clear, when nothing
-   * is focused.
+   * Step-level preview: while a step row is hovered the C4 dim narrows to that
+   * single hop's participants (from + to); leaving clears the dim, restoring
+   * the focused-hide view (or the whole graph when nothing is focused).
    */
   const handleTrailStepHover = useCallback(
     (ref: { trailId: string; stepIndex: number } | null) => {
       setHoveredStep(ref);
-      applyDim(
-        ref
-          ? { trailId: ref.trailId, stepIndex: ref.stepIndex }
-          : focusedTrailId
-            ? { trailId: focusedTrailId }
-            : null,
-      );
     },
-    [applyDim, focusedTrailId],
+    [],
   );
 
   const clearFocus = useCallback(() => {
     setFocusedTrailId(null);
     setGraphEpoch((e) => e + 1);
-    applyDim(null);
     setHoveredStep(null);
-  }, [applyDim]);
+  }, []);
 
   /** The trail currently focused in the component graph, for the status line. */
   const focusedTrailTitle = focusedTrailId ? (trailTitles.get(focusedTrailId) ?? focusedTrailId) : null;
   /** The hovered step's `from → to`, for the status line. */
-  const hoveredStepDef = hoveredStep
-    ? DRILLDOWN_TRAILS.find((t) => t.id === hoveredStep.trailId)?.steps[hoveredStep.stepIndex]
-    : undefined;
+  const hoveredStepDef =
+    hoveredStep && hoveredStep.stepIndex != null
+      ? DRILLDOWN_TRAILS.find((t) => t.id === hoveredStep.trailId)?.steps[hoveredStep.stepIndex]
+      : undefined;
 
   return (
     <div
@@ -265,10 +306,10 @@ function Demo() {
                 Trails
               </span>
               <span style={{ fontSize: 12, color: '#777', lineHeight: 1.5 }}>
-                Pick a trail to dim the C4 to its cast and deep-link the component
-                graph below; hover a step to narrow the dim to one hop. An edge
-                clicked in the C4 view deep-links here the same way. Dimmed boxes
-                are everything the focused trail does not touch — a hop internal
+                Pick a trail to hide the C4 down to its cast and deep-link the
+                component graph below; hover a step to dim to one hop. An edge
+                clicked in the C4 view deep-links here the same way. Boxes the
+                focused trail does not touch leave the canvas — a hop internal
                 to a container dims every line.
               </span>
             </div>
@@ -302,15 +343,12 @@ function Demo() {
               }}
               onHoverStep={(tl, stepIndex) => {
                 setHoveredStep({ trailId: tl.id, stepIndex });
-                applyDim({ trailId: tl.id, stepIndex });
               }}
               onHoverFlow={(tl) => {
-                setHoveredStep(null);
-                applyDim({ trailId: tl.id });
+                setHoveredStep({ trailId: tl.id, stepIndex: null });
               }}
               onLeaveStep={() => {
                 setHoveredStep(null);
-                applyDim(focusedTrailId ? { trailId: focusedTrailId } : null);
               }}
             />
           }
@@ -333,8 +371,10 @@ function Demo() {
             }}
             onTrailClick={(ref) => focusTrail(ref.trailId)}
             onToggleContainer={toggle}
-            dimmedElementIds={dimmedElementIds}
-            dimmedEdgeIds={dimmedEdgeIds}
+            hiddenElementIds={emphasis.hiddenElementIds}
+            hiddenEdgeIds={emphasis.hiddenEdgeIds}
+            dimmedElementIds={emphasis.dimmedElementIds}
+            dimmedEdgeIds={emphasis.dimmedEdgeIds}
           />
         </GraphWithSidebar>
       </div>
