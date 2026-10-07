@@ -28,7 +28,7 @@ afterEach(() => {
 describe('CRUD', () => {
   test('create generates an id, persists a file, and reads back', async () => {
     const store = makeStore();
-    const created = await store.createTopic({ title: 'Auth flow', trailIds: [] });
+    const created = await store.createTopic({ title: 'Auth flow' });
     expect(created.id).toMatch(/^topic-/);
     expect(existsSync(join(topicsDir, `${created.id}.json`))).toBe(true);
 
@@ -38,20 +38,22 @@ describe('CRUD', () => {
 
   test('create honors an explicit id and rejects duplicates', async () => {
     const store = makeStore();
-    await store.createTopic({ id: 'topic-x', title: 'A', trailIds: [] });
-    await expect(
-      store.createTopic({ id: 'topic-x', title: 'B', trailIds: [] }),
-    ).rejects.toThrow(/already exists/);
+    await store.createTopic({ id: 'topic-x', title: 'A' });
+    await expect(store.createTopic({ id: 'topic-x', title: 'B' })).rejects.toThrow(
+      /already exists/
+    );
   });
 
-  test('update changes fields but never id/createdAt/trailIds', async () => {
+  test('update changes fields but never id/createdAt', async () => {
     const store = makeStore();
-    const t = await store.createTopic({ id: 'topic-u', title: 'A', trailIds: ['t1'] });
-    const updated = await store.updateTopic('topic-u', { title: 'B', description: 'hi' });
+    const t = await store.createTopic({ id: 'topic-u', title: 'A' });
+    const updated = await store.updateTopic('topic-u', {
+      title: 'B',
+      description: 'hi',
+    });
     expect(updated.title).toBe('B');
     expect(updated.description).toBe('hi');
     expect(updated.createdAt).toBe(t.createdAt);
-    expect(updated.trailIds).toEqual(['t1']);
   });
 
   test('repos (PURL strings) persist on create and are updatable', async () => {
@@ -59,7 +61,6 @@ describe('CRUD', () => {
     const created = await store.createTopic({
       id: 'topic-repos',
       title: 'Repo-scoped',
-      trailIds: [],
       repos: ['pkg:github/acme/web'],
     });
     expect(created.repos).toEqual(['pkg:github/acme/web']);
@@ -78,22 +79,21 @@ describe('CRUD', () => {
       id: 'topic-pub',
       title: 'Pub',
       description: 'has a description',
-      trailIds: ['local-1'],
       repos: ['pkg:github/acme/web'],
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-02T00:00:00.000Z',
     };
     const published = publishedFromDraft(draft, {
-      trailIds: ['remote-1'],
       createdBy: { githubId: 1, githubLogin: 'u1' },
       visibility: 'private',
     });
     expect(published.repos).toEqual(['pkg:github/acme/web']);
+    expect(published).not.toHaveProperty('trailIds');
   });
 
   test('delete removes the file and the index entry', async () => {
     const store = makeStore();
-    await store.createTopic({ id: 'topic-d', title: 'D', trailIds: [] });
+    await store.createTopic({ id: 'topic-d', title: 'D' });
     expect(await store.deleteTopic('topic-d')).toBe(true);
     expect(existsSync(join(topicsDir, 'topic-d.json'))).toBe(false);
     expect(await store.getTopic('topic-d')).toBeNull();
@@ -103,7 +103,7 @@ describe('CRUD', () => {
   test('no eviction cap — many topics all survive', async () => {
     const store = makeStore();
     for (let i = 0; i < 120; i++) {
-      await store.createTopic({ id: `topic-${i}`, title: `T${i}`, trailIds: [] });
+      await store.createTopic({ id: `topic-${i}`, title: `T${i}` });
     }
     expect((await store.getTopics()).length).toBe(120);
   });
@@ -112,30 +112,60 @@ describe('CRUD', () => {
 describe('index rebuild', () => {
   test('a corrupt _index.json is rebuilt by scanning topic files', async () => {
     const store = makeStore();
-    await store.createTopic({ id: 'topic-r', title: 'R', trailIds: ['z'] });
+    await store.createTopic({ id: 'topic-r', title: 'R' });
 
     // Corrupt the manifest and force a fresh store to rebuild from disk.
     writeFileSync(join(topicsDir, '_index.json'), 'not json', 'utf8');
     const fresh = makeStore();
     const list = await fresh.list();
     expect(list.map((e) => e.id)).toContain('topic-r');
-    expect(list.find((e) => e.id === 'topic-r')?.trailCount).toBe(1);
+    expect(list.find((e) => e.id === 'topic-r')).not.toHaveProperty('trailCount');
+    expect(readFileSync(join(topicsDir, '_index.json'), 'utf8')).not.toContain('trailCount');
+  });
+
+  test('legacy topic files drop trailIds but preserve other fields', async () => {
+    const store = makeStore();
+    await store.createTopic({
+      id: 'topic-legacy',
+      title: 'Legacy',
+      repos: ['pkg:github/a/b'],
+    });
+    const topicPath = join(topicsDir, 'topic-legacy.json');
+    const legacy = {
+      ...JSON.parse(readFileSync(topicPath, 'utf8')),
+      trailIds: ['old-trail'],
+      description: 'Keep this description',
+    };
+    writeFileSync(topicPath, JSON.stringify(legacy), 'utf8');
+
+    const loaded = await store.getTopic('topic-legacy');
+
+    expect(loaded).toMatchObject({
+      id: 'topic-legacy',
+      title: 'Legacy',
+      description: 'Keep this description',
+      repos: ['pkg:github/a/b'],
+    });
+    expect(loaded).not.toHaveProperty('trailIds');
+    expect(JSON.parse(readFileSync(topicPath, 'utf8'))).not.toHaveProperty('trailIds');
   });
 });
 
 describe('migration', () => {
-  const seedLegacy = (topics: Partial<DraftTopic>[]) => {
-    writeFileSync(
-      legacyBlob,
-      JSON.stringify({ version: '1.0.0', topics }, null, 2),
-      'utf8',
-    );
+  const seedLegacy = (topics: Record<string, unknown>[]) => {
+    writeFileSync(legacyBlob, JSON.stringify({ version: '1.0.0', topics }, null, 2), 'utf8');
   };
 
   test('fans the blob out to file-per-topic and backs up the blob', async () => {
     seedLegacy([
-      { id: 'topic-1', title: 'One', trailIds: ['a'], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-02T00:00:00.000Z' },
-      { id: 'topic-2', title: 'Two', trailIds: [] },
+      {
+        id: 'topic-1',
+        title: 'One',
+        trailIds: ['a'],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-02T00:00:00.000Z',
+      },
+      { id: 'topic-2', title: 'Two', trailIds: [], repos: ['pkg:github/a/b'] },
     ]);
     const store = makeStore();
     const result = await store.migrateFromLegacyBlob();
@@ -149,6 +179,12 @@ describe('migration', () => {
     const one = await store.getTopic('topic-1');
     expect(one?.title).toBe('One');
     expect(one?.createdAt).toBe('2026-01-01T00:00:00.000Z');
+    expect(one).not.toHaveProperty('trailIds');
+    expect(await store.getTopic('topic-2')).toMatchObject({
+      title: 'Two',
+      repos: ['pkg:github/a/b'],
+    });
+    expect(await store.getTopic('topic-2')).not.toHaveProperty('trailIds');
     expect(existsSync(join(topicsDir, 'topic-1.json'))).toBe(true);
   });
 

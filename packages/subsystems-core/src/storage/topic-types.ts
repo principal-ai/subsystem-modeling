@@ -3,11 +3,11 @@
  * agrees on. Browser-safe (no `node:*`); the file-per-topic store that reads and
  * writes these lives in `./node` (see `topicStore.ts`).
  *
- * A **topic** is a curated bundle of trails on one subject. Two distinct named
- * shapes, split by id-namespace / ownership, with an explicit translation
- * between them — NOT one shared shape. They share most field names, but `id`
- * and `trailIds` live in different namespaces (local vs server), so passing one
- * where the other is expected corrupts the trail foreign-keys.
+ * A **topic** is a locally authored subject brief that may be published. Two
+ * distinct named shapes, split by id-namespace / ownership, with an explicit
+ * translation between them — NOT one shared shape. Their `id` fields live in
+ * different namespaces (local vs server), so passing one where the other is
+ * expected corrupts topic identity.
  *
  * - {@link DraftTopic}     — locally-authored, what desktop persists + edits.
  * - {@link PublishedTopic} — server-authoritative, what the server returns and
@@ -15,10 +15,8 @@
  * - {@link publishedFromDraft} — the Draft -> Published projection (one-way;
  *                            there is no reverse hydration).
  *
- * The shapes mirror the over-the-wire form used by the sharing API (web-ade) so
- * a published topic and a locally stored one stay interchangeable on read. All
- * timestamps are ISO 8601 strings because this contract crosses the desktop/web
- * boundary.
+ * All timestamps are ISO 8601 strings because this contract crosses the
+ * desktop/web boundary.
  */
 
 /**
@@ -40,13 +38,7 @@ export interface TopicStatus {
    * `new-thought`, so legacy topics and renamed values need no migration.
    */
   state:
-    | 'new-thought'
-    | 'working'
-    | 'paused'
-    | 'waiting'
-    | 'done-for-now'
-    | 'deprecated'
-    | 'abandoned';
+    'new-thought' | 'working' | 'paused' | 'waiting' | 'done-for-now' | 'deprecated' | 'abandoned';
   /** Free-form text shown in place of the default label for the state. */
   label?: string;
   /** External blocker description. Meaningful when `state` is `waiting`. */
@@ -57,7 +49,7 @@ export interface TopicStatus {
     until?: string;
     /** Structured pointer to the thing being waited on, for automations. */
     ref?: {
-      kind: 'url' | 'pr' | 'issue' | 'topic' | 'trail';
+      kind: 'url' | 'pr' | 'issue' | 'topic';
       /** The address/id of the referenced thing. */
       value: string;
       /** Optional human label for display. */
@@ -122,8 +114,6 @@ export interface DraftTopic {
   title: string;
   /** Optional markdown body. */
   description?: string;
-  /** Ordered list of LOCAL trail ids — foreign keys into the local trail store. */
-  trailIds: string[];
   /**
    * Repositories this topic is about, as PURL strings (e.g.
    * `pkg:github/owner/repo`). The topic's own source of truth for "which repos"
@@ -160,8 +150,6 @@ export interface PublishedTopic {
   title: string;
   /** Markdown body — required on the server. */
   description: string;
-  /** Ordered list of REMOTE trail ids. */
-  trailIds: string[];
   /**
    * Repositories this topic is about, as PURL strings (e.g.
    * `pkg:github/owner/repo`). Travels with the topic across the wire so a
@@ -184,13 +172,10 @@ export interface PublishedTopic {
  * Inputs the {@link DraftTopic} cannot supply on its own — the namespace
  * crossing and the fields publish must enforce. The caller resolves these
  * before projecting:
- * - `trailIds`: LOCAL trail ids remapped to REMOTE ids (web-ade references
- *   trails by their server id; see desktop's `resolveRemoteTrailIds`).
  * - `createdBy`: required on the server; supplied here if the draft lacks it.
  * - `visibility`: a published concept the draft never carries.
  */
 export interface PublishProjection {
-  trailIds: string[];
   createdBy: TopicCreator;
   visibility: 'private' | 'public';
 }
@@ -199,8 +184,8 @@ export interface PublishProjection {
  * Project a {@link DraftTopic} into a {@link PublishedTopic} — the one-way
  * Draft -> Published translation. It does NOT perform any I/O (no id minting,
  * no asset upload, no network): the caller resolves the namespace-crossing and
- * required fields into {@link PublishProjection} first (remapping trail ids,
- * uploading assets, choosing visibility), and this enforces the shape.
+ * required fields into {@link PublishProjection} first (uploading assets,
+ * choosing visibility), and this enforces the shape.
  *
  * One-way by design: there is no reverse `PublishedTopic -> DraftTopic`
  * hydration. A published topic's edits write through to the server; the local
@@ -212,19 +197,16 @@ export interface PublishProjection {
  */
 export function publishedFromDraft(
   draft: DraftTopic,
-  projection: PublishProjection,
+  projection: PublishProjection
 ): PublishedTopic {
   const description = (draft.description ?? '').trim();
   if (description.length === 0) {
-    throw new Error(
-      `Topic ${draft.id} has no description; a description is required to publish.`,
-    );
+    throw new Error(`Topic ${draft.id} has no description; a description is required to publish.`);
   }
   return {
     id: draft.id,
     title: draft.title,
     description,
-    trailIds: projection.trailIds,
     ...(draft.repos !== undefined ? { repos: draft.repos } : {}),
     createdAt: draft.createdAt,
     updatedAt: draft.updatedAt,

@@ -26,15 +26,7 @@
 
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import {
-  mkdir,
-  readFile,
-  writeFile,
-  unlink,
-  readdir,
-  rename,
-  access,
-} from 'node:fs/promises';
+import { mkdir, readFile, writeFile, unlink, readdir, rename, access } from 'node:fs/promises';
 import type { DraftTopic, TopicStatus } from './topic-types';
 
 /** Root of the global, cross-repo principal narration store. */
@@ -56,7 +48,6 @@ export interface TopicIndexEntry {
   id: string;
   title: string;
   descriptionPreview: string;
-  trailCount: number;
   /** `status.state` lifted out for filtering/sorting without a file read. */
   state?: TopicStatus['state'];
   createdAt: string;
@@ -75,8 +66,7 @@ interface IndexFileV1 {
 
 const emptyIndex = (): IndexFileV1 => ({ version: 1, entries: [] });
 
-const sanitizeSegment = (value: string): string =>
-  value.replace(/[^A-Za-z0-9._-]/g, '_');
+const sanitizeSegment = (value: string): string => value.replace(/[^A-Za-z0-9._-]/g, '_');
 
 const nowIso = (): string => new Date().toISOString();
 
@@ -91,11 +81,16 @@ const descriptionPreview = (description?: string): string => {
   return `${trimmed.slice(0, DESCRIPTION_PREVIEW_MAX - 1)}…`;
 };
 
+/** Strip the removed topic-to-trail field from data written by older versions. */
+const withoutLegacyTrailIds = (topic: object): Record<string, unknown> => {
+  const { trailIds: _trailIds, ...canonical } = topic as Record<string, unknown>;
+  return canonical;
+};
+
 const buildEntry = (topic: DraftTopic, sizeBytes: number): TopicIndexEntry => ({
   id: topic.id,
   title: topic.title || 'Untitled topic',
   descriptionPreview: descriptionPreview(topic.description),
-  trailCount: topic.trailIds.length,
   state: topic.status?.state,
   createdAt: topic.createdAt,
   updatedAt: topic.updatedAt,
@@ -108,7 +103,7 @@ const buildEntry = (topic: DraftTopic, sizeBytes: number): TopicIndexEntry => ({
 /** Shape the legacy `~/.alexandria/topics.json` blob is parsed as. */
 interface LegacyTopicsBlob {
   version?: string;
-  topics?: DraftTopic[];
+  topics?: unknown[];
 }
 
 export interface MigrationResult {
@@ -123,10 +118,8 @@ export interface MigrationResult {
 }
 
 /**
- * Fields a caller may set when updating a topic. `id`, `createdAt`, and
- * `trailIds` are immutable here — `id`/`createdAt` are set once at creation, and
- * `trailIds` is foreign-keyed membership owned by the desktop's trail store, so
- * a topic update here can never rewrite it.
+ * Fields a caller may set when updating a topic. `id` and `createdAt` are set
+ * once at creation and cannot be changed by an update.
  */
 export type TopicUpdate = Partial<
   Pick<DraftTopic, 'title' | 'description' | 'status' | 'createdBy' | 'assets' | 'repos'>
@@ -142,10 +135,7 @@ export type TopicUpdate = Partial<
  * onto a still-required `id: string` would NOT widen it — an intersection keeps
  * the stricter member — which would leave `id` wrongly required for callers.
  */
-export type TopicCreate = Omit<
-  DraftTopic,
-  'id' | 'createdAt' | 'updatedAt'
-> & {
+export type TopicCreate = Omit<DraftTopic, 'id' | 'createdAt' | 'updatedAt'> & {
   id?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -191,9 +181,7 @@ export class TopicStore {
   /** Cheap listing straight off the manifest — no per-topic file read. */
   async list(): Promise<TopicIndexEntry[]> {
     const idx = await this.getIndex();
-    return idx.entries
-      .slice()
-      .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+    return idx.entries.slice().sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
   }
 
   async createTopic(input: TopicCreate): Promise<DraftTopic> {
@@ -203,14 +191,13 @@ export class TopicStore {
     if (idx.entries.some((e) => e.id === id)) {
       throw new Error(`Topic with id '${id}' already exists`);
     }
-    const topic: DraftTopic = {
+    const topic = {
       ...input,
       id,
       title: input.title || 'Untitled topic',
-      trailIds: input.trailIds ?? [],
       createdAt: input.createdAt ?? now,
       updatedAt: input.updatedAt ?? now,
-    };
+    } as DraftTopic;
     await this.writeTopic(topic, idx);
     return topic;
   }
@@ -222,7 +209,6 @@ export class TopicStore {
       ...existing,
       ...updates,
       id: existing.id,
-      trailIds: existing.trailIds,
       createdAt: existing.createdAt,
       updatedAt: nowIso(),
     };
@@ -267,26 +253,31 @@ export class TopicStore {
       blob = JSON.parse(raw) as LegacyTopicsBlob;
     } catch {
       throw new Error(
-        `Legacy topics blob at ${this.legacyBlobPath} is not valid JSON; not migrating.`,
+        `Legacy topics blob at ${this.legacyBlobPath} is not valid JSON; not migrating.`
       );
     }
 
     const idx = await this.getIndex();
     let migrated = 0;
     let skipped = 0;
-    for (const legacy of blob.topics ?? []) {
-      if (!legacy?.id) {
+    const legacyTopics = Array.isArray(blob.topics) ? blob.topics : [];
+    for (const legacyValue of legacyTopics) {
+      if (!legacyValue || typeof legacyValue !== 'object' || Array.isArray(legacyValue)) {
+        skipped++;
+        continue;
+      }
+      const legacy = legacyValue as Record<string, unknown>;
+      if (typeof legacy.id !== 'string' || !legacy.id) {
         skipped++;
         continue;
       }
       const now = nowIso();
-      const topic: DraftTopic = {
+      const topic = {
         ...legacy,
-        title: legacy.title || 'Untitled topic',
-        trailIds: legacy.trailIds ?? [],
-        createdAt: legacy.createdAt ?? now,
-        updatedAt: legacy.updatedAt ?? now,
-      };
+        title: typeof legacy.title === 'string' && legacy.title ? legacy.title : 'Untitled topic',
+        createdAt: typeof legacy.createdAt === 'string' ? legacy.createdAt : now,
+        updatedAt: typeof legacy.updatedAt === 'string' ? legacy.updatedAt : now,
+      } as DraftTopic;
       try {
         await this.writeTopic(topic, idx);
         migrated++;
@@ -334,13 +325,14 @@ export class TopicStore {
 
   /** Write a topic file and upsert its index entry. Does not generate ids. */
   private async writeTopic(topic: DraftTopic, idx: IndexFileV1): Promise<void> {
-    const fileName = `${sanitizeSegment(topic.id)}.json`;
+    const canonicalTopic = withoutLegacyTrailIds(topic) as unknown as DraftTopic;
+    const fileName = `${sanitizeSegment(canonicalTopic.id)}.json`;
     const file = join(this.baseDir, fileName);
     await mkdir(dirname(file), { recursive: true });
-    const serialized = JSON.stringify(topic, null, 2);
+    const serialized = JSON.stringify(canonicalTopic, null, 2);
     await writeFile(file, serialized, 'utf8');
-    const entry = buildEntry(topic, Buffer.byteLength(serialized, 'utf8'));
-    const at = idx.entries.findIndex((e) => e.id === topic.id);
+    const entry = buildEntry(canonicalTopic, Buffer.byteLength(serialized, 'utf8'));
+    const at = idx.entries.findIndex((e) => e.id === canonicalTopic.id);
     if (at >= 0) idx.entries[at] = entry;
     else idx.entries.push(entry);
     await this.persistIndex();
@@ -349,7 +341,16 @@ export class TopicStore {
   private async readTopic(fileName: string): Promise<DraftTopic | null> {
     try {
       const raw = await readFile(join(this.baseDir, fileName), 'utf8');
-      return JSON.parse(raw) as DraftTopic;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const topic = withoutLegacyTrailIds(parsed) as unknown as DraftTopic;
+      if ('trailIds' in parsed) {
+        try {
+          await writeFile(join(this.baseDir, fileName), JSON.stringify(topic, null, 2), 'utf8');
+        } catch (err) {
+          console.warn('[TopicStore] Failed to remove legacy trailIds from', fileName, err);
+        }
+      }
+      return topic;
     } catch (err) {
       console.error('[TopicStore] Failed to read topic', fileName, err);
       return null;
@@ -381,7 +382,20 @@ export class TopicStore {
       const raw = await readFile(this.indexPath, 'utf8');
       const parsed = JSON.parse(raw) as Partial<IndexFileV1>;
       if (parsed?.version === 1 && Array.isArray(parsed.entries)) {
-        return { version: 1, entries: parsed.entries as TopicIndexEntry[] };
+        let hadLegacyTrailCount = false;
+        const entries = parsed.entries.map((entry) => {
+          hadLegacyTrailCount ||= Boolean(
+            entry && typeof entry === 'object' && 'trailCount' in entry
+          );
+          const { trailCount: _trailCount, ...canonical } = entry as TopicIndexEntry & {
+            trailCount?: number;
+          };
+          return canonical;
+        });
+        if (hadLegacyTrailCount) {
+          await writeFile(this.indexPath, JSON.stringify({ version: 1, entries }, null, 2), 'utf8');
+        }
+        return { version: 1, entries };
       }
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
@@ -408,13 +422,12 @@ export class TopicStore {
       const topic = await this.readTopic(name);
       if (!topic?.id) continue;
       const createdAt = topic.createdAt ?? nowIso();
-      const stamped: DraftTopic = {
+      const stamped = {
         ...topic,
         createdAt,
         updatedAt: topic.updatedAt ?? createdAt,
         title: topic.title || 'Untitled topic',
-        trailIds: topic.trailIds ?? [],
-      };
+      } as DraftTopic;
       const raw = JSON.stringify(stamped, null, 2);
       idx.entries.push(buildEntry(stamped, Buffer.byteLength(raw, 'utf8')));
     }
