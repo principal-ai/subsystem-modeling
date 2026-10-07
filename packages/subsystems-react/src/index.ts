@@ -210,6 +210,8 @@ export {
   STEP_COPY_FEEDBACK_MS,
 } from './subsystem/TrailsPanel';
 export type { TrailsPanelProps } from './subsystem/TrailsPanel';
+export { TrailStepsNav } from './subsystem/TrailStepsNav';
+export type { TrailStepsNavProps } from './subsystem/TrailStepsNav';
 export { buildStepBrief } from './subsystem/trailBrief';
 export { GraphLayoutCover } from './subsystem/GraphLayoutCover';
 export type { GraphLayoutCoverProps } from './subsystem/GraphLayoutCover';

@@ -5,7 +5,7 @@ import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme
 import { C4Graph } from '../../../subsystem/C4Graph';
 import { GraphWithSidebar } from '../../../subsystem/GraphWithSidebar';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
-import { TrailsPanel } from '../../../subsystem/TrailsPanel';
+import { TrailStepsNav } from '../../../subsystem/TrailStepsNav';
 import type { C4Edge } from '../../../subsystem/c4';
 import {
   DRILLDOWN_C4_MODEL,
@@ -115,10 +115,9 @@ function Demo() {
     trailId: string;
     stepIndex: number | null;
   } | null>(null);
-  // The C4 sidebar's own trails panel (composed by the story through
-  // GraphWithSidebar): which rows have their steps expanded, and which step the
-  // row shows focused. The focused trail itself is the shared state above.
-  const [c4ExpandedTrails, setC4ExpandedTrails] = useState<Set<string>>(new Set());
+  // The C4 sidebar's own step pane (composed by the story through
+  // GraphWithSidebar): which step the focused trail shows selected. The
+  // focused trail itself is the shared state above.
   const [c4FocusedStepIndex, setC4FocusedStepIndex] = useState<number | null>(null);
 
   const model = useMemo(
@@ -315,20 +314,11 @@ function Demo() {
             </div>
           }
           sidebarBody={
-            <TrailsPanel
+            <TrailStepsNav
               trails={DRILLDOWN_TRAILS}
-              expandedTrails={c4ExpandedTrails}
               focusedTrailId={focusedTrailId}
               focusedStepIndex={c4FocusedStepIndex}
               hoveredTrailStep={hoveredStep}
-              onToggleCollapsed={(id) =>
-                setC4ExpandedTrails((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(id)) next.delete(id);
-                  else next.add(id);
-                  return next;
-                })
-              }
               onFocusFlow={(tl) => {
                 setC4FocusedStepIndex(null);
                 focusTrail(tl.id);
