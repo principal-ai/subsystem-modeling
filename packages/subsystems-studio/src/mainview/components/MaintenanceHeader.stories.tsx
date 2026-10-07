@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { MaintenanceHeader } from "./MaintenanceHeader";
 
 const meta = {
-	title: "Maintenance/MaintenanceHeader",
+	title: "Maintainer Tab/MaintenanceHeader",
 	component: MaintenanceHeader,
 	parameters: { layout: "fullscreen" },
 	args: {

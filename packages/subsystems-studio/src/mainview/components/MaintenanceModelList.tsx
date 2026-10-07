@@ -27,6 +27,7 @@ import {
 	type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
+import { AUDIT_FIX_LANE } from "../subsystemIssues";
 import {
 	ProvenanceBadge,
 	ProvenanceDetail,
@@ -420,6 +421,7 @@ export function LaneBadges({
 	onOpenLane,
 	proposalCounts,
 	onOpenProposals,
+	fixableCounts,
 }: {
 	lanes: Partial<Record<SubsystemVerificationLane, VerificationLaneStatus>>;
 	colors: {
@@ -435,8 +437,18 @@ export function LaneBadges({
 	/** Pending proposals per lane — shows a count badge and reroutes the click. */
 	proposalCounts?: Partial<Record<SubsystemVerificationLane, number>>;
 	onOpenProposals?: (lane: SubsystemVerificationLane) => void;
+	/**
+	 * One-click deterministic fixes per lane — a green count badge mirroring the
+	 * proposal badge. Its own click target (top-left) opens the lane's findings,
+	 * where the per-finding Apply buttons live, without stealing the proposal
+	 * click (top-right).
+	 */
+	fixableCounts?: Partial<Record<SubsystemVerificationLane, number>>;
 }) {
 	const { theme } = useTheme();
+	// Same green the per-finding Apply button and the diagnostics chip use:
+	// this marks "a click fixes this", not severity.
+	const fixableColor = colors.success ?? "#2da44e";
 	return (
 		<span
 			style={{
@@ -450,12 +462,15 @@ export function LaneBadges({
 				const status = lanes[lane] ?? "none";
 				const tint = laneStatusColor(status, colors, muted);
 				const count = proposalCounts?.[lane] ?? 0;
-				// A lane with pending proposals reviews them instead of opening
-				// the model — the badge is the proposal affordance.
+				const fixable = fixableCounts?.[lane] ?? 0;
+				// The lane's icon affordance. A lane with pending proposals
+				// reviews them instead of opening the model — the badge is the
+				// proposal affordance. Otherwise the icon opens the lane's
+				// findings (which is where the per-finding Apply buttons live).
+				let base: ReactNode;
 				if (count > 0 && onOpenProposals) {
-					return (
+					base = (
 						<button
-							key={lane}
 							type="button"
 							onClick={(e) => {
 								e.stopPropagation();
@@ -500,11 +515,9 @@ export function LaneBadges({
 							</span>
 						</button>
 					);
-				}
-				if (!onOpenLane) {
-					return (
+				} else if (!onOpenLane) {
+					base = (
 						<Icon
-							key={lane}
 							size={13}
 							aria-label={`${label}: ${status}`}
 							style={{
@@ -513,43 +526,103 @@ export function LaneBadges({
 							}}
 						/>
 					);
+				} else {
+					base = (
+						<button
+							type="button"
+							onClick={(e) => {
+								e.stopPropagation();
+								onOpenLane(lane);
+							}}
+							aria-label={`Open ${label} findings (${status})`}
+							title={`Open this model focused on ${label} findings`}
+							style={{
+								display: "inline-flex",
+								alignItems: "center",
+								justifyContent: "center",
+								width: 26,
+								height: 26,
+								padding: 0,
+								border: `1px solid ${theme.colors.border ?? "#333"}`,
+								borderRadius: 6,
+								background: "transparent",
+								color: tint,
+								opacity: status === "none" ? 0.5 : 1,
+								cursor: "pointer",
+							}}
+							onMouseEnter={(e) => {
+								e.currentTarget.style.background =
+									theme.colors.backgroundHover ??
+									theme.colors.backgroundSecondary ??
+									"transparent";
+							}}
+							onMouseLeave={(e) => {
+								e.currentTarget.style.background = "transparent";
+							}}
+						>
+							<Icon size={14} />
+						</button>
+					);
 				}
+				// The proposal badge (top-right) rides the icon button so clicking
+				// it bubbles to the proposals modal. The fixable badge (top-left)
+				// is its own target: it opens the lane's findings, where the
+				// one-click Apply buttons are, without stealing the proposal click.
+				const fixTitle = `${fixable} one-click fix${
+					fixable === 1 ? "" : "es"
+				} in ${label} — open findings to apply`;
+				const badgeStyle: React.CSSProperties = {
+					position: "absolute",
+					top: -5,
+					left: -5,
+					minWidth: 14,
+					height: 14,
+					padding: "0 3px",
+					borderRadius: 7,
+					border: "none",
+					background: fixableColor,
+					color: theme.colors.background,
+					fontSize: 9,
+					fontWeight: 700,
+					lineHeight: 1,
+					fontFamily: theme.fonts.monospace,
+					display: "inline-flex",
+					alignItems: "center",
+					justifyContent: "center",
+				};
+				const fixBadge =
+					fixable > 0 ? (
+						onOpenLane ? (
+							<button
+								type="button"
+								onClick={(e) => {
+									e.stopPropagation();
+									onOpenLane(lane);
+								}}
+								title={fixTitle}
+								aria-label={fixTitle}
+								style={{ ...badgeStyle, cursor: "pointer" }}
+							>
+								{fixable > 99 ? "99+" : fixable}
+							</button>
+						) : (
+							<span title={fixTitle} style={badgeStyle}>
+								{fixable > 99 ? "99+" : fixable}
+							</span>
+						)
+					) : null;
 				return (
-					<button
+					<span
 						key={lane}
-						type="button"
-						onClick={(e) => {
-							e.stopPropagation();
-							onOpenLane(lane);
-						}}
-						aria-label={`Open ${label} findings (${status})`}
-						title={`Open this model focused on ${label} findings`}
 						style={{
+							position: "relative",
 							display: "inline-flex",
-							alignItems: "center",
-							justifyContent: "center",
-							width: 26,
-							height: 26,
-							padding: 0,
-							border: `1px solid ${theme.colors.border ?? "#333"}`,
-							borderRadius: 6,
-							background: "transparent",
-							color: tint,
-							opacity: status === "none" ? 0.5 : 1,
-							cursor: "pointer",
-						}}
-						onMouseEnter={(e) => {
-							e.currentTarget.style.background =
-								theme.colors.backgroundHover ??
-								theme.colors.backgroundSecondary ??
-								"transparent";
-						}}
-						onMouseLeave={(e) => {
-							e.currentTarget.style.background = "transparent";
+							flexShrink: 0,
 						}}
 					>
-						<Icon size={14} />
-					</button>
+						{base}
+						{fixBadge}
+					</span>
 				);
 			})}
 		</span>
@@ -557,8 +630,9 @@ export function LaneBadges({
 }
 
 /** One model card: title, blocked count, Runs / Run maintenance / Brief agent,
- *  lane badges, and — while a run is in flight — the live agent strip (active
- *  agent, event counters, last event line, click to open the events tab). */
+ *  a fixable badge for the audit's one-click fixes, lane badges, and — while a
+ *  run is in flight — the live agent strip (active agent, event counters, last
+ *  event line, click to open the events tab). */
 export function MaintenanceModelCard({
 	model,
 	runs,
@@ -659,11 +733,28 @@ export function MaintenanceModelCard({
 			: "Preparing OpenCode session…"
 		: null;
 	// Runs arrive newest first, so the first finished one is the most recent.
-	// A persisted "running" row always has a live block above it (the run is in
-	// flight), so drop it to avoid stating it twice. Only the newest finished
-	// run is shown: older rows are history nobody acts on, and the Fix-cycle
-	// strip already summarizes the sequence.
-	const latestRun = runs.find((r) => r.status !== "running");
+	// A persisted "running" row normally has a live block above it (the run is
+	// in flight), so prefer the newest finished run and avoid stating it twice.
+	// When there is no live block — e.g. a running row the host has not
+	// re-tracked since a restart — fall back to the running row so the run is
+	// still visible rather than reading as "No runs yet". Only one row is shown:
+	// older runs are history nobody acts on, and the Fix-cycle strip already
+	// summarizes the sequence.
+	const activeRun = runs.find((r) => r.status === "running");
+	const latestRun =
+		runs.find((r) => r.status !== "running") ??
+		(maintainRunning ? undefined : activeRun);
+	// One-click deterministic fixes the saved audit offers, bucketed into the
+	// lane icons they belong to. They are the cheapest path to progress (a
+	// re-pin / signature fill closes a finding without an agent run), so the
+	// card badges them the way it badges pending proposals.
+	const fixableCountsByLane: Partial<
+		Record<SubsystemVerificationLane, number>
+	> = {};
+	for (const group of model.fixGroups ?? []) {
+		const lane = AUDIT_FIX_LANE[group.fixId] ?? "construct";
+		fixableCountsByLane[lane] = (fixableCountsByLane[lane] ?? 0) + group.count;
+	}
 	return (
 		<div
 			onClick={() => onToggleRuns(model.graphId)}
@@ -732,6 +823,7 @@ export function MaintenanceModelCard({
 				onOpenLane={(lane) => onOpenLane(model, lane)}
 				proposalCounts={proposalCounts}
 				onOpenProposals={(lane) => onOpenProposals(model, lane)}
+				fixableCounts={fixableCountsByLane}
 			/>
 			</div>
 			{/*
@@ -1003,7 +1095,9 @@ export function MaintenanceModelCard({
 								color: muted,
 							}}
 						>
-							No runs yet.
+							{maintainRunning
+								? "A run is in flight — see the live activity above."
+								: "No runs yet."}
 						</div>
 					)}
 				</div>

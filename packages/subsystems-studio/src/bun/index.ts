@@ -43,6 +43,7 @@ import {
 import { attachSignatureAugmentations } from "./augmentation-store";
 import { publishSubsystemModelGist } from "./gist-publish";
 import {
+	auditFixGroups,
 	buildAuditFingerprint,
 	deleteSubsystemModelAudit,
 	getSubsystemModelAuditListSummary,
@@ -1938,6 +1939,7 @@ const requests: RequestHandlers = {
 						};
 						let stale = false;
 						let checkedAt: string | undefined;
+						let fixGroups: MaintenanceOverviewModel["fixGroups"];
 						if (full) {
 							const graphify = await assessSubsystemGraphifyReadiness(
 								full,
@@ -1959,6 +1961,10 @@ const requests: RequestHandlers = {
 								lanes = summary.lanes;
 								stale = summary.stale;
 								checkedAt = summary.checkedAt;
+								fixGroups =
+									summary.fixGroups.length > 0
+										? summary.fixGroups
+										: undefined;
 							}
 						}
 						// Cheap provenance tier — a couple of git calls per referenced
@@ -2000,6 +2006,7 @@ const requests: RequestHandlers = {
 							na: verification?.na ?? 0,
 							coverage: verification?.coverage ?? 0,
 							pendingProposalCount: pending.length,
+							fixGroups,
 							recentRunAt: lastRun?.startedAt,
 							stale,
 							checkedAt,
@@ -2907,26 +2914,6 @@ const auditingGraphIds = new Set<string>();
 
 
 /**
- * Group a report's one-click fixes by `fix.id` so the confirmation preview can
- * offer one action per kind. Every fix of a kind shares the same RPC and the
- * same write path, so a group is applied by a single unscoped call; scoped
- * calls stay reserved for the per-finding Apply buttons.
- */
-function pendingAuditFixesByKind(
-	report: SubsystemModelAuditReport,
-): SubsystemModelAuditFixGroup[] {
-	const byFix = new Map<string, number>();
-	for (const finding of report.findings) {
-		if (!finding.fix) continue;
-		byFix.set(finding.fix.id, (byFix.get(finding.fix.id) ?? 0) + 1);
-	}
-	return [...byFix.entries()].map(([fixId, count]) => ({
-		fixId: fixId as SubsystemModelAuditFixGroup["fixId"],
-		count,
-	}));
-}
-
-/**
  * One-click fixes an audit found, waiting on the user's confirmation.
  * In-memory and single-slot per model: the preview is a transient offer, and
  * the next audit for that model replaces it. Nothing is written to the model
@@ -2954,7 +2941,7 @@ async function auditAndStageOneClickFixes(
 	const audited = await auditSubsystemModel(graphId);
 	if (!audited.ok) return audited;
 	if (viewerSettings.autoApplyAuditFixes) {
-		const groups = pendingAuditFixesByKind(audited.report);
+		const groups = auditFixGroups(audited.report);
 		if (groups.length > 0) setPendingAuditFixPreview(graphId, groups);
 	}
 	return audited;

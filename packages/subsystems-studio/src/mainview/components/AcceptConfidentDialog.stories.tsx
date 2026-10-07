@@ -8,7 +8,7 @@ const entries = [
 ];
 
 const meta = {
-  title: "Maintenance/AcceptConfidentDialog",
+  title: "Maintainer Tab/Modals/AcceptConfidentDialog",
   component: AcceptConfidentDialog,
   parameters: { layout: "fullscreen" },
   args: {

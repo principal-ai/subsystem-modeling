@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { IdentityModal } from "./AppHeader";
 
 const meta = {
-  title: "Maintenance/IdentityModal",
+  title: "App Header/IdentityModal",
   component: IdentityModal,
   parameters: { layout: "fullscreen" },
   args: {

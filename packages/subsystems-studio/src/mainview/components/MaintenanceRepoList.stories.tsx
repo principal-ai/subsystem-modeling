@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { MaintenanceRepoList, repoBreakdown } from "./MaintenanceRepoList";
 
 const meta = {
-	title: "Maintenance/MaintenanceRepoList",
+	title: "Maintainer Tab/MaintenanceRepoList",
 	component: MaintenanceRepoList,
 	parameters: { layout: "fullscreen" },
 	args: {

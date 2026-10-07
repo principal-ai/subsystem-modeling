@@ -67,6 +67,10 @@ const PAYMENTS = model({
 	title: "Payments Service",
 	blocked: 2,
 	pendingProposalCount: 2,
+	fixGroups: [
+		{ fixId: "adopt_graphify_declaration_ref", count: 3 },
+		{ fixId: "adopt_graphify_signature", count: 1 },
+	],
 	lanes: {
 		construct: "issues",
 		"static-topology": "partial",
@@ -146,7 +150,7 @@ const PAYMENTS_PROPOSALS: SubsystemModelProposal[] = [
 ];
 
 const meta = {
-	title: "Maintenance/MaintenanceModelList",
+	title: "Maintainer Tab/MaintenanceModelList",
 	component: MaintenanceModelList,
 	parameters: { layout: "fullscreen" },
 	args: {

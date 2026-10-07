@@ -144,7 +144,7 @@ const componentFix: SubsystemModelProposal = {
 };
 
 const meta = {
-  title: "Proposals/ProposalsModal",
+  title: "Maintainer Tab/Proposals/ProposalsModal",
   component: ProposalsModal,
   parameters: { layout: "fullscreen" },
   args: {

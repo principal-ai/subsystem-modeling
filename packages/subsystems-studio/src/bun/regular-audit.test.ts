@@ -13,6 +13,10 @@ describe("viewer-settings regular audit", () => {
 		expect(d.regularAuditIntervalMinutes).toBe(5);
 	});
 
+	test("surfaces one-click fixes during audit by default", () => {
+		expect(defaultViewerSettings().autoApplyAuditFixes).toBe(true);
+	});
+
 	test("clamps interval to minimum 5 minutes", () => {
 		expect(coerceRegularAuditIntervalMinutes(1)).toBe(5);
 		expect(coerceRegularAuditIntervalMinutes(90)).toBe(90);

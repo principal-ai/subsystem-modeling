@@ -42,6 +42,10 @@ const OVERVIEW: MaintenanceOverview = {
 			na: 2,
 			coverage: 0.8,
 			pendingProposalCount: 2,
+			fixGroups: [
+				{ fixId: "adopt_graphify_declaration_ref", count: 3 },
+				{ fixId: "adopt_graphify_signature", count: 1 },
+			],
 			stale: false,
 			checkedAt: T0,
 			lanes: {
@@ -141,7 +145,7 @@ const RUNS: SubsystemModelRun[] = [
 ];
 
 const meta = {
-	title: "Maintenance/MaintenancePanel",
+	title: "Maintainer Tab/MaintenancePanel",
 	component: MaintenancePanel,
 	parameters: { layout: "fullscreen" },
 	decorators: [

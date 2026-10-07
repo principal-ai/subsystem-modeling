@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { RunMaintenanceConfirm } from "./RunMaintenanceConfirm";
 
 const meta = {
-  title: "Maintenance/RunMaintenanceConfirm",
+  title: "Maintainer Tab/Modals/RunMaintenanceConfirm",
   component: RunMaintenanceConfirm,
   parameters: { layout: "fullscreen" },
   args: {

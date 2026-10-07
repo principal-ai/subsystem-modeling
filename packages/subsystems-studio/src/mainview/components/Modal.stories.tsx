@@ -14,7 +14,7 @@ import {
  * `ModalButton` so the hover / press feedback matches production.
  */
 const meta = {
-  title: "Maintenance/Modal (template)",
+  title: "App Header/Modal (template)",
   component: Modal,
   parameters: { layout: "fullscreen" },
 } satisfies Meta<typeof Modal>;

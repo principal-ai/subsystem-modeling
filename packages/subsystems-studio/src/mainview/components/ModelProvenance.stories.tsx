@@ -483,7 +483,7 @@ const BADGE_FIXTURES: Array<[string, ModelProvenanceData]> = [
  * ================================================================== */
 
 const meta = {
-	title: "Subsystem/ModelProvenance/States",
+	title: "Subsystem Tab/ModelProvenance/States",
 	component: ModelProvenance,
 	parameters: { layout: "fullscreen" },
 	decorators: [
@@ -549,7 +549,7 @@ export const MultiRepo: Story = {
 /* ------------------------------ aspirational ------------------------------ */
 
 const metaAspirational = {
-	title: "Subsystem/ModelProvenance/Aspirational",
+	title: "Subsystem Tab/ModelProvenance/Aspirational",
 	component: ModelProvenance,
 	parameters: { layout: "fullscreen" },
 	decorators: [
@@ -620,7 +620,7 @@ export const AutoRePinOutcomes: AspStory = {
 /* ---------------------------------- badge ---------------------------------- */
 
 const metaBadge = {
-	title: "Subsystem/ModelProvenance/Badge",
+	title: "Subsystem Tab/ModelProvenance/Badge",
 	component: ProvenanceBadge,
 	parameters: { layout: "fullscreen" },
 	decorators: [
@@ -911,7 +911,7 @@ export const LogicTable: BadgeStory = {
 /* -------------------------------- regression -------------------------------- */
 
 const metaRegression = {
-	title: "Subsystem/ModelProvenance/Regression",
+	title: "Subsystem Tab/ModelProvenance/Regression",
 	component: ProvenanceBadge,
 	parameters: { layout: "fullscreen" },
 	decorators: [

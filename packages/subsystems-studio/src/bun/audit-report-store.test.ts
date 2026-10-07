@@ -9,6 +9,7 @@ import type {
 	SubsystemModelAuditReport,
 } from "../shared/contract";
 import {
+	auditFixGroups,
 	buildAuditFingerprint,
 	summarizeLanes,
 	summarizeVerification,
@@ -241,6 +242,67 @@ function report(
 		...over,
 	};
 }
+
+describe("auditFixGroups", () => {
+	test("groups fixes by kind and skips findings without one", () => {
+		const groups = auditFixGroups(
+			report({
+				findings: [
+					{
+						kind: "signature_mismatch",
+						severity: "error",
+						message: "a",
+						fix: {
+							id: "adopt_graphify_signature",
+							label: "fill",
+							parameterTypes: [],
+							returnTypes: [],
+						},
+					},
+					{
+						kind: "signature_mismatch",
+						severity: "error",
+						message: "b",
+						fix: {
+							id: "adopt_graphify_signature",
+							label: "fill",
+							parameterTypes: [],
+							returnTypes: [],
+						},
+					},
+					{
+						kind: "missing_file",
+						severity: "error",
+						message: "c",
+						fix: {
+							id: "adopt_graphify_file",
+							label: "relocate",
+							file: "src/a.ts",
+						},
+					},
+					// No fix — an agent's job, not counted.
+					{ kind: "symbol_unmatched", severity: "error", message: "d" },
+				],
+			}),
+		);
+		expect(groups).toEqual([
+			{ fixId: "adopt_graphify_signature", count: 2 },
+			{ fixId: "adopt_graphify_file", count: 1 },
+		]);
+	});
+
+	test("empty when no finding carries a fix", () => {
+		expect(
+			auditFixGroups(
+				report({
+					findings: [
+						{ kind: "symbol_unmatched", severity: "error", message: "d" },
+					],
+				}),
+			),
+		).toEqual([]);
+	});
+});
 
 describe("summarizeVerification", () => {
 	test("fully confirmed model reads 100% with no blocking", () => {

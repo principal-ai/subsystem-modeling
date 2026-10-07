@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { MaintainModelPickerModal } from "./MaintainModelPickerModal";
 
 const meta = {
-  title: "Maintenance/MaintainModelPickerModal",
+  title: "Maintainer Tab/Modals/MaintainModelPickerModal",
   component: MaintainModelPickerModal,
   parameters: { layout: "fullscreen" },
   args: {

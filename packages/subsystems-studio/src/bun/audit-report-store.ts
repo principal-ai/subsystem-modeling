@@ -17,6 +17,7 @@ import type {
 	SubsystemGraphifyReadiness,
 	SubsystemModelAuditBoundaryCheck,
 	SubsystemModelAuditCheck,
+	SubsystemModelAuditFixGroup,
 	SubsystemModelAuditReport,
 	SubsystemModelVerification,
 	SubsystemModelVerificationLayer,
@@ -66,9 +67,34 @@ export interface SubsystemModelAuditListSummary {
 	verification: SubsystemModelVerification;
 	/** Coarse per-lane status for lane badges. */
 	lanes: Record<SubsystemVerificationLane, VerificationLaneStatus>;
+	/**
+	 * One-click deterministic fixes this report offers, grouped by kind. Empty
+	 * when every finding needs an agent. Drives the Maintain model card's
+	 * fixable badge, so the offer is visible without opening the model.
+	 */
+	fixGroups: SubsystemModelAuditFixGroup[];
 	/** True when live inputs no longer match the saved fingerprint. */
 	stale: boolean;
 	fingerprint: string;
+}
+
+/**
+ * Group a report's one-click fixes by `fix.id` so a caller can offer one action
+ * per kind, or just count them. Every fix of a kind shares the same RPC and the
+ * same write path, so a group is applied by a single unscoped call.
+ */
+export function auditFixGroups(
+	report: SubsystemModelAuditReport,
+): SubsystemModelAuditFixGroup[] {
+	const byFix = new Map<string, number>();
+	for (const finding of report.findings) {
+		if (!finding.fix) continue;
+		byFix.set(finding.fix.id, (byFix.get(finding.fix.id) ?? 0) + 1);
+	}
+	return [...byFix.entries()].map(([fixId, count]) => ({
+		fixId: fixId as SubsystemModelAuditFixGroup["fixId"],
+		count,
+	}));
 }
 
 export function auditIssueCount(report: SubsystemModelAuditReport): number {
@@ -424,6 +450,7 @@ export async function getSubsystemModelAuditListSummary(
 		lanes: summarizeLanes(saved.report, {
 			hasTrails: opts?.hasTrails === true,
 		}),
+		fixGroups: auditFixGroups(saved.report),
 		stale: saved.fingerprint !== liveFingerprint,
 		fingerprint: saved.fingerprint,
 	};

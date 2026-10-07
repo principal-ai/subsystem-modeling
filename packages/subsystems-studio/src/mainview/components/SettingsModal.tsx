@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Gauge, KeyRound, SlidersHorizontal } from "lucide-react";
+import { ChevronRight, Gauge, KeyRound, SlidersHorizontal } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
 	DEFAULT_TAB_FLAGS,
@@ -78,7 +78,7 @@ const FALLBACK_SETTINGS: ViewerSettings = {
 	subsystemMaintainerModel: null,
 	regularAuditEnabled: true,
 	regularAuditIntervalMinutes: 5,
-	autoApplyAuditFixes: false,
+	autoApplyAuditFixes: true,
 	typesafeApiKey: null,
 	maintenanceRepoKey: null,
 	lastActiveTabId: null,
@@ -105,6 +105,30 @@ const AUTO_ACCEPT_CONFIDENCE_OPTIONS = [
 	{ value: 0.95, label: "95% — strict" },
 ] as const;
 
+/**
+ * The audit findings that carry a deterministic one-click fix. Enumerated here
+ * (name only, expandable) so the "surface one-click fixes" toggle says exactly
+ * which conditions it acts on. Mirrors the three `SubsystemModelAuditFix` kinds
+ * and the Maintainer docs' remediation table.
+ */
+const AUTO_FIX_CONDITIONS: Array<{ name: string; detail: string }> = [
+	{
+		name: "Declaration line drifted",
+		detail:
+			"The stored declaration line moved or changed since capture, but Graphify still has an exact symbol match. Applying re-pins the start line and line hash.",
+	},
+	{
+		name: "Signature empty — Graphify has types",
+		detail:
+			"The component declares no parameter or return types while Graphify does. Applying fills the declaration bags from Graphify's type edges.",
+	},
+	{
+		name: "File missing — unique Graphify relocate",
+		detail:
+			"The claimed file path is gone and Graphify has a unique definition of the symbol at another path. Applying updates the component's file.",
+	},
+];
+
 const SETTINGS_TABS = [
 	{
 		id: "tabs",
@@ -130,7 +154,79 @@ const SETTINGS_TABS = [
 
 type SettingsTab = (typeof SETTINGS_TABS)[number]["id"];
 
-export function SettingsModal({ onClose }: { onClose: () => void }) {
+/**
+ * The one-click-fix conditions, collapsed to a name each; clicking a row
+ * expands its description. Keeps the Auditing pane scannable while still
+ * spelling out exactly what "surface one-click fixes" covers.
+ */
+function AutoFixConditions() {
+	const { theme } = useTheme();
+	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
+	const [open, setOpen] = useState<string | null>(null);
+	return (
+		<div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+			{AUTO_FIX_CONDITIONS.map((c) => {
+				const isOpen = open === c.name;
+				return (
+					<div key={c.name}>
+						<button
+							type="button"
+							onClick={() => setOpen(isOpen ? null : c.name)}
+							aria-expanded={isOpen}
+							style={{
+								display: "flex",
+								alignItems: "center",
+								gap: 6,
+								width: "100%",
+								padding: "3px 0",
+								background: "transparent",
+								border: "none",
+								cursor: "pointer",
+								color: theme.colors.text,
+								fontFamily: theme.fonts.body,
+								fontSize: theme.fontSizes[0],
+								textAlign: "left",
+							}}
+						>
+							<ChevronRight
+								size={12}
+								style={{
+									flexShrink: 0,
+									color: muted,
+									transform: isOpen ? "rotate(90deg)" : "none",
+									transition: "transform 120ms ease",
+								}}
+							/>
+							<span style={{ fontWeight: 500 }}>{c.name}</span>
+						</button>
+						{isOpen && (
+							<span
+								style={{
+									display: "block",
+									marginLeft: 18,
+									fontSize: theme.fontSizes[0],
+									color: muted,
+									lineHeight: 1.45,
+								}}
+							>
+								{c.detail}
+							</span>
+						)}
+					</div>
+				);
+			})}
+		</div>
+	);
+}
+
+export function SettingsModal({
+	onClose,
+	initialTab = "tabs",
+}: {
+	onClose: () => void;
+	/** Tab shown on mount. Lets Storybook land directly on a pane. */
+	initialTab?: SettingsTab;
+}) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 	const [settings, setSettings] = useState<ViewerSettings | null>(null);
@@ -142,7 +238,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 		source: string;
 		freeCount: number;
 	} | null>(null);
-	const [activeTab, setActiveTab] = useState<SettingsTab>("tabs");
+	const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
 	const [narrow, setNarrow] = useState(() =>
 		typeof window !== "undefined"
 			? window.matchMedia("(max-width: 720px)").matches
@@ -829,6 +925,83 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 											: "Discovering free OpenCode models…"}
 									</span>
 								</div>
+								<div
+									style={{
+										padding: "10px 12px",
+										marginTop: 8,
+										borderRadius: 8,
+										background: theme.colors.background,
+										border: `1px solid ${theme.colors.border}`,
+									}}
+								>
+									<label
+										style={{
+											display: "flex",
+											alignItems: "center",
+											gap: 12,
+											cursor:
+												settings && savingKey !== "autoApplyAuditFixes"
+													? "pointer"
+													: "default",
+										}}
+									>
+										<input
+											type="checkbox"
+											checked={settings?.autoApplyAuditFixes ?? false}
+											disabled={!settings || savingKey === "autoApplyAuditFixes"}
+											onChange={() => void toggleAutoApplyAuditFixes()}
+											style={{
+												width: 16,
+												height: 16,
+												accentColor: theme.colors.success ?? "#2da44e",
+												cursor:
+													settings && savingKey !== "autoApplyAuditFixes"
+														? "pointer"
+														: "default",
+												flexShrink: 0,
+											}}
+										/>
+										<span style={{ minWidth: 0, flex: 1 }}>
+											<span
+												style={{
+													display: "block",
+													fontSize: theme.fontSizes[1],
+													fontWeight: 600,
+													lineHeight: 1.3,
+												}}
+											>
+												Surface one-click fixes during audit
+											</span>
+											<span
+												style={{
+													display: "block",
+													fontSize: theme.fontSizes[0],
+													color: muted,
+													lineHeight: 1.4,
+													marginTop: 2,
+												}}
+											>
+												Show the deterministic fixes an audit finds as a
+												confirmation bar on the model, with one Apply all.
+												Nothing is written until you approve.
+											</span>
+										</span>
+									</label>
+									<div style={{ marginTop: 10, paddingLeft: 28 }}>
+										<span
+											style={{
+												display: "block",
+												fontSize: theme.fontSizes[0],
+												color: muted,
+												lineHeight: 1.4,
+												marginBottom: 2,
+											}}
+										>
+											One-click fix conditions:
+										</span>
+										<AutoFixConditions />
+									</div>
+								</div>
 							</>
 						)}
 
@@ -1081,66 +1254,6 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 									</span>
 								</div>
 
-								<label
-									style={{
-										display: "flex",
-										alignItems: "center",
-										gap: 12,
-										padding: "10px 12px",
-										marginTop: 8,
-										borderRadius: 8,
-										background: theme.colors.background,
-										border: `1px solid ${theme.colors.border}`,
-										cursor:
-											settings && savingKey !== "autoApplyAuditFixes"
-												? "pointer"
-												: "default",
-									}}
-								>
-									<input
-										type="checkbox"
-										checked={settings?.autoApplyAuditFixes ?? false}
-										disabled={!settings || savingKey === "autoApplyAuditFixes"}
-										onChange={() => void toggleAutoApplyAuditFixes()}
-										style={{
-											width: 16,
-											height: 16,
-											accentColor: theme.colors.success ?? "#2da44e",
-											cursor:
-												settings && savingKey !== "autoApplyAuditFixes"
-													? "pointer"
-													: "default",
-											flexShrink: 0,
-										}}
-									/>
-									<span style={{ minWidth: 0, flex: 1 }}>
-										<span
-											style={{
-												display: "block",
-												fontSize: theme.fontSizes[1],
-												fontWeight: 600,
-												lineHeight: 1.3,
-											}}
-										>
-											Surface one-click fixes during audit
-										</span>
-										<span
-											style={{
-												display: "block",
-												fontSize: theme.fontSizes[0],
-												color: muted,
-												lineHeight: 1.4,
-												marginTop: 2,
-											}}
-										>
-											When an audit finds deterministic fixes — declaration
-											re-pins, adoptable signature fills, unique Graphify file
-											relocates — show them as a confirmation bar on the model
-											with one Apply all. Nothing is written until you approve.
-											Findings an agent must judge are unaffected.
-										</span>
-									</span>
-								</label>
 							</>
 						)}
 					</div>

@@ -160,7 +160,7 @@ const PROVENANCE_DIRTY: ModelProvenanceData = {
 };
 
 const meta = {
-	title: "Maintenance/MaintenanceModelCard",
+	title: "Maintainer Tab/MaintenanceModelCard",
 	component: MaintenanceModelCard,
 	parameters: { layout: "fullscreen" },
 	decorators: [
@@ -218,6 +218,26 @@ export const IssuesWithProposals: Story = {
 			nextRoute: { agent: "construct-fixer", layer: "construct", mode: "issues" },
 		},
 		proposalCounts: { construct: 1, "static-topology": 1 },
+	},
+};
+
+/**
+ * The saved audit offers one-click fixes — a green "fixable" count badges the
+ * construct lane icon (top-left), mirroring the orange proposal count (top-right).
+ * Clicking it opens the lane's findings, where the Apply buttons live.
+ */
+export const FixableOffers: Story = {
+	args: {
+		model: {
+			...BASE,
+			verdict: "issues",
+			blocking: 2,
+			fixGroups: [
+				{ fixId: "adopt_graphify_declaration_ref", count: 3 },
+				{ fixId: "adopt_graphify_signature", count: 1 },
+			],
+			nextRoute: { agent: "construct-fixer", layer: "construct", mode: "issues" },
+		},
 	},
 };
 
@@ -319,6 +339,41 @@ export const RunningErrored: Story = {
 			error: "OpenCode session failed: context length exceeded",
 			sessionId: "ses_mock",
 		},
+	},
+};
+
+/**
+ * The model's first-ever run, still in flight, with its history expanded.
+ * There is no finished run to list, so the section must point at the live
+ * activity rather than claim "No runs yet".
+ */
+export const RunningFirstRun: Story = {
+	args: {
+		runs: [RUNS[0]],
+		maintainRunning: true,
+		runsOpen: true,
+		feed: {
+			status: "running",
+			events: 14,
+			agent: "construct-fixer",
+			title: "Payments Service",
+			last: "Auditing construct declarations…",
+			lastAt: Date.now(),
+			sessionId: "ses_mock",
+		},
+	},
+};
+
+/**
+ * A persisted running row the host is not tracking yet (e.g. right after a
+ * restart) — no live strip, so the row itself must surface in the history
+ * instead of the empty state.
+ */
+export const PersistedRunningRun: Story = {
+	args: {
+		runs: [RUNS[0]],
+		maintainRunning: false,
+		runsOpen: true,
 	},
 };
 

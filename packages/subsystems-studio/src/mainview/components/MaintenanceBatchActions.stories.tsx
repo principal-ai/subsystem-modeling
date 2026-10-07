@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { MaintenanceBatchActions } from "./MaintenanceHeader";
 
 const meta = {
-	title: "Maintenance/MaintenanceBatchActions",
+	title: "Maintainer Tab/MaintenanceBatchActions",
 	component: MaintenanceBatchActions,
 	parameters: { layout: "fullscreen" },
 	args: {

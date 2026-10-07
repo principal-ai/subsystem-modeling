@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { DeleteAllProposalsDialog } from "./DeleteAllProposalsDialog";
 
 const meta = {
-  title: "Maintenance/DeleteAllProposalsDialog",
+  title: "Maintainer Tab/Modals/DeleteAllProposalsDialog",
   component: DeleteAllProposalsDialog,
   parameters: { layout: "fullscreen" },
   args: {

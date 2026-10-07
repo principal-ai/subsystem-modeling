@@ -114,8 +114,8 @@ export interface ViewerSettings {
 	 * When true, an audit pass that finds deterministic one-click fixes
 	 * (declaration re-pins, adoptable signature fills, unique Graphify file
 	 * relocates) surfaces them as a confirmation preview instead of leaving
-	 * them buried in collapsed issue categories. Default false — the human
-	 * approves the batch before anything is written to the model.
+	 * them buried in collapsed issue categories. Defaults to true; the human
+	 * still approves the batch before anything is written to the model.
 	 */
 	autoApplyAuditFixes: boolean;
 	/**
@@ -889,6 +889,12 @@ export interface MaintenanceOverviewModel {
 	na: number;
 	coverage: number;
 	pendingProposalCount: number;
+	/**
+	 * One-click deterministic fixes the saved audit offers, grouped by kind
+	 * (declaration re-pins, signature fills, file relocates). Absent when the
+	 * model has none, so cards render exactly as before for clean models.
+	 */
+	fixGroups?: SubsystemModelAuditFixGroup[];
 	/**
 	 * ISO timestamp of that model's most recent Maintain run (host-side rows
 	 * only — the renderer's repo-filtered re-sort reuses the value carried on

@@ -17,7 +17,7 @@ import sample from '../fixtures/graphify-constructs-sample.json';
 const FRAME = { width: '100%', height: '100vh' } as const;
 
 const meta = {
-  title: 'Subsystem/ConstructsSearch',
+  title: 'Subsystem Tab/ConstructsSearch',
   component: ConstructsSearchList,
   args: {
     items: sample.declarations as unknown as DeclarationSearchItem[],

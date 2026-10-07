@@ -11,9 +11,37 @@ import type {
 } from "@principal-ai/subsystems-react";
 import type {
 	StoredSubsystemModel,
+	SubsystemModelAuditFixGroup,
 	SubsystemModelAuditReport,
 	SubsystemModelAuditFinding,
+	SubsystemVerificationLane,
 } from "../shared/contract";
+
+/** Preview label per one-click fix kind — what Apply all would write. */
+export const AUDIT_FIX_KIND_LABEL: Record<
+	SubsystemModelAuditFixGroup["fixId"],
+	string
+> = {
+	adopt_graphify_declaration_ref: "declaration re-pins",
+	adopt_graphify_signature: "signature fills",
+	adopt_graphify_file: "file relocates",
+};
+
+/**
+ * Which verification lane a one-click fix belongs to, so its count can badge
+ * the lane icon the way proposals do. All three kinds correct a component's
+ * source claim (declaration line, signature types), so they are construct-lane
+ * findings — the mapping is explicit rather than assumed so a future fix kind
+ * can land on another lane without a silent misfile.
+ */
+export const AUDIT_FIX_LANE: Record<
+	SubsystemModelAuditFixGroup["fixId"],
+	SubsystemVerificationLane
+> = {
+	adopt_graphify_declaration_ref: "construct",
+	adopt_graphify_signature: "construct",
+	adopt_graphify_file: "construct",
+};
 
 function shortPurl(purl: string): string {
 	const m = purl.match(/pkg:github\/([^/#]+\/[^/#]+)/i);

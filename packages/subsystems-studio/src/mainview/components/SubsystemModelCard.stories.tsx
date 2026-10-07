@@ -85,7 +85,7 @@ const DESCRIPTION =
 const WITH_DESC: SubsystemModelSummary = { ...BASE, description: DESCRIPTION };
 
 const meta = {
-	title: "Subsystem/SubsystemModelCard",
+	title: "Subsystem Tab/SubsystemModelCard",
 	component: SubsystemModelCard,
 	parameters: { layout: "fullscreen" },
 	decorators: [

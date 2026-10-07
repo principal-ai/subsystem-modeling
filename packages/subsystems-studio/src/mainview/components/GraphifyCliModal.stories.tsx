@@ -13,7 +13,7 @@ const installed = {
 } as const;
 
 const meta = {
-  title: "Maintenance/GraphifyCliModal",
+  title: "App Header/GraphifyCliModal",
   component: GraphifyCliModal,
   parameters: { layout: "fullscreen" },
   args: {

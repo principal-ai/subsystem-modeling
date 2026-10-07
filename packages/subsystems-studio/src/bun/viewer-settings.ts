@@ -33,7 +33,7 @@ export function defaultViewerSettings(): ViewerSettings {
 		subsystemMaintainerModel: null,
 		regularAuditEnabled: true,
 		regularAuditIntervalMinutes: REGULAR_AUDIT_INTERVAL_DEFAULT_MINUTES,
-		autoApplyAuditFixes: false,
+		autoApplyAuditFixes: true,
 		typesafeApiKey: null,
 		maintenanceRepoKey: null,
 		lastActiveTabId: null,

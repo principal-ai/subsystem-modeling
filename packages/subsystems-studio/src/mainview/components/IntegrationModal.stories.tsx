@@ -38,7 +38,7 @@ const status = {
 } as never;
 
 const meta = {
-  title: "Maintenance/IntegrationModal",
+  title: "App Header/IntegrationModal",
   component: IntegrationModal,
   parameters: { layout: "fullscreen" },
   args: {

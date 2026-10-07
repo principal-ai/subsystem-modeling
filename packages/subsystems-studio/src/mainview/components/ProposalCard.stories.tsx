@@ -314,7 +314,7 @@ const tabRegistryComponent: SubsystemComponent = {
 };
 
 const meta = {
-  title: "Proposals/ProposalCard",
+  title: "Maintainer Tab/Proposals/ProposalCard",
   component: ProposalCard,
   parameters: { layout: "fullscreen" },
   decorators: [

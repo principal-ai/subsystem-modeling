@@ -31,6 +31,7 @@ import type { SubsystemVerificationLane, VerificationLaneStatus } from "../../sh
 import { CenteredMessage } from "../ui";
 import {
 	auditReportToIssues,
+	AUDIT_FIX_KIND_LABEL,
 	diagnosticFixableCount,
 	diagnosticIssueCount,
 	diagnosticStatus,
@@ -45,13 +46,6 @@ import type {
 	SubsystemModelAuditReport,
 	SubsystemTrail,
 } from "../../shared/contract";
-
-/** Preview label per one-click fix kind — what Apply all would write. */
-const AUDIT_FIX_KIND_LABEL: Record<SubsystemModelAuditFixGroup["fixId"], string> = {
-	adopt_graphify_declaration_ref: "declaration re-pins",
-	adopt_graphify_signature: "signature fills",
-	adopt_graphify_file: "file relocates",
-};
 
 // Disabled for now — Excalidraw edits don't save back to the store yet
 // (excalidrawSceneToSubsystemModel exists but nothing wires it up), so the

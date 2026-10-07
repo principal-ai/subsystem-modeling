@@ -3,7 +3,7 @@ import { Box } from "lucide-react";
 import { LaneHelpDialog } from "./LaneHelpDialog";
 
 const meta = {
-  title: "Maintenance/LaneHelpDialog",
+  title: "Maintainer Tab/Modals/LaneHelpDialog",
   component: LaneHelpDialog,
   parameters: { layout: "fullscreen" },
   args: {
