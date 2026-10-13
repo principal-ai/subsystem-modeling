@@ -18,11 +18,12 @@ import type { AgentSessionEvent } from "@principal-ai/agent-monitoring";
 // bun-side modules.
 import type { MergeSidecar } from "../bun/merge-submodel-models";
 import type {
+	SpanFreshness,
 	SubsystemComponent,
 	SubsystemComponentEdge,
-	SubsystemDeclarationRef,
 	SubsystemEdgeMechanism,
 	SubsystemModelDocument,
+	SubsystemSourceSpan,
 	SubsystemTrail,
 	SubsystemTrailMechanism,
 	SubsystemTrailStep,
@@ -47,8 +48,8 @@ export type ViewerMode = "local" | "remote";
 /**
  * Which permanent tabs appear in the strip by default. Toggled from the
  * header Settings modal; persisted host-side under
- * `~/.principal/principal-studio-settings.json`. Subsystems and Maintainer
- * start on; the rest start off.
+ * `~/.principal/principal-studio-settings.json`. Subsystems, Constructs and
+ * Maintainer start on; the rest start off.
  */
 export interface DefaultTabFlags {
 	/** Agent Sessions overview tab. */
@@ -63,6 +64,8 @@ export interface DefaultTabFlags {
 	packageLayers: boolean;
 	/** Subsystems list tab. */
 	subsystems: boolean;
+	/** Verified constructs tab (source spans confirmed by the last audit). */
+	constructs: boolean;
 	/** Maintain overview tab (verification progress + proposals). */
 	maintenance: boolean;
 	/** OpenCode V2 debug / runtime tab. */
@@ -77,6 +80,7 @@ export const DEFAULT_TAB_FLAGS: DefaultTabFlags = {
 	graphify: false,
 	packageLayers: false,
 	subsystems: true,
+	constructs: true,
 	maintenance: true,
 	opencodeV2: false,
 };
@@ -429,7 +433,7 @@ export interface SubsystemModelFileRef {
 		alias: string;
 		name: string;
 		construct: string;
-		/** 1-based declaration line, when the model carries a declarationRef. */
+		/** 1-based declaration start line, when the model carries a declarationSpan. */
 		startLine?: number;
 	}>;
 	/**
@@ -484,7 +488,7 @@ export interface SubsystemModelSummary {
 	/**
 	 * Per-purl comparison of the pinned commit against the current checkout.
 	 * Coarse "the repo moved" signal — anchor-level freshness (did a referenced
-	 * file change?) stays with the per-declaration `lineHash`.
+	 * construct change?) stays with the per-declaration `contentHash`.
 	 */
 	purlFreshness?: SubsystemModelPurlFreshness[];
 	/**
@@ -605,11 +609,19 @@ export interface SubsystemComponentVerificationResult {
 		 */
 		augmented?: SubsystemSignatureClaim;
 	};
-	/** Declaration start-line anchor + freshness (exact anchor + readable file). */
+	/** Declaration span anchor + freshness (exact anchor + readable file). */
 	declaration?: {
-		freshness: "fresh" | "stale" | "missing" | "unanchored" | "unchecked";
-		ref?: SubsystemDeclarationRef;
-		liveLineHash?: string;
+		freshness: SpanFreshness;
+		span?: SubsystemSourceSpan;
+		/** Hash of the live content across the span's range, when readable. */
+		liveContentHash?: string;
+		/**
+		 * Candidate re-pin: the stored span shifted to Graphify's current
+		 * `source_location`, length preserved. Present only when the shifted
+		 * range re-hashes to the stored `contentHash` (a content-preserving
+		 * move). A changed hash is not a move — it routes to the agent lane.
+		 */
+		repin?: SubsystemSourceSpan;
 	};
 	/**
 	 * An in-memory store that declares no type — no `valueType` and no named
@@ -625,15 +637,22 @@ export type SubsystemModelAuditFindingKind =
 	| "symbol_ambiguous"
 	| "symbol_unmatched"
 	| "trail"
-	| "stale_declaration"
+	| "construct_span_stale"
+	/**
+	 * A grounded claim with no captured span — a completeness gap, never a hard
+	 * failure. The construct-verifier agent lane reads source and proposes the
+	 * span (start/end/content hash); until then the claim cannot be fully
+	 * verified. Parallel to `construct_unconfirmed`.
+	 */
+	| "construct_span_unconfirmed"
 	| "construct_mismatch"
 	| "construct_unconfirmed"
 	| "store_type_undeclared"
 	| "store_type_stale"
 	| "signature_mismatch"
 	| "signature_unconfirmed"
-	| "step_unconfirmed"
-	| "step_stale"
+	| "step_span_unconfirmed"
+	| "step_span_stale"
 	| "repo_unresolved"
 	| "graphify_unavailable"
 	| "third_party_path"
@@ -673,8 +692,8 @@ export type SubsystemModelAuditFix =
 	| {
 			id: "adopt_graphify_declaration_ref";
 			label: string;
-			/** Re-pin from Graphify `source_location` + current line hash. */
-			declarationRef: SubsystemDeclarationRef;
+			/** Re-pin the span to Graphify's `source_location`, shifted + re-hashed. */
+			declarationSpan: SubsystemSourceSpan;
 			previousStartLine?: number;
 	  };
 
@@ -718,13 +737,7 @@ export interface SubsystemModelAuditCheck {
 	fileExists: boolean | null;
 	/** null = no symbol claimed or file unresolved. */
 	symbolDeclared: boolean | null;
-	declarationFreshness?:
-		| "fresh"
-		| "stale"
-		| "missing"
-		| "unanchored"
-		| "unchecked"
-		| "n/a";
+	declarationFreshness?: SpanFreshness | "n/a";
 	constructMatch?: boolean | null;
 	/** Claimed construct from the model (when construct was checked). */
 	constructClaimed?: string;
@@ -1058,8 +1071,8 @@ export type SubsystemModelProposalChange =
 	| {
 			target: "component";
 			componentAlias: string;
-			field: "declarationRef";
-			value: SubsystemDeclarationRef | null;
+			field: "declarationSpan";
+			value: SubsystemSourceSpan | null;
 	  }
 	| {
 			/**
@@ -1142,8 +1155,8 @@ export type SubsystemModelProposalChange =
 			target: "trail-step";
 			trailId: string;
 			stepIndex: number;
-			field: "file" | "line" | "symbol" | "from" | "to" | "mechanism" | "annotation";
-			value: string | number | null;
+			field: "file" | "symbol" | "from" | "to" | "mechanism" | "annotation";
+			value: string | null;
 	  }
 	| {
 			/**
@@ -1189,6 +1202,24 @@ export type SubsystemModelProposalChange =
 			/** Claimed module frame key (defaults from component.module). */
 			value: string;
 			/** 1-based inclusive span of the declaration read from source. */
+			lines: SubsystemDeclarationSpan;
+			file?: string;
+			symbol?: string;
+			purl?: string;
+	  }
+	| {
+			/**
+			 * Capture the construct's source span when the model carries none
+			 * (a `construct_span_unconfirmed` gap). Graphify supplies only the
+			 * start line, so the agent reads the declaration and reports its
+			 * exact start/end; the host computes the content hash at accept
+			 * time (like a call site). Accept writes the augmentation store and
+			 * pins the span onto the component.
+			 */
+			target: "augmentation";
+			componentAlias: string;
+			field: "span";
+			/** 1-based inclusive range of the declaration read from source. */
 			lines: SubsystemDeclarationSpan;
 			file?: string;
 			symbol?: string;
@@ -1457,9 +1488,68 @@ export interface PackageLayerRepoEntry {
 	} | null;
 }
 
+/** One fully verified construct — a construct whose last audit check passed. */
+export interface VerifiedConstruct {
+	/** Owning model. */
+	modelId: string;
+	modelTitle: string;
+	/** Model-local component alias (stable across file moves). */
+	alias: string;
+	name: string;
+	construct: string;
+	symbol?: string;
+	/** Repo-root-relative file the declaration lives in. */
+	file: string;
+	purl: string;
+	/** Repo key (`pkg:github/owner/name`) the construct is grouped under. */
+	repoKey: string;
+	/** 1-based inclusive declaration span. */
+	startLine: number;
+	endLine: number;
+	/** Content hash of the span, recomputed on read to confirm freshness. */
+	contentHash: string;
+	/** ISO time of the audit that verified this construct. */
+	auditedAt: string;
+	/**
+	 * Path shown in the list — relative to the owning package root when the
+	 * repo has package info, else the full repo-relative path. `file` always
+	 * stays repo-relative (it is what the span read resolves against).
+	 */
+	packageRelativeFile: string;
+}
+
+/** One package's verified constructs, as a divider group in the Constructs tab. */
+export interface VerifiedConstructPackage {
+	/** Repo-relative package root; "" for the repo root / ungrouped bucket. */
+	path: string;
+	/** Package name (`@scope/name`); "" when no package info is available. */
+	name: string;
+	version?: string;
+	packageManager?: string;
+	/** The repo's root package in a monorepo. */
+	isMonorepoRoot?: boolean;
+	description?: string;
+	/** Repo-relative path to the manifest (package.json / Cargo.toml / …). */
+	manifestPath?: string;
+	constructs: VerifiedConstruct[];
+}
+
+/** Verified constructs for one repo, grouped by package. */
+export interface VerifiedConstructRepo {
+	repoKey: string;
+	owner: string;
+	name: string;
+	/** True when the cached package slice produced the grouping. */
+	hasPackageInfo: boolean;
+	/** True when package discovery found a monorepo. */
+	isMonorepo: boolean;
+	/** Divider groups (repo root first). One group when no package info. */
+	packages: VerifiedConstructPackage[];
+}
+
 export interface TabSummary {
 	id: string;
-	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "maintenance" | "graphify" | "package-layers" | "opencode-v2";
+	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "constructs" | "maintenance" | "graphify" | "package-layers" | "opencode-v2";
 	title: string;
 	mode?: ViewerMode;
 	/** For `subsystem-model` tabs — absolute path to the persisted JSON. */
@@ -1470,7 +1560,7 @@ export interface TabFullState {
 	ok: boolean;
 	error?: string;
 	id: string;
-	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "maintenance" | "graphify" | "package-layers" | "opencode-v2";
+	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "constructs" | "maintenance" | "graphify" | "package-layers" | "opencode-v2";
 	title: string;
 	mode?: ViewerMode;
 	repoRoot?: string;
@@ -1520,13 +1610,13 @@ export interface GitConfigIdentity {
 }
 
 /** Identity of the person using the viewer, resolved host-side from
- *  gh CLI → TOUR_GH_TOKEN → git config. */
+ *  gh CLI → git config. */
 export interface UserIdentity {
 	login?: string;
 	name?: string;
 	avatarUrl?: string;
 	htmlUrl?: string;
-	source: "gh" | "token" | "git" | "none";
+	source: "gh" | "git" | "none";
 	/** Local git config, always read even when signed in to GitHub. */
 	git?: GitConfigIdentity;
 }
@@ -1604,6 +1694,22 @@ export type StudioRequests = {
 	readSubsystemFile: {
 		params: { purl?: string; file: string };
 		response: { ok: boolean; content?: string; error?: string };
+	};
+	/**
+	 * Read one pinned declaration span (Constructs tab) and confirm it against
+	 * its stored content hash. `verified` reports whether the span still hashes
+	 * to `contentHash`; the text is returned either way so the caller can show
+	 * drift, but a `verified: false` span must not render as verified.
+	 */
+	readSubsystemSpan: {
+		params: {
+			purl: string;
+			file: string;
+			startLine: number;
+			endLine: number;
+			contentHash: string;
+		};
+		response: { ok: boolean; text?: string; verified?: boolean; error?: string };
 	};
 	getFileTree: {
 		params: { tabId: string; path?: string };
@@ -1751,6 +1857,17 @@ export type StudioRequests = {
 		response: { graphs: SubsystemModelSummary[] };
 	};
 	/**
+	 * Every fully verified construct across all stored models, grouped by repo.
+	 * Derived from *persisted* audits (no audit is run) — a construct appears
+	 * when its saved check is `verified` (exact graphify anchor, construct
+	 * classified, signature confirmed, declaration span fresh). Backs the
+	 * Constructs tab.
+	 */
+	listVerifiedConstructs: {
+		params: Record<string, never>;
+		response: { ok: boolean; error?: string; repos: VerifiedConstructRepo[] };
+	};
+	/**
 	 * Aggregate Maintain overview: per-model verification progress, pending
 	 * proposals across models, and in-flight Maintain runs. Backs the ambient
 	 * header chip + maintenance panel.
@@ -1802,7 +1919,7 @@ export type StudioRequests = {
 	 * Publish the portable document for a stored model as a public GitHub
 	 * gist. Creates on first share; PATCHes the linked gist when `gist` is
 	 * already stamped on the record. Requires a local GitHub token
-	 * (`gh auth token`, git credential helper, or `TOUR_GH_TOKEN`).
+	 * (`gh auth token` or the git credential helper).
 	 */
 	shareSubsystemModelAsGist: {
 		params: { graphId: string };

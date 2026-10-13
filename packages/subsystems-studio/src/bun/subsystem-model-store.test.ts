@@ -280,10 +280,10 @@ describe("trail verify pass", () => {
 					id: "wt",
 					title: "save",
 					steps: [
-						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 3, purl: "pkg:github/a/repo-a#src/seam.ts", symbol: "a" },
-						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 999, purl: "pkg:github/a/repo-a#src/seam.ts", symbol: "a" },
-						{ from: "a", to: "store", mechanism: "calls", file: "src/nope.ts", line: 1, purl: "pkg:github/a/repo-a#src/nope.ts", symbol: "a" },
-						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 4, purl: "pkg:github/a/repo-a#src/seam.ts", symbol: "a" },
+						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", span: { startLine: 3, endLine: 3, contentHash: 'fixture' }, purl: "pkg:github/a/repo-a#src/seam.ts", symbol: "a" },
+						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", span: { startLine: 999, endLine: 999, contentHash: 'fixture' }, purl: "pkg:github/a/repo-a#src/seam.ts", symbol: "a" },
+						{ from: "a", to: "store", mechanism: "calls", file: "src/nope.ts", span: { startLine: 1, endLine: 1, contentHash: 'fixture' }, purl: "pkg:github/a/repo-a#src/nope.ts", symbol: "a" },
+						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", span: { startLine: 4, endLine: 4, contentHash: 'fixture' }, purl: "pkg:github/a/repo-a#src/seam.ts", symbol: "a" },
 					],
 				},
 				{
@@ -292,7 +292,7 @@ describe("trail verify pass", () => {
 					id: "wt-legacy",
 					title: "legacy",
 					steps: [
-						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", line: 3, symbol: "a" } as SubsystemTrailStep,
+						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", span: { startLine: 3, endLine: 3, contentHash: 'fixture' }, symbol: "a" } as SubsystemTrailStep,
 					],
 				},
 			],

@@ -55,9 +55,9 @@ const RENDERABLE: Record<string, SubsystemComponentConstruct> = {
  * with rebuilt detail can do this — the graph's `unknown`/`module` nodes have no
  * construct or signature to show, so they're handled by the fallback instead.
  *
- * No `declarationRef` is attached: graph.json carries the start line but not the
- * declaration's content hash, so a ref here would claim a freshness the fixture
- * can't back up.
+ * No `declarationSpan` is attached: graph.json carries the start line but not the
+ * declaration's end line or content hash, so a span here would claim a
+ * freshness the fixture can't back up.
  */
 function toComponent(item: DeclarationSearchItem): SubsystemComponent | null {
   const construct = RENDERABLE[item.construct];

@@ -1,48 +1,48 @@
 import { describe, expect, test } from "bun:test";
 import { adoptGraphifyDeclarationRefFixFromVerify } from "./verify-subsystem-component";
 
-const repin = {
-	file: "src/foo.ts",
-	startLine: 42,
-	lineHash: "abc",
-	graphifyNodeId: "n1",
-	capturedAt: new Date(0).toISOString(),
-};
+const repin = { startLine: 42, endLine: 48, contentHash: "abc" };
 
 describe("adoptGraphifyDeclarationRefFixFromVerify", () => {
-	test("offers re-pin when exact + stale + new ref", () => {
+	test("offers re-pin when exact + stale + content-preserving move", () => {
 		const fix = adoptGraphifyDeclarationRefFixFromVerify(
-			{
-				declarationRef: {
-					file: "src/foo.ts",
-					startLine: 10,
-					lineHash: "old",
-					capturedAt: new Date(0).toISOString(),
-				},
-			},
-			{ freshness: "stale", ref: repin },
+			{ declarationSpan: { startLine: 10, endLine: 16, contentHash: "abc" } },
+			{ freshness: "stale", repin },
 			{ resolution: "exact", nodeId: "n1" },
 		);
 		expect(fix?.id).toBe("adopt_graphify_declaration_ref");
-		expect(fix?.declarationRef.startLine).toBe(42);
+		expect(fix?.declarationSpan.startLine).toBe(42);
 		expect(fix?.previousStartLine).toBe(10);
 	});
 
 	test("skips without exact anchor", () => {
 		expect(
 			adoptGraphifyDeclarationRefFixFromVerify(
-				{ declarationRef: { file: "a.ts", startLine: 1, lineHash: "x", capturedAt: new Date(0).toISOString() } },
-				{ freshness: "stale", ref: repin },
+				{ declarationSpan: { startLine: 1, endLine: 3, contentHash: "x" } },
+				{ freshness: "stale", repin },
 				{ resolution: "file-only" },
 			),
 		).toBeUndefined();
 	});
 
-	test("skips when pin already matches", () => {
+	test("skips a content-changed span (not a move)", () => {
 		expect(
 			adoptGraphifyDeclarationRefFixFromVerify(
-				{ declarationRef: repin },
-				{ freshness: "stale", ref: repin },
+				{ declarationSpan: { startLine: 10, endLine: 16, contentHash: "abc" } },
+				{
+					freshness: "stale",
+					repin: { startLine: 42, endLine: 48, contentHash: "different" },
+				},
+				{ resolution: "exact" },
+			),
+		).toBeUndefined();
+	});
+
+	test("skips when the span already sits at the new start", () => {
+		expect(
+			adoptGraphifyDeclarationRefFixFromVerify(
+				{ declarationSpan: repin },
+				{ freshness: "stale", repin },
 				{ resolution: "exact" },
 			),
 		).toBeUndefined();

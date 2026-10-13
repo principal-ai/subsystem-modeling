@@ -29,7 +29,6 @@ export interface LoadTourMessage {
 	tourFile: string;
 	mode: "local" | "remote";
 	repoRoot?: string;
-	ghToken?: string;
 	repoOwner?: string;
 	repoName?: string;
 	repoPurl?: string;

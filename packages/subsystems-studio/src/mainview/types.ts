@@ -14,6 +14,7 @@ export type TabState =
 	| { kind: "agent-sessions" }
 	| { kind: "maintenance-sessions" }
 	| { kind: "subsystems" }
+	| { kind: "constructs" }
 	| { kind: "maintenance" }
 	| { kind: "graphify" }
 	| { kind: "package-layers" }

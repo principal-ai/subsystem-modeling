@@ -83,6 +83,7 @@ import {
 } from "./opencode-models";
 import { auditSubsystemModel, applySubsystemModelAuditFix, verifySubsystemComponent } from "./verify-subsystem-component";
 import { inspectSubsystemSymbol } from "./inspect-symbol";
+import { listVerifiedConstructs, readSubsystemSpan } from "./verified-constructs";
 import {
 	getGraphifyStatus,
 	getGraphifyStatusDetailed,
@@ -314,6 +315,7 @@ const LIBRARY_TAB_ID = "library";
 const AGENT_SESSIONS_TAB_ID = "agent-sessions";
 const MAINTENANCE_SESSIONS_TAB_ID = "maintenance-sessions";
 const SUBSYSTEMS_TAB_ID = "subsystems";
+const CONSTRUCTS_TAB_ID = "constructs";
 const MAINTENANCE_TAB_ID = "maintenance";
 const GRAPHIFY_TAB_ID = "graphify";
 const PACKAGE_LAYERS_TAB_ID = "package-layers";
@@ -327,6 +329,7 @@ const PERMANENT_TAB_DEFS: Array<{
 		| "agent-sessions"
 		| "maintenance-sessions"
 		| "subsystems"
+		| "constructs"
 		| "maintenance"
 		| "graphify"
 		| "package-layers"
@@ -340,6 +343,12 @@ const PERMANENT_TAB_DEFS: Array<{
 		kind: "subsystems",
 		title: "Subsystems",
 		flag: "subsystems",
+	},
+	{
+		id: CONSTRUCTS_TAB_ID,
+		kind: "constructs",
+		title: "Constructs",
+		flag: "constructs",
 	},
 	{
 		id: MAINTENANCE_TAB_ID,
@@ -456,7 +465,6 @@ interface TourTabState {
 	repoOwner?: string;
 	repoName?: string;
 	repoPurl?: string;
-	ghToken?: string;
 }
 
 interface LibraryTabState {
@@ -481,6 +489,12 @@ interface SubsystemsTabState {
 	id: typeof SUBSYSTEMS_TAB_ID;
 	kind: "subsystems";
 	title: "Subsystems";
+}
+
+interface ConstructsTabState {
+	id: typeof CONSTRUCTS_TAB_ID;
+	kind: "constructs";
+	title: "Constructs";
 }
 
 interface MaintenanceTabState {
@@ -550,6 +564,7 @@ type TabState =
 	| AgentSessionsTabState
 	| MaintenanceSessionsTabState
 	| SubsystemsTabState
+	| ConstructsTabState
 	| MaintenanceTabState
 	| GraphifyTabState
 	| PackageLayersTabState
@@ -565,6 +580,7 @@ function permanentTabState(
 	| AgentSessionsTabState
 	| MaintenanceSessionsTabState
 	| SubsystemsTabState
+	| ConstructsTabState
 	| MaintenanceTabState
 	| GraphifyTabState
 	| PackageLayersTabState
@@ -582,6 +598,9 @@ function permanentTabState(
 	}
 	if (def.kind === "subsystems") {
 		return { id: SUBSYSTEMS_TAB_ID, kind: "subsystems", title: "Subsystems" };
+	}
+	if (def.kind === "constructs") {
+		return { id: CONSTRUCTS_TAB_ID, kind: "constructs", title: "Constructs" };
 	}
 	if (def.kind === "maintenance") {
 		return { id: MAINTENANCE_TAB_ID, kind: "maintenance", title: "Maintainer" };
@@ -645,6 +664,8 @@ function ensurePermanentTab(id: string): void {
 				id === PACKAGE_LAYERS_TAB_ID || viewerSettings.defaultTabs.packageLayers,
 			subsystems:
 				id === SUBSYSTEMS_TAB_ID || viewerSettings.defaultTabs.subsystems,
+			constructs:
+				id === CONSTRUCTS_TAB_ID || viewerSettings.defaultTabs.constructs,
 			maintenance:
 				id === MAINTENANCE_TAB_ID || viewerSettings.defaultTabs.maintenance,
 			opencodeV2:
@@ -866,7 +887,6 @@ function addTabFromMessage(msg: LoadTourMessage): string {
 		repoOwner: msg.repoOwner,
 		repoName: msg.repoName,
 		repoPurl: msg.repoPurl,
-		ghToken: msg.ghToken,
 	};
 	tabs.set(id, tab);
 	suggestedTabId = id;
@@ -1107,7 +1127,7 @@ function subsystemFilesFromComponents(
 		construct: string;
 		file?: string;
 		purl?: string;
-		declarationRef?: { startLine?: number };
+		declarationSpan?: { startLine?: number };
 	}>,
 ): Array<{
 	file: string;
@@ -1145,7 +1165,7 @@ function subsystemFilesFromComponents(
 				alias: c.alias,
 				name: c.name,
 				construct: c.construct,
-				startLine: c.declarationRef?.startLine,
+				startLine: c.declarationSpan?.startLine,
 			});
 		}
 	}
@@ -1162,7 +1182,13 @@ function subsystemTrailsFromModel(
 	trails?: ReadonlyArray<{
 		id: string;
 		title: string;
-		steps?: ReadonlyArray<{ file: string; line: number; from: string; to: string; purl?: string }>;
+		steps?: ReadonlyArray<{
+			file: string;
+			span?: { startLine: number };
+			from: string;
+			to: string;
+			purl?: string;
+		}>;
 	}>,
 ): Array<{
 	id: string;
@@ -1197,17 +1223,14 @@ function subsystemTrailsFromModel(
 				byKey.set(key, entry);
 				files.push(entry);
 			}
-			if (
-				Number.isFinite(s.line) &&
-				s.line > 0 &&
-				!entry.lines!.includes(s.line)
-			) {
-				entry.lines!.push(s.line);
+			const line = s.span?.startLine;
+			if (Number.isFinite(line) && (line as number) > 0 && !entry.lines!.includes(line as number)) {
+				entry.lines!.push(line as number);
 			}
 			stepSites.push({
 				file: s.file,
 				purl,
-				line: Number.isFinite(s.line) && s.line > 0 ? s.line : undefined,
+				line: Number.isFinite(line) && (line as number) > 0 ? (line as number) : undefined,
 			});
 		}
 		for (const f of files) f.lines!.sort((a, b) => a - b);
@@ -1299,6 +1322,7 @@ function isStaticTab(
 	| AgentSessionsTabState
 	| MaintenanceSessionsTabState
 	| SubsystemsTabState
+	| ConstructsTabState
 	| MaintenanceTabState
 	| GraphifyTabState
 	| PackageLayersTabState
@@ -1308,6 +1332,7 @@ function isStaticTab(
 		tab.kind === "agent-sessions" ||
 		tab.kind === "maintenance-sessions" ||
 		tab.kind === "subsystems" ||
+		tab.kind === "constructs" ||
 		tab.kind === "maintenance" ||
 		tab.kind === "graphify" ||
 		tab.kind === "package-layers" ||
@@ -1491,6 +1516,8 @@ const requests: RequestHandlers = {
 					return { ok: false, error: (err as Error).message };
 				}
 			},
+			readSubsystemSpan: async ({ purl, file, startLine, endLine, contentHash }) =>
+				readSubsystemSpan({ purl, file, startLine, endLine, contentHash }),
 		readFile: async ({ tabId, path, repo }) => {
 			const tab = getTab(tabId);
 			if (!tab) return { ok: false, error: `unknown tab: ${tabId}` };
@@ -1642,9 +1669,8 @@ const requests: RequestHandlers = {
 				return { ok: true };
 			},
 			getUserIdentity: async () => {
-				// Source repoRoot/token from a tour tab (the suggested/active one
-				// first, else any) for the git/token fallbacks. The gh-CLI path
-				// needs neither.
+				// Source repoRoot from a tour tab (the suggested/active one first,
+				// else any) for the git fallback. The gh-CLI path needs neither.
 				const active = getTab(suggestedTabId);
 				const tourTab =
 					active && active.kind === "tour"
@@ -1652,7 +1678,7 @@ const requests: RequestHandlers = {
 						: (Array.from(tabs.values()).find(
 								(t): t is TourTabState => t.kind === "tour",
 						  ) ?? null);
-				return resolveUserIdentity(tourTab?.repoRoot, tourTab?.ghToken);
+				return resolveUserIdentity(tourTab?.repoRoot);
 			},
 			getSettings: () => viewerSettings,
 			setSettings: ({ settings }) => {
@@ -1921,6 +1947,14 @@ const requests: RequestHandlers = {
 					}),
 				);
 				return { graphs };
+			},
+			listVerifiedConstructs: async () => {
+				try {
+					const repos = await listVerifiedConstructs();
+					return { ok: true as const, repos };
+				} catch (err) {
+					return { ok: false as const, error: (err as Error).message, repos: [] };
+				}
 			},
 			getMaintenanceOverview: async () => {
 				const entries = await listSubsystemModels();
@@ -3521,8 +3555,6 @@ function bootMessage(): LoadTourMessage | null {
 		mode: initialMode,
 	};
 	if (initialRepoRoot) msg.repoRoot = initialRepoRoot;
-	const ghToken = process.env["TOUR_GH_TOKEN"];
-	if (ghToken) msg.ghToken = ghToken;
 	const repoOwner = process.env["TOUR_REPO_OWNER"];
 	if (repoOwner) msg.repoOwner = repoOwner;
 	const repoName = process.env["TOUR_REPO_NAME"];

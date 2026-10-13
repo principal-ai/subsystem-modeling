@@ -359,13 +359,13 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 
 // ---------------------------------------------------------------------------
 // IdentityModal — explains where the header's user identity came from. Opened by
-// clicking the identity chip. Each source (gh CLI / TOUR_GH_TOKEN / git config)
-// gets a one-line provenance so people understand we read it locally and didn't
-// phone home for it.
+// clicking the identity chip. Each source (gh CLI / git config) gets a one-line
+// provenance so people understand we read it locally and didn't phone home for
+// it.
 // ---------------------------------------------------------------------------
 
 const GITHUB_SOURCE_COPY: Record<
-	"gh" | "token",
+	"gh",
 	{ label: string; command: string; detail: string }
 > = {
 	gh: {
@@ -373,12 +373,6 @@ const GITHUB_SOURCE_COPY: Record<
 		command: "gh api user",
 		detail:
 			"You're signed in to the GitHub CLI, so we asked it who you are. The login and avatar come straight from your GitHub account.",
-	},
-	token: {
-		label: "GitHub token",
-		command: "GET api.github.com/user",
-		detail:
-			"A GitHub token was provided to the viewer (TOUR_GH_TOKEN). We used it to look up your account on GitHub for the login and avatar.",
 	},
 };
 
@@ -461,13 +455,10 @@ export function IdentityModal({
 }) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
-	// GitHub provenance shows when signed in (gh CLI / token). The local git
-	// config row shows whenever it resolved — including alongside GitHub.
-	const githubCopy =
-		user.source === "gh" || user.source === "token"
-			? GITHUB_SOURCE_COPY[user.source]
-			: null;
-	const githubIcon = user.source === "token" ? User : Terminal;
+	// GitHub provenance shows when signed in via the gh CLI. The local git config
+	// row shows whenever it resolved — including alongside GitHub.
+	const githubCopy = user.source === "gh" ? GITHUB_SOURCE_COPY["gh"] : null;
+	const githubIcon = Terminal;
 
 	return (
 		<div
@@ -603,9 +594,8 @@ export function IdentityModal({
 					</span>
 					<span>
 						The header chip is labelled by the first available of: GitHub CLI →
-						GitHub token → git config. Your local git identity is always read and
-						shown here too. All of this is resolved on your machine — it isn't sent
-						anywhere.
+						git config. Your local git identity is always read and shown here too.
+						All of this is resolved on your machine — it isn't sent anywhere.
 					</span>
 				</div>
 

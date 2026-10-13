@@ -50,6 +50,11 @@ const TAB_TOGGLES: Array<{
 		description: "Saved subsystem component graphs",
 	},
 	{
+		key: "constructs",
+		label: "Constructs",
+		description: "Verified constructs by repo, with source spans",
+	},
+	{
 		key: "maintenance",
 		label: "Maintainer",
 		description: "Live Maintain overview: verification progress and proposals",

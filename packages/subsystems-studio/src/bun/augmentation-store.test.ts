@@ -10,10 +10,12 @@ import {
 	findAcceptedModuleAugmentation,
 	findAcceptedSignatureAugmentation,
 	findAcceptedCallSiteAugmentation,
+	findAcceptedSpanAugmentation,
 	upsertAcceptedConstructAugmentation,
 	upsertAcceptedModuleAugmentation,
 	upsertAcceptedSignatureAugmentation,
 	upsertAcceptedCallSiteAugmentation,
+	upsertAcceptedSpanAugmentation,
 } from "./augmentation-store";
 
 describe("augmentationKey", () => {
@@ -237,6 +239,55 @@ describe("attachSignatureAugmentations", () => {
 			expect(found?.claims.callSite?.contentHash).toBe("abc123");
 			expect(found?.claims.callSite?.mechanism).toBe("calls");
 			expect(found?.provenance.source).toBe("test-agent");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test("upsert then find accepted span augmentation", async () => {
+		const root = mkdtempSync(join(tmpdir(), "ga-store-span-"));
+		try {
+			const written = await upsertAcceptedSpanAugmentation({
+				purl: "pkg:github/acme/widget",
+				file: "src/decl.ts",
+				symbol: "HostInfo",
+				span: { startLine: 12, endLine: 40, contentHash: "hash12" },
+				source: "test-agent",
+				rationale: "captured declaration extent",
+				storeRoot: root,
+			});
+			expect(written.ok).toBe(true);
+
+			const found = await findAcceptedSpanAugmentation({
+				purl: "pkg:github/acme/widget",
+				file: "src/decl.ts",
+				symbol: "HostInfo",
+				storeRoot: root,
+			});
+			expect(found).not.toBeNull();
+			expect(found?.claims.span).toEqual({
+				startLine: 12,
+				endLine: 40,
+				contentHash: "hash12",
+			});
+			expect(found?.provenance.source).toBe("test-agent");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	test("rejects a span with an unordered or empty range", async () => {
+		const root = mkdtempSync(join(tmpdir(), "ga-store-span-bad-"));
+		try {
+			const bad = await upsertAcceptedSpanAugmentation({
+				purl: "pkg:github/acme/widget",
+				file: "src/decl.ts",
+				symbol: "HostInfo",
+				span: { startLine: 10, endLine: 4, contentHash: "h" },
+				source: "test-agent",
+				storeRoot: root,
+			});
+			expect(bad.ok).toBe(false);
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}

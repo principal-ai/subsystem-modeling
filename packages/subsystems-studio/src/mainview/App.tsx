@@ -26,6 +26,7 @@ import { TabStrip } from "./components/TabStrip";
 import { AgentSessionsOverviewView } from "./views/AgentSessions";
 import { LibraryView } from "./views/LibraryView";
 import { SubsystemModelsView } from "./views/SubsystemModelsView";
+import { VerifiedConstructsView } from "./views/VerifiedConstructsView";
 import { MaintenanceView } from "./views/MaintenanceView";
 import { GraphifyReposView } from "./views/GraphifyReposView";
 import { PackageLayersReposView } from "./views/PackageLayersReposView";
@@ -85,6 +86,7 @@ const STATIC_TAB_IDS = new Set([
 	"agent-sessions",
 	"maintenance-sessions",
 	"subsystems",
+	"constructs",
 	"maintenance",
 	"graphify",
 	"package-layers",
@@ -100,6 +102,7 @@ function staticTabState(tabId: string): TabState | null {
 	if (tabId === "agent-sessions") return { kind: "agent-sessions" };
 	if (tabId === "maintenance-sessions") return { kind: "maintenance-sessions" };
 	if (tabId === "subsystems") return { kind: "subsystems" };
+	if (tabId === "constructs") return { kind: "constructs" };
 	if (tabId === "maintenance") return { kind: "maintenance" };
 	if (tabId === "graphify") return { kind: "graphify" };
 	if (tabId === "package-layers") return { kind: "package-layers" };
@@ -119,6 +122,7 @@ function renderStaticView(tabId: string, active: boolean): ReactNode | null {
 	if (state.kind === "maintenance-sessions")
 		return <AgentSessionsOverviewView scope="maintain" active={active} />;
 	if (state.kind === "subsystems") return <SubsystemModelsView />;
+	if (state.kind === "constructs") return <VerifiedConstructsView />;
 	if (state.kind === "maintenance") return <MaintenanceView />;
 	if (state.kind === "graphify") return <GraphifyReposView />;
 	if (state.kind === "package-layers") return <PackageLayersReposView />;

@@ -8,6 +8,7 @@ import {
 	PACKAGE_MODULE_FIXER_AGENT,
 	PACKAGE_MODULE_VERIFIER_AGENT,
 	RUNTIME_TOPOLOGY_VERIFIER_AGENT,
+	TRAIL_VERIFIER_AGENT,
 	selectMaintainRoute,
 } from "./maintain-model";
 import type { StoredSubsystemModel } from "./subsystem-model-store";
@@ -98,6 +99,28 @@ describe("selectMaintainRoute", () => {
 			],
 		});
 		expect(selectMaintainRoute(report)?.agent).toBe(CONSTRUCT_FIXER_AGENT);
+	});
+
+	test("routes a trail-step error to the trail verifier, not the construct fixer", () => {
+		// `step_span_unconfirmed` is an error (span not captured), but it is
+		// trail-lane work: the construct fixer must never swallow it.
+		const report = emptyReport({
+			needsUpdate: true,
+			findings: [
+				{
+					kind: "step_span_unconfirmed",
+					severity: "error",
+					trailId: "wt",
+					step: 0,
+					message: "step span not captured",
+				},
+			],
+		});
+		expect(selectMaintainRoute(report)).toEqual({
+			agent: TRAIL_VERIFIER_AGENT,
+			layer: "trail",
+			mode: "verify",
+		});
 	});
 
 	test("prefers construct issues over module gaps", () => {

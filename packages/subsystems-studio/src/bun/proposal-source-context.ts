@@ -280,7 +280,7 @@ export async function buildProposalSourceContext(
 
 		const symbol = component.symbol ?? component.name;
 		const declarationLine =
-			component.declarationRef?.startLine ?? findSymbolLine(content, symbol);
+			component.declarationSpan?.startLine ?? findSymbolLine(content, symbol);
 
 		const span = declaredSpan(proposal, alias);
 		const rendered = sliceComponent(content, declarationLine, span);

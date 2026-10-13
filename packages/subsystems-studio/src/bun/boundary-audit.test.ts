@@ -421,7 +421,7 @@ describe("dropUnbackedMissing", () => {
 	test("findings with no process kinds pass through untouched", () => {
 		const out = dropUnbackedMissing([
 			finding("missing_file", "a"),
-			finding("step_unconfirmed"),
+			finding("step_span_unconfirmed"),
 		]);
 		expect(out).toHaveLength(2);
 	});

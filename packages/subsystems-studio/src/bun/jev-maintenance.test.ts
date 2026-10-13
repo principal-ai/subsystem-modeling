@@ -79,8 +79,8 @@ describe("accuracyInstruction", () => {
 					target: "trail-step",
 					trailId: "w",
 					stepIndex: 0,
-					field: "line",
-					value: 1,
+					field: "file",
+					value: "x",
 				},
 			]),
 		);

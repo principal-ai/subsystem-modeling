@@ -262,7 +262,8 @@ export interface SubsystemModelVerification {
 		to: string;
 		mechanism: string;
 		file: string;
-		line: number;
+		/** Present only when the step carries a span. */
+		line?: number;
 		reason: string;
 	}>;
 }
@@ -536,7 +537,7 @@ export async function verifyModelFiles(
 						to: step.to,
 						mechanism: step.mechanism,
 						file: step.file,
-						line: step.line,
+						line: step.span?.startLine,
 						reason,
 					});
 			const from = componentByAlias.get(step.from);
@@ -552,13 +553,20 @@ export async function verifyModelFiles(
 				const abs = join(root, step.file);
 				try {
 					const lines = (await fs.readFile(abs, "utf8")).split("\n");
-					if (step.line < 1 || step.line > lines.length) {
-						fail(`line ${step.line} out of range (${step.file} has ${lines.length} lines)`);
+					const startLine = step.span?.startLine;
+					if (startLine == null) {
+						// No captured span yet — the file resolves, but the seam's
+						// line is unverified. Not a failure.
+						trailsChecked++;
 						continue;
 					}
-					const lineText = lines[step.line - 1] ?? "";
+					if (startLine < 1 || startLine > lines.length) {
+						fail(`line ${startLine} out of range (${step.file} has ${lines.length} lines)`);
+						continue;
+					}
+					const lineText = lines[startLine - 1] ?? "";
 					if (!lineText.trim()) {
-						fail(`line ${step.line} in ${step.file} is blank`);
+						fail(`line ${startLine} in ${step.file} is blank`);
 						continue;
 					}
 					trailsChecked++;

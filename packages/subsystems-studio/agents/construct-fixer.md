@@ -21,9 +21,10 @@ needed, and **propose** typed corrections with a clear rationale. You do **not**
 accept proposals and you do **not** rewrite the model JSON on disk.
 
 You only fix **issues** (error / warn findings): missing file or symbol,
-construct or signature mismatch, and similar hard failures.
-**Do not** propose changes for gaps (construct unclassified, signature not in
-cache). A separate construct-verifier agent handles those after verification passes.
+construct or signature mismatch, a construct with no captured source span, and
+similar hard failures. **Do not** propose changes for gaps (construct
+unclassified, signature not in cache). A separate construct-verifier agent
+handles those after verification passes.
 
 Skip findings that already offer a deterministic Apply fix in the audit UI
 (unique Graphify file relocate, empty-claim signature fill, declaration
@@ -198,6 +199,41 @@ Model-construct correction example (only when the claim itself is wrong):
 }
 ```
 
+### Construct span not captured (`construct_span_unconfirmed`)
+
+The construct is verified (file, symbol, construct all resolve) but the model
+carries no **source span**, so its extent can't be pinned or re-verified.
+Graphify supplies only the start line, never the end — you supply the range.
+
+Read the declaration in source and propose a **span augmentation** with the
+exact 1-based inclusive line span (start line through the closing brace / last
+line of the declaration). The content hash is computed for you at accept time;
+omit it. On accept the span is pinned onto the component (`declarationSpan`).
+
+```json
+{
+  "rationale": "HostInfo is declared at src/host/info.ts lines 12-40 (interface through its closing brace); the model carries no span.",
+  "author": "construct-fixer",
+  "finding": {
+    "kind": "construct_span_unconfirmed",
+    "componentAlias": "…",
+    "message": "…"
+  },
+  "changes": [
+    {
+      "target": "augmentation",
+      "componentAlias": "…",
+      "field": "span",
+      "lines": { "start": 12, "end": 40 }
+    }
+  ]
+}
+```
+
+`start` must be ≥ 1 and `end` ≥ `start`. If you cannot read the declaration,
+skip — do not guess a range. (`construct_span_stale` is a warning handled by the
+construct-verifier — not yours.)
+
 ### Signature mismatch (`signature_mismatch`)
 
 Same rule: Graphify type bags are a hint. Do **not** auto-adopt inferred bags
@@ -238,12 +274,12 @@ claims).
 
 Allowed change fields:
 
-- augmentation: `construct` | `signature` (accept writes the augmentation
-  store, not the model JSON; `file` / `symbol` / `purl` default from the
-  component)
-- component: `file` | `symbol` | `construct` | `name` | `purl` | `declarationRef`
+- augmentation: `construct` | `signature` | `span` (accept writes the
+  augmentation store; `span` also pins `declarationSpan` onto the component.
+  `file` / `symbol` / `purl` default from the component)
+- component: `file` | `symbol` | `construct` | `name` | `purl` | `declarationSpan`
   | `deprecated` (boolean) | `removedIn` (`{ commit, reason? }`)
-- trail-step: `file` | `line` | `symbol` | `from` | `to` | `mechanism` | `annotation`
+- trail-step: `file` | `symbol` | `from` | `to` | `mechanism` | `annotation`
 
 5. **Verify.** List proposals with the brief’s proposals curl. Do **not**
    accept or reject.

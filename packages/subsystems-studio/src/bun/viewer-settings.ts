@@ -96,6 +96,7 @@ function normalize(raw: unknown): ViewerSettings {
 				defaults.defaultTabs.packageLayers,
 			),
 			subsystems: coerceBool(tabs["subsystems"], defaults.defaultTabs.subsystems),
+			constructs: coerceBool(tabs["constructs"], defaults.defaultTabs.constructs),
 			maintenance: coerceBool(tabs["maintenance"], defaults.defaultTabs.maintenance),
 			opencodeV2: coerceBool(tabs["opencodeV2"], defaults.defaultTabs.opencodeV2),
 		},

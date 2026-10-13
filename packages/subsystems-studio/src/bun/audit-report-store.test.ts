@@ -176,7 +176,7 @@ function componentCheck(
 		componentAlias: "c",
 		fileExists: true,
 		symbolDeclared: true,
-		declarationFreshness: "fresh",
+		declarationFreshness: "full",
 		constructMatch: true,
 		signature: "match",
 		anchor: "exact",

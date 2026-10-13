@@ -39,7 +39,7 @@
  *   `"moved"`. Anything reading `behindBy` here is inventing data.
  * - **No dirty indicator.** A dirty tree has no reproducible name, so it is
  *   never recorded as a coordinate (`subsystem-model.ts:388-392`). Anchor-level
- *   dirtiness surfaces per declaration instead, via `lineHash`.
+ *   dirtiness surfaces per declaration instead, via the span `contentHash`.
  *
  * Extracted as its own module so it can be iterated in Storybook (see
  * `ModelProvenance.stories.tsx`) before any of it is piped through

@@ -193,7 +193,7 @@ function mergeGroup(
 	take("symbol", (c) => c.symbol);
 	take("purl", (c) => c.purl);
 	take("tokens", (c) => c.tokens);
-	take("declarationRef", (c) => c.declarationRef);
+	take("declarationSpan", (c) => c.declarationSpan);
 	// Declaration: prefer from a model whose audit verified this component's purl.
 	take("declaration", (c) => c.declaration, () => {
 		const verified = members.find(

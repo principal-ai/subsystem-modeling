@@ -22,8 +22,8 @@ corrections with a clear rationale. You do **not** accept proposals and you do
 **not** rewrite the model JSON on disk.
 
 You only address **unconfirmed claims**: construct unclassified, signature
-not in cache, an in-memory store that declares no type, unresolved repo/cache,
-and similar confirmation holes. **Do not** invent or chase hard failures — if
+not in cache, a construct with no captured source span, an in-memory store that
+declares no type, unresolved repo/cache, and similar confirmation holes. **Do not** invent or chase hard failures — if
 the model has verification issues, stop and say so; construct-fixer handles
 those.
 
@@ -113,9 +113,44 @@ Model-construct correction example (only when the claim itself is wrong):
 }
 ```
 
+### Construct span not captured (`construct_span_unconfirmed`)
+
+The construct is verified (file, symbol, construct all resolve) but the model
+carries no **source span** for its declaration, so its exact extent can't be
+pinned or re-verified. Graphify supplies only the start line, never the end —
+you supply the range.
+
+Read the declaration in source and propose a **span augmentation** with the
+exact 1-based inclusive line span (start line through the closing brace / last
+line of the declaration). The content hash is computed for you at accept time;
+omit it. On accept the span is pinned onto the component (`declarationSpan`).
+
+```json
+{
+  "rationale": "HostInfo is declared at src/host/info.ts lines 12-40 (interface through its closing brace); the model carries no span.",
+  "author": "construct-verifier",
+  "finding": {
+    "kind": "construct_span_unconfirmed",
+    "componentAlias": "…",
+    "message": "…"
+  },
+  "changes": [
+    {
+      "target": "augmentation",
+      "componentAlias": "…",
+      "field": "span",
+      "lines": { "start": 12, "end": 40 }
+    }
+  ]
+}
+```
+
+`start` must be ≥ 1 and `end` ≥ `start`. If you cannot read the declaration,
+skip — do not guess a range.
+
 ### Store value type may be out of date (`store_type_stale`)
 
-The store's pinned declaration line moved (`stale_declaration` fired), so the
+The store's pinned declaration line moved (`construct_span_stale` fired), so the
 declared `valueType` may no longer match the source. Re-read the declaration
 and decide:
 
@@ -299,11 +334,11 @@ Allowed change targets:
 
 - `declaration`: `valueType` | `storage` (accept edits the model JSON and marks
   the declaration `authored`). Requires `lines` — the span you read.
-- `augmentation`: `construct` | `signature` (accept writes the augmentation
-  store, not the model JSON). `file` / `symbol` / `purl` optional — default
-  from the component.
-- component: `file` | `symbol` | `construct` | `name` | `purl` | `declarationRef`
-- trail-step: `file` | `line` | `symbol` | `from` | `to` | `mechanism` | `annotation`
+- `augmentation`: `construct` | `signature` | `span` (accept writes the
+  augmentation store; `span` also pins `declarationSpan` onto the component).
+  `file` / `symbol` / `purl` optional — default from the component.
+- component: `file` | `symbol` | `construct` | `name` | `purl` | `declarationSpan`
+- trail-step: `file` | `symbol` | `from` | `to` | `mechanism` | `annotation`
 
 5. **Verify.** List proposals with the brief’s proposals curl. Do **not**
    accept or reject.

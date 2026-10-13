@@ -25,7 +25,13 @@ export function laneForChange(
 	// work: it fills the declaration the construct panel renders.
 	if (ch.target === "declaration") return "construct";
 	if (ch.target === "augmentation") {
-		if (ch.field === "construct" || ch.field === "signature") return "construct";
+		if (
+			ch.field === "construct" ||
+			ch.field === "signature" ||
+			ch.field === "span"
+		) {
+			return "construct";
+		}
 		if (ch.field === "callSite") return "trail";
 		return "static-topology"; // module (containment)
 	}
@@ -52,7 +58,8 @@ export function laneForFindingKind(
 		case "missing_file":
 		case "symbol_ambiguous":
 		case "symbol_unmatched":
-		case "stale_declaration":
+		case "construct_span_unconfirmed":
+		case "construct_span_stale":
 		case "repo_unresolved":
 		case "graphify_unavailable":
 		case "third_party_path":
@@ -66,8 +73,8 @@ export function laneForFindingKind(
 		case "boundary_process_rejected":
 			return "dynamic-topology";
 		case "trail":
-		case "step_unconfirmed":
-		case "step_stale":
+		case "step_span_unconfirmed":
+		case "step_span_stale":
 			return "trail";
 		default:
 			return null;

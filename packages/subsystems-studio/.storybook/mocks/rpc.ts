@@ -86,6 +86,7 @@ let viewerSettings: ViewerSettings = {
     graphify: false,
     packageLayers: false,
     subsystems: true,
+    constructs: false,
     maintenance: true,
     opencodeV2: false,
   },

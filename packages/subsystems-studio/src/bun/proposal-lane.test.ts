@@ -15,8 +15,8 @@ const step = (): SubsystemModelProposalChange =>
 		target: "trail-step",
 		trailId: "w",
 		stepIndex: 0,
-		field: "line",
-		value: 1,
+		field: "file",
+		value: "x",
 	}) as never;
 const declaration = (field: string): SubsystemModelProposalChange =>
 	({
@@ -32,11 +32,14 @@ describe("laneForChange", () => {
 		expect(laneForChange(component("file"))).toBe("construct");
 		expect(laneForChange(component("symbol"))).toBe("construct");
 		expect(laneForChange(component("construct"))).toBe("construct");
-		expect(laneForChange(component("declarationRef"))).toBe("construct");
+		expect(laneForChange(component("declarationSpan"))).toBe("construct");
 	});
-	test("construct/signature augmentation -> construct", () => {
+	test("construct/signature/span augmentation -> construct", () => {
 		expect(laneForChange(augmentation("construct"))).toBe("construct");
 		expect(laneForChange(augmentation("signature"))).toBe("construct");
+		// A construct's source span is construct work; a step's span is
+		// trail work (the `callSite` field, tested below).
+		expect(laneForChange(augmentation("span"))).toBe("construct");
 	});
 	test("authoring a declaration field -> construct", () => {
 		// A store's `valueType` fills the declaration the construct panel
@@ -62,6 +65,11 @@ describe("laneForFindingKind", () => {
 		expect(laneForFindingKind("construct_mismatch")).toBe("construct");
 		expect(laneForFindingKind("missing_file")).toBe("construct");
 		expect(laneForFindingKind("store_type_undeclared")).toBe("construct");
+		// Span gaps/drift are construct-lane (component) vs trail-lane (step).
+		expect(laneForFindingKind("construct_span_unconfirmed")).toBe("construct");
+		expect(laneForFindingKind("construct_span_stale")).toBe("construct");
+		expect(laneForFindingKind("step_span_unconfirmed")).toBe("trail");
+		expect(laneForFindingKind("step_span_stale")).toBe("trail");
 	});
 	test("maps boundary findings onto their lanes", () => {
 		expect(laneForFindingKind("boundary_module_file_mismatch")).toBe(

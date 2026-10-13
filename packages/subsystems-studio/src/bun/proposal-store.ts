@@ -21,6 +21,7 @@ import {
 	upsertAcceptedSignatureAugmentation, 
 	upsertAcceptedModuleAugmentation,
 	upsertAcceptedCallSiteAugmentation,
+	upsertAcceptedSpanAugmentation,
 	type CallSiteAugmentationClaim,
 } from "./augmentation-store";
 import { hashContentRange } from "./declaration-ref";
@@ -136,7 +137,7 @@ function resolveAugmentationTarget(
 	graph: StoredSubsystemModel,
 	ch: Extract<
 		SubsystemModelProposalChange,
-		{ target: "augmentation"; field: "construct" | "signature" | "module" }
+		{ target: "augmentation"; field: "construct" | "signature" | "module" | "span" }
 	>,
 ): { file: string; symbol: string; purl: string; componentName: string } | null {
 	const c = graph.components.find((x) => x.alias === ch.componentAlias);
@@ -263,6 +264,12 @@ function buildPreview(
 					label: `augment ${name}.signature (${where})`,
 					before: "not yet confirmed",
 					after: formatSignatureClaim(sig),
+				});
+			} else if (ch.field === "span") {
+				rows.push({
+					label: `capture span for ${name} (${where})`,
+					before: "no span",
+					after: `lines ${ch.lines.start}-${ch.lines.end}`,
 				});
 			} else {
 				rows.push({
@@ -478,9 +485,9 @@ function validateChanges(
 			if (!graph.components.some((c) => c.alias === ch.componentAlias)) {
 				return `unknown component: ${ch.componentAlias}`;
 			}
-			if (ch.field === "declarationRef") {
+			if (ch.field === "declarationSpan") {
 				if (ch.value !== null && typeof ch.value !== "object") {
-					return "declarationRef value must be an object or null";
+					return "declarationSpan value must be an object or null";
 				}
 			} else if (ch.field === "deprecated") {
 				if (typeof ch.value !== "boolean") {
@@ -525,15 +532,7 @@ function validateChanges(
 			) {
 				return `invalid stepIndex ${ch.stepIndex} for trail ${ch.trailId}`;
 			}
-			if (ch.field === "line") {
-				if (
-					typeof ch.value !== "number" ||
-					!Number.isInteger(ch.value) ||
-					ch.value < 1
-				) {
-					return "line value must be a positive integer";
-				}
-			} else if (ch.value !== null && typeof ch.value !== "string") {
+			if (ch.value !== null && typeof ch.value !== "string") {
 				return `${ch.field} value must be a string or null`;
 			}
 		} else if (ch.target === "augmentation") {
@@ -541,7 +540,8 @@ function validateChanges(
 				ch.field !== "construct" &&
 				ch.field !== "signature" &&
 				ch.field !== "module" &&
-				ch.field !== "callSite"
+				ch.field !== "callSite" &&
+				ch.field !== "span"
 			) {
 				return `unsupported augmentation field: ${(ch as { field: string }).field}`;
 			} else if (ch.field === "callSite") {
@@ -608,6 +608,15 @@ function validateChanges(
 				if (typeof ch.value !== "string" || !ch.value.trim()) {
 					return "augmentation module value must be a non-empty string";
 				}
+				if (!graph.components.some((c) => c.alias === ch.componentAlias)) {
+					return `unknown component: ${ch.componentAlias}`;
+				}
+				if (!resolveAugmentationTarget(graph, ch)) {
+					return `augmentation for ${ch.componentAlias} needs file, symbol, and purl (on the change or component)`;
+				}
+			} else if (ch.field === "span") {
+				// The span's `lines` were already validated above; it needs a
+				// resolvable declaration target like the other component augs.
 				if (!graph.components.some((c) => c.alias === ch.componentAlias)) {
 					return `unknown component: ${ch.componentAlias}`;
 				}
@@ -823,6 +832,30 @@ async function applyAugmentationChanges(	graph: StoredSubsystemModel,
 				],
 			});
 			if (!written.ok) return written.error;
+			// Pin the step span onto the step so the model carries it inline
+			// (portable), rather than only in the host-local augmentation store.
+			const trails = (graph.trails ?? []).map((t) =>
+				t.id !== callSiteCh.trailId
+					? t
+					: {
+							...t,
+							steps: t.steps.map((s, i) =>
+								i === callSiteCh.stepIndex
+									? {
+											...s,
+											span: {
+												startLine: callSite.lines.start,
+												endLine: callSite.lines.end,
+												contentHash: callSite.contentHash,
+											},
+										}
+									: s,
+							),
+						},
+			);
+			if (trails.length > 0) {
+				await updateSubsystemModel(graph.id, { trails });
+			}
 			continue;
 		}
 
@@ -873,6 +906,54 @@ async function applyAugmentationChanges(	graph: StoredSubsystemModel,
 				],
 			});
 			if (!written.ok) return written.error;
+		} else if (ch.field === "span") {
+			// The host computes the content hash from the agent's line range —
+			// same contract as a call site. The span is written to the
+			// augmentation store (the capture lane) and pinned onto the
+			// component so the model carries it without a later verify pass.
+			const repoRoot = resolveRepoRootForPurl(resolved.purl);
+			if (!repoRoot) {
+				return `span contentHash could not be computed: repo not resolved for ${resolved.purl}`;
+			}
+			let content: string;
+			try {
+				content = await fs.readFile(join(repoRoot, resolved.file), "utf8");
+			} catch {
+				return `span contentHash could not be computed: cannot read ${resolved.file}`;
+			}
+			const contentHash = hashContentRange(
+				content,
+				ch.lines.start,
+				ch.lines.end,
+			);
+			if (!contentHash) {
+				return `span contentHash could not be computed: lines ${ch.lines.start}-${ch.lines.end} out of bounds in ${resolved.file}`;
+			}
+			const span = {
+				startLine: ch.lines.start,
+				endLine: ch.lines.end,
+				contentHash,
+			};
+			const written = await upsertAcceptedSpanAugmentation({
+				purl: resolved.purl,
+				file: resolved.file,
+				symbol: resolved.symbol,
+				span,
+				source: proposal.author?.trim() || "proposal",
+				rationale: proposal.rationale,
+				evidence: [
+					`proposal ${proposal.id}`,
+					`component ${ch.componentAlias}`,
+				],
+			});
+			if (!written.ok) return written.error;
+			await updateSubsystemModel(graph.id, {
+				components: graph.components.map((c) =>
+					c.alias === ch.componentAlias
+						? { ...c, declarationSpan: span }
+						: c,
+				),
+			});
 		}
 	}
 	return null;

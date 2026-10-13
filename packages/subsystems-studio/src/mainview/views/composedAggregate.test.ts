@@ -107,17 +107,17 @@ describe("aggregateToFrames", () => {
 						id: "w1",
 						title: "One",
 						steps: [
-							{ from: "a", to: "b", mechanism: "calls", file: "src/a.ts", line: 1, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" },
-							{ from: "a", to: "b", mechanism: "calls", file: "src/a.ts", line: 2, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" },
-							{ from: "a", to: "c", mechanism: "reads", file: "src/a.ts", line: 3, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" },
-							{ from: "ghost", to: "b", mechanism: "calls", file: "src/a.ts", line: 4, purl: "pkg:github/acme/app#src/a.ts", symbol: "ghost" },
+							{ from: "a", to: "b", mechanism: "calls", file: "src/a.ts", span: { startLine: 1, endLine: 1, contentHash: 'fixture' }, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" },
+							{ from: "a", to: "b", mechanism: "calls", file: "src/a.ts", span: { startLine: 2, endLine: 2, contentHash: 'fixture' }, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" },
+							{ from: "a", to: "c", mechanism: "reads", file: "src/a.ts", span: { startLine: 3, endLine: 3, contentHash: 'fixture' }, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" },
+							{ from: "ghost", to: "b", mechanism: "calls", file: "src/a.ts", span: { startLine: 4, endLine: 4, contentHash: 'fixture' }, purl: "pkg:github/acme/app#src/a.ts", symbol: "ghost" },
 						],
 					},
 					{
 						id: "w2",
 						title: "Two",
 						steps: [
-							{ from: "b", to: "a", mechanism: "feeds", file: "src/b.ts", line: 9, purl: "pkg:github/acme/app#src/b.ts", symbol: "b" },
+							{ from: "b", to: "a", mechanism: "feeds", file: "src/b.ts", span: { startLine: 9, endLine: 9, contentHash: 'fixture' }, purl: "pkg:github/acme/app#src/b.ts", symbol: "b" },
 						],
 					},
 				],
@@ -167,7 +167,7 @@ describe("aggregateToFrames", () => {
 						id: "w1",
 						title: "One",
 						steps: [
-							{ from: "a", to: "c", mechanism: "calls", file: "src/a.ts", line: 1, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" },
+							{ from: "a", to: "c", mechanism: "calls", file: "src/a.ts", span: { startLine: 1, endLine: 1, contentHash: 'fixture' }, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" },
 						],
 					},
 				],
@@ -203,7 +203,7 @@ describe("aggregateToFrames", () => {
 					{
 						id: "w1",
 						title: "One",
-						steps: [{ from: "a", to: "c", mechanism: "calls", file: "src/a.ts", line: 1, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" }],
+						steps: [{ from: "a", to: "c", mechanism: "calls", file: "src/a.ts", span: { startLine: 1, endLine: 1, contentHash: 'fixture' }, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" }],
 					},
 				],
 			}),
@@ -257,15 +257,15 @@ describe("aggregateToFrames", () => {
 						id: "w1",
 						title: "One",
 						steps: [
-							{ from: "a", to: "b", mechanism: "calls", file: "src/a.ts", line: 1, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" },
-							{ from: "a", to: "c", mechanism: "reads", file: "src/a.ts", line: 2, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" },
+							{ from: "a", to: "b", mechanism: "calls", file: "src/a.ts", span: { startLine: 1, endLine: 1, contentHash: 'fixture' }, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" },
+							{ from: "a", to: "c", mechanism: "reads", file: "src/a.ts", span: { startLine: 2, endLine: 2, contentHash: 'fixture' }, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" },
 						],
 					},
 					{
 						id: "w2",
 						title: "Empty after rebase",
 						steps: [
-							{ from: "a", to: "c", mechanism: "reads", file: "src/a.ts", line: 3, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" },
+							{ from: "a", to: "c", mechanism: "reads", file: "src/a.ts", span: { startLine: 3, endLine: 3, contentHash: 'fixture' }, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" },
 						],
 					},
 				],
@@ -297,7 +297,7 @@ describe("aggregateToFrames", () => {
 				id: "w1",
 				title: "One",
 				steps: [
-					{ from: "module:src/a.ts", to: "module:src/b.ts", mechanism: "calls", file: "src/a.ts", line: 1, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" },
+					{ from: "module:src/a.ts", to: "module:src/b.ts", mechanism: "calls", file: "src/a.ts", span: { startLine: 1, endLine: 1, contentHash: 'fixture' }, purl: "pkg:github/acme/app#src/a.ts", symbol: "a" },
 				],
 			},
 		]);

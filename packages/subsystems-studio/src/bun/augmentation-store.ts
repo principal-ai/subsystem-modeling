@@ -55,6 +55,20 @@ export interface CallSiteAugmentationClaim {
 	mechanism: SubsystemTrailMechanism;
 }
 
+/**
+ * Agent-captured source span for a construct declaration. Graphify supplies
+ * the start line only, so the end line (and therefore the range hash) comes
+ * from the agent lane. Keyed by the declaration's file::symbol.
+ */
+export interface SpanAugmentationClaim {
+	/** 1-based inclusive start line of the construct. */
+	startLine: number;
+	/** 1-based inclusive end line. Always >= startLine. */
+	endLine: number;
+	/** SHA-256 (truncated) of the normalized content across the range. */
+	contentHash: string;
+}
+
 export interface GraphifyAugmentation {
 	id: string;
 	purl: string;
@@ -65,6 +79,7 @@ export interface GraphifyAugmentation {
 		signature?: SignatureAugmentationClaim;
 		module?: GraphifyModuleAugmentationClaim;
 		callSite?: CallSiteAugmentationClaim;
+		span?: SpanAugmentationClaim;
 	};
 	evidence?: string[];
 	provenance: {
@@ -501,6 +516,113 @@ export async function upsertAcceptedModuleAugmentation(input: {
 		file,
 		symbol,
 		claims: { module: moduleClaim },
+		evidence: input.evidence,
+		provenance: {
+			source: input.source.trim() || "unknown",
+			at: now,
+			rationale: input.rationale?.trim() || undefined,
+		},
+		status: "accepted",
+		resolvedAt: now,
+	};
+	doc.augmentations.unshift(augmentation);
+	await writeDoc(doc, input.storeRoot);
+	return { ok: true, augmentation };
+}
+
+// ---------------------------------------------------------------------------
+// Span Augmentations (construct declaration capture)
+// ---------------------------------------------------------------------------
+
+function normalizeSpanClaim(
+	raw: SpanAugmentationClaim | undefined,
+): SpanAugmentationClaim | null {
+	if (!raw || typeof raw !== "object") return null;
+	const startLine = raw.startLine;
+	const endLine = raw.endLine;
+	const contentHash =
+		typeof raw.contentHash === "string" ? raw.contentHash.trim() : "";
+	if (typeof startLine !== "number" || !Number.isFinite(startLine)) return null;
+	if (typeof endLine !== "number" || !Number.isFinite(endLine)) return null;
+	if (startLine < 1 || endLine < startLine) return null;
+	if (!contentHash) return null;
+	return { startLine, endLine, contentHash };
+}
+
+/**
+ * Latest accepted span claim for this file+symbol, if any. Mirrors
+ * {@link findAcceptedCallSiteAugmentation} for construct declarations.
+ */
+export async function findAcceptedSpanAugmentation(opts: {
+	purl: string;
+	file: string;
+	symbol: string;
+	storeRoot?: string;
+}): Promise<GraphifyAugmentation | null> {
+	const key = purlRepoKey(opts.purl) ?? opts.purl.trim();
+	if (!key || !opts.file?.trim() || !opts.symbol?.trim()) return null;
+	const want = augmentationKey(opts.file, opts.symbol);
+	const doc = await readDoc(key, opts.storeRoot);
+	const accepted = doc.augmentations.filter((a) => {
+		if (a.status !== "accepted") return false;
+		if (augmentationKey(a.file, a.symbol) !== want) return false;
+		return normalizeSpanClaim(a.claims.span) != null;
+	});
+	if (accepted.length === 0) return null;
+	accepted.sort((a, b) => {
+		const at = a.resolvedAt ?? a.provenance.at;
+		const bt = b.resolvedAt ?? b.provenance.at;
+		return bt.localeCompare(at);
+	});
+	return accepted[0] ?? null;
+}
+
+export async function upsertAcceptedSpanAugmentation(input: {
+	purl: string;
+	file: string;
+	symbol: string;
+	span: SpanAugmentationClaim;
+	source: string;
+	rationale?: string;
+	evidence?: string[];
+	storeRoot?: string;
+}): Promise<
+	| { ok: true; augmentation: GraphifyAugmentation }
+	| { ok: false; error: string }
+> {
+	const key = purlRepoKey(input.purl) ?? input.purl.trim();
+	if (!key) return { ok: false, error: "purl is required" };
+	const file = input.file.trim().replace(/\\/g, "/");
+	const symbol = input.symbol.trim();
+	const span = normalizeSpanClaim(input.span);
+	if (!file) return { ok: false, error: "file is required" };
+	if (!symbol) return { ok: false, error: "symbol is required" };
+	if (!span) {
+		return {
+			ok: false,
+			error: "span must include { startLine, endLine, contentHash }",
+		};
+	}
+
+	const now = new Date().toISOString();
+	const want = augmentationKey(file, symbol);
+	const doc = await readDoc(key, input.storeRoot);
+
+	// Supersede prior accepted span augs for the same declaration.
+	for (let i = 0; i < doc.augmentations.length; i++) {
+		const a = doc.augmentations[i]!;
+		if (a.status !== "accepted") continue;
+		if (augmentationKey(a.file, a.symbol) !== want) continue;
+		if (!normalizeSpanClaim(a.claims.span)) continue;
+		doc.augmentations[i] = { ...a, status: "rejected", resolvedAt: now };
+	}
+
+	const augmentation: GraphifyAugmentation = {
+		id: newId(),
+		purl: key,
+		file,
+		symbol,
+		claims: { span },
 		evidence: input.evidence,
 		provenance: {
 			source: input.source.trim() || "unknown",

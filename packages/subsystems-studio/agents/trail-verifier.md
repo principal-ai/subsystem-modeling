@@ -30,9 +30,9 @@ The brief's **Access** section is authoritative. Prefer **Studio HTTP (`curl`)**
 
 ## The two findings you handle
 
-- `step_unconfirmed` — no accepted call site augmentation exists for this step
+- `step_span_unconfirmed` — no accepted call site augmentation exists for this step
   yet. Verify the call site and propose one.
-- `step_stale` — an accepted augmentation exists, but the pinned line span's
+- `step_span_stale` — an accepted augmentation exists, but the pinned line span's
   content changed. Re-read the current lines and propose a **fresh span** (a new
   callSite augmentation with the same key replaces the old one on accept).
 
@@ -57,7 +57,7 @@ audit output also lists the trail and step details.
   "rationale": "checkoutApi.handleCheckout calls cartStore.add at src/checkout/api.ts:42 (single-line call); the trail step claims checkoutApi → cartStore via writes.",
   "author": "trail-verifier",
   "finding": {
-    "kind": "step_unconfirmed",
+    "kind": "step_span_unconfirmed",
     "trailId": "checkout-flow",
     "step": 0,
     "message": "…"
@@ -88,6 +88,8 @@ Notes on the change shape:
 - `mechanism` must match the step's mechanism (the finding message shows it).
 - `value.lines` is the 1-based inclusive span of the **call site** you read.
 - Omit `contentHash` — Studio computes it from the span at accept time.
+- On accept the step span is also pinned onto the step (`step.span`), so the
+  model carries the range inline rather than only in the augmentation store.
 - A stale step uses the same shape with the **current** line span; the new
   augmentation replaces the stale one.
 

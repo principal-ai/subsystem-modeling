@@ -177,6 +177,30 @@ function mergeTallies(...tallies: VerificationTally[]): VerificationTally {
 }
 
 /**
+ * True when a construct-layer check is *fully verified*: the claim is confirmed
+ * by an exact graphify anchor, classified, signature-confirmed, and carries a
+ * fresh declaration span. This is the condition `classifyConstructCheck`
+ * buckets as `verified`, exposed so callers (the Constructs tab) can select the
+ * verified set from a persisted report without re-deriving the rule.
+ */
+export function isVerifiedConstructCheck(
+	c: SubsystemModelAuditCheck,
+): boolean {
+	return (
+		c.verdict === "ok" &&
+		c.graphify === "confirmed" &&
+		c.fileExists === true &&
+		// Exact anchor is not enough: an unclassified construct (`null`) is a
+		// gap (`construct_unconfirmed`), not a confirmed claim.
+		c.constructMatch === true &&
+		c.signature !== "mismatch" &&
+		c.signature !== "skipped" &&
+		c.declarationFreshness !== "stale" &&
+		c.declarationFreshness !== "missing"
+	);
+}
+
+/**
  * Bucket one construct-layer component check.
  *
  * `graphify: "skipped"` marks external / custom-entity / proposed components —
@@ -205,17 +229,7 @@ function classifyConstructCheck(
 		tally.blocked++;
 		return;
 	}
-	if (
-		c.verdict === "ok" &&
-		c.graphify === "confirmed" &&
-		// Exact anchor is not enough: an unclassified construct (`null`) is a
-		// gap (`construct_unconfirmed`), not a confirmed claim.
-		c.constructMatch === true &&
-		c.signature !== "mismatch" &&
-		c.signature !== "skipped" &&
-		c.declarationFreshness !== "stale" &&
-		c.declarationFreshness !== "missing"
-	) {
+	if (isVerifiedConstructCheck(c)) {
 		tally.verified++;
 		return;
 	}

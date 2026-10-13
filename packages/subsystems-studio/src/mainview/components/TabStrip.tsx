@@ -9,6 +9,7 @@ import { useTheme } from "@principal-ade/industry-theme";
 import {
 	Activity,
 	Bot,
+	Braces,
 	Container,
 	FileText,
 	Gauge,
@@ -34,6 +35,7 @@ const KIND_ICONS: Partial<Record<TabSummary["kind"], LucideIcon>> = {
 	"subsystem-model": LayoutDashboard,
 	"subsystem-showcase": LayoutGrid,
 	subsystems: LayoutDashboard,
+	constructs: Braces,
 	maintenance: Gauge,
 	graphify: Share2,
 	"package-layers": Container,
@@ -100,6 +102,7 @@ export function TabStrip({
 					tab.kind === "agent-sessions" ||
 					tab.kind === "maintenance-sessions" ||
 					tab.kind === "subsystems" ||
+					tab.kind === "constructs" ||
 					tab.kind === "maintenance" ||
 					tab.kind === "graphify" ||
 					tab.kind === "package-layers" ||

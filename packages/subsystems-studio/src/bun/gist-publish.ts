@@ -1,8 +1,8 @@
 /**
  * Publish a portable subsystem model as a public GitHub gist.
  *
- * Token resolution reads `TOUR_GH_TOKEN` → `gh auth token` → git credential
- * helper. The token is never logged.
+ * Token resolution reads `gh auth token` → git credential helper. The token is
+ * never logged.
  */
 
 import { spawnSync } from "node:child_process";
@@ -84,10 +84,8 @@ function resolveTokenViaGitCredential(): string | null {
 	return null;
 }
 
-/** Resolve a GitHub token for gist write. Prefer env (Studio launch), then gh/git. */
+/** Resolve a GitHub token for gist write: gh CLI first, then the git credential helper. */
 export function resolveGithubToken(): string | null {
-	const fromEnv = process.env["TOUR_GH_TOKEN"]?.trim();
-	if (fromEnv) return fromEnv;
 	return resolveTokenViaGh() ?? resolveTokenViaGitCredential();
 }
 
@@ -119,7 +117,7 @@ export async function publishSubsystemModelGist(opts: {
 		return {
 			ok: false,
 			error:
-				"No GitHub token found. Run `gh auth login` (gist scope) or set TOUR_GH_TOKEN.",
+				"No GitHub token found. Run `gh auth login` (needs the gist scope).",
 		};
 	}
 

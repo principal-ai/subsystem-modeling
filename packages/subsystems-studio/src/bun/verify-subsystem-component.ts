@@ -33,10 +33,10 @@ import type {
 	SubsystemModelAuditReport,
 } from "../shared/contract";
 import {
-	buildDeclarationRef,
-	hashDeclarationLineFromContent,
+	buildSourceSpan,
+	hashContentRange,
 	parseSourceLocation,
-	type SubsystemDeclarationRef,
+	type SubsystemSourceSpan,
 } from "./declaration-ref";
 import { loadGraphifyGraph } from "./graphify-runner";
 import {
@@ -50,8 +50,8 @@ import {
 	findAcceptedModuleAugmentation,
 	findAcceptedSignatureAugmentation,
 	findAcceptedCallSiteAugmentation,
+	findAcceptedSpanAugmentation,
 } from "./augmentation-store";
-import { hashContentRange } from "./declaration-ref";
 import {
 	auditBoundaryFields,
 	auditProcessVerification,
@@ -116,9 +116,16 @@ export function adoptGraphifyFileFixFromVerify(
 	};
 }
 
-/** Exact Graphify anchor + drifted pin → one-click re-pin from current source_location. */
+/**
+ * Exact Graphify anchor + a content-preserving move → one-click re-pin.
+ *
+ * Graphify supplies only the start line, so the candidate span is the stored
+ * span shifted to the new start with its length preserved. It is offered only
+ * when the shifted range re-hashes to the stored `contentHash` — i.e. the
+ * construct moved intact. A changed hash is not a move; it needs the agent lane.
+ */
 export function adoptGraphifyDeclarationRefFixFromVerify(
-	component: { declarationRef?: SubsystemDeclarationRef },
+	component: { declarationSpan?: SubsystemSourceSpan },
 	declaration: NonNullable<SubsystemComponentVerificationResult["declaration"]>,
 	anchor: SubsystemComponentVerificationResult["anchor"],
 ): Extract<
@@ -127,29 +134,17 @@ export function adoptGraphifyDeclarationRefFixFromVerify(
 > | undefined {
 	if (declaration.freshness !== "stale") return undefined;
 	if (anchor?.resolution !== "exact") return undefined;
-	const repin = declaration.ref;
-	if (
-		!repin ||
-		typeof repin.startLine !== "number" ||
-		typeof repin.lineHash !== "string"
-	) {
-		return undefined;
-	}
-	const stored = component.declarationRef;
-	if (
-		stored &&
-		stored.startLine === repin.startLine &&
-		stored.lineHash === repin.lineHash
-	) {
-		return undefined;
-	}
+	const repin = declaration.repin;
+	const stored = component.declarationSpan;
+	if (!repin || !stored) return undefined;
+	// Only a content-preserving move is safe to re-pin.
+	if (repin.contentHash !== stored.contentHash) return undefined;
+	if (repin.startLine === stored.startLine) return undefined;
 	return {
 		id: "adopt_graphify_declaration_ref",
-		label: `Re-pin declaration to Graphify L${repin.startLine}${
-			stored ? ` (was L${stored.startLine})` : ""
-		}`,
-		declarationRef: repin,
-		previousStartLine: stored?.startLine,
+		label: `Re-pin declaration to L${repin.startLine} (was L${stored.startLine})`,
+		declarationSpan: repin,
+		previousStartLine: stored.startLine,
 	};
 }
 
@@ -221,18 +216,22 @@ function graphEdges(smoke: {
 	return Array.isArray(raw) ? (raw as GraphifyEdge[]) : [];
 }
 
-function declarationFreshness(
-	stored: SubsystemDeclarationRef | undefined,
-	startLine: number,
-	liveHash: string | null,
+/**
+ * Freshness of a span against live content.
+ *
+ * `full` when the live range hashes to the span's `contentHash` and Graphify
+ * still points at the span's start. `stale` when the content changed or the
+ * declaration moved (positional drift). The hash is the invariant: a construct
+ * that merely moved can be re-pinned by re-hashing the shifted range.
+ */
+function spanFreshness(
+	current: SubsystemSourceSpan,
+	liveHash: string,
+	graphifyStart: number | null,
 ): NonNullable<SubsystemComponentVerificationResult["declaration"]>["freshness"] {
-	if (liveHash == null) return "missing";
-	if (!stored) return "fresh";
-	// Drift is positional: has the declaration moved? Content changes are the
-	// signature check's job; `lineHash` stays stored for the re-pin but no
-	// longer trips staleness (a single line is a weak content fingerprint).
-	if (stored.startLine !== startLine) return "stale";
-	return "fresh";
+	if (liveHash !== current.contentHash) return "stale";
+	if (graphifyStart != null && graphifyStart !== current.startLine) return "stale";
+	return "full";
 }
 
 /** A store's declared value type, normalized. Null when it declares none. */
@@ -268,7 +267,7 @@ export function storeTypeUndeclared(component: SubsystemComponent): boolean {
  * of date.
  *
  * Reuses the drift trigger that already exists: a stale declaration means
- * "look at this again" (it raises `stale_declaration` with a one-click re-pin).
+ * "look at this again" (it raises `construct_span_stale` with a one-click re-pin).
  * A declared value type can only be wrong because the source moved, so this is
  * the moment to re-derive it — no new check lane, and Graphify can never
  * provide the type itself.
@@ -323,69 +322,95 @@ async function captureDeclaration(
 	component: SubsystemComponent,
 	anchor: ComponentAnchorResult,
 	fileContent: string | null,
-	repoRoot: string | null,
+	_repoRoot: string | null,
 	opts?: { dryRun?: boolean },
 ): Promise<NonNullable<SubsystemComponentVerificationResult["declaration"]> | undefined> {
-	if (anchor.resolution !== "exact" || !anchor.node) {
-		if (!component.declarationRef) return { freshness: "unanchored" };
-		if (!fileContent) return { freshness: "unchecked" };
-		const liveHash = hashDeclarationLineFromContent(
+	const stored = component.declarationSpan;
+
+	// The capture lane: an accepted span augmentation is the only source of a
+	// full span (Graphify gives the start line, never the end).
+	let captured: SubsystemSourceSpan | undefined;
+	if (component.purl && component.file && component.symbol) {
+		const aug = await findAcceptedSpanAugmentation({
+			purl: component.purl,
+			file: component.file,
+			symbol: component.symbol,
+		});
+		const claim = aug?.claims.span;
+		if (claim) {
+			captured = buildSourceSpan({
+				startLine: claim.startLine,
+				endLine: claim.endLine,
+				contentHash: claim.contentHash,
+			});
+		}
+	}
+
+	const current = captured ?? stored;
+	if (!current) return { freshness: "unanchored" };
+	if (!fileContent) return { freshness: "unchecked", span: current };
+
+	const liveHash = hashContentRange(
+		fileContent,
+		current.startLine,
+		current.endLine,
+	);
+	if (liveHash == null) return { freshness: "missing", span: current };
+
+	const graphifyStart =
+		anchor.resolution === "exact" && anchor.node
+			? parseSourceLocation(
+					typeof anchor.node.source_location === "string"
+						? anchor.node.source_location
+						: undefined,
+				)
+			: null;
+
+	// A content-preserving move: shift the stored span to Graphify's start,
+	// keep its length, and re-hash. Offered only when the hash is unchanged —
+	// then the construct moved intact and the shift is a safe re-pin.
+	let repin: SubsystemSourceSpan | undefined;
+	if (
+		stored &&
+		graphifyStart != null &&
+		graphifyStart !== current.startLine &&
+		graphifyStart !== stored.startLine
+	) {
+		const len = stored.endLine - stored.startLine;
+		const shiftedHash = hashContentRange(
 			fileContent,
-			component.declarationRef.startLine,
+			graphifyStart,
+			graphifyStart + len,
 		);
-		return {
-			freshness: declarationFreshness(
-				component.declarationRef,
-				component.declarationRef.startLine,
-				liveHash,
-			),
-			ref: component.declarationRef,
-			liveLineHash: liveHash ?? undefined,
-		};
+		if (shiftedHash === stored.contentHash) {
+			repin = buildSourceSpan({
+				startLine: graphifyStart,
+				endLine: graphifyStart + len,
+				contentHash: shiftedHash,
+			});
+		}
 	}
 
-	const startLine = parseSourceLocation(
-		typeof anchor.node.source_location === "string"
-			? anchor.node.source_location
-			: undefined,
-	);
-	if (startLine == null || !fileContent) {
-		return component.declarationRef
-			? { freshness: "unchecked", ref: component.declarationRef }
-			: { freshness: "unanchored" };
-	}
+	const freshness = spanFreshness(current, liveHash, graphifyStart);
 
-	const liveHash = hashDeclarationLineFromContent(fileContent, startLine);
-	if (liveHash == null) {
-		return {
-			freshness: "missing",
-			ref: component.declarationRef,
-		};
-	}
-
-	const freshness = declarationFreshness(
-		component.declarationRef,
-		startLine,
-		liveHash,
-	);
-	const ref = await buildDeclarationRef({
-		file: component.file,
-		startLine,
-		lineHash: liveHash,
-		graphifyNodeId: String(anchor.node.id),
-		repoRoot,
-	});
-
-	// Dry-run audit reports freshness without writing declarationRef back.
-	if (!opts?.dryRun) {
+	// Promote an accepted span augmentation into the model (dry-run reports
+	// without writing).
+	if (
+		!opts?.dryRun &&
+		captured &&
+		(!stored ||
+			stored.startLine !== captured.startLine ||
+			stored.endLine !== captured.endLine ||
+			stored.contentHash !== captured.contentHash)
+	) {
 		await updateSubsystemModel(graphId, {
 			components: components.map((c) =>
-				c.alias === component.alias ? { ...c, declarationRef: ref } : c,
+				c.alias === component.alias ? { ...c, declarationSpan: captured } : c,
 			),
 		});
 	}
 
-	return { freshness, ref, liveLineHash: liveHash };
+	return { freshness, span: current, liveContentHash: liveHash, repin };
 }
 
 async function finalizeResult(
@@ -1239,29 +1264,42 @@ export async function auditSubsystemModel(
 
 		if (r.declaration?.freshness) {
 			check.declarationFreshness = r.declaration.freshness;
-			if (r.declaration.freshness === "fresh") declarationsFresh++;
-			if (r.declaration.freshness === "stale") {
+			if (r.declaration.freshness === "full") declarationsFresh++;
+			if (r.declaration.freshness === "unanchored") {
+				// A hard failure: with no captured span the construct cannot be
+				// verified at all — the agent lane must mint one from source.
 				issue = true;
-				const stored = c.declarationRef;
+				findings.push({
+					kind: "construct_span_unconfirmed",
+					severity: "error",
+					componentAlias: c.alias,
+					componentName: c.name,
+					message: `No source span captured — capture a span (start/end/content hash) from source to verify this construct.`,
+				});
+				seenComponentIssue.add(c.alias);
+			}
+			if (r.declaration.freshness === "stale") {
+				// A warning: the span was captured but drifted. A content-preserving
+				// move carries a one-click re-pin; a content change needs the agent.
+				const stored = c.declarationSpan;
 				const fix = adoptGraphifyDeclarationRefFixFromVerify(
 					c,
 					r.declaration,
 					r.anchor,
 				);
 				findings.push({
-					kind: "stale_declaration",
-					severity: "error",
+					kind: "construct_span_stale",
+					severity: "info",
 					componentAlias: c.alias,
 					componentName: c.name,
 					message: fix
-						? `Declaration moved — Graphify pins L${fix.declarationRef.startLine}${
+						? `Declaration moved — Graphify pins L${fix.declarationSpan.startLine}${
 								stored ? ` (model had L${stored.startLine})` : ""
 							}`
-						: `Declaration moved${stored ? ` (stored L${stored.startLine})` : ""}`,
+						: `Declaration span no longer matches source — the content changed (stored L${stored?.startLine ?? "?"}).`,
 					fix,
 				});
 				staleDeclarations++;
-				seenComponentIssue.add(c.alias);
 			}
 		}
 
@@ -1530,40 +1568,45 @@ export async function auditSubsystemModel(
 				continue;
 			}
 
-			// Skip steps where we can't resolve the target component
-			if (!toComponent?.file?.trim() || !toComponent?.symbol?.trim()) continue;
-
-			// The step's site purl determines the repo
+			// The step's site purl determines the repo.
 			const stepPurl = step.purl?.trim();
 			if (!stepPurl || !isRepoPurl(stepPurl)) continue;
 
-			// Look up accepted call site augmentation
-			const aug = await findAcceptedCallSiteAugmentation({
-				purl: stepPurl,
-				file: step.file,
-				symbol: step.symbol,
-				targetFile: toComponent.file,
-				targetSymbol: toComponent.symbol,
-				mechanism: step.mechanism,
-			});
+			const repoRoot = resolveRepoRootForPurl(stepPurl);
+			if (!repoRoot) continue;
 
-			if (!aug?.claims.callSite) {
-				// No augmentation — step is unconfirmed
-				stepsUnconfirmed++;
-				findings.push({
-					kind: "step_unconfirmed",
-					severity: "info",
-					trailId: trail.id,
-					step: stepIndex,
-					message: `Trail "${trail.title}" step ${stepIndex + 1}: call site not verified (${step.from} → ${step.to} via ${step.mechanism})`,
+			// Prefer the step's own span; fall back to the accepted call-site
+			// augmentation — the capture lane that mints it.
+			let span = step.span;
+			if (!span && toComponent?.file?.trim() && toComponent?.symbol?.trim()) {
+				const aug = await findAcceptedCallSiteAugmentation({
+					purl: stepPurl,
+					file: step.file,
+					symbol: step.symbol,
+					targetFile: toComponent.file,
+					targetSymbol: toComponent.symbol,
+					mechanism: step.mechanism,
 				});
-				continue;
+				const claim = aug?.claims.callSite;
+				if (claim) {
+					span = {
+						startLine: claim.lines.start,
+						endLine: claim.lines.end,
+						contentHash: claim.contentHash,
+					};
+				}
 			}
 
-			// Verify the content hash still matches
-			const repoRoot = resolveRepoRootForPurl(stepPurl);
-			if (!repoRoot) {
-				// Can't verify — repo not resolved, skip
+			if (!span) {
+				// No captured span — the step is unconfirmed (a gap, not a failure).
+				stepsUnconfirmed++;
+				findings.push({
+					kind: "step_span_unconfirmed",
+					severity: "error",
+					trailId: trail.id,
+					step: stepIndex,
+					message: `Trail "${trail.title}" step ${stepIndex + 1}: step span not captured (${step.from} → ${step.to} via ${step.mechanism})`,
+				});
 				continue;
 			}
 
@@ -1572,19 +1615,19 @@ export async function auditSubsystemModel(
 				const content = await fs.readFile(filePath, "utf8");
 				const currentHash = hashContentRange(
 					content,
-					aug.claims.callSite.lines.start,
-					aug.claims.callSite.lines.end,
+					span.startLine,
+					span.endLine,
 				);
-				if (currentHash === aug.claims.callSite.contentHash) {
+				if (currentHash === span.contentHash) {
 					stepsVerified++;
 				} else {
 					stepsStale++;
 					findings.push({
-						kind: "step_stale",
+						kind: "step_span_stale",
 						severity: "info",
 						trailId: trail.id,
 						step: stepIndex,
-						message: `Trail "${trail.title}" step ${stepIndex + 1}: call site changed since verification (lines ${aug.claims.callSite.lines.start}-${aug.claims.callSite.lines.end} in ${step.file})`,
+						message: `Trail "${trail.title}" step ${stepIndex + 1}: step span changed since verification (lines ${span.startLine}-${span.endLine} in ${step.file})`,
 					});
 				}
 			} catch {
@@ -1685,7 +1728,7 @@ export async function auditSubsystemModel(
  * Apply deterministic audit fix(es), then re-audit.
  * - `adopt_graphify_signature` — copy graphify named type bags into declaration
  * - `adopt_graphify_file` — update component.file from Graphify when claimed path missing
- * - `adopt_graphify_declaration_ref` — re-pin declarationRef from Graphify source_location
+ * - `adopt_graphify_declaration_ref` — re-pin the span to Graphify's source_location (content-preserving move)
  */
 export async function applySubsystemModelAuditFix(opts: {
 	graphId: string;
@@ -1757,7 +1800,7 @@ export async function applySubsystemModelAuditFix(opts: {
 				...c,
 				file,
 				// Old pin is for the previous path; clear so next audit re-captures.
-				declarationRef: undefined,
+				declarationSpan: undefined,
 			};
 		});
 
@@ -1777,7 +1820,7 @@ export async function applySubsystemModelAuditFix(opts: {
 	}
 
 	if (opts.fixId === "adopt_graphify_declaration_ref") {
-		const refUpdates = new Map<string, SubsystemDeclarationRef>();
+		const spanUpdates = new Map<string, SubsystemSourceSpan>();
 
 		for (const componentAlias of targetAliases) {
 			const component = graph.components.find((c) => c.alias === componentAlias);
@@ -1792,34 +1835,32 @@ export async function applySubsystemModelAuditFix(opts: {
 				dryRun: true,
 			});
 			const decl = verified.declaration;
-			const repin = decl?.ref;
+			const repin = decl?.repin;
 			const canRepin =
 				decl?.freshness === "stale" &&
 				verified.anchor?.resolution === "exact" &&
-				repin != null &&
-				typeof repin.startLine === "number" &&
-				typeof repin.lineHash === "string";
+				repin != null;
 			if (!canRepin || !repin) {
 				if (opts.componentAlias) {
 					return {
 						ok: false,
 						error:
-							"no Graphify declaration re-pin (need exact symbol match + drifted pin)",
+							"no Graphify declaration re-pin (need exact symbol match + content-preserving move)",
 					};
 				}
 				continue;
 			}
-			refUpdates.set(componentAlias, repin);
+			spanUpdates.set(componentAlias, repin);
 		}
 
-		if (refUpdates.size === 0) {
+		if (spanUpdates.size === 0) {
 			return { ok: false, error: "no adoptable declaration re-pins found" };
 		}
 
 		const components = graph.components.map((c) => {
-			const declarationRef = refUpdates.get(c.alias);
-			if (!declarationRef) return c;
-			return { ...c, declarationRef };
+			const declarationSpan = spanUpdates.get(c.alias);
+			if (!declarationSpan) return c;
+			return { ...c, declarationSpan };
 		});
 
 		const updated = await updateSubsystemModel(opts.graphId, { components });
@@ -1831,7 +1872,7 @@ export async function applySubsystemModelAuditFix(opts: {
 		if (!audited.ok) return { ok: false, error: audited.error };
 		return {
 			ok: true,
-			applied: refUpdates.size,
+			applied: spanUpdates.size,
 			report: audited.report,
 			fingerprint: audited.fingerprint,
 		};

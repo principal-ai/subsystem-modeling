@@ -110,8 +110,8 @@ function constructSubject(proposal: SubsystemModelProposal): string {
 		}
 	}
 	if (c.target === "component") {
-		if (c.field === "declarationRef") {
-			return "The proposed declaration anchor (file + line) is correct for the source under review.";
+		if (c.field === "declarationSpan") {
+			return "The proposed declaration span (start/end lines + content hash) is correct for the source under review.";
 		}
 		return "The proposed component identity or field value is correct given the source under review.";
 	}
