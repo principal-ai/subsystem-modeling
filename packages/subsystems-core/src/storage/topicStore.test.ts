@@ -123,6 +123,39 @@ describe('index rebuild', () => {
     expect(readFileSync(join(topicsDir, '_index.json'), 'utf8')).not.toContain('trailCount');
   });
 
+  test('getTopics({ refresh: true }) rescans and picks up external file changes', async () => {
+    const store = makeStore();
+    await store.createTopic({ id: 'topic-known', title: 'Known' });
+
+    // A topic file written directly, bypassing the store, so the cached
+    // manifest never learns about it.
+    const external = {
+      id: 'topic-external',
+      title: 'External',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    writeFileSync(
+      join(topicsDir, 'topic-external.json'),
+      JSON.stringify(external, null, 2),
+      'utf8',
+    );
+
+    // The cached read trusts the manifest and misses the external file...
+    expect((await store.getTopics()).map((t) => t.id)).not.toContain('topic-external');
+
+    // ...a refreshing read rebuilds from disk and sees it.
+    expect((await store.getTopics({ refresh: true })).map((t) => t.id)).toContain(
+      'topic-external',
+    );
+
+    // A file removed out-of-band drops out of the refreshed manifest too.
+    rmSync(join(topicsDir, 'topic-external.json'));
+    expect((await store.getTopics({ refresh: true })).map((t) => t.id)).not.toContain(
+      'topic-external',
+    );
+  });
+
   test('legacy topic files drop trailIds but preserve other fields', async () => {
     const store = makeStore();
     await store.createTopic({

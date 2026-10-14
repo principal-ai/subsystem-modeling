@@ -161,8 +161,18 @@ export class TopicStore {
 
   // ===== Topic CRUD =====
 
-  async getTopics(): Promise<DraftTopic[]> {
-    const idx = await this.getIndex();
+  /**
+   * Read every topic.
+   *
+   * Pass `{ refresh: true }` to rescan the directory and rebuild the private
+   * `_index.json` manifest before reading, instead of trusting the cached
+   * manifest. Use this on an explicit user refresh: topic files written outside
+   * the store (another process, manual edits) are otherwise invisible, and
+   * entries for deleted files otherwise linger, because the manifest only
+   * rebuilds when it is missing or unparseable.
+   */
+  async getTopics(options: { refresh?: boolean } = {}): Promise<DraftTopic[]> {
+    const idx = options.refresh ? await this.rebuildIndex() : await this.getIndex();
     const topics: DraftTopic[] = [];
     for (const entry of idx.entries) {
       const topic = await this.readTopic(entry.fileName);
@@ -178,9 +188,14 @@ export class TopicStore {
     return this.readTopic(entry.fileName);
   }
 
-  /** Cheap listing straight off the manifest — no per-topic file read. */
-  async list(): Promise<TopicIndexEntry[]> {
-    const idx = await this.getIndex();
+  /**
+   * Cheap listing straight off the manifest — no per-topic file read.
+   *
+   * Pass `{ refresh: true }` to rebuild the manifest from disk first (see
+   * {@link getTopics}).
+   */
+  async list(options: { refresh?: boolean } = {}): Promise<TopicIndexEntry[]> {
+    const idx = options.refresh ? await this.rebuildIndex() : await this.getIndex();
     return idx.entries.slice().sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
   }
 
