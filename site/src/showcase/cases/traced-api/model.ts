@@ -16,11 +16,10 @@ export const components: SubsystemComponent[] = [
     role: 'entry',
     purl: PURL,
     file: 'app/main.py',
-    declarationRef: {
-      file: 'app/main.py',
+    declarationSpan: {
       startLine: 14,
-      lineHash: '3bfb342e89a0430b3fb06e3bf1b715c6',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 14,
+      contentHash: '3bfb342e89a0430b3fb06e3bf1b715c6',
     },
     module: 'app/main.py',
     purpose: 'Process entry — boot tracing, then wire FastAPI routes.',
@@ -34,11 +33,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'setup_tracing',
     purl: PURL,
     file: 'app/telemetry.py',
-    declarationRef: {
-      file: 'app/telemetry.py',
+    declarationSpan: {
       startLine: 17,
-      lineHash: 'cb7bce65b2d13f68986b2872f384c126',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 17,
+      contentHash: 'cb7bce65b2d13f68986b2872f384c126',
     },
     module: 'app/telemetry.py',
     purpose: 'Boot only — installs TracerProvider + OTLP BatchSpanProcessor.',
@@ -52,11 +50,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'provider',
     purl: PURL,
     file: 'app/telemetry.py',
-    declarationRef: {
-      file: 'app/telemetry.py',
+    declarationSpan: {
       startLine: 14,
-      lineHash: 'd4220a49abbda8de97f2e47cec94ff58',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 14,
+      contentHash: 'd4220a49abbda8de97f2e47cec94ff58',
     },
     module: 'app/telemetry.py',
     purpose: 'In-process span/event sink — every start_as_current_span records here.',
@@ -73,11 +70,10 @@ export const components: SubsystemComponent[] = [
     stereotype: 'route',
     purl: PURL,
     file: 'app/routes/orders.py',
-    declarationRef: {
-      file: 'app/routes/orders.py',
+    declarationSpan: {
       startLine: 25,
-      lineHash: 'a1add8dbe3b0b2bea8c7349ae494b814',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 25,
+      contentHash: 'a1add8dbe3b0b2bea8c7349ae494b814',
     },
     module: 'app/routes/orders.py',
     purpose: 'HTTP POST /orders — opens orders.create span + events.',
@@ -94,11 +90,10 @@ export const components: SubsystemComponent[] = [
     stereotype: 'route',
     purl: PURL,
     file: 'app/routes/orders.py',
-    declarationRef: {
-      file: 'app/routes/orders.py',
+    declarationSpan: {
       startLine: 12,
-      lineHash: '63658d02235079c42f5e09e9f5caebc9',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 12,
+      contentHash: '63658d02235079c42f5e09e9f5caebc9',
     },
     module: 'app/routes/orders.py',
     purpose: 'HTTP GET /orders/{id} — opens orders.read span + events.',
@@ -112,11 +107,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'create_order',
     purl: PURL,
     file: 'app/services/order_service.py',
-    declarationRef: {
-      file: 'app/services/order_service.py',
+    declarationSpan: {
       startLine: 18,
-      lineHash: '31ecd31d2cd6c713b611208e00780908',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 18,
+      contentHash: '31ecd31d2cd6c713b611208e00780908',
     },
     module: 'app/services/order_service.py',
     purpose: 'Create path — child span, payment, persist.',
@@ -130,11 +124,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'get_order',
     purl: PURL,
     file: 'app/services/order_service.py',
-    declarationRef: {
-      file: 'app/services/order_service.py',
+    declarationSpan: {
       startLine: 10,
-      lineHash: '70133960002323402f15af6cc525a636',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 10,
+      contentHash: '70133960002323402f15af6cc525a636',
     },
     module: 'app/services/order_service.py',
     purpose: 'Read path — child span around the DB load.',
@@ -148,11 +141,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'orders_repo',
     purl: PURL,
     file: 'app/db.py',
-    declarationRef: {
-      file: 'app/db.py',
+    declarationSpan: {
       startLine: 10,
-      lineHash: 'b71cb3de047c15b5bb42b3a8af62867f',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 10,
+      contentHash: 'b71cb3de047c15b5bb42b3a8af62867f',
     },
     module: 'app/db.py',
     purpose: 'DB access — query spans + db.query.* events.',
@@ -166,11 +158,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'capture_payment',
     purl: PURL,
     file: 'app/clients/payments.py',
-    declarationRef: {
-      file: 'app/clients/payments.py',
+    declarationSpan: {
       startLine: 11,
-      lineHash: 'b50ce984321c3b1c0c287edcbef3a68b',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 11,
+      contentHash: 'b50ce984321c3b1c0c287edcbef3a68b',
     },
     module: 'app/clients/payments.py',
     purpose: 'Outbound call — span, events, W3C inject into payments-api.',
@@ -187,11 +178,10 @@ export const components: SubsystemComponent[] = [
     stereotype: 'route',
     purl: PAYMENTS_PURL,
     file: 'payments/handle_capture.py',
-    declarationRef: {
-      file: 'payments/handle_capture.py',
+    declarationSpan: {
       startLine: 11,
-      lineHash: '962380f028cffcf5a5c9a014887d725a',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 11,
+      contentHash: '962380f028cffcf5a5c9a014887d725a',
     },
     module: 'payments/handle_capture.py',
     purpose: 'Downstream capture endpoint — continues the W3C trace.',
@@ -229,7 +219,11 @@ export const trails = [
         "to": "tracer-provider",
         "mechanism": "produces",
         "file": "app/routes/orders.py",
-        "line": 13,
+        "span": {
+          "startLine": 13,
+          "endLine": 13,
+          "contentHash": "809e529d3814b76cbc4be2e5be9819be"
+        },
         "purl": PURL,
         "symbol": "start_as_current_span(\"orders.read\")",
         "annotation": "Runtime: open the route span (not setup)."
@@ -239,7 +233,11 @@ export const trails = [
         "to": "tracer-provider",
         "mechanism": "produces",
         "file": "app/routes/orders.py",
-        "line": 15,
+        "span": {
+          "startLine": 15,
+          "endLine": 15,
+          "contentHash": "efb2e79ee1f7dfb247e0a553a4c67661"
+        },
         "purl": PURL,
         "symbol": "add_event(\"orders.read.started\")",
         "annotation": "Span event recorded into the TracerProvider."
@@ -249,7 +247,11 @@ export const trails = [
         "to": "get-order",
         "mechanism": "calls",
         "file": "app/routes/orders.py",
-        "line": 16,
+        "span": {
+          "startLine": 16,
+          "endLine": 16,
+          "contentHash": "e96a76914cfdc926a5a1046b251d2141"
+        },
         "purl": PURL,
         "symbol": "get_order",
         "annotation": "Business call under the active span context."
@@ -259,7 +261,11 @@ export const trails = [
         "to": "tracer-provider",
         "mechanism": "produces",
         "file": "app/services/order_service.py",
-        "line": 11,
+        "span": {
+          "startLine": 11,
+          "endLine": 11,
+          "contentHash": "93cfa8a5b963cc46c3dc9fbaba89490a"
+        },
         "purl": PURL,
         "symbol": "start_as_current_span(\"OrderService.get\")",
         "annotation": "Child span — still the same trace."
@@ -269,7 +275,11 @@ export const trails = [
         "to": "orders-repo",
         "mechanism": "calls",
         "file": "app/services/order_service.py",
-        "line": 13,
+        "span": {
+          "startLine": 13,
+          "endLine": 13,
+          "contentHash": "e8ad73edc47e4651a643ab7584d5dc6d"
+        },
         "purl": PURL,
         "symbol": "find_by_id",
         "annotation": "Service delegates to the repo."
@@ -279,7 +289,11 @@ export const trails = [
         "to": "tracer-provider",
         "mechanism": "produces",
         "file": "app/db.py",
-        "line": 13,
+        "span": {
+          "startLine": 13,
+          "endLine": 13,
+          "contentHash": "5bc86f6d8f056752381080a341522bc5"
+        },
         "purl": PURL,
         "symbol": "start_as_current_span(\"db.orders.find\")",
         "annotation": "DB span + db.query.execute / db.query.done events."
@@ -289,7 +303,11 @@ export const trails = [
         "to": "Postgres",
         "mechanism": "reads",
         "file": "app/db.py",
-        "line": 17,
+        "span": {
+          "startLine": 17,
+          "endLine": 17,
+          "contentHash": "558fb0b7e0b0833ef06ef20416243adb"
+        },
         "purl": PURL,
         "symbol": "_ORDERS.get",
         "annotation": "Actual Postgres read (showcase stand-in)."
@@ -299,7 +317,11 @@ export const trails = [
         "to": "OTLPCollector",
         "mechanism": "produces",
         "file": "app/telemetry.py",
-        "line": 22,
+        "span": {
+          "startLine": 22,
+          "endLine": 22,
+          "contentHash": "45f0df103a2a4fde971d809ba3126f6d"
+        },
         "purl": PURL,
         "symbol": "BatchSpanProcessor",
         "annotation": "When spans end, the processor exports them to the OTLP collector."
@@ -315,7 +337,11 @@ export const trails = [
         "to": "tracer-provider",
         "mechanism": "produces",
         "file": "app/routes/orders.py",
-        "line": 26,
+        "span": {
+          "startLine": 26,
+          "endLine": 26,
+          "contentHash": "ffbdf3ca36bbcafe377b12ac4a75a618"
+        },
         "purl": PURL,
         "symbol": "start_as_current_span(\"orders.create\")",
         "annotation": "Runtime: route span + orders.create.started event."
@@ -325,7 +351,11 @@ export const trails = [
         "to": "tracer-provider",
         "mechanism": "produces",
         "file": "app/routes/orders.py",
-        "line": 28,
+        "span": {
+          "startLine": 28,
+          "endLine": 28,
+          "contentHash": "f8b26c9049fac01e277cb0b249fbb5e4"
+        },
         "purl": PURL,
         "symbol": "add_event(\"orders.create.started\")",
         "annotation": "Event on the parent span before work begins."
@@ -335,7 +365,11 @@ export const trails = [
         "to": "create-order",
         "mechanism": "calls",
         "file": "app/routes/orders.py",
-        "line": 29,
+        "span": {
+          "startLine": 29,
+          "endLine": 29,
+          "contentHash": "f86a2fd74a6e3a5138d3a06720232339"
+        },
         "purl": PURL,
         "symbol": "create_order",
         "annotation": "Into the service under the active context."
@@ -345,7 +379,11 @@ export const trails = [
         "to": "tracer-provider",
         "mechanism": "produces",
         "file": "app/services/order_service.py",
-        "line": 19,
+        "span": {
+          "startLine": 19,
+          "endLine": 19,
+          "contentHash": "2a55909faca33d3f3bf925891b53d8bf"
+        },
         "purl": PURL,
         "symbol": "start_as_current_span(\"OrderService.create\")",
         "annotation": "Child span for the write path."
@@ -355,7 +393,11 @@ export const trails = [
         "to": "capture-payment",
         "mechanism": "calls",
         "file": "app/services/order_service.py",
-        "line": 21,
+        "span": {
+          "startLine": 21,
+          "endLine": 21,
+          "contentHash": "a80c7115481af0a30ef30f8ae326d681"
+        },
         "purl": PURL,
         "symbol": "capture_payment",
         "annotation": "Payment before persist."
@@ -365,7 +407,11 @@ export const trails = [
         "to": "tracer-provider",
         "mechanism": "produces",
         "file": "app/clients/payments.py",
-        "line": 12,
+        "span": {
+          "startLine": 12,
+          "endLine": 12,
+          "contentHash": "fc1554e22d25ea7e6b6967f683dc2c24"
+        },
         "purl": PURL,
         "symbol": "start_as_current_span(\"payments.capture\")",
         "annotation": "Outbound span + payments.capture.requested event."
@@ -375,7 +421,11 @@ export const trails = [
         "to": "handle-capture",
         "mechanism": "calls",
         "file": "app/clients/payments.py",
-        "line": 16,
+        "span": {
+          "startLine": 16,
+          "endLine": 16,
+          "contentHash": "62d3ac43ddcd7e34f24cba536a170e22"
+        },
         "purl": PURL,
         "symbol": "inject",
         "annotation": "Cross into payments-api — W3C traceparent continues the trace."
@@ -385,7 +435,11 @@ export const trails = [
         "to": "OTLPCollector",
         "mechanism": "produces",
         "file": "payments/handle_capture.py",
-        "line": 14,
+        "span": {
+          "startLine": 14,
+          "endLine": 14,
+          "contentHash": "6a66317929aefd4b8f3099f53b638b6d"
+        },
         "purl": PURL,
         "symbol": "start_as_current_span(\"payments.handle\")",
         "annotation": "Downstream span in the payments-api process."
@@ -395,7 +449,11 @@ export const trails = [
         "to": "tracer-provider",
         "mechanism": "produces",
         "file": "app/services/order_service.py",
-        "line": 23,
+        "span": {
+          "startLine": 23,
+          "endLine": 23,
+          "contentHash": "d4323a4ac6d25d260528c3504349911a"
+        },
         "purl": PURL,
         "symbol": "add_event(\"service.payment_captured\")",
         "annotation": "Event on the service span after capture returns."
@@ -405,7 +463,11 @@ export const trails = [
         "to": "orders-repo",
         "mechanism": "calls",
         "file": "app/services/order_service.py",
-        "line": 24,
+        "span": {
+          "startLine": 24,
+          "endLine": 24,
+          "contentHash": "742dc69979a3ce9d0e487cc1c4044a45"
+        },
         "purl": PURL,
         "symbol": "insert",
         "annotation": "Persist with payment id."
@@ -415,7 +477,11 @@ export const trails = [
         "to": "tracer-provider",
         "mechanism": "produces",
         "file": "app/db.py",
-        "line": 23,
+        "span": {
+          "startLine": 23,
+          "endLine": 23,
+          "contentHash": "8ffbef410986d0b82ebca39d200e8094"
+        },
         "purl": PURL,
         "symbol": "start_as_current_span(\"db.orders.insert\")",
         "annotation": "DB write span + query events into TracerProvider."
@@ -425,7 +491,11 @@ export const trails = [
         "to": "Postgres",
         "mechanism": "writes",
         "file": "app/db.py",
-        "line": 29,
+        "span": {
+          "startLine": 29,
+          "endLine": 29,
+          "contentHash": "afd296c288dafdb2654a15498f8b18e7"
+        },
         "purl": PURL,
         "symbol": "_ORDERS[order_id]",
         "annotation": "Actual write (showcase stand-in)."
@@ -435,7 +505,11 @@ export const trails = [
         "to": "OTLPCollector",
         "mechanism": "produces",
         "file": "app/telemetry.py",
-        "line": 22,
+        "span": {
+          "startLine": 22,
+          "endLine": 22,
+          "contentHash": "45f0df103a2a4fde971d809ba3126f6d"
+        },
         "purl": PURL,
         "symbol": "BatchSpanProcessor",
         "annotation": "Finished span tree exports to OTLP."
@@ -451,7 +525,11 @@ export const trails = [
         "to": "setup-tracing",
         "mechanism": "calls",
         "file": "app/main.py",
-        "line": 15,
+        "span": {
+          "startLine": 15,
+          "endLine": 15,
+          "contentHash": "c1dc67b3fa0d1ba128153219c9ec754f"
+        },
         "purl": PURL,
         "symbol": "setup_tracing",
         "annotation": "Once at process start — not per request."
@@ -461,7 +539,11 @@ export const trails = [
         "to": "tracer-provider",
         "mechanism": "registers-into",
         "file": "app/telemetry.py",
-        "line": 20,
+        "span": {
+          "startLine": 20,
+          "endLine": 20,
+          "contentHash": "8d84888db94a715141687a9be71e209d"
+        },
         "purl": PURL,
         "symbol": "TracerProvider",
         "annotation": "Install the in-process sink tracers will produce into."
@@ -471,7 +553,11 @@ export const trails = [
         "to": "OTLPCollector",
         "mechanism": "produces",
         "file": "app/telemetry.py",
-        "line": 21,
+        "span": {
+          "startLine": 21,
+          "endLine": 21,
+          "contentHash": "726e550b7a40518723dc4272c6dddea1"
+        },
         "purl": PURL,
         "symbol": "OTLPSpanExporter",
         "annotation": "Exporter attached; request trails are what actually fill it."

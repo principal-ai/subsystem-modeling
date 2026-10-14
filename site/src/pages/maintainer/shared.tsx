@@ -251,7 +251,7 @@ export const PACKAGE_LAYER_CASES: AuditCase[] = [
     outcome: 'pass',
     remediation: 'none',
     snippet: `{
-  "id": "dispatch",
+  "alias": "dispatch",
   "construct": "function",
   "symbol": "dispatch",
   "file": "src/host/main.ts",
@@ -451,7 +451,7 @@ export const MODULE_MEMBERSHIP_CASES: AuditCase[] = [
     outcome: 'pass',
     remediation: 'none',
     snippet: `{
-  "id": "parse",
+  "alias": "parse",
   "construct": "function",
   "symbol": "parseTranscript",
   "file": "src/session/transcript.ts",
@@ -512,8 +512,8 @@ export const PROCESS_BOUNDARY_CASES: AuditCase[] = [
       'Members of the same module claim different process values. Unconfirmed (boundary_process_nest_disagree). runtime-topology-verifier aligns process (or clears it).',
     outcome: 'gap',
     remediation: 'runtime-topology-verifier',
-    snippet: `{ "id": "boot",  "module": "src/host/main.ts", "process": "host" }
-{ "id": "create", "module": "src/host/main.ts", "process": "renderer" }
+    snippet: `{ "alias": "boot",  "module": "src/host/main.ts", "process": "host" }
+{ "alias": "create", "module": "src/host/main.ts", "process": "renderer" }
 // ← same module, two processes`,
   },
   {
@@ -522,7 +522,7 @@ export const PROCESS_BOUNDARY_CASES: AuditCase[] = [
       'A runtime component states its process. Verified (process_claim) — the lane goes green without a module claim, which is what separates "process stated and nothing wrong" from "no process information at all" (grey).',
     outcome: 'pass',
     remediation: 'none',
-    snippet: `{ "id": "boot", "file": "src/host/main.ts", "process": "host" }
+    snippet: `{ "alias": "boot", "file": "src/host/main.ts", "process": "host" }
 // → dynamic topology verified`,
   },
   {
@@ -531,7 +531,7 @@ export const PROCESS_BOUNDARY_CASES: AuditCase[] = [
       'A function / class / custom entity states no process, and an accepted C4 container exists to assign one from. Unconfirmed (boundary_process_missing). runtime-topology-verifier proposes the process — but only to a container-verified key. Types (interface, type_alias), externals, stores and proposed components are exempt.',
     outcome: 'gap',
     remediation: 'runtime-topology-verifier',
-    snippet: `{ "id": "boot", "file": "src/host/main.ts" }
+    snippet: `{ "alias": "boot", "file": "src/host/main.ts" }
 // ← runtime component, no deployment unit stated`,
   },
   {
@@ -540,7 +540,7 @@ export const PROCESS_BOUNDARY_CASES: AuditCase[] = [
       'A runtime component states no process and no accepted container exists to assign one from — the container-first rule. The missing finding is replaced by boundary_process_unbacked, and container-verifier proposes the container before any component claim is coined.',
     outcome: 'gap',
     remediation: 'container-verifier',
-    snippet: `{ "id": "boot", "file": "src/host/main.ts" }
+    snippet: `{ "alias": "boot", "file": "src/host/main.ts" }
 // ← no process, and no accepted container for this repo`,
   },
   {
@@ -734,7 +734,7 @@ export const TRAIL_STEP_CASES: AuditCase[] = [
   {
     example: 'call site not verified',
     meaning:
-      'No accepted callSite augmentation exists for this step (step_unconfirmed). trail-verifier reads the caller file, locates the call to the target symbol, and proposes a callSite augmentation.',
+      'No accepted callSite augmentation exists for this step (step_span_unconfirmed). trail-verifier reads the caller file, locates the call to the target symbol, and proposes a callSite augmentation.',
     outcome: 'gap',
     remediation: 'trail-verifier',
     snippet: `{
@@ -747,7 +747,7 @@ export const TRAIL_STEP_CASES: AuditCase[] = [
   {
     example: 'call site changed',
     meaning:
-      'An accepted augmentation exists, but the pinned span’s content changed (step_stale). trail-verifier re-reads the current lines and proposes a fresh span; the new augmentation replaces the stale one on accept.',
+      'An accepted augmentation exists, but the pinned span’s content changed (step_span_stale). trail-verifier re-reads the current lines and proposes a fresh span; the new augmentation replaces the stale one on accept.',
     outcome: 'gap',
     remediation: 'trail-verifier',
   },

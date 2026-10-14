@@ -58,12 +58,13 @@ export function makeShowcaseRenderers(caseDir: string): ShowcaseRenderers {
       const startLine = opts?.startLine;
       const fileName = file.split('/').pop() ?? file;
       if (startLine != null && !opts?.fullFile) {
+        const endLine = opts?.endLine ?? startLine;
         return (
           <PierreSnippetView
             filePath={file}
             fileName={fileName}
             startLine={startLine}
-            endLine={startLine}
+            endLine={endLine}
             focusLine={startLine}
             contextLines={12}
             readFile={readFile}

@@ -17,11 +17,10 @@ export const components: SubsystemComponent[] = [
     stereotype: 'model',
     purl: PURL,
     file: 'models/staging/stg_orders.sql',
-    declarationRef: {
-      file: 'models/staging/stg_orders.sql',
+    declarationSpan: {
       startLine: 2,
-      lineHash: 'b1a36d25d9633ed2ac04939fcb614ccb',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 2,
+      contentHash: 'b1a36d25d9633ed2ac04939fcb614ccb',
     },
     module: 'models/staging/stg_orders.sql',
     purpose: 'Staging model — clean raw orders.',
@@ -37,11 +36,10 @@ export const components: SubsystemComponent[] = [
     stereotype: 'model',
     purl: PURL,
     file: 'models/marts/fct_daily_orders.sql',
-    declarationRef: {
-      file: 'models/marts/fct_daily_orders.sql',
+    declarationSpan: {
       startLine: 2,
-      lineHash: 'b1a36d25d9633ed2ac04939fcb614ccb',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 2,
+      contentHash: 'b1a36d25d9633ed2ac04939fcb614ccb',
     },
     module: 'models/marts/fct_daily_orders.sql',
     purpose: 'Mart — daily order facts for consumers.',
@@ -57,11 +55,10 @@ export const components: SubsystemComponent[] = [
     stereotype: 'tests',
     purl: PURL,
     file: 'models/schema.yml',
-    declarationRef: {
-      file: 'models/schema.yml',
+    declarationSpan: {
       startLine: 3,
-      lineHash: '72aa5eaddc0863cbc803bc82043f69ea',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 3,
+      contentHash: '72aa5eaddc0863cbc803bc82043f69ea',
     },
     module: 'models/schema.yml',
     purpose: 'Unique / not_null tests on staging and marts.',
@@ -99,7 +96,11 @@ export const trails = [
         "to": "RawOrders",
         "mechanism": "reads",
         "file": "models/staging/stg_orders.sql",
-        "line": 8,
+        "span": {
+          "startLine": 8,
+          "endLine": 8,
+          "contentHash": "24d8624647b0fa7b49f6fc498eb2705c"
+        },
         "purl": PURL,
         "symbol": "source('raw','orders')",
         "annotation": "Staging reads the raw source."
@@ -109,7 +110,11 @@ export const trails = [
         "to": "Warehouse",
         "mechanism": "writes",
         "file": "models/staging/stg_orders.sql",
-        "line": 2,
+        "span": {
+          "startLine": 2,
+          "endLine": 2,
+          "contentHash": "b1a36d25d9633ed2ac04939fcb614ccb"
+        },
         "purl": PURL,
         "symbol": "select",
         "annotation": "Materialize stg_orders in the warehouse."
@@ -119,7 +124,11 @@ export const trails = [
         "to": "stg-orders",
         "mechanism": "reads",
         "file": "models/marts/fct_daily_orders.sql",
-        "line": 6,
+        "span": {
+          "startLine": 6,
+          "endLine": 6,
+          "contentHash": "cf1cdbd1cf9ce6b2460f0f5e8243818a"
+        },
         "purl": PURL,
         "symbol": "ref('stg_orders')",
         "annotation": "Mart depends on staging via ref()."
@@ -129,7 +138,11 @@ export const trails = [
         "to": "Warehouse",
         "mechanism": "writes",
         "file": "models/marts/fct_daily_orders.sql",
-        "line": 2,
+        "span": {
+          "startLine": 2,
+          "endLine": 2,
+          "contentHash": "b1a36d25d9633ed2ac04939fcb614ccb"
+        },
         "purl": PURL,
         "symbol": "select",
         "annotation": "Materialize daily facts."

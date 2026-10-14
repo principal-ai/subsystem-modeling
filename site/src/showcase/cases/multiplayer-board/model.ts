@@ -17,11 +17,10 @@ export const components: SubsystemComponent[] = [
     stereotype: 'component',
     purl: PURL,
     file: 'app/board/[room]/page.tsx',
-    declarationRef: {
-      file: 'app/board/[room]/page.tsx',
+    declarationSpan: {
       startLine: 11,
-      lineHash: 'd7307216d988167ac9fc80e887aecdcf',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 11,
+      contentHash: 'd7307216d988167ac9fc80e887aecdcf',
     },
     purpose: 'Excalidraw-style room — draw locally, see peers live.',
     layer: 1,
@@ -36,11 +35,10 @@ export const components: SubsystemComponent[] = [
     stereotype: 'hook',
     purl: PURL,
     file: 'lib/usePresence.ts',
-    declarationRef: {
-      file: 'lib/usePresence.ts',
+    declarationSpan: {
       startLine: 10,
-      lineHash: '3abe64963de9b555552ca3cf6498c6a1',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 10,
+      contentHash: '3abe64963de9b555552ca3cf6498c6a1',
     },
     purpose: 'Publish local cursor; subscribe to peer presence.',
     layer: 2,
@@ -53,11 +51,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'listShapes',
     purl: PURL,
     file: 'convex/shapes.ts',
-    declarationRef: {
-      file: 'convex/shapes.ts',
+    declarationSpan: {
       startLine: 5,
-      lineHash: 'a5a0db2b4a59ec5b7e757e24d682f8a6',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 5,
+      contentHash: 'a5a0db2b4a59ec5b7e757e24d682f8a6',
     },
     purpose: 'Reactive Convex query — peers re-render when shapes change.',
     layer: 2,
@@ -70,11 +67,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'upsertShape',
     purl: PURL,
     file: 'convex/shapes.ts',
-    declarationRef: {
-      file: 'convex/shapes.ts',
+    declarationSpan: {
       startLine: 16,
-      lineHash: '72061a55e1e8b5db98dfc8cfc1f5d106',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 16,
+      contentHash: '72061a55e1e8b5db98dfc8cfc1f5d106',
     },
     purpose: 'Convex mutation — write path for a local stroke.',
     layer: 2,
@@ -87,11 +83,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'listPresence',
     purl: PURL,
     file: 'convex/presence.ts',
-    declarationRef: {
-      file: 'convex/presence.ts',
+    declarationSpan: {
       startLine: 5,
-      lineHash: '34c92ffb7f23ecd5c1215eae639ca07f',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 5,
+      contentHash: '34c92ffb7f23ecd5c1215eae639ca07f',
     },
     purpose: 'Reactive query of who is in the room and where.',
     layer: 2,
@@ -104,11 +99,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'updatePresence',
     purl: PURL,
     file: 'convex/presence.ts',
-    declarationRef: {
-      file: 'convex/presence.ts',
+    declarationSpan: {
       startLine: 15,
-      lineHash: '7c8e294aada54c303ab6921613de7df1',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 15,
+      contentHash: '7c8e294aada54c303ab6921613de7df1',
     },
     purpose: 'Convex mutation — publish cursor position.',
     layer: 2,
@@ -135,7 +129,11 @@ export const trails = [
         "to": "upsert-shape",
         "mechanism": "calls",
         "file": "app/board/[room]/page.tsx",
-        "line": 17,
+        "span": {
+          "startLine": 17,
+          "endLine": 17,
+          "contentHash": "63081610280439935202205dbee38b3e"
+        },
         "purl": PURL,
         "symbol": "upsertShape",
         "annotation": "Local pointer-up becomes a Convex mutation."
@@ -145,7 +143,11 @@ export const trails = [
         "to": "Convex",
         "mechanism": "writes",
         "file": "convex/shapes.ts",
-        "line": 32,
+        "span": {
+          "startLine": 32,
+          "endLine": 32,
+          "contentHash": "603cca8dfa1be863ee7e7df44ef83da3"
+        },
         "purl": PURL,
         "symbol": "insert",
         "annotation": "Shape lands in Convex — the shared board state."
@@ -161,7 +163,11 @@ export const trails = [
         "to": "list-shapes",
         "mechanism": "calls",
         "file": "app/board/[room]/page.tsx",
-        "line": 12,
+        "span": {
+          "startLine": 12,
+          "endLine": 12,
+          "contentHash": "3be5cf68172b8573a9d0dd597b66409c"
+        },
         "purl": PURL,
         "symbol": "useQuery(listShapes)",
         "annotation": "Same query subscription every client holds open."
@@ -171,7 +177,11 @@ export const trails = [
         "to": "Convex",
         "mechanism": "reads",
         "file": "convex/shapes.ts",
-        "line": 8,
+        "span": {
+          "startLine": 8,
+          "endLine": 8,
+          "contentHash": "8798ba99ce85a0dae1923f751f70aac0"
+        },
         "purl": PURL,
         "symbol": "ctx.db.query",
         "annotation": "Convex pushes an update; React re-renders the canvas list."
@@ -187,7 +197,11 @@ export const trails = [
         "to": "use-presence",
         "mechanism": "calls",
         "file": "app/board/[room]/page.tsx",
-        "line": 14,
+        "span": {
+          "startLine": 14,
+          "endLine": 14,
+          "contentHash": "73c2d5b69cd222a9bae67fb63a929bea"
+        },
         "purl": PURL,
         "symbol": "usePresence",
         "annotation": "Board mounts the presence hook alongside shapes."
@@ -197,7 +211,11 @@ export const trails = [
         "to": "update-presence",
         "mechanism": "calls",
         "file": "lib/usePresence.ts",
-        "line": 16,
+        "span": {
+          "startLine": 16,
+          "endLine": 16,
+          "contentHash": "23827190cdfb4d2da84e5e64ff5441d4"
+        },
         "purl": PURL,
         "symbol": "updatePresence",
         "annotation": "Pointer moves publish local cursor position."
@@ -207,7 +225,11 @@ export const trails = [
         "to": "Convex",
         "mechanism": "writes",
         "file": "convex/presence.ts",
-        "line": 30,
+        "span": {
+          "startLine": 30,
+          "endLine": 30,
+          "contentHash": "9a1dad23a34229a635efda2ce02f3064"
+        },
         "purl": PURL,
         "symbol": "patch",
         "annotation": "Presence row updates in Convex for peers to read."
@@ -217,7 +239,11 @@ export const trails = [
         "to": "list-presence",
         "mechanism": "calls",
         "file": "lib/usePresence.ts",
-        "line": 11,
+        "span": {
+          "startLine": 11,
+          "endLine": 11,
+          "contentHash": "ee8777a0069310f9cfaeb03ddcf6edfd"
+        },
         "purl": PURL,
         "symbol": "useQuery(listPresence)",
         "annotation": "Peers arrive through the reactive presence query."

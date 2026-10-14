@@ -17,11 +17,10 @@ export const components: SubsystemComponent[] = [
     stereotype: 'component',
     purl: PURL,
     file: 'app/book/page.tsx',
-    declarationRef: {
-      file: 'app/book/page.tsx',
+    declarationSpan: {
       startLine: 11,
-      lineHash: '4c7d47276514c3bac1f63505c8be4c50',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 11,
+      contentHash: '4c7d47276514c3bac1f63505c8be4c50',
     },
     module: 'app/book/page.tsx',
     purpose: 'Browser UI — calls server actions only; never touches the DB.',
@@ -41,11 +40,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'captureEvent',
     purl: PURL,
     file: 'lib/captureEvent.ts',
-    declarationRef: {
-      file: 'lib/captureEvent.ts',
+    declarationSpan: {
       startLine: 7,
-      lineHash: 'e7541ce8084780a92eb1b388df968737',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 7,
+      contentHash: 'e7541ce8084780a92eb1b388df968737',
     },
     module: 'lib/captureEvent.ts',
     purpose: 'Client-side PostHog wrapper for product moments.',
@@ -71,11 +69,10 @@ export const components: SubsystemComponent[] = [
     stereotype: 'server-action',
     purl: PURL,
     file: 'app/book/actions.ts',
-    declarationRef: {
-      file: 'app/book/actions.ts',
+    declarationSpan: {
       startLine: 17,
-      lineHash: '83c2a721935e6f8d6c8cfa583fb41f9d',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 17,
+      contentHash: '83c2a721935e6f8d6c8cfa583fb41f9d',
     },
     module: 'app/book/actions.ts',
     purpose: 'Server action — wire boundary for confirming a booking.',
@@ -100,11 +97,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'createBooking',
     purl: PURL,
     file: 'lib/createBooking.ts',
-    declarationRef: {
-      file: 'lib/createBooking.ts',
+    declarationSpan: {
       startLine: 12,
-      lineHash: '06bab10f57a6ff1ca04f7d1dd2c9d839',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 12,
+      contentHash: '06bab10f57a6ff1ca04f7d1dd2c9d839',
     },
     module: 'lib/createBooking.ts',
     purpose: 'Server lib — persist a reservation.',
@@ -158,7 +154,11 @@ export const trails = [
         "to": "book-slot",
         "mechanism": "calls",
         "file": "app/book/page.tsx",
-        "line": 24,
+        "span": {
+          "startLine": 24,
+          "endLine": 24,
+          "contentHash": "e21ce5bef1fa5207c7fac042c25b8708"
+        },
         "purl": PURL,
         "symbol": "bookSlot",
         "annotation": "Confirm — client → server action wire boundary."
@@ -168,7 +168,11 @@ export const trails = [
         "to": "create-booking",
         "mechanism": "calls",
         "file": "app/book/actions.ts",
-        "line": 22,
+        "span": {
+          "startLine": 22,
+          "endLine": 22,
+          "contentHash": "e424e69c3a9ad105d21541e075235683"
+        },
         "purl": PURL,
         "symbol": "createBooking",
         "annotation": "Server action delegates to the booking lib."
@@ -178,7 +182,11 @@ export const trails = [
         "to": "Database",
         "mechanism": "writes",
         "file": "lib/createBooking.ts",
-        "line": 13,
+        "span": {
+          "startLine": 13,
+          "endLine": 13,
+          "contentHash": "14c48df2e2e6fcde4c2711e7c49cfd04"
+        },
         "purl": PURL,
         "symbol": "insert",
         "annotation": "Persist on the server — source of truth."
@@ -188,7 +196,11 @@ export const trails = [
         "to": "capture-event",
         "mechanism": "calls",
         "file": "app/book/page.tsx",
-        "line": 26,
+        "span": {
+          "startLine": 26,
+          "endLine": 26,
+          "contentHash": "c7a7ac2115fcb5447bf658c42ecf7ca9"
+        },
         "purl": PURL,
         "symbol": "captureEvent('booking_created')",
         "annotation": "Client records the product moment after success."
@@ -198,7 +210,11 @@ export const trails = [
         "to": "PostHog",
         "mechanism": "calls",
         "file": "lib/captureEvent.ts",
-        "line": 7,
+        "span": {
+          "startLine": 7,
+          "endLine": 7,
+          "contentHash": "e7541ce8084780a92eb1b388df968737"
+        },
         "purl": PURL,
         "symbol": "captureEvent",
         "annotation": "PostHog from the client — not the source of truth."

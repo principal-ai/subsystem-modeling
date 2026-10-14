@@ -17,11 +17,10 @@ export const components: SubsystemComponent[] = [
     stereotype: 'module',
     purl: PURL,
     file: 'main.tf',
-    declarationRef: {
-      file: 'main.tf',
+    declarationSpan: {
       startLine: 2,
-      lineHash: '406fd4d497a10af5b50089ce0ca0cabe',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 2,
+      contentHash: '406fd4d497a10af5b50089ce0ca0cabe',
     },
     module: 'main.tf',
     purpose: 'Root module — wires the reusable static_site module.',
@@ -37,11 +36,10 @@ export const components: SubsystemComponent[] = [
     stereotype: 'module',
     purl: PURL,
     file: 'modules/static_site/main.tf',
-    declarationRef: {
-      file: 'modules/static_site/main.tf',
+    declarationSpan: {
       startLine: 1,
-      lineHash: 'f576110648832b0386de6be9a38f2844',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 1,
+      contentHash: 'f576110648832b0386de6be9a38f2844',
     },
     module: 'modules/static_site/main.tf',
     purpose: 'Child module — bucket + website config.',
@@ -55,11 +53,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'provider.aws',
     purl: PURL,
     file: 'providers.tf',
-    declarationRef: {
-      file: 'providers.tf',
+    declarationSpan: {
       startLine: 10,
-      lineHash: 'b191e0aeb258e69831e4e7f69f3e30ce',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 10,
+      contentHash: 'b191e0aeb258e69831e4e7f69f3e30ce',
     },
     module: 'providers.tf',
     purpose: 'AWS provider configuration.',
@@ -87,7 +84,11 @@ export const trails = [
         "to": "static-site",
         "mechanism": "calls",
         "file": "main.tf",
-        "line": 2,
+        "span": {
+          "startLine": 2,
+          "endLine": 2,
+          "contentHash": "406fd4d497a10af5b50089ce0ca0cabe"
+        },
         "purl": PURL,
         "symbol": "module \"site\"",
         "annotation": "Root invokes the child module."
@@ -97,7 +98,11 @@ export const trails = [
         "to": "AWS",
         "mechanism": "writes",
         "file": "modules/static_site/main.tf",
-        "line": 1,
+        "span": {
+          "startLine": 1,
+          "endLine": 1,
+          "contentHash": "f576110648832b0386de6be9a38f2844"
+        },
         "purl": PURL,
         "symbol": "aws_s3_bucket",
         "annotation": "Module declares the bucket resource."
@@ -107,7 +112,11 @@ export const trails = [
         "to": "AWS",
         "mechanism": "writes",
         "file": "modules/static_site/main.tf",
-        "line": 6,
+        "span": {
+          "startLine": 6,
+          "endLine": 6,
+          "contentHash": "db3a4e0824cdded30a6518cbf08f9a64"
+        },
         "purl": PURL,
         "symbol": "aws_s3_bucket_website_configuration",
         "annotation": "Website hosting config on the same bucket."
@@ -117,7 +126,11 @@ export const trails = [
         "to": "AWS",
         "mechanism": "calls",
         "file": "providers.tf",
-        "line": 10,
+        "span": {
+          "startLine": 10,
+          "endLine": 10,
+          "contentHash": "b191e0aeb258e69831e4e7f69f3e30ce"
+        },
         "purl": PURL,
         "symbol": "provider \"aws\"",
         "annotation": "Provider authenticates calls to AWS."

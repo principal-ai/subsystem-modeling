@@ -18,11 +18,10 @@ export const components: SubsystemComponent[] = [
     stereotype: 'activity',
     purl: PURL,
     file: `${JAVA}/MainActivity.java`,
-    declarationRef: {
-      file: 'app/src/main/java/com/example/notes/MainActivity.java',
+    declarationSpan: {
       startLine: 13,
-      lineHash: 'f6d53f156824e685a26239a8d3720667',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 13,
+      contentHash: 'f6d53f156824e685a26239a8d3720667',
     },
     purpose: 'UI entry — wires views to the ViewModel; never touches Room.',
     layer: 1,
@@ -37,11 +36,10 @@ export const components: SubsystemComponent[] = [
     stereotype: 'viewmodel',
     purl: PURL,
     file: `${JAVA}/NotesViewModel.java`,
-    declarationRef: {
-      file: 'app/src/main/java/com/example/notes/NotesViewModel.java',
+    declarationSpan: {
       startLine: 9,
-      lineHash: 'b727d5506f33862275a36a5ae4b8c809',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 9,
+      contentHash: 'b727d5506f33862275a36a5ae4b8c809',
     },
     purpose: 'Survives rotation — maps UI intents to repository calls.',
     layer: 2,
@@ -54,11 +52,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'NotesRepository',
     purl: PURL,
     file: `${JAVA}/NotesRepository.java`,
-    declarationRef: {
-      file: 'app/src/main/java/com/example/notes/NotesRepository.java',
+    declarationSpan: {
       startLine: 8,
-      lineHash: '56c8edc77e6c7f08a13419948a119f9e',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 8,
+      contentHash: '56c8edc77e6c7f08a13419948a119f9e',
     },
     purpose: 'Single source of truth — Room locally, network on refresh.',
     layer: 3,
@@ -73,11 +70,10 @@ export const components: SubsystemComponent[] = [
     stereotype: 'dao',
     purl: PURL,
     file: `${JAVA}/NoteDao.java`,
-    declarationRef: {
-      file: 'app/src/main/java/com/example/notes/NoteDao.java',
+    declarationSpan: {
       startLine: 12,
-      lineHash: '173aa7cdd142fbaba31260e14cf4e233',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 12,
+      contentHash: '173aa7cdd142fbaba31260e14cf4e233',
     },
     purpose: 'Room DAO — local persistence boundary.',
     layer: 3,
@@ -90,11 +86,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'NotesApi',
     purl: PURL,
     file: `${JAVA}/NotesApi.java`,
-    declarationRef: {
-      file: 'app/src/main/java/com/example/notes/NotesApi.java',
+    declarationSpan: {
       startLine: 7,
-      lineHash: 'f46f44164495bd6f3bf03cf84864001d',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 7,
+      contentHash: 'f46f44164495bd6f3bf03cf84864001d',
     },
     purpose: 'Thin HTTP client for remote notes.',
     layer: 3,
@@ -131,7 +126,11 @@ export const trails = [
         "to": "notes-view-model",
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/MainActivity.java",
-        "line": 26,
+        "span": {
+          "startLine": 26,
+          "endLine": 26,
+          "contentHash": "070696a5615b8af275ff1c825f76fd4e"
+        },
         "purl": PURL,
         "symbol": "getNotes().observe",
         "annotation": "Activity observes LiveData from the ViewModel."
@@ -141,7 +140,11 @@ export const trails = [
         "to": "notes-repository",
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/NotesViewModel.java",
-        "line": 22,
+        "span": {
+          "startLine": 22,
+          "endLine": 22,
+          "contentHash": "418ad670373c86a7188a77ee2ace36d6"
+        },
         "purl": PURL,
         "symbol": "observeNotes",
         "annotation": "ViewModel forwards to the repository."
@@ -151,7 +154,11 @@ export const trails = [
         "to": "note-dao",
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/NotesRepository.java",
-        "line": 22,
+        "span": {
+          "startLine": 22,
+          "endLine": 22,
+          "contentHash": "13b5d96ffe3d9012df92abccc4ee8f8d"
+        },
         "purl": PURL,
         "symbol": "observeAll",
         "annotation": "Repository reads through the DAO — not the Activity."
@@ -161,7 +168,11 @@ export const trails = [
         "to": "Room",
         "mechanism": "reads",
         "file": "app/src/main/java/com/example/notes/NoteDao.java",
-        "line": 14,
+        "span": {
+          "startLine": 14,
+          "endLine": 14,
+          "contentHash": "43b0e26b7b460ca1aadd7e5af043d62d"
+        },
         "purl": PURL,
         "symbol": "observeAll",
         "annotation": "Room query powers the list."
@@ -177,7 +188,11 @@ export const trails = [
         "to": "notes-view-model",
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/MainActivity.java",
-        "line": 27,
+        "span": {
+          "startLine": 27,
+          "endLine": 27,
+          "contentHash": "e2df7c2228d7d6ec904e97392139ad82"
+        },
         "purl": PURL,
         "symbol": "addNote",
         "annotation": "Click handler → ViewModel only."
@@ -187,7 +202,11 @@ export const trails = [
         "to": "notes-repository",
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/NotesViewModel.java",
-        "line": 27,
+        "span": {
+          "startLine": 27,
+          "endLine": 27,
+          "contentHash": "b078ffaf041f60e9346fafd5af5a48bd"
+        },
         "purl": PURL,
         "symbol": "insert",
         "annotation": "ViewModel validates, then repository insert."
@@ -197,7 +216,11 @@ export const trails = [
         "to": "note-dao",
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/NotesRepository.java",
-        "line": 26,
+        "span": {
+          "startLine": 26,
+          "endLine": 26,
+          "contentHash": "06da5909a301047b49c40d83b138cfb0"
+        },
         "purl": PURL,
         "symbol": "insert",
         "annotation": "Repository owns the write."
@@ -207,7 +230,11 @@ export const trails = [
         "to": "Room",
         "mechanism": "writes",
         "file": "app/src/main/java/com/example/notes/NoteDao.java",
-        "line": 17,
+        "span": {
+          "startLine": 17,
+          "endLine": 17,
+          "contentHash": "f61305b7d7476f6bd6f38278dbe584dd"
+        },
         "purl": PURL,
         "symbol": "insert",
         "annotation": "Room persists on device."
@@ -223,7 +250,11 @@ export const trails = [
         "to": "notes-repository",
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/NotesViewModel.java",
-        "line": 31,
+        "span": {
+          "startLine": 31,
+          "endLine": 31,
+          "contentHash": "0b512d6301e293213aa9b155a5948662"
+        },
         "purl": PURL,
         "symbol": "refreshFromNetwork",
         "annotation": "Pull-to-refresh style intent."
@@ -233,7 +264,11 @@ export const trails = [
         "to": "notes-api",
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/NotesRepository.java",
-        "line": 30,
+        "span": {
+          "startLine": 30,
+          "endLine": 30,
+          "contentHash": "dbacedeb3a258efb0e2fe6052e2839ca"
+        },
         "purl": PURL,
         "symbol": "fetchNotes",
         "annotation": "Network before touching Room."
@@ -243,7 +278,11 @@ export const trails = [
         "to": "NotesBackend",
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/NotesApi.java",
-        "line": 8,
+        "span": {
+          "startLine": 8,
+          "endLine": 8,
+          "contentHash": "bd7494c56e0041a79722d67b63a726ca"
+        },
         "purl": PURL,
         "symbol": "fetchNotes",
         "annotation": "HTTP to the notes backend."
@@ -253,7 +292,11 @@ export const trails = [
         "to": "note-dao",
         "mechanism": "calls",
         "file": "app/src/main/java/com/example/notes/NotesRepository.java",
-        "line": 31,
+        "span": {
+          "startLine": 31,
+          "endLine": 31,
+          "contentHash": "be0ae7faed6a82cf91b2ffa8597dbc33"
+        },
         "purl": PURL,
         "symbol": "replaceAll",
         "annotation": "Replace local cache with remote payload."
@@ -263,7 +306,11 @@ export const trails = [
         "to": "Room",
         "mechanism": "writes",
         "file": "app/src/main/java/com/example/notes/NoteDao.java",
-        "line": 20,
+        "span": {
+          "startLine": 20,
+          "endLine": 20,
+          "contentHash": "fb15a0f97f34acf0447b3c9da57bdae9"
+        },
         "purl": PURL,
         "symbol": "replaceAll",
         "annotation": "Transactional Room rewrite."

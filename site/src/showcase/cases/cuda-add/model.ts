@@ -15,11 +15,10 @@ export const components: SubsystemComponent[] = [
     role: 'entry',
     purl: PURL,
     file: 'src/main.cu',
-    declarationRef: {
-      file: 'src/main.cu',
+    declarationSpan: {
       startLine: 9,
-      lineHash: '775b36031c81d0d71f6c4f6b390810ed',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 9,
+      contentHash: '775b36031c81d0d71f6c4f6b390810ed',
     },
     purpose: 'Host — alloc, HtoD, launch, DtoH.',
     layer: 1,
@@ -35,11 +34,10 @@ export const components: SubsystemComponent[] = [
     stereotype: 'kernel',
     purl: PURL,
     file: 'src/add_kernel.cu',
-    declarationRef: {
-      file: 'src/add_kernel.cu',
+    declarationSpan: {
       startLine: 2,
-      lineHash: '3a36562190f49e15062af380af65a9c0',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 2,
+      contentHash: '3a36562190f49e15062af380af65a9c0',
     },
     purpose: 'Device kernel — element-wise add on the GPU.',
     layer: 2,
@@ -61,10 +59,10 @@ export const trails: SubsystemTrail[] = [
     id: 'tl-launch',
     title: 'Host → kernel → host',
     steps: [
-      { from: 'main', to: 'GPU', mechanism: 'writes', file: 'src/main.cu', line: 26, purl: PURL, symbol: 'cudaMemcpy(HtoD)', annotation: 'Upload inputs to device memory.' },
-      { from: 'main', to: 'add-kernel', mechanism: 'calls', file: 'src/main.cu', line: 29, purl: PURL, symbol: 'add_kernel<<<>>>', annotation: 'Launch the device grid.' },
-      { from: 'add-kernel', to: 'GPU', mechanism: 'reads', file: 'src/add_kernel.cu', line: 5, purl: PURL, symbol: 'out[i] = a[i] + b[i]', annotation: 'Each thread reads device memory and writes the sum.' },
-      { from: 'main', to: 'GPU', mechanism: 'reads', file: 'src/main.cu', line: 32, purl: PURL, symbol: 'cudaMemcpy(DtoH)', annotation: 'Copy results back to the host.' },
+      { from: 'main', to: 'GPU', mechanism: 'writes', file: 'src/main.cu', span: { startLine: 26, endLine: 26, contentHash: '7ed0e239d4faab45f42f1c712cc384ba' }, purl: PURL, symbol: 'cudaMemcpy(HtoD)', annotation: 'Upload inputs to device memory.' },
+      { from: 'main', to: 'add-kernel', mechanism: 'calls', file: 'src/main.cu', span: { startLine: 29, endLine: 29, contentHash: '349f9d3b005279005a9f8bd00b2d3ded' }, purl: PURL, symbol: 'add_kernel<<<>>>', annotation: 'Launch the device grid.' },
+      { from: 'add-kernel', to: 'GPU', mechanism: 'reads', file: 'src/add_kernel.cu', span: { startLine: 5, endLine: 5, contentHash: '06babab018639b6fdec6b4ab807e14f5' }, purl: PURL, symbol: 'out[i] = a[i] + b[i]', annotation: 'Each thread reads device memory and writes the sum.' },
+      { from: 'main', to: 'GPU', mechanism: 'reads', file: 'src/main.cu', span: { startLine: 32, endLine: 32, contentHash: '91e97e53b628ef948d0f374adcefca3c' }, purl: PURL, symbol: 'cudaMemcpy(DtoH)', annotation: 'Copy results back to the host.' },
     ],
   },
 ];

@@ -15,11 +15,10 @@ export const components: SubsystemComponent[] = [
     role: 'entry',
     purl: PURL,
     file: 'host/main.c',
-    declarationRef: {
-      file: 'host/main.c',
+    declarationSpan: {
       startLine: 15,
-      lineHash: '65dbda96d1562ee5fada6112f438aa29',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 15,
+      contentHash: '65dbda96d1562ee5fada6112f438aa29',
     },
     purpose: 'C host — create Lua VM, register callbacks, run script.',
     layer: 1,
@@ -32,11 +31,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'host_log',
     purl: PURL,
     file: 'host/main.c',
-    declarationRef: {
-      file: 'host/main.c',
+    declarationSpan: {
       startLine: 9,
-      lineHash: '2f0e0bff8dbd3563e9d2e0989acff992',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 9,
+      contentHash: '2f0e0bff8dbd3563e9d2e0989acff992',
     },
     purpose: 'Native callback registered into Lua.',
     layer: 2,
@@ -50,11 +48,10 @@ export const components: SubsystemComponent[] = [
     role: 'entry',
     purl: PURL,
     file: 'script.lua',
-    declarationRef: {
-      file: 'script.lua',
+    declarationSpan: {
       startLine: 2,
-      lineHash: '08cfc0508704758efd7c24e96ff57b60',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 2,
+      contentHash: '08cfc0508704758efd7c24e96ff57b60',
     },
     purpose: 'Lua guest function — may call back into the host.',
     layer: 2,
@@ -81,7 +78,11 @@ export const trails = [
         "to": "LuaVM",
         "mechanism": "calls",
         "file": "host/main.c",
-        "line": 16,
+        "span": {
+          "startLine": 16,
+          "endLine": 16,
+          "contentHash": "84bfab6b97415276aaf6fc3d4f66ec68"
+        },
         "purl": PURL,
         "symbol": "luaL_newstate",
         "annotation": "Create the embedded VM."
@@ -91,7 +92,11 @@ export const trails = [
         "to": "host-log",
         "mechanism": "registers-into",
         "file": "host/main.c",
-        "line": 18,
+        "span": {
+          "startLine": 18,
+          "endLine": 18,
+          "contentHash": "94b9d2a7232270c2233c2bea74bd48fc"
+        },
         "purl": PURL,
         "symbol": "lua_register(host_log)",
         "annotation": "Expose a native function to Lua."
@@ -101,7 +106,11 @@ export const trails = [
         "to": "LuaVM",
         "mechanism": "calls",
         "file": "host/main.c",
-        "line": 20,
+        "span": {
+          "startLine": 20,
+          "endLine": 20,
+          "contentHash": "a0cd1de6f614b18dd396ee87c9e438d2"
+        },
         "purl": PURL,
         "symbol": "luaL_dofile",
         "annotation": "Load script.lua into the VM."
@@ -111,7 +120,11 @@ export const trails = [
         "to": "greet",
         "mechanism": "calls",
         "file": "host/main.c",
-        "line": 27,
+        "span": {
+          "startLine": 27,
+          "endLine": 27,
+          "contentHash": "fe75667b35e78e3be7f203a67ed6fc65"
+        },
         "purl": PURL,
         "symbol": "lua_pcall(greet)",
         "annotation": "Host calls into the guest."
@@ -121,7 +134,11 @@ export const trails = [
         "to": "host-log",
         "mechanism": "calls",
         "file": "script.lua",
-        "line": 3,
+        "span": {
+          "startLine": 3,
+          "endLine": 3,
+          "contentHash": "3be9861c3bdab827d245abc79ada9677"
+        },
         "purl": PURL,
         "symbol": "host_log",
         "annotation": "Guest calls back into native host_log."
@@ -131,7 +148,11 @@ export const trails = [
         "to": "host-log",
         "mechanism": "calls",
         "file": "host/main.c",
-        "line": 11,
+        "span": {
+          "startLine": 11,
+          "endLine": 11,
+          "contentHash": "02cd3a913984d84f8a69870f85a2ee70"
+        },
         "purl": PURL,
         "symbol": "printf",
         "annotation": "Native side effect from the callback."

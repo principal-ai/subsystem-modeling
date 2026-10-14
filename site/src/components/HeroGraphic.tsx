@@ -8,24 +8,24 @@ const SUBSYSTEM_MODEL_JSON = `{
   "title": "Checkout",
   "components": [
     {
-      "id": "checkout-api",
+      "alias": "checkout-api",
       "construct": "function", "symbol": "checkoutApi",
       "role": "entry", "purl": "pkg:github/you/your-app",
       "file": "src/checkout/api.ts"
     },
     {
-      "id": "cart-store",
+      "alias": "cart-store",
       "construct": "store", "symbol": "cartStore",
       "purl": "pkg:github/you/your-app",
       "file": "src/checkout/cartStore.ts"
     },
     {
-      "id": "Stripe",
+      "alias": "Stripe",
       "construct": "external", "role": "service",
       "purl": "external"
     },
     {
-      "id": "Web client",
+      "alias": "Web client",
       "construct": "external", "purl": "external"
     }
   ],
@@ -37,17 +37,20 @@ const SUBSYSTEM_MODEL_JSON = `{
         {
           "from": "Web client", "to": "checkout-api",
           "mechanism": "calls",
-          "file": "src/checkout/api.ts", "line": 1
+          "file": "src/checkout/api.ts",
+          "span": { "startLine": 1, "endLine": 1, "contentHash": "edc66d36b0aa68b622e78e9ffe830b00" }
         },
         {
           "from": "checkout-api", "to": "cart-store",
           "mechanism": "writes",
-          "file": "src/checkout/api.ts", "line": 12
+          "file": "src/checkout/api.ts",
+          "span": { "startLine": 12, "endLine": 12, "contentHash": "9e242a85bb83b331b7ece1e48b234b1c" }
         },
         {
           "from": "checkout-api", "to": "Stripe",
           "mechanism": "calls",
-          "file": "src/checkout/api.ts", "line": 24
+          "file": "src/checkout/api.ts",
+          "span": { "startLine": 24, "endLine": 24, "contentHash": "111f9d50f5852db9e9b7347b07e0a9fd" }
         }
       ]
     }

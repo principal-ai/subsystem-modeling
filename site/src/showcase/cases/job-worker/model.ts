@@ -15,11 +15,10 @@ export const components: SubsystemComponent[] = [
     role: 'entry',
     purl: PURL,
     file: 'src/main.rs',
-    declarationRef: {
-      file: 'src/main.rs',
+    declarationSpan: {
       startLine: 13,
-      lineHash: '4b4cfc47bd6bb499be5c57f1d849cab3',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 13,
+      contentHash: '4b4cfc47bd6bb499be5c57f1d849cab3',
     },
     purpose: 'Tokio entry — connect the queue, run the worker loop.',
     layer: 1,
@@ -32,11 +31,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'run_worker',
     purl: PURL,
     file: 'src/consumer.rs',
-    declarationRef: {
-      file: 'src/consumer.rs',
+    declarationSpan: {
       startLine: 8,
-      lineHash: 'b95cd71f39f22b33a5a9c90e1500d583',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 8,
+      contentHash: 'b95cd71f39f22b33a5a9c90e1500d583',
     },
     purpose: 'Dequeue loop — ack on success, nack on failure.',
     layer: 2,
@@ -49,11 +47,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'handle_job',
     purl: PURL,
     file: 'src/handler.rs',
-    declarationRef: {
-      file: 'src/handler.rs',
+    declarationSpan: {
       startLine: 7,
-      lineHash: '617178c715270343b648ce8da055e67c',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 7,
+      contentHash: '617178c715270343b648ce8da055e67c',
     },
     purpose: 'Dispatch by job kind (email, image, …).',
     layer: 3,
@@ -66,11 +63,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'RedisQueue',
     purl: PURL,
     file: 'src/queue.rs',
-    declarationRef: {
-      file: 'src/queue.rs',
+    declarationSpan: {
       startLine: 19,
-      lineHash: '7e19b0a3477f16eed79964fdcd2aa88f',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 19,
+      contentHash: '7e19b0a3477f16eed79964fdcd2aa88f',
     },
     purpose: 'Queue impl — BRPOP / ack / nack against Redis.',
     layer: 3,
@@ -107,7 +103,11 @@ export const trails = [
         "to": "run-worker",
         "mechanism": "calls",
         "file": "src/main.rs",
-        "line": 17,
+        "span": {
+          "startLine": 17,
+          "endLine": 17,
+          "contentHash": "3351d340c6940af1036244c54ddf8126"
+        },
         "purl": PURL,
         "symbol": "run_worker",
         "annotation": "Tokio main hands off to the consumer loop."
@@ -117,7 +117,11 @@ export const trails = [
         "to": "redis-queue",
         "mechanism": "calls",
         "file": "src/consumer.rs",
-        "line": 10,
+        "span": {
+          "startLine": 10,
+          "endLine": 10,
+          "contentHash": "2af1459fed3c9398d1ad824ca476c18e"
+        },
         "purl": PURL,
         "symbol": "dequeue",
         "annotation": "Pull the next job (or idle-sleep)."
@@ -127,7 +131,11 @@ export const trails = [
         "to": "Redis",
         "mechanism": "reads",
         "file": "src/queue.rs",
-        "line": 32,
+        "span": {
+          "startLine": 32,
+          "endLine": 32,
+          "contentHash": "21939d75647bc0c615f026a3e1f46db9"
+        },
         "purl": PURL,
         "symbol": "dequeue",
         "annotation": "Redis BRPOP — queue is the external."
@@ -137,7 +145,11 @@ export const trails = [
         "to": "handle-job",
         "mechanism": "calls",
         "file": "src/consumer.rs",
-        "line": 13,
+        "span": {
+          "startLine": 13,
+          "endLine": 13,
+          "contentHash": "e04ad4ea63511e76f40a2533a4b7e3a3"
+        },
         "purl": PURL,
         "symbol": "handle_job",
         "annotation": "Dispatch into the handler."
@@ -147,7 +159,11 @@ export const trails = [
         "to": "Email",
         "mechanism": "calls",
         "file": "src/handler.rs",
-        "line": 9,
+        "span": {
+          "startLine": 9,
+          "endLine": 9,
+          "contentHash": "d30f9f7555b44be58a858bfd5991a6d0"
+        },
         "purl": PURL,
         "symbol": "send_email",
         "annotation": "Kind-specific side effect (email path)."
@@ -157,7 +173,11 @@ export const trails = [
         "to": "redis-queue",
         "mechanism": "calls",
         "file": "src/consumer.rs",
-        "line": 14,
+        "span": {
+          "startLine": 14,
+          "endLine": 14,
+          "contentHash": "6c408f5c0c1939322583edb786c9333f"
+        },
         "purl": PURL,
         "symbol": "ack",
         "annotation": "Success — remove the job from the queue."
@@ -173,7 +193,11 @@ export const trails = [
         "to": "redis-queue",
         "mechanism": "calls",
         "file": "src/consumer.rs",
-        "line": 10,
+        "span": {
+          "startLine": 10,
+          "endLine": 10,
+          "contentHash": "2af1459fed3c9398d1ad824ca476c18e"
+        },
         "purl": PURL,
         "symbol": "dequeue",
         "annotation": "Same dequeue path as success."
@@ -183,7 +207,11 @@ export const trails = [
         "to": "handle-job",
         "mechanism": "calls",
         "file": "src/consumer.rs",
-        "line": 13,
+        "span": {
+          "startLine": 13,
+          "endLine": 13,
+          "contentHash": "e04ad4ea63511e76f40a2533a4b7e3a3"
+        },
         "purl": PURL,
         "symbol": "handle_job",
         "annotation": "Handler returns Err."
@@ -193,7 +221,11 @@ export const trails = [
         "to": "redis-queue",
         "mechanism": "calls",
         "file": "src/consumer.rs",
-        "line": 17,
+        "span": {
+          "startLine": 17,
+          "endLine": 17,
+          "contentHash": "763ccc5f0993d0d3e70fabdda854dd5f"
+        },
         "purl": PURL,
         "symbol": "nack",
         "annotation": "Failure — requeue for retry (LPUSH)."
@@ -203,7 +235,11 @@ export const trails = [
         "to": "Redis",
         "mechanism": "writes",
         "file": "src/queue.rs",
-        "line": 41,
+        "span": {
+          "startLine": 41,
+          "endLine": 41,
+          "contentHash": "67f413993bcb273037564c13a2ba4f6c"
+        },
         "purl": PURL,
         "symbol": "nack",
         "annotation": "Redis write puts the job back."

@@ -10,7 +10,7 @@ import { makeShowcaseRenderers } from '../src/showcase/files.tsx';
 
 const components: SubsystemComponent[] = [
   {
-    id: 'orders-routes',
+    alias: 'orders-routes',
     process: 'orders-api',
     name: 'orderRoutes',
     construct: 'function',
@@ -21,7 +21,7 @@ const components: SubsystemComponent[] = [
     purpose: 'Express router — the wire boundary (POST /orders, GET /orders/:id).',
   },
   {
-    id: 'order-service',
+    alias: 'order-service',
     process: 'orders-api',
     name: 'OrderService',
     construct: 'class',
@@ -31,7 +31,7 @@ const components: SubsystemComponent[] = [
     purpose: 'Business rules: stock checks, totals, payment capture.',
   },
   {
-    id: 'order-repo',
+    alias: 'order-repo',
     process: 'orders-api',
     name: 'OrderRepository',
     construct: 'class',
@@ -41,7 +41,7 @@ const components: SubsystemComponent[] = [
     purpose: 'SQL persistence for orders.',
   },
   {
-    id: 'Postgres',
+    alias: 'Postgres',
     name: 'Postgres',
     construct: 'external',
     role: 'service',
@@ -50,7 +50,7 @@ const components: SubsystemComponent[] = [
     purpose: 'Retained orders.',
   },
   {
-    id: 'Redis',
+    alias: 'Redis',
     name: 'Redis',
     construct: 'external',
     role: 'service',
@@ -59,7 +59,7 @@ const components: SubsystemComponent[] = [
     purpose: 'Idempotency keys + rate limits.',
   },
   {
-    id: 'Stripe',
+    alias: 'Stripe',
     name: 'Stripe',
     construct: 'external',
     role: 'service',
@@ -79,7 +79,11 @@ const trails: SubsystemTrail[] = [
         to: 'order-service',
         mechanism: 'calls',
         file: 'src/routes/orders.ts',
-        line: 14,
+        span: {
+          startLine: 14,
+          endLine: 14,
+          contentHash: '9ca276dd2ec8993b8720355b396547d4',
+        },
         symbol: "router.post('/orders')",
         annotation: 'Wire boundary — reserves an idempotency key before touching Stripe.',
       },
@@ -88,7 +92,11 @@ const trails: SubsystemTrail[] = [
         to: 'Redis',
         mechanism: 'writes',
         file: 'src/services/orderService.ts',
-        line: 23,
+        span: {
+          startLine: 23,
+          endLine: 23,
+          contentHash: 'f1efc6d5708643e78b1ea18caba72e0f',
+        },
         symbol: 'reserveIdempotencyKey',
         annotation: 'Key lands in Redis first so a crash mid-flight folds into the cached result.',
       },
@@ -97,7 +105,11 @@ const trails: SubsystemTrail[] = [
         to: 'Stripe',
         mechanism: 'calls',
         file: 'src/services/orderService.ts',
-        line: 31,
+        span: {
+          startLine: 31,
+          endLine: 31,
+          contentHash: '534627f6a493352f8735a873f4bbd31f',
+        },
         symbol: 'capturePayment',
         annotation: 'Only truly irreversible side effect — bound to the reserved key.',
       },
@@ -106,7 +118,11 @@ const trails: SubsystemTrail[] = [
         to: 'order-repo',
         mechanism: 'calls',
         file: 'src/services/orderService.ts',
-        line: 38,
+        span: {
+          startLine: 38,
+          endLine: 38,
+          contentHash: 'f7c32347ed7732176d9d4d4c51d71984',
+        },
         symbol: 'saveOrder',
         annotation: 'Persist the order with the payment id for reconciliation.',
       },
@@ -115,7 +131,11 @@ const trails: SubsystemTrail[] = [
         to: 'Postgres',
         mechanism: 'writes',
         file: 'src/repositories/orderRepository.ts',
-        line: 12,
+        span: {
+          startLine: 12,
+          endLine: 12,
+          contentHash: '5b2b553b8b94659a76a538de0f03887b',
+        },
         symbol: 'insert',
         annotation: 'ON CONFLICT (idempotency_key) DO NOTHING — client retries short-circuit.',
       },

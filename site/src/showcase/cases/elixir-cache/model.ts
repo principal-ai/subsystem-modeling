@@ -17,11 +17,10 @@ export const components: SubsystemComponent[] = [
     stereotype: 'application',
     purl: PURL,
     file: 'lib/notes/application.ex',
-    declarationRef: {
-      file: 'lib/notes/application.ex',
+    declarationSpan: {
       startLine: 1,
-      lineHash: 'a952f2f7c0ea3280c6a3bc4e9ad554e4',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 1,
+      contentHash: 'a952f2f7c0ea3280c6a3bc4e9ad554e4',
     },
     module: 'lib/notes/application.ex',
     purpose: 'OTP application — starts the supervisor tree.',
@@ -37,11 +36,10 @@ export const components: SubsystemComponent[] = [
     stereotype: 'gen_server',
     purl: PURL,
     file: 'lib/notes/cache.ex',
-    declarationRef: {
-      file: 'lib/notes/cache.ex',
+    declarationSpan: {
       startLine: 1,
-      lineHash: 'd50e5a1104f8c4ff10f238cfe40931bc',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 1,
+      contentHash: 'd50e5a1104f8c4ff10f238cfe40931bc',
     },
     module: 'lib/notes/cache.ex',
     purpose: 'GenServer — sync get, async put; restarted on crash.',
@@ -55,11 +53,10 @@ export const components: SubsystemComponent[] = [
     symbol: 'Notes.Client',
     purl: PURL,
     file: 'lib/notes/client.ex',
-    declarationRef: {
-      file: 'lib/notes/client.ex',
+    declarationSpan: {
       startLine: 1,
-      lineHash: 'a57958f54d0ccc51e00ba5b913288b93',
-      capturedAt: '2025-01-01T00:00:00.000Z',
+      endLine: 1,
+      contentHash: 'a57958f54d0ccc51e00ba5b913288b93',
     },
     module: 'lib/notes/client.ex',
     purpose: 'Call-site helper used by other processes.',
@@ -87,7 +84,11 @@ export const trails = [
         "to": "Supervisor",
         "mechanism": "calls",
         "file": "lib/notes/application.ex",
-        "line": 12,
+        "span": {
+          "startLine": 12,
+          "endLine": 12,
+          "contentHash": "222fcd84e1d0977c107e17a1ae26c33f"
+        },
         "purl": PURL,
         "symbol": "Supervisor.start_link",
         "annotation": "Application starts the supervision tree."
@@ -97,7 +98,11 @@ export const trails = [
         "to": "cache",
         "mechanism": "registers-into",
         "file": "lib/notes/application.ex",
-        "line": 8,
+        "span": {
+          "startLine": 8,
+          "endLine": 8,
+          "contentHash": "86deaf4444e8cb8a208029f6d528d2b6"
+        },
         "purl": PURL,
         "symbol": "Notes.Cache",
         "annotation": "Cache listed as a child spec."
@@ -107,7 +112,11 @@ export const trails = [
         "to": "cache",
         "mechanism": "watches",
         "file": "lib/notes/cache.ex",
-        "line": 7,
+        "span": {
+          "startLine": 7,
+          "endLine": 7,
+          "contentHash": "681bb3a1b0bf31f4f5641a4fff1649af"
+        },
         "purl": PURL,
         "symbol": "start_link",
         "annotation": "Supervisor starts (and can restart) the GenServer."
@@ -123,7 +132,11 @@ export const trails = [
         "to": "cache",
         "mechanism": "calls",
         "file": "lib/notes/client.ex",
-        "line": 4,
+        "span": {
+          "startLine": 4,
+          "endLine": 4,
+          "contentHash": "1247fe12e8b76fb0a5deeaf49315f99f"
+        },
         "purl": PURL,
         "symbol": "Cache.get",
         "annotation": "Client issues a call."
@@ -133,7 +146,11 @@ export const trails = [
         "to": "cache",
         "mechanism": "calls",
         "file": "lib/notes/cache.ex",
-        "line": 11,
+        "span": {
+          "startLine": 11,
+          "endLine": 11,
+          "contentHash": "e649b731bc5f5f207addc5e77e9879d9"
+        },
         "purl": PURL,
         "symbol": "GenServer.call",
         "annotation": "Synchronous request into the GenServer."
@@ -143,7 +160,11 @@ export const trails = [
         "to": "cache",
         "mechanism": "calls",
         "file": "lib/notes/cache.ex",
-        "line": 21,
+        "span": {
+          "startLine": 21,
+          "endLine": 21,
+          "contentHash": "7cfa77cebede71c9d7858b5091b9e254"
+        },
         "purl": PURL,
         "symbol": "handle_call",
         "annotation": "Server replies from process state."
@@ -159,7 +180,11 @@ export const trails = [
         "to": "cache",
         "mechanism": "calls",
         "file": "lib/notes/client.ex",
-        "line": 7,
+        "span": {
+          "startLine": 7,
+          "endLine": 7,
+          "contentHash": "a64dca6aca5a8489868f31fafece2b86"
+        },
         "purl": PURL,
         "symbol": "Cache.put",
         "annotation": "Client casts a write."
@@ -169,7 +194,11 @@ export const trails = [
         "to": "cache",
         "mechanism": "calls",
         "file": "lib/notes/cache.ex",
-        "line": 13,
+        "span": {
+          "startLine": 13,
+          "endLine": 13,
+          "contentHash": "80ce1b342ce051ab78d3b23fb350e55b"
+        },
         "purl": PURL,
         "symbol": "GenServer.cast",
         "annotation": "Asynchronous message — no reply."
@@ -179,7 +208,11 @@ export const trails = [
         "to": "cache",
         "mechanism": "calls",
         "file": "lib/notes/cache.ex",
-        "line": 26,
+        "span": {
+          "startLine": 26,
+          "endLine": 26,
+          "contentHash": "865556d5933d92a79b450b3b712313be"
+        },
         "purl": PURL,
         "symbol": "handle_cast",
         "annotation": "Server updates its map state."
