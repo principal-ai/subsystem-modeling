@@ -756,10 +756,10 @@ export function ProvenanceBadge({
 		!!provenance.verifiedAtCommits;
 
 	// A record with no pins at all is a migration transient, not a state we
-	// support: `commitsFromDeclarationRefs` (`purl-commits.ts:116`) already
-	// backfills `createdAtCommits` for records written before pinning existed.
-	// Kept as a guard so an un-backfilled record renders nothing rather than an
-	// empty chip — but it should never be observed.
+	// support: records written before pinning existed were given
+	// `createdAtCommits` by a one-shot migration script. Kept as a guard so an
+	// un-backfilled record renders nothing rather than an empty chip — but it
+	// should never be observed.
 	if (
 		!provenance.createdAtCommits &&
 		!provenance.verifiedAtCommits &&
