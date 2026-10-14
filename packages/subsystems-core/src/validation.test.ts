@@ -32,7 +32,7 @@ describe('validateSubsystemModelCrossField', () => {
         {
           id: 'w1',
           title: 'flow',
-          steps: [{ from: 'a', to: 'b', mechanism: 'calls', file: 'src/a.ts', line: 1, purl: 'pkg:github/acme/app#src/a.ts', symbol: 'a' }],
+          steps: [{ from: 'a', to: 'b', mechanism: 'calls', file: 'src/a.ts', purl: 'pkg:github/acme/app#src/a.ts', symbol: 'a' }],
         },
       ],
     });
@@ -55,7 +55,7 @@ describe('validateSubsystemModelCrossField', () => {
           {
             id: 'w1',
             title: 'flow',
-            steps: [{ from: 'ghost', to: 'a', mechanism: 'calls', file: 'src/a.ts', line: 1, purl: 'pkg:github/acme/app#src/a.ts', symbol: 'ghost' }],
+            steps: [{ from: 'ghost', to: 'a', mechanism: 'calls', file: 'src/a.ts', purl: 'pkg:github/acme/app#src/a.ts', symbol: 'ghost' }],
           },
         ],
       }),
@@ -72,7 +72,7 @@ describe('validateSubsystemModelCrossField', () => {
           {
             id: 'w1',
             title: 'flow',
-            steps: [{ from: 'a', to: 'a', mechanism: 'calls', file: 'src/a.ts', line: 1, purl: 'pkg:github/acme/app#src/other.ts', symbol: 'a' }],
+            steps: [{ from: 'a', to: 'a', mechanism: 'calls', file: 'src/a.ts', purl: 'pkg:github/acme/app#src/other.ts', symbol: 'a' }],
           },
         ],
       }),
@@ -161,7 +161,6 @@ describe('validateSubsystemModelCrossField', () => {
                 to: 'a',
                 mechanism: 'calls',
                 file: 'packages/react/node_modules/@pierre/diffs/dist/index.js',
-                line: 1,
                 purl: 'pkg:npm/@pierre/diffs#packages/react/node_modules/@pierre/diffs/dist/index.js',
                 symbol: 'a',
               },
@@ -172,5 +171,69 @@ describe('validateSubsystemModelCrossField', () => {
     );
     expect(problems).toHaveLength(1);
     expect(problems[0]!.path).toBe('/trails/0/steps/0/file');
+  });
+
+  test('accepts an ordered span on a component and a step', () => {
+    expect(
+      validateSubsystemModelCrossField(
+        doc({
+          components: [
+            comp('a', {
+              declarationSpan: { startLine: 1, endLine: 9, contentHash: 'h' },
+            }),
+          ],
+          trails: [
+            {
+              id: 'w1',
+              title: 'flow',
+              steps: [
+                {
+                  from: 'a',
+                  to: 'a',
+                  mechanism: 'calls',
+                  file: 'src/a.ts',
+                  purl: 'pkg:github/acme/app#src/a.ts',
+                  symbol: 'a',
+                  span: { startLine: 3, endLine: 3, contentHash: 'h' },
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  test('flags a span whose endLine precedes startLine', () => {
+    const problems = validateSubsystemModelCrossField(
+      doc({
+        components: [
+          comp('a', {
+            declarationSpan: { startLine: 10, endLine: 4, contentHash: 'h' },
+          }),
+        ],
+        trails: [
+          {
+            id: 'w1',
+            title: 'flow',
+            steps: [
+              {
+                from: 'a',
+                to: 'a',
+                mechanism: 'calls',
+                file: 'src/a.ts',
+                purl: 'pkg:github/acme/app#src/a.ts',
+                symbol: 'a',
+                span: { startLine: 8, endLine: 2, contentHash: 'h' },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(problems).toHaveLength(2);
+    expect(problems[0]!.path).toBe('/components/0/declarationSpan');
+    expect(problems[0]!.message).toContain('precedes startLine');
+    expect(problems[1]!.path).toBe('/trails/0/steps/0/span');
   });
 });

@@ -113,13 +113,29 @@ export interface SubsystemDeclToken {
   color?: string;
 }
 
-/** Anchored declaration location (usually from verify tooling). */
-export interface SubsystemDeclarationRef {
-  file: string;
+/**
+ * A content-addressed range of source — the model's identity primitive.
+ *
+ * A span is `startLine` + `endLine` + the hash of the normalized content
+ * across that range. Every claim is *anchored* to a span: a component's
+ * construct declaration (`declarationSpan`) and a trail step's runtime seam
+ * (`span`) are the same shape. `file` / `purl` live on the owner, so a span is
+ * a pure range + fingerprint.
+ *
+ * The hash is the identity: if live content re-hashes to `contentHash`, the
+ * anchored code is byte-identical, which is what lets verification reason about
+ * constructs rather than line changes.
+ */
+export interface SubsystemSourceSpan {
+  /** 1-based first line of the construct/step within the owner's `file`. */
   startLine: number;
-  lineHash: string;
-  graphifyNodeId?: string;
-  capturedAt: string;
+  /** 1-based last line, inclusive. Always `>= startLine`. */
+  endLine: number;
+  /**
+   * SHA-256 of the normalized content across `[startLine, endLine]`, truncated
+   * to 32 hex chars. Produced by `hashContentRange`.
+   */
+  contentHash: string;
 }
 
 export interface SubsystemParamInfo {
@@ -376,8 +392,12 @@ export interface SubsystemComponent {
    */
   declarationProvenance?: SubsystemDeclarationProvenance;
   tokens?: SubsystemDeclToken[];
-  /** Location anchor (file/line/hash) — distinct from `declaration` (shape). */
-  declarationRef?: SubsystemDeclarationRef;
+  /**
+   * The construct's source span (start/end/content hash) — its anchored
+   * identity. Distinct from `declaration`, which is the structured shape.
+   * Usually captured by verify tooling, not hand-authored.
+   */
+  declarationSpan?: SubsystemSourceSpan;
 }
 
 /**
@@ -399,8 +419,13 @@ export interface SubsystemTrailStep {
   /** Runtime seam label (Set B). */
   mechanism: SubsystemTrailMechanism;
   file: string;
-  /** 1-based line within `file`. */
-  line: number;
+  /**
+   * The step's source span — the call-site range and its content hash. The
+   * trail-step counterpart of a component's `declarationSpan`, captured by
+   * verify tooling from the call site. `file` + `symbol` locate the frame;
+   * absent until verification anchors it.
+   */
+  span?: SubsystemSourceSpan;
   /**
    * File-anchored purl of the seam site (e.g.
    * `pkg:github/owner/name#path/to/file.ts`), mirroring component `purl`.

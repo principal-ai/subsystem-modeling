@@ -14,6 +14,7 @@
 import type {
   SubsystemModelDocument,
   SubsystemComponent,
+  SubsystemSourceSpan,
   SubsystemTrail,
 } from './types/subsystem-model';
 
@@ -51,6 +52,27 @@ function isUngrounded(c: SubsystemComponent): boolean {
  */
 function mentionsNodeModules(path: string): boolean {
   return /(^|\/)node_modules(\/|$)/.test(path);
+}
+
+/**
+ * A span's range must be ordered: `endLine >= startLine`. The schema enforces
+ * that each line is a positive integer but cannot compare two fields, so the
+ * ordering rule lives here. `owner` prefixes the message (e.g.
+ * `component "save"`).
+ */
+function spanRangeProblem(
+  span: SubsystemSourceSpan | undefined,
+  path: string,
+  owner: string,
+): SubsystemValidationProblem | null {
+  if (!span) return null;
+  if (span.endLine < span.startLine) {
+    return {
+      path,
+      message: `${owner}: span endLine ${span.endLine} precedes startLine ${span.startLine} — a span range must be ordered (endLine >= startLine).`,
+    };
+  }
+  return null;
 }
 
 /**
@@ -97,6 +119,12 @@ export function validateSubsystemModelCrossField(
         message: `component ${JSON.stringify(c.alias)}: file ${JSON.stringify(file)} points into node_modules — installed artifacts are not part of the repo and cannot be verified. Model the dependency as construct "external" with purl "pkg:npm/<package>" and no file, or anchor the claim to the package's real source.`,
       });
     }
+    const spanProblem = spanRangeProblem(
+      c.declarationSpan,
+      `/components/${i}/declarationSpan`,
+      `component ${JSON.stringify(c.alias)}`,
+    );
+    if (spanProblem) problems.push(spanProblem);
   });
 
   trails.forEach((w: SubsystemTrail, ti) => {
@@ -131,6 +159,12 @@ export function validateSubsystemModelCrossField(
           message: `trail ${JSON.stringify(w.id)}: step ${si} file ${JSON.stringify(step.file)} points into node_modules — anchor the seam at the call site inside the repo instead.`,
         });
       }
+      const spanProblem = spanRangeProblem(
+        step.span,
+        `/trails/${ti}/steps/${si}/span`,
+        `trail ${JSON.stringify(w.id)}: step ${si}`,
+      );
+      if (spanProblem) problems.push(spanProblem);
     });
   });
 

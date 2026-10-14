@@ -46,8 +46,18 @@ describe("subsystem-model schema", () => {
 		expect(schema.properties.verifiedAtCommits).toBeDefined();
 	});
 
-	test("no longer carries per-declaration revision (superseded by the model-level pin)", () => {
-		expect(schema.$defs.declarationRef?.properties?.revision).toBeUndefined();
+	test("declares a content-addressed source span", () => {
+		// The identity primitive: start + end + content hash. Replaces the old
+		// start-line-only `declarationRef`.
+		expect(schema.$defs.sourceSpan?.properties?.startLine).toBeDefined();
+		expect(schema.$defs.sourceSpan?.properties?.endLine).toBeDefined();
+		expect(schema.$defs.sourceSpan?.properties?.contentHash).toBeDefined();
+		expect(schema.$defs.declarationRef).toBeUndefined();
+	});
+
+	test("trail steps carry a span, not a bare line", () => {
+		expect(schema.$defs.trailStep?.properties?.span).toBeDefined();
+		expect(schema.$defs.trailStep?.properties?.line).toBeUndefined();
 	});
 
 	test("a store declares its own value type", () => {

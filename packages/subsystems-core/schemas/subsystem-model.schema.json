@@ -32,7 +32,7 @@
     },
     "trails": {
       "type": "array",
-      "description": "Ordered runtime trails (one per named behavior). Each step names from/to/mechanism and the concrete file:line where that seam fires.",
+      "description": "Ordered runtime trails (one per named behavior). Each step names from/to/mechanism and the concrete file where that seam fires; the seam's source span is captured by verification.",
       "items": {
         "$ref": "#/$defs/trail"
       }
@@ -231,9 +231,9 @@
             "$ref": "#/$defs/declToken"
           }
         },
-        "declarationRef": {
-          "$ref": "#/$defs/declarationRef",
-          "description": "Anchored declaration location (start line + line hash). Usually populated by verify tooling, not hand-authored. Distinct from `declaration`, which is the structured shape."
+        "declarationSpan": {
+          "$ref": "#/$defs/sourceSpan",
+          "description": "The construct's source span (start/end/content hash) — its anchored identity. Usually populated by verify tooling, not hand-authored. Distinct from `declaration`, which is the structured shape."
         }
       }
     },
@@ -244,7 +244,6 @@
         "to",
         "mechanism",
         "file",
-        "line",
         "purl",
         "symbol"
       ],
@@ -269,10 +268,9 @@
           "pattern": "^(?!.*(^|/)node_modules(/|$)).*$",
           "description": "Repo-root-relative path where the seam fires for this trail."
         },
-        "line": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "1-based line of the site within `file`."
+        "span": {
+          "$ref": "#/$defs/sourceSpan",
+          "description": "The seam's source span — the call-site range and its content hash. The trail-step counterpart of a component's declarationSpan; captured by verify tooling. `file` + `symbol` locate the frame."
         },
         "purl": {
           "type": "string",
@@ -352,36 +350,30 @@
         }
       }
     },
-    "declarationRef": {
+    "sourceSpan": {
       "type": "object",
+      "description": "A content-addressed range of source — the model's identity primitive. startLine/endLine are 1-based inclusive lines within the owner's `file`; contentHash is the hash of the normalized content across that range. `file` / `purl` live on the owner, so a span is a pure range + fingerprint.",
       "required": [
-        "file",
         "startLine",
-        "lineHash",
-        "capturedAt"
+        "endLine",
+        "contentHash"
       ],
       "additionalProperties": false,
       "properties": {
-        "file": {
-          "type": "string",
-          "description": "Repo-root-relative path (matches component.file)."
-        },
         "startLine": {
           "type": "integer",
           "minimum": 1,
-          "description": "1-based declaration start line."
+          "description": "1-based first line of the construct/seam within the owner's file."
         },
-        "lineHash": {
-          "type": "string",
-          "description": "Hash of the normalized declaration line at capture time (drift detection)."
+        "endLine": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "1-based last line, inclusive. Always >= startLine (cross-field rule enforced by validation)."
         },
-        "graphifyNodeId": {
+        "contentHash": {
           "type": "string",
-          "description": "Graphify node id when captured from an exact anchor."
-        },
-        "capturedAt": {
-          "type": "string",
-          "description": "ISO timestamp when this ref was recorded."
+          "minLength": 1,
+          "description": "SHA-256 of the normalized content across [startLine, endLine], truncated to 32 hex chars. The span's identity."
         }
       }
     },
