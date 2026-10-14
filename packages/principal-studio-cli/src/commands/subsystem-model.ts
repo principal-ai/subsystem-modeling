@@ -177,17 +177,16 @@ async function createAction(options: {
     process.exit(2);
   }
   const body = parsed as Record<string, unknown>;
-
-  const problems = findSubsystemModelProblems(body);
-  if (problems.length > 0) {
-    process.stderr.write(`invalid model: ${problems.join('; ')}\n`);
-    process.exit(2);
-  }
   if (options.force) body['force'] = true;
 
   let record: StoredSubsystemModel | null = null;
   let reused = false;
   if (await studioHttpUp()) {
+    // A running Studio is the single validator: it owns the schema the model
+    // will actually be stored against. The CLI's bundled subsystems-core can
+    // lag it (the two shipped schemas have drifted before), so validating
+    // locally first would reject payloads the Studio accepts — and vice versa.
+    // Hold local validation for the offline path below.
     const viaHttp = await createViaHttp(body);
     if (viaHttp) {
       record = viaHttp.record;
@@ -195,6 +194,11 @@ async function createAction(options: {
     }
   }
   if (!record) {
+    const problems = findSubsystemModelProblems(body);
+    if (problems.length > 0) {
+      process.stderr.write(`invalid model: ${problems.join('; ')}\n`);
+      process.exit(2);
+    }
     const outcome = await upsertSubsystemModel(
       {
         title: body['title'] as string,
