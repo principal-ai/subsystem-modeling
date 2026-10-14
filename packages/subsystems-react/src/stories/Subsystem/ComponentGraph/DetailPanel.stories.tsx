@@ -5,7 +5,7 @@ import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import { PierreFileView, PierreSnippetView } from '../../../pierre';
 import type { SubsystemComponent, SubsystemComponentEdge } from '../../../subsystem/model';
-import type { SubsystemOpenFileOptions } from '../../../subsystem/declarationRef';
+import type { SubsystemOpenFileOptions } from '../../../subsystem/sourceSpan';
 import type { GraphifyComponentDetail } from '../../../graphify';
 import componentDeclarationSource from '../../../subsystem/ComponentDeclaration.tsx?raw';
 import resolveSource from '../../../graphify/resolve.ts?raw';
@@ -221,7 +221,7 @@ export const DetailKinds: Story = {
 };
 
 // ---------------------------------------------------------------------------
-// Declaration line open — Pierre snippet/file views + declarationRef.
+// Declaration line open — Pierre snippet/file views + declarationSpan.
 // Click the ComponentDeclaration node → toggle file → click path or L251.
 // ---------------------------------------------------------------------------
 const storyFileContents: Record<string, string> = {
@@ -238,11 +238,10 @@ const declarationOpenComponents: SubsystemComponent[] = [
     purl: 'pkg:github/principal-ai/principal-view-core-library',
     purpose: 'declaration panel — click file or L251 to open the drawer at the export line',
     symbol: 'ComponentDeclaration',
-    declarationRef: {
-      file: 'packages/subsystems-react/src/subsystem/ComponentDeclaration.tsx',
+    declarationSpan: {
       startLine: 251,
-      lineHash: 'storybook-placeholder',
-      capturedAt: new Date(0).toISOString(),
+      endLine: 251,
+      contentHash: 'storybook-placeholder',
     },
   },
   {
@@ -253,11 +252,10 @@ const declarationOpenComponents: SubsystemComponent[] = [
     purl: 'pkg:github/principal-ai/principal-view-core-library',
     purpose: 'graphify type-ref resolver (second file for tree navigation)',
     symbol: 'resolveGraphifyTypeRef',
-    declarationRef: {
-      file: 'packages/subsystems-react/src/graphify/resolve.ts',
+    declarationSpan: {
       startLine: 1,
-      lineHash: 'storybook-placeholder',
-      capturedAt: new Date(0).toISOString(),
+      endLine: 1,
+      contentHash: 'storybook-placeholder',
     },
   },
 ];
@@ -279,7 +277,7 @@ function DeclarationLineOpenDemo() {
           filePath={file}
           fileName={file.split('/').pop() ?? file}
           startLine={startLine}
-          endLine={startLine}
+          endLine={opts?.endLine ?? startLine}
           focusLine={startLine}
           contextLines={40}
           readFile={readStoryFile}

@@ -311,16 +311,16 @@ export {
   PROPOSED_COLOR,
 } from './subsystem/model';
 export type {
-  SubsystemDeclarationRef,
+  SubsystemSourceSpan,
   SubsystemOpenFileOptions,
-  DeclarationFreshness,
-} from './subsystem/declarationRef';
+  SpanFreshness,
+} from './subsystem/sourceSpan';
 export {
   parseSourceLocation,
   normalizeDeclarationLine,
   extractDeclarationLine,
   DECLARATION_HASH_ALGO,
-} from './subsystem/declarationRef';
+} from './subsystem/sourceSpan';
 export {
   setPrettierProvider,
   getPrettierProvider,

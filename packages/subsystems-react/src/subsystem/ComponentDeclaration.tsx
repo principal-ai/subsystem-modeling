@@ -16,8 +16,8 @@ import {
   type SubsystemComponent,
   type SubsystemDeclTokenKind,
 } from './model';
-import type { SubsystemOpenFileOptions } from './declarationRef';
-import { parseSourceLocation } from './declarationRef';
+import type { SpanFreshness, SubsystemOpenFileOptions } from './sourceSpan';
+import { parseSourceLocation } from './sourceSpan';
 import { resolveComponentDeclaration } from './formatDeclaration';
 import { tokenizeComponent } from './tokenizeComponent';
 import { componentColor } from '../pierre/constructColors';
@@ -101,10 +101,11 @@ export interface ComponentVerificationState {
     inlineParameters?: number;
   };
   declaration?: {
-    freshness: 'fresh' | 'stale' | 'missing' | 'unanchored' | 'unchecked';
-    ref?: {
+    freshness: SpanFreshness;
+    span?: {
       startLine: number;
-      lineHash: string;
+      endLine: number;
+      contentHash: string;
     };
   };
 }
@@ -235,7 +236,7 @@ function verificationSummary(
     const declFresh = v.declaration?.freshness;
     const declBit =
       declFresh && declFresh !== 'unanchored'
-        ? ` · declaration ${declFresh}${v.declaration?.ref ? ` L${v.declaration.ref.startLine}` : ''}`
+        ? ` · declaration ${declFresh}${v.declaration?.span ? ` L${v.declaration.span.startLine}` : ''}`
         : '';
     const anchorBit = `exact → ${v.anchor?.label ?? v.anchor?.nodeId ?? 'node'}${loc}${declBit}`;
     if (v.construct && v.construct.match !== true) {
@@ -418,9 +419,13 @@ export function ComponentDeclaration({
   }, [inspection]);
 
   const declarationStartLine =
-    component.declarationRef?.startLine ??
-    verification?.declaration?.ref?.startLine ??
+    component.declarationSpan?.startLine ??
+    verification?.declaration?.span?.startLine ??
     parseSourceLocation(verification?.anchor?.source_location) ??
+    undefined;
+  const declarationEndLine =
+    component.declarationSpan?.endLine ??
+    verification?.declaration?.span?.endLine ??
     undefined;
 
   const externalKind =
@@ -434,7 +439,12 @@ export function ComponentDeclaration({
     if (!onOpenFile || !component.file) return;
     onOpenFile(
       component.file,
-      declarationStartLine != null ? { startLine: declarationStartLine } : undefined,
+      declarationStartLine != null
+        ? {
+            startLine: declarationStartLine,
+            ...(declarationEndLine != null ? { endLine: declarationEndLine } : {}),
+          }
+        : undefined,
     );
   };
 

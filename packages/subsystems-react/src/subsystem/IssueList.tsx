@@ -20,14 +20,13 @@ import {
   CircleCheck,
   CircleDashed,
   CircleEllipsis,
-  CircleHelp,
   CircleSlash,
   CircleX,
   Component,
+  FileCodeCorner,
   FileX,
   FolderGit2,
   Footprints,
-  History,
   Link2Off,
   MapPin,
   Minus,
@@ -103,7 +102,8 @@ const KIND_CATEGORY: Record<string, SubsystemIssueCategory> = {
   missing_file: 'construct',
   symbol_ambiguous: 'construct',
   symbol_unmatched: 'construct',
-  stale_declaration: 'construct',
+  construct_span_unconfirmed: 'construct',
+  construct_span_stale: 'construct',
   construct_mismatch: 'construct',
   construct_unconfirmed: 'construct',
   signature_mismatch: 'construct',
@@ -121,8 +121,8 @@ const KIND_CATEGORY: Record<string, SubsystemIssueCategory> = {
   boundary_process_rejected: 'dynamic-topology',
   boundary_process_unbacked: 'dynamic-topology',
   trail: 'trail',
-  step_unconfirmed: 'trail',
-  step_stale: 'trail',
+  step_span_unconfirmed: 'trail',
+  step_span_stale: 'trail',
 };
 
 /**
@@ -142,7 +142,8 @@ const KIND_RUNG: Record<string, SubsystemIssueRung> = {
   missing_file: 'file',
   symbol_unmatched: 'symbol',
   symbol_ambiguous: 'symbol',
-  stale_declaration: 'declaration',
+  construct_span_unconfirmed: 'declaration',
+  construct_span_stale: 'declaration',
   construct_unconfirmed: 'type',
   construct_mismatch: 'type',
   signature_unconfirmed: 'signature',
@@ -173,11 +174,10 @@ export const ISSUE_RUNG_ICON: Record<SubsystemIssueRung, LucideIcon> = {
 };
 
 /**
- * Icons for findings that are about a BOUNDARY rather than a construct, so they
- * have no rung to key off. These are what earns a frame badge: a kind listed
- * here is badged on the region node it names (see `ISSUE_KIND_ICON` consumers),
- * because the finding is a property of the region's shape — no single member
- * construct is at fault.
+ * Icons for findings that name their own glyph rather than keying off a rung —
+ * boundary findings (which badge the region node they name) and the span
+ * findings (construct + step share `FileCodeCorner`). A kind listed here wins
+ * over its rung icon in the row; the span state is carried by color.
  */
 export const ISSUE_KIND_ICON: Record<string, LucideIcon> = {
   // One module, more than one claimed process parent — a containment that can't
@@ -191,9 +191,13 @@ export const ISSUE_KIND_ICON: Record<string, LucideIcon> = {
   boundary_process_rejected: CircleX,
   // Container-first gate: a claim cites a key no accepted container owns.
   boundary_process_unbacked: Link2Off,
-  // Trail step verification: unconfirmed = no augmentation yet, stale = code changed
-  step_unconfirmed: CircleHelp,
-  step_stale: History,
+  // Span findings — one family, state carried by color (red = not captured,
+  // amber = changed). Construct span sits on the declaration rung but keeps
+  // this glyph; step span has no rung.
+  construct_span_unconfirmed: FileCodeCorner,
+  construct_span_stale: FileCodeCorner,
+  step_span_unconfirmed: FileCodeCorner,
+  step_span_stale: FileCodeCorner,
 };
 
 /**
@@ -264,7 +268,8 @@ const KIND_LABEL: Record<string, string> = {
   missing_file: 'Construct declaration file missing',
   symbol_ambiguous: 'Multiple construct symbol matches',
   symbol_unmatched: 'Construct symbol missing',
-  stale_declaration: 'Construct declaration drift',
+  construct_span_unconfirmed: 'Construct span not captured',
+  construct_span_stale: 'Construct span drift',
   construct_mismatch: 'Construct type mismatch',
   construct_unconfirmed: 'Construct type unconfirmed',
   signature_mismatch: 'Construct signature mismatch',
@@ -281,8 +286,8 @@ const KIND_LABEL: Record<string, string> = {
   boundary_process_rejected: 'Container rejected',
   boundary_process_unbacked: 'Process claim unbacked',
   trail: 'Step issue',
-  step_unconfirmed: 'Call site not verified',
-  step_stale: 'Call site changed',
+  step_span_unconfirmed: 'Step span not captured',
+  step_span_stale: 'Step span changed',
 };
 
 /** Label for an issue's kind. Explicit `kindLabel` wins; unknown kinds humanize. */
@@ -305,7 +310,8 @@ const KIND_ORDER: Record<string, number> = {
   missing_file: 10,
   symbol_unmatched: 11,
   symbol_ambiguous: 12,
-  stale_declaration: 13,
+  construct_span_unconfirmed: 12.5,
+  construct_span_stale: 13,
   construct_unconfirmed: 14,
   construct_mismatch: 15,
   signature_unconfirmed: 16,
@@ -321,8 +327,8 @@ const KIND_ORDER: Record<string, number> = {
   boundary_process_rejected: 35,
   // Trail — mechanical issues first, then step verification
   trail: 40,
-  step_unconfirmed: 41,
-  step_stale: 42,
+  step_span_unconfirmed: 41,
+  step_span_stale: 42,
 };
 
 const KIND_ORDER_FALLBACK = 100;
@@ -491,19 +497,18 @@ export function SubsystemIssueCard({
   const showDetail = expanded;
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const color = severityColor(issue.severity, theme.colors);
-  // Leading icon: the verification rung when the finding maps to one, else the
-  // layer's icon — every row reads with an icon.
+  // Leading icon: an explicit kind glyph (boundary badge, span family) wins;
+  // else the verification rung (construct ladder); else the target kind; else
+  // the layer's icon — every row reads with an icon.
   const rung = issueRung(issue.kind);
-  // Rung icons are the construct ladder; a boundary finding names its own icon
-  // (it has no rung); everything else falls back to its layer's icon.
   const targetIcon = issue.target?.kind
     ? ISSUE_TARGET_KIND_ICON[issue.target.kind]
     : undefined;
-  const RowIcon: LucideIcon = rung
-    ? ISSUE_RUNG_ICON[rung]
-    : (ISSUE_KIND_ICON[issue.kind] ??
-      targetIcon ??
-      SUBSYSTEM_ISSUE_CATEGORY_ICON[issueCategory(issue)]);
+  const RowIcon: LucideIcon =
+    ISSUE_KIND_ICON[issue.kind] ??
+    (rung
+      ? ISSUE_RUNG_ICON[rung]
+      : (targetIcon ?? SUBSYSTEM_ISSUE_CATEGORY_ICON[issueCategory(issue)]));
   const activate = () => {
     const next = !expanded;
     setExpanded(next);

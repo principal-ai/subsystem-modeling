@@ -30,7 +30,7 @@ import {
   formatPurl,
   type SubsystemComponent,
 } from './model';
-import type { SubsystemOpenFileOptions } from './declarationRef';
+import type { SubsystemOpenFileOptions } from './sourceSpan';
 import { ComponentDeclaration } from './ComponentDeclaration';
 import type { ComponentVerificationState } from './ComponentDeclaration';
 import type { DeclarationSymbolRef, SymbolInspection } from './symbolRefs';
@@ -75,12 +75,23 @@ const FileDrawerContent = memo(function FileDrawerContent({
   render,
   file,
   startLine,
+  endLine,
 }: {
   render: (file: string, opts?: SubsystemOpenFileOptions) => ReactNode;
   file: string;
   startLine?: number;
+  endLine?: number;
 }) {
-  return <>{render(file, startLine != null ? { startLine } : undefined)}</>;
+  return (
+    <>
+      {render(
+        file,
+        startLine != null
+          ? { startLine, ...(endLine != null ? { endLine } : {}) }
+          : undefined,
+      )}
+    </>
+  );
 });
 
 interface FileTreeNode {
@@ -236,9 +247,11 @@ export function ConstructsCatalog({
   const [purposeOverrides, setPurposeOverrides] = useState<
     Record<string, boolean>
   >({});
-  const [drawer, setDrawer] = useState<{ file: string; startLine?: number } | null>(
-    null,
-  );
+  const [drawer, setDrawer] = useState<{
+    file: string;
+    startLine?: number;
+    endLine?: number;
+  } | null>(null);
 
   const visibleSet = useMemo(() => new Set(visibleAliases), [visibleAliases]);
   const visibleComponents = useMemo(
@@ -314,7 +327,7 @@ export function ConstructsCatalog({
     if (!drawer) return;
     const match =
       orderedComponents.find(
-        (c) => c.file === drawer.file && c.declarationRef?.startLine === drawer.startLine,
+        (c) => c.file === drawer.file && c.declarationSpan?.startLine === drawer.startLine,
       ) ?? orderedComponents.find((c) => c.file === drawer.file);
     if (!match) return;
     document
@@ -508,9 +521,10 @@ export function ConstructsCatalog({
   const onOpenFile = useCallback(
     (file: string, opts?: SubsystemOpenFileOptions) => {
       const startLine = opts?.startLine;
+      const endLine = opts?.endLine;
       setDrawer((prev) => {
         if (prev?.file === file && prev.startLine === startLine) return null;
-        return { file, startLine };
+        return { file, startLine, endLine };
       });
       onFileSelect?.(file);
     },
@@ -1013,12 +1027,12 @@ export function ConstructsCatalog({
                         const lineOpen =
                           fileOpen &&
                           drawer.startLine != null &&
-                          c.declarationRef?.startLine === drawer.startLine;
+                          c.declarationSpan?.startLine === drawer.startLine;
                         // A combined header owns the path, so declarations under
                         // it drop their own badge; those with no known line just
                         // render unnumbered. Without a header, keep the badge.
                         const numbered =
-                          hasFile && c.declarationRef?.startLine != null;
+                          hasFile && c.declarationSpan?.startLine != null;
                         // The header names the external kind, so the body just
                         // names the construct.
                         const isExt = c.construct === 'external';
@@ -1099,6 +1113,7 @@ export function ConstructsCatalog({
               render={renderDrawerContent}
               file={drawer.file}
               startLine={drawer.startLine}
+              endLine={drawer.endLine}
             />
           ) : null}
         </FileDrawer>

@@ -61,7 +61,6 @@ const trails: SubsystemTrail[] = [
         to: 'reader',
         mechanism: 'calls',
         file: 'transcript.ts',
-        line: 1,
         purl: 'pkg:github/principal-ai/agent-monitoring#transcript.ts',
         symbol: 'transcript',
       },
@@ -70,7 +69,6 @@ const trails: SubsystemTrail[] = [
         to: 'host',
         mechanism: 'calls',
         file: 'SessionReader.ts',
-        line: 1,
         purl: 'pkg:github/principal-ai/agent-monitoring#SessionReader.ts',
         symbol: 'SessionReader',
       },
@@ -112,7 +110,7 @@ describe('subsystem graph model', () => {
       trails: [{
         id: 'w1',
         title: 'feed',
-        steps: [{ from: 'reader', to: 'proposed-watcher', mechanism: 'feeds', file: 'x.ts', line: 1 }],
+        steps: [{ from: 'reader', to: 'proposed-watcher', mechanism: 'feeds', file: 'x.ts' }],
       }],
     });
     expect(nodes.find((n) => n.id === 'proposed-watcher')).toBeDefined();
@@ -455,7 +453,7 @@ describe('subsystem graph model', () => {
       trails: [{
         id: 'w1',
         title: 'call',
-        steps: [{ from: 'a', to: 'b', mechanism: 'calls', file: 'a.ts', line: 1 }],
+        steps: [{ from: 'a', to: 'b', mechanism: 'calls', file: 'a.ts' }],
       }],
     });
     expect(regions.map((r) => r.key)).toEqual(['app/host']);
@@ -816,25 +814,24 @@ describe('subsystem graph model', () => {
     }
   });
 
-  test('subsystemGraphLayoutKey ignores declarationRef-only changes', () => {
+  test('subsystemGraphLayoutKey ignores declarationSpan-only changes', () => {
     const base = doc;
-    const withRef = {
+    const withSpan = {
       components: comps.map((c, i) =>
         i === 0
           ? {
               ...c,
-              declarationRef: {
-                file: c.file,
+              declarationSpan: {
                 startLine: 42,
-                lineHash: 'abc',
-                capturedAt: new Date(0).toISOString(),
+                endLine: 48,
+                contentHash: 'abc',
               },
             }
           : c,
       ),
       trails,
     };
-    expect(subsystemGraphLayoutKey(base)).toBe(subsystemGraphLayoutKey(withRef));
+    expect(subsystemGraphLayoutKey(base)).toBe(subsystemGraphLayoutKey(withSpan));
   });
 });
 
@@ -869,7 +866,6 @@ describe('isConstructsOnlyModel', () => {
                 to: 'reader',
                 mechanism: 'calls',
                 file: 'transcript.ts',
-                line: 1,
               },
             ],
           },

@@ -331,7 +331,7 @@ export const DRILLDOWN_TRAILS: SubsystemTrail[] = [
         to: 'gist-load',
         mechanism: 'calls',
         file: 'site/src/pages/Gist.tsx',
-        line: 67,
+        span: { startLine: 67, endLine: 67, contentHash: 'fixture' },
         symbol: 'Gist.load',
         annotation: 'Consumer lands on /gist?gist=... — the end of a Studio share.',
         purl: stepPurl('site/src/pages/Gist.tsx'),
@@ -341,7 +341,7 @@ export const DRILLDOWN_TRAILS: SubsystemTrail[] = [
         to: 'github-gists-api',
         mechanism: 'calls',
         file: 'site/src/lib/gist.ts',
-        line: 94,
+        span: { startLine: 94, endLine: 94, contentHash: 'fixture' },
         symbol: 'loadSubsystemModelFromGist',
         annotation: 'Read the public gist JSON (no Studio disk involved).',
         purl: stepPurl('site/src/lib/gist.ts'),
@@ -351,7 +351,7 @@ export const DRILLDOWN_TRAILS: SubsystemTrail[] = [
         to: 'to-portable',
         mechanism: 'calls',
         file: 'site/src/lib/gist.ts',
-        line: 154,
+        span: { startLine: 154, endLine: 154, contentHash: 'fixture' },
         symbol: 'loadSubsystemModelFromGist',
         annotation: 'Only portable fields are shown — host gist refs never travel in the file.',
         purl: stepPurl('site/src/lib/gist.ts'),
@@ -361,7 +361,7 @@ export const DRILLDOWN_TRAILS: SubsystemTrail[] = [
         to: 'react-graph',
         mechanism: 'uses',
         file: 'site/src/pages/Gist.tsx',
-        line: 184,
+        span: { startLine: 184, endLine: 184, contentHash: 'fixture' },
         symbol: 'Gist',
         annotation: 'Render the shared model in the browser.',
         purl: stepPurl('site/src/pages/Gist.tsx'),
@@ -377,7 +377,7 @@ export const DRILLDOWN_TRAILS: SubsystemTrail[] = [
         to: 'studio-create',
         mechanism: 'calls',
         file: 'packages/principal-studio-cli/src/commands/subsystem-model.ts',
-        line: 186,
+        span: { startLine: 186, endLine: 186, contentHash: 'fixture' },
         symbol: 'createAction',
         annotation: 'CLI/agent create path — always a new local sg- id today.',
         purl: stepPurl('packages/principal-studio-cli/src/commands/subsystem-model.ts'),
@@ -387,7 +387,7 @@ export const DRILLDOWN_TRAILS: SubsystemTrail[] = [
         to: 'model-disk-store',
         mechanism: 'writes',
         file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
-        line: 929,
+        span: { startLine: 929, endLine: 929, contentHash: 'fixture' },
         symbol: 'createSubsystemModel',
         annotation:
           'Host create writes a record into the shared ~/.principal/subsystem-models directory (CLI can write the same store).',
@@ -398,7 +398,7 @@ export const DRILLDOWN_TRAILS: SubsystemTrail[] = [
         to: 'index-entry',
         mechanism: 'writes',
         file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
-        line: 951,
+        span: { startLine: 951, endLine: 951, contentHash: 'fixture' },
         symbol: 'createSubsystemModel',
         annotation: 'Mirror listing fields into _index.json.',
         purl: stepPurl('packages/subsystems-studio/src/bun/subsystem-model-store.ts'),
@@ -408,7 +408,7 @@ export const DRILLDOWN_TRAILS: SubsystemTrail[] = [
         to: 'open-tab',
         mechanism: 'calls',
         file: 'packages/principal-studio-cli/src/commands/subsystem-model.ts',
-        line: 205,
+        span: { startLine: 205, endLine: 205, contentHash: 'fixture' },
         symbol: 'createAction',
         annotation: 'Open the local model in Studio.',
         purl: stepPurl('packages/principal-studio-cli/src/commands/subsystem-model.ts'),
@@ -424,7 +424,7 @@ export const DRILLDOWN_TRAILS: SubsystemTrail[] = [
         to: 'studio-get',
         mechanism: 'calls',
         file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
-        line: 919,
+        span: { startLine: 919, endLine: 919, contentHash: 'fixture' },
         symbol: 'getSubsystemModel',
         annotation: 'Load the hydrated local record from the disk store.',
         purl: 'external:proposed#packages/subsystems-studio/src/bun/subsystem-model-store.ts',
@@ -434,7 +434,7 @@ export const DRILLDOWN_TRAILS: SubsystemTrail[] = [
         to: 'to-portable',
         mechanism: 'calls',
         file: 'site/src/lib/gist.ts',
-        line: 161,
+        span: { startLine: 161, endLine: 161, contentHash: 'fixture' },
         symbol: 'toPortableDocument',
         annotation: 'Strip host fields so the gist file is portable-only.',
         purl: 'external:proposed#site/src/lib/gist.ts',
@@ -444,7 +444,7 @@ export const DRILLDOWN_TRAILS: SubsystemTrail[] = [
         to: 'gist-ref',
         mechanism: 'reads',
         file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
-        line: 849,
+        span: { startLine: 849, endLine: 849, contentHash: 'fixture' },
         symbol: 'indexEntryFor',
         annotation: 'Index/host gist ref decides PATCH existing gist vs POST a new one.',
         purl: stepPurl('packages/subsystems-studio/src/bun/subsystem-model-store.ts'),
@@ -454,7 +454,7 @@ export const DRILLDOWN_TRAILS: SubsystemTrail[] = [
         to: 'github-gists-api',
         mechanism: 'calls',
         file: 'site/src/lib/gist.ts',
-        line: 94,
+        span: { startLine: 94, endLine: 94, contentHash: 'fixture' },
         symbol: 'loadSubsystemModelFromGist',
         annotation: 'POST /gists (first share) or PATCH /gists/{id} (subsequent) — token required.',
         purl: 'external:proposed#site/src/lib/gist.ts',
@@ -464,7 +464,7 @@ export const DRILLDOWN_TRAILS: SubsystemTrail[] = [
         to: 'studio-update',
         mechanism: 'calls',
         file: 'packages/subsystems-studio/src/bun/subsystem-model-store.ts',
-        line: 957,
+        span: { startLine: 957, endLine: 957, contentHash: 'fixture' },
         symbol: 'updateSubsystemModel',
         annotation:
           'Stamp gist.id on the local record + index so the next share updates in place.',
@@ -511,7 +511,7 @@ export function deriveElementMembers(
   for (const el of elements) {
     if (el.kind === 'container' && el.process) {
       out.set(el.id, byProcess.get(el.process) ?? []);
-    } else if (el.members) {
+    } else if ((el.kind === 'component' || el.kind === 'external-system') && el.members) {
       out.set(el.id, el.members);
     }
   }
@@ -531,8 +531,6 @@ function container(
     containerKind: 'application',
     technology: 'Bun',
     state: 'accepted',
-    members: [],
-    constructs: [],
     parentId: SYSTEM.id,
     ...over,
   };
@@ -544,7 +542,6 @@ function component(
   return {
     kind: 'component',
     members: [],
-    constructs: [],
     state: 'accepted',
     parentId: over.container,
     technology: 'Bun',
@@ -577,7 +574,6 @@ export const DRILLDOWN_ELEMENTS: C4Element[] = [
     label: 'Subsystem model store',
     container: HOST,
     members: ['studio-create', 'studio-update', 'studio-get', 'index-entry'],
-    constructs: ['function'],
     technology: 'Bun fs',
     description: 'The subsystem-model-store.ts API surface.',
   }),
@@ -586,7 +582,6 @@ export const DRILLDOWN_ELEMENTS: C4Element[] = [
     label: 'Tab opening',
     container: HOST,
     members: ['open-tab'],
-    constructs: ['function'],
     technology: 'Bun',
     description: 'Focus or create a subsystem-model tab.',
   }),
@@ -602,7 +597,6 @@ export const DRILLDOWN_ELEMENTS: C4Element[] = [
     label: 'Model views',
     container: RENDERER,
     members: ['studio-list', 'studio-model-view'],
-    constructs: ['function'],
     technology: 'Electrobun',
     description: 'The two model surfaces in the renderer.',
   }),
@@ -618,7 +612,6 @@ export const DRILLDOWN_ELEMENTS: C4Element[] = [
     label: 'subsystem-model command',
     container: CLI,
     members: ['cli-create'],
-    constructs: ['function'],
     technology: 'Bun',
     description: 'The create subcommand.',
   }),
@@ -634,7 +627,6 @@ export const DRILLDOWN_ELEMENTS: C4Element[] = [
     label: 'Gist page & loader',
     container: SITE,
     members: ['site-gist-page', 'gist-load', 'to-portable'],
-    constructs: ['function'],
     technology: 'React',
     description: '/gist page + fetch/parse + portable strip.',
   }),
@@ -843,6 +835,7 @@ export function deriveCodeProcessKeys(
   const processByAlias = new Map(components.map((c) => [c.alias, c.process]));
   for (const el of elements) {
     if (el.kind === 'container' && el.process) backed.add(el.process);
+    if (el.kind !== 'component' && el.kind !== 'external-system') continue;
     for (const alias of el.members ?? []) {
       const p = processByAlias.get(alias);
       if (p) backed.add(p);

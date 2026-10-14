@@ -55,7 +55,7 @@ import {
   type SubsystemTrail,
 } from './model';
 import { ConstructsCatalog } from './ConstructsCatalog';
-import type { SubsystemOpenFileOptions } from './declarationRef';
+import type { SubsystemOpenFileOptions } from './sourceSpan';
 import {
   SubsystemAgentsPanel,
   type SubsystemAgentsPanelProps,
@@ -140,7 +140,7 @@ function constructIdentifiers(comp: SubsystemComponent): string[] {
 }
 
 type DrawerTarget =
-  | { kind: 'file'; file: string; startLine?: number }
+  | { kind: 'file'; file: string; startLine?: number; endLine?: number }
   | { kind: 'trail'; trailId: string; stepIndex: number | null };
 
 /**
@@ -480,11 +480,13 @@ const FileDrawerContent = memo(function FileDrawerContent({
   render,
   file,
   startLine,
+  endLine,
   fullFile,
 }: {
   render: (file: string, opts?: SubsystemOpenFileOptions) => ReactNode;
   file: string;
   startLine?: number;
+  endLine?: number;
   fullFile?: boolean;
 }) {
   return (
@@ -492,7 +494,11 @@ const FileDrawerContent = memo(function FileDrawerContent({
       {render(
         file,
         startLine != null
-          ? { startLine, ...(fullFile ? { fullFile: true } : {}) }
+          ? {
+              startLine,
+              ...(endLine != null ? { endLine } : {}),
+              ...(fullFile ? { fullFile: true } : {}),
+            }
           : undefined,
       )}
     </>
@@ -596,6 +602,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
   const [fileOverlay, setFileOverlay] = useState<{
     file: string;
     startLine?: number;
+    endLine?: number;
   } | null>(null);
   // Mirror so step-focus can decide whether to wait for the drawer open
   // transition before fitView (avoids framing against full-height canvas).
@@ -886,7 +893,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
   }, [drawerStepIndex, focusedTrail, visibleStepIndex]);
 
   // Refresh selected component when the components list updates (e.g. verify
-  // writes back declarationRef).
+  // writes back declarationSpan).
   useEffect(() => {
     if (!selected) return;
     const fresh = components.find((c) => c.alias === selected.alias);
@@ -895,7 +902,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
 
   // Pass 1: build with estimated widths so React Flow can measure the DOM.
   // The pane stays hidden until Pass 2 completes. Key off layout-affecting
-  // fields only — declarationRef updates after verify must not re-run ELK.
+  // fields only — declarationSpan updates after verify must not re-run ELK.
   const layoutKey = useMemo(
     () => subsystemGraphLayoutKey({ components, trails, graphifyRelations }),
     [components, trails, graphifyRelations],
@@ -1219,22 +1226,22 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
   // Keyed by the React Flow edge id (from → mechanism → to). An edge can have
   // multiple steps with issues; we show the worst status (stale > unconfirmed).
   const stepIssueBadgeByEdgeId = useMemo(() => {
-    const map = new Map<string, { kind: 'step_unconfirmed' | 'step_stale'; severity: 'info' | 'error'; count: number }>();
+    const map = new Map<string, { kind: 'step_span_unconfirmed' | 'step_span_stale'; severity: 'info' | 'error'; count: number }>();
     if (!issues?.length || !trails?.length) {
       return map;
     }
     for (const issue of issues) {
-      if (issue.kind !== 'step_unconfirmed' && issue.kind !== 'step_stale') continue;
+      if (issue.kind !== 'step_span_unconfirmed' && issue.kind !== 'step_span_stale') continue;
       const stepInfo = issueStep(issue);
       if (!stepInfo) continue;
       const step = stepInfo.trail.steps[stepInfo.stepIndex];
       if (!step) continue;
       const edgeId = trailStepGraphEdgeId(step);
       const prev = map.get(edgeId);
-      // step_stale is worse than step_unconfirmed
-      const isWorse = issue.kind === 'step_stale' && prev?.kind !== 'step_stale';
+      // step_span_stale is worse than step_span_unconfirmed
+      const isWorse = issue.kind === 'step_span_stale' && prev?.kind !== 'step_span_stale';
       map.set(edgeId, {
-        kind: isWorse || !prev ? issue.kind as 'step_unconfirmed' | 'step_stale' : prev.kind,
+        kind: isWorse || !prev ? issue.kind as 'step_span_unconfirmed' | 'step_span_stale' : prev.kind,
         severity: prev?.severity === 'error' || issue.severity === 'error' ? 'error' : 'info',
         count: (prev?.count ?? 0) + 1,
       });
@@ -1778,6 +1785,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
     (file: string, opts?: SubsystemOpenFileOptions) => {
       setFileOverlay(null);
       const startLine = opts?.startLine;
+      const endLine = opts?.endLine;
       if (
         openFileRef.current?.file === file &&
         openFileRef.current.startLine === startLine
@@ -1785,16 +1793,16 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
         setDrawerTarget(null);
         return;
       }
-      setDrawerTarget({ kind: 'file', file, startLine });
+      setDrawerTarget({ kind: 'file', file, startLine, endLine });
       onFileSelect?.(file);
     },
     [onFileSelect],
   );
 
   // Double-click a component opens its declaration in the file drawer — the
-  // `file` + anchored `declarationRef.startLine` when verify resolved one,
-  // else the file top. Uses the same open path as the declaration panel's
-  // file link, so the drawer and file tree stay in sync.
+  // `file` + anchored `declarationSpan` range when verify resolved one, else
+  // the file top. Uses the same open path as the declaration panel's file
+  // link, so the drawer and file tree stay in sync.
   // Boundary region currently framed by a double-click, so a second
   // double-click on the same boundary zooms back out to the whole graph.
   const [focusedBoundaryKey, setFocusedBoundaryKey] = useState<string | null>(null);
@@ -1831,15 +1839,21 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
       if (node.type !== 'subsystem-component') return;
       const comp = (node.data as { component?: SubsystemComponent } | undefined)?.component;
       if (!comp?.file) return;
-      const startLine = comp.declarationRef?.startLine;
-      onOpenDeclarationFile(comp.file, startLine != null ? { startLine } : undefined);
+      const startLine = comp.declarationSpan?.startLine;
+      const endLine = comp.declarationSpan?.endLine;
+      onOpenDeclarationFile(
+        comp.file,
+        startLine != null
+          ? { startLine, ...(endLine != null ? { endLine } : {}) }
+          : undefined,
+      );
     },
     [onOpenDeclarationFile, fitView, focusedBoundaryKey],
   );
 
   const onOpenFileFromTrail = useCallback(
     (file: string, opts?: SubsystemOpenFileOptions) => {
-      setFileOverlay({ file, startLine: opts?.startLine });
+      setFileOverlay({ file, startLine: opts?.startLine, endLine: opts?.endLine });
       onFileSelect?.(file);
     },
     [onFileSelect],
@@ -2135,7 +2149,8 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
         setDrawerTarget({
           kind: 'file',
           file: step.file,
-          startLine: step.line,
+          startLine: step.span?.startLine,
+          endLine: step.span?.endLine,
         });
       }
       const edgeIds = new Set([trailStepGraphEdgeId(step)]);
@@ -2245,7 +2260,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
             if (renderTrailViewer) {
               setDrawerTarget({ kind: 'trail', trailId: tl.id, stepIndex: stepIdx });
             } else {
-              setDrawerTarget({ kind: 'file', file: step.file, startLine: step.line });
+              setDrawerTarget({ kind: 'file', file: step.file, startLine: step.span?.startLine, endLine: step.span?.endLine });
             }
           }
         }
@@ -2537,10 +2552,13 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
     (alias: string) => {
       const comp = components.find((c) => c.alias === alias);
       if (!comp?.file) return;
-      const startLine = comp.declarationRef?.startLine;
+      const startLine = comp.declarationSpan?.startLine;
+      const endLine = comp.declarationSpan?.endLine;
       onOpenDeclarationFile(
         comp.file,
-        startLine != null ? { startLine } : undefined,
+        startLine != null
+          ? { startLine, ...(endLine != null ? { endLine } : {}) }
+          : undefined,
       );
     },
     [components, onOpenDeclarationFile],
@@ -2976,7 +2994,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
                 return (
                   <span
                     aria-hidden
-                    title={lbl.stepIssue.kind === 'step_stale'
+                    title={lbl.stepIssue.kind === 'step_span_stale'
                       ? 'Call site changed since verification'
                       : 'Call site not yet verified'}
                     style={{
@@ -3218,7 +3236,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
                 drawerTarget.startLine != null &&
                 !!selected.file &&
                 selected.file === drawerTarget.file &&
-                selected.declarationRef?.startLine === drawerTarget.startLine
+                selected.declarationSpan?.startLine === drawerTarget.startLine
               }
             />
           </div>
@@ -3250,6 +3268,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
             render={renderDrawerContent}
             file={drawerTarget.file}
             startLine={drawerTarget.startLine}
+            endLine={drawerTarget.endLine}
           />
         ) : null}
       </FileDrawer>
@@ -3297,6 +3316,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
               render={renderDrawerContent}
               file={fileOverlay.file}
               startLine={fileOverlay.startLine}
+              endLine={fileOverlay.endLine}
               fullFile
             />
           </div>

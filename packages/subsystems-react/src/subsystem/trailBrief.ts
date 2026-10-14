@@ -31,7 +31,12 @@ export function buildStepBrief(
   lines.push(`- to: \`${step.to}\``);
   lines.push(`- mechanism: \`${step.mechanism}\``);
   lines.push(`- symbol: \`${step.symbol}\``);
-  lines.push(`- site: \`${step.file}:${step.line}\``);
+  const site = step.span
+    ? step.span.startLine === step.span.endLine
+      ? `${step.file}:${step.span.startLine}`
+      : `${step.file}:${step.span.startLine}-${step.span.endLine}`
+    : step.file;
+  lines.push(`- site: \`${site}\``);
   lines.push(`- purl: \`${step.purl}\``);
   if (step.annotation != null && step.annotation.length > 0) {
     lines.push(`- note: ${step.annotation}`);

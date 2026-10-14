@@ -1,27 +1,31 @@
 /**
- * Declaration anchoring — start-line + single-line content hash.
+ * Source-span anchoring — a content-addressed range of source.
  *
- * Graphify emits `source_location: "L42"` (declaration start line). We capture
- * that line's normalized text as a fingerprint to detect drift without end-line
- * spans or graphify changes.
+ * A span is `startLine` + `endLine` + a hash of the normalized content across
+ * that range. The type is owned by `@principal-ai/subsystems-core` (the
+ * portable standard); this module re-exports it and provides the line helpers
+ * shared by the renderers and host-side hashing.
+ *
+ * Graphify emits `source_location: "L42"` (a start line only); the end line is
+ * derived by verification, and `hashContentRange` (host-side) produces the
+ * `contentHash`.
  */
 
-/** Persisted anchor for a subsystem component's source declaration. */
-export interface SubsystemDeclarationRef {
-  /** Repo-root-relative path (matches `component.file`). */
-  file: string;
-  /** 1-based declaration start line (from graphify `source_location`). */
-  startLine: number;
-  /** SHA-256 of {@link normalizeDeclarationLine} output, truncated to 32 hex chars. */
-  lineHash: string;
-  /** Graphify node id when captured from an exact anchor. */
-  graphifyNodeId?: string;
-  /** ISO timestamp when this ref was recorded. */
-  capturedAt: string;
-}
+import type { SubsystemSourceSpan } from '@principal-ai/subsystems-core';
 
-export type DeclarationFreshness =
-  | 'fresh'
+export type { SubsystemSourceSpan };
+
+/**
+ * How fresh an anchored span is, as computed by verification.
+ *
+ * - `full` — the span (start + end + hash) is present and live content matches.
+ * - `stale` — present, but the content or position drifted.
+ * - `missing` — present, but the range no longer resolves.
+ * - `unanchored` — no span captured yet.
+ * - `unchecked` — source unreadable / repo unresolved.
+ */
+export type SpanFreshness =
+  | 'full'
   | 'stale'
   | 'missing'
   | 'unanchored'
@@ -55,6 +59,11 @@ export function extractDeclarationLine(content: string, lineNumber: number): str
 export interface SubsystemOpenFileOptions {
   /** Scroll/highlight this 1-based line (declaration start or trail site). */
   startLine?: number;
+  /**
+   * End of the anchored span, when the owner carries one. Lets the snippet
+   * window show the construct's full extent instead of a single line.
+   */
+  endLine?: number;
   /**
    * When true with `startLine`, show the whole file scrolled to that line
    * instead of a focused snippet window.

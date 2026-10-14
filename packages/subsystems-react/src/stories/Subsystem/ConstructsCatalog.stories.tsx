@@ -4,7 +4,7 @@ import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme
 import { ConstructsCatalog } from '../../subsystem/ConstructsCatalog';
 import { PierreFileView, PierreSnippetView } from '../../pierre';
 import type { SubsystemComponent } from '../../subsystem/model';
-import type { SubsystemOpenFileOptions } from '../../subsystem/declarationRef';
+import type { SubsystemOpenFileOptions } from '../../subsystem/sourceSpan';
 import type { SymbolInspection } from '../../subsystem/symbolRefs';
 import type { GraphifyComponentDetail } from '../../graphify';
 
@@ -43,11 +43,10 @@ const components: SubsystemComponent[] = [
     process: 'notes-api/server',
     file: 'src/api/submitNote.ts',
     purpose: 'HTTP/handler entry — validates and hands off to the service.',
-    declarationRef: {
-      file: 'src/api/submitNote.ts',
+    declarationSpan: {
       startLine: 7,
-      lineHash: 'storybook-placeholder',
-      capturedAt: new Date(0).toISOString(),
+      endLine: 7,
+      contentHash: 'storybook-placeholder',
     },
     declaration: {
       kind: 'function',
@@ -69,11 +68,10 @@ const components: SubsystemComponent[] = [
     process: 'notes-api/server',
     file: 'src/NoteService.ts',
     purpose: 'Owns intake rules; methods are separate nodes when they matter.',
-    declarationRef: {
-      file: 'src/NoteService.ts',
+    declarationSpan: {
       startLine: 3,
-      lineHash: 'storybook-placeholder',
-      capturedAt: new Date(0).toISOString(),
+      endLine: 3,
+      contentHash: 'storybook-placeholder',
     },
     declaration: {
       kind: 'class',
@@ -101,11 +99,10 @@ const components: SubsystemComponent[] = [
     process: 'notes-api/server',
     file: 'src/NoteService.ts',
     purpose: 'Instance method on NoteService — written as its own construct.',
-    declarationRef: {
-      file: 'src/NoteService.ts',
+    declarationSpan: {
       startLine: 14,
-      lineHash: 'storybook-placeholder',
-      capturedAt: new Date(0).toISOString(),
+      endLine: 14,
+      contentHash: 'storybook-placeholder',
     },
     declaration: {
       kind: 'method',
@@ -337,7 +334,7 @@ function renderFileViewer(file: string, opts?: SubsystemOpenFileOptions) {
         filePath={file}
         fileName={file.split('/').pop() ?? file}
         startLine={startLine}
-        endLine={startLine}
+        endLine={opts?.endLine ?? startLine}
         focusLine={startLine}
         contextLines={12}
         readFile={readStoryFile}

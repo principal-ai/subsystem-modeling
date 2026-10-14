@@ -1848,7 +1848,7 @@ export function convertSubsystemToEdges(
   return edges;
 }
 
-/** Stable key for layout-affecting graph fields (ignores declarationRef, etc.). */
+/** Stable key for layout-affecting graph fields (ignores declarationSpan, etc.). */
 export function subsystemGraphLayoutKey(
   doc: Pick<SubsystemModelDocument, 'components' | 'trails'> & {
     graphifyRelations?: readonly SubsystemGraphifyRelation[];

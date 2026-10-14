@@ -3,7 +3,7 @@ import {
   extractDeclarationLine,
   normalizeDeclarationLine,
   parseSourceLocation,
-} from './declarationRef';
+} from './sourceSpan';
 
 describe('parseSourceLocation', () => {
   test('parses L-prefixed lines', () => {

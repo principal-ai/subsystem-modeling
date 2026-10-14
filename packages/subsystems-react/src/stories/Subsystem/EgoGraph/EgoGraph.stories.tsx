@@ -151,11 +151,10 @@ function toComponent(
     ...(line != null ? { line } : {}),
     ...(line != null
       ? {
-          declarationRef: {
-            file: node.source_file ?? '',
+          declarationSpan: {
             startLine: line,
-            lineHash: 'ego-fixture',
-            capturedAt: new Date(0).toISOString(),
+            endLine: line,
+            contentHash: 'ego-fixture',
           },
         }
       : {}),

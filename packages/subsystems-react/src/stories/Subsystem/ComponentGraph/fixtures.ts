@@ -38,7 +38,7 @@ export function trailFromSteps(
       to,
       mechanism,
       file,
-      line,
+      span: { startLine: line, endLine: line, contentHash: 'fixture' },
       purl: `pkg:github/storybook/fixture#${file}`,
       symbol: symbol ?? from,
     })),
@@ -54,7 +54,6 @@ export function graphSpecFromSteps(
     to,
     mechanism: mechanism as SubsystemTrailMechanism,
     file: 'story-placeholder.ts',
-    line: 1,
     purl: 'pkg:github/storybook/fixture#story-placeholder.ts',
     symbol: from,
   }));

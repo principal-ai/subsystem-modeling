@@ -38,7 +38,7 @@ import type {
   SubsystemTrail,
   SubsystemTrailStep,
 } from '../subsystem/model';
-import type { SubsystemOpenFileOptions } from '../subsystem/declarationRef';
+import type { SubsystemOpenFileOptions } from '../subsystem/sourceSpan';
 import { buildPierreOptions, PIERRE_FILE_STYLE } from './pierreBackground';
 import { pierreLangForPath } from './pierreFileLang';
 import { resolvePierreSyntaxThemeName } from './pierreSyntaxTheme';
@@ -161,7 +161,7 @@ function OpenFileHeaderButton({
   onOpenFile,
 }: {
   file: string;
-  line: number;
+  line?: number;
   onOpenFile: (path: string, opts?: SubsystemOpenFileOptions) => void;
 }) {
   const { theme } = useTheme();
@@ -171,7 +171,7 @@ function OpenFileHeaderButton({
       type="button"
       onClick={(e) => {
         e.stopPropagation();
-        onOpenFile(file, { startLine: line, fullFile: true });
+        onOpenFile(file, line != null ? { startLine: line, fullFile: true } : { fullFile: true });
       }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -354,13 +354,9 @@ export function PierreTrailCodeView({
         );
       }
       const contents = load.byPath.get(key) ?? '';
-      return sliceSnippetWindow(
-        contents,
-        step.line,
-        step.line,
-        contextLines,
-        step.line,
-      );
+      const start = step.span?.startLine ?? 1;
+      const end = step.span?.endLine ?? start;
+      return sliceSnippetWindow(contents, start, end, contextLines, start);
     });
   }, [load, trail.steps, contextLines, isProposedStep]);
 
@@ -396,7 +392,7 @@ export function PierreTrailCodeView({
           name: step.file,
           contents: slice.contents,
           lang: pierreLangForPath(step.file),
-          cacheKey: `${trail.id}:${index}:${step.file}:${step.line}:${slice.sliceStart}-${slice.sliceEnd}${failure != null ? ':unavailable' : ''}`,
+          cacheKey: `${trail.id}:${index}:${step.file}:${step.span?.startLine ?? ''}:${slice.sliceStart}-${slice.sliceEnd}${failure != null ? ':unavailable' : ''}`,
         },
       };
     });
@@ -472,11 +468,11 @@ export function PierreTrailCodeView({
             </span>
           ) : (
             <>
-              L{step.line}
+              L{step.span?.startLine ?? '?'}
               {onOpenFile && (
                 <OpenFileHeaderButton
                   file={step.file}
-                  line={step.line}
+                  line={step.span?.startLine}
                   onOpenFile={onOpenFile}
                 />
               )}
@@ -528,7 +524,7 @@ export function PierreTrailCodeView({
       const step = trail.steps[index];
       if (!step) return;
       if (load.status === 'ready' && load.unavailable.has(siteKey(step))) return;
-      onOpenFile(step.file, { startLine: step.line, fullFile: true });
+      onOpenFile(step.file, { startLine: step.span?.startLine, fullFile: true });
     },
     [onOpenFile, trail.steps, load],
   );

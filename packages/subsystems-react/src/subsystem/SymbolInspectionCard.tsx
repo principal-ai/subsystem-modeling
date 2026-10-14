@@ -15,8 +15,8 @@ import { ExternalLink } from 'lucide-react';
 import { useTheme } from '@principal-ade/industry-theme';
 import { resolvePierreSyntaxThemeName } from '../pierre/pierreSyntaxTheme';
 import { sourceLangForPath, type SourceSyntaxLang } from '../pierre/sourceLang';
-import type { SubsystemOpenFileOptions } from './declarationRef';
-import { parseSourceLocation } from './declarationRef';
+import type { SubsystemOpenFileOptions } from './sourceSpan';
+import { parseSourceLocation } from './sourceSpan';
 import { generateDeclarationString } from './formatDeclaration';
 import type {
   SubsystemComponent,

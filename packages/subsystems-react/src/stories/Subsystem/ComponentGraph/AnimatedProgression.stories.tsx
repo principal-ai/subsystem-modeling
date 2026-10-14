@@ -39,19 +39,19 @@ const trails: SubsystemTrail[] = [
     id: 'wt-book',
     title: 'Guest books',
     steps: [
-      { from: 'booking-page', to: 'book-slot', mechanism: 'calls', file: 'app/book/page.tsx', line: 24, purl: PURL, symbol: 'bookSlot' },
-      { from: 'book-slot', to: 'create-booking', mechanism: 'calls', file: 'app/book/actions.ts', line: 22, purl: PURL, symbol: 'createBooking' },
-      { from: 'create-booking', to: 'Database', mechanism: 'writes', file: 'lib/createBooking.ts', line: 13, purl: PURL, symbol: 'insert' },
-      { from: 'booking-page', to: 'capture-event', mechanism: 'calls', file: 'app/book/page.tsx', line: 26, purl: PURL, symbol: 'captureEvent' },
+      { from: 'booking-page', to: 'book-slot', mechanism: 'calls', file: 'app/book/page.tsx', span: { startLine: 24, endLine: 24, contentHash: 'fixture' }, purl: PURL, symbol: 'bookSlot' },
+      { from: 'book-slot', to: 'create-booking', mechanism: 'calls', file: 'app/book/actions.ts', span: { startLine: 22, endLine: 22, contentHash: 'fixture' }, purl: PURL, symbol: 'createBooking' },
+      { from: 'create-booking', to: 'Database', mechanism: 'writes', file: 'lib/createBooking.ts', span: { startLine: 13, endLine: 13, contentHash: 'fixture' }, purl: PURL, symbol: 'insert' },
+      { from: 'booking-page', to: 'capture-event', mechanism: 'calls', file: 'app/book/page.tsx', span: { startLine: 26, endLine: 26, contentHash: 'fixture' }, purl: PURL, symbol: 'captureEvent' },
     ],
   },
   {
     id: 'wt-pick',
     title: 'Guest picks a slot',
     steps: [
-      { from: 'booking-page', to: 'list-open-slots', mechanism: 'calls', file: 'app/book/page.tsx', line: 17, purl: PURL, symbol: 'listOpenSlots' },
-      { from: 'list-open-slots', to: 'list-slots', mechanism: 'calls', file: 'app/book/actions.ts', line: 14, purl: PURL, symbol: 'listSlots' },
-      { from: 'list-slots', to: 'Database', mechanism: 'reads', file: 'lib/listSlots.ts', line: 9, purl: PURL, symbol: 'findOpen' },
+      { from: 'booking-page', to: 'list-open-slots', mechanism: 'calls', file: 'app/book/page.tsx', span: { startLine: 17, endLine: 17, contentHash: 'fixture' }, purl: PURL, symbol: 'listOpenSlots' },
+      { from: 'list-open-slots', to: 'list-slots', mechanism: 'calls', file: 'app/book/actions.ts', span: { startLine: 14, endLine: 14, contentHash: 'fixture' }, purl: PURL, symbol: 'listSlots' },
+      { from: 'list-slots', to: 'Database', mechanism: 'reads', file: 'lib/listSlots.ts', span: { startLine: 9, endLine: 9, contentHash: 'fixture' }, purl: PURL, symbol: 'findOpen' },
     ],
   },
 ];
