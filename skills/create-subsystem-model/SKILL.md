@@ -102,8 +102,9 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
           "to": "warmup-worker",                   // target component alias
           "mechanism": "calls",                    // see mechanism list below
           "file": "packages/subsystems-studio/src/bun/server-sessions.ts",
-          "line": 42,                              // 1-based site where the seam fires
           "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/server-sessions.ts",  // required: file-anchored purl of the seam site; readers resolve the checkout from this
+          // The seam's source span { startLine, endLine, contentHash } is captured
+          // by verification, not hand-authored — see the step contract below.
           "symbol": "probeOpencodeServer",         // optional frame label in Trails UI
           "annotation": "Probe the server before listing sessions."  // optional codeview note
         }
@@ -185,31 +186,33 @@ never author an `edges` array.
 | `to` | yes | Target component `alias` this step lands on |
 | `mechanism` | yes | Runtime seam label (closed set below) |
 | `file` | yes | Repo-root-relative path of the seam site |
-| `line` | yes | 1-based line in `file` where that relationship fires |
+| `span` | no | Seam source span (`startLine`, `endLine`, `contentHash`) — the call-site range and its content hash. Captured by verify tooling, not hand-authored; `file` + `symbol` locate the frame. |
 | `purl` | yes | File-anchored purl of the seam site (repo key + `#` + `file`, mirroring component `purl`). Readers resolve the checkout from this — the step must not rely on its endpoints' repos. The fragment after `#` must equal `file`. |
 | `symbol` | yes | Frame name shown in the Trails list — the function/method on the stack at the site. Required; there is no mechanism + filename fallback. |
 | `annotation` | no | Free-text note for this step. Viewers show it in the codeview annotation column next to the highlighted line. Informative only — never verified against source. Prefer one short verb-first sentence (same voice as `purpose`). |
 
-Do **not** point `file:line` at a random nearby line: pick the line where the
-seam actually fires (a reviewer checks the step against it). Site verification
-(`verification.trailsChecked` / `trailsFailed`) confirms the file
-resolves under the step's `purl` and the line is in range and non-blank — it
-does not check text affinity, so a wrong-but-plausible line passes
-verification and misleads readers. Get the line right anyway.
+Do **not** anchor the step at a random nearby site: `file` + `symbol` should
+name the frame where the seam actually fires (a reviewer checks the step against
+it). Site verification (`verification.trailsChecked` / `trailsFailed`) confirms
+the file resolves under the step's `purl` and — once a `span` has been captured
+— that its start line is in range and non-blank; it does not check text
+affinity, so a plausible-but-wrong site passes verification and misleads
+readers. Anchor it right anyway.
 
 **Authoring workflow**
 
 1. Lay components (+ optional `module` / `process` boundary frames).
 2. Name the trails the user cares about (titles humans will click).
-3. For each step, open the real glue file, pick the call/emit/register line,
-   and record `{ from, to, mechanism, file, line, purl, symbol?, annotation? }`
+3. For each step, open the real glue file, find the call/emit/register site,
+   and record `{ from, to, mechanism, file, purl, symbol?, annotation? }`
    where `purl` is the file-anchored purl of that glue file (`<repo-key>#<file>`).
    The seam file does NOT need an owning component — that is exactly what the
    step `purl` is for.
    Default **on** for `annotation` when the step needs a human-readable
-   "what happens here" — the site line alone is often opaque without it.
-4. Create via CLI; if `trailsFailed` is non-empty, correct the site lines
-   and update (Studio HTTP PUT while Studio is running, or recreate).
+   "what happens here" — `file` + `symbol` alone is often opaque without it.
+4. Create via CLI; verification pins each step's `span`. If `trailsFailed` is
+   non-empty, correct the site and update (Studio HTTP PUT while Studio is
+   running, or recreate).
 
 Reference shape: `packages/subsystems-react/src/stories/Subsystem/ComponentGraph/Trails.stories.tsx`.
 
