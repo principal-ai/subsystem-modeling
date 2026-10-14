@@ -12,10 +12,18 @@
  * pure and needs no ELK — the layout half it feeds is covered by the node e2e.
  */
 import { describe, expect, test } from 'bun:test';
-import { c4GroupDefs, hidesComponentDuringMorph, rebaseGroupBoundsAbsolute, showDescriptionFor } from './C4Graph';
-import { OPEN_FOOTER_PAD, OPEN_SIDE_PAD } from './C4NodeCard';
+import {
+  absoluteRectOf,
+  c4GroupDefs,
+  hidesComponentDuringMorph,
+  rebaseGroupBoundsAbsolute,
+  showDescriptionFor,
+} from './C4Graph';
+import type { C4ConstructGraph } from './C4Graph';
+import { COMPONENT_HEADER_PAD, OPEN_FOOTER_PAD, OPEN_SIDE_PAD } from './C4NodeCard';
 import { openContainerSet, openStateKey } from './c4';
 import type { C4Element, C4Model } from './c4';
+import type { SubsystemComponent } from './model';
 
 const SYSTEM = 'system:studio';
 
@@ -148,6 +156,46 @@ describe('c4GroupDefs — the opened container', () => {
   });
 });
 
+describe('c4GroupDefs — constructs nest container → component → construct', () => {
+  const comp = (alias: string): SubsystemComponent => ({
+    alias,
+    name: alias,
+    construct: 'function',
+    file: `${alias}.ts`,
+    purl: `pkg:x#${alias}.ts`,
+  });
+
+  test('a component that claims constructs grows into a nested ELK parent', () => {
+    const cg: C4ConstructGraph = {
+      components: [comp('a'), comp('b')],
+      trails: [],
+      componentOf: new Map([['a', 'cmp:a']]),
+    };
+    const groups = groupById(c4GroupDefs(base, [HOST], new Map([[HOST, cg]])).groups);
+    const compGroup = groups.get('cmp:a')!;
+    // The construct nests inside its component, which nests inside the container.
+    expect(compGroup.parentId).toBe(HOST);
+    expect(compGroup.memberIds).toEqual(['a']);
+    expect(compGroup.drawnAsCard).toBe(true);
+    expect(compGroup.padTop).toBe(COMPONENT_HEADER_PAD);
+    // The container holds the component (as a group) and the unclaimed construct.
+    expect(groups.get(HOST)!.memberIds).toEqual(['cmp:a', 'cmp:b', 'b']);
+  });
+
+  test('a construct no component claims sits directly in the container', () => {
+    const cg: C4ConstructGraph = { components: [comp('orphan')], trails: [] };
+    const groups = groupById(c4GroupDefs(base, [HOST], new Map([[HOST, cg]])).groups);
+    expect(groups.get(HOST)!.memberIds).toEqual(['cmp:a', 'cmp:b', 'orphan']);
+    // No component claims it, so it is not a group of its own.
+    expect(groups.has('orphan')).toBe(false);
+  });
+
+  test('no construct graph leaves the container holding only its components', () => {
+    const groups = groupById(c4GroupDefs(base, [HOST]).groups);
+    expect(groups.get(HOST)!.memberIds).toEqual(['cmp:a', 'cmp:b']);
+  });
+});
+
 describe('c4GroupDefs — frames', () => {
   test('the opened container is not also drawn as a frame', () => {
     // It is drawn as a grown card. Leaving it in `frames` would draw a frame
@@ -235,6 +283,52 @@ describe('c4GroupDefs — several containers open at once', () => {
     // two groups with the same id, which ELK rejects as a duplicate.
     const groups = c4GroupDefs(pair, [HOST, HOST]).groups;
     expect(groups.filter((g) => g.id === HOST)).toHaveLength(1);
+  });
+});
+
+describe('absoluteRectOf — a node rect in absolute flow space', () => {
+  const node = (id: string, x: number, y: number, parentId?: string) => ({
+    id,
+    position: { x, y },
+    width: 100,
+    height: 50,
+    ...(parentId ? { parentId } : {}),
+  });
+  const layout = () => ({
+    nodes: [
+      node('system', 12, 12),
+      node('container', 10, 190, 'system'),
+      node('component', 24, 64, 'container'),
+    ],
+    groupBounds: new Map([['container', { x: 22, y: 202, width: 250, height: 500 }]]),
+  });
+
+  test('a group takes its absolute bounds', () => {
+    // The group bounds are already absolute — the node box must not be consulted.
+    expect(absoluteRectOf(layout(), 'container')).toEqual({
+      x: 22,
+      y: 202,
+      width: 250,
+      height: 500,
+    });
+  });
+
+  test('a nested leaf adds every ancestor origin', () => {
+    // system(12,12) + container(10,190) + component(24,64)
+    expect(absoluteRectOf(layout(), 'component')).toEqual({
+      x: 46,
+      y: 266,
+      width: 100,
+      height: 50,
+    });
+  });
+
+  test('a root leaf is its own position', () => {
+    expect(absoluteRectOf(layout(), 'system')).toEqual({ x: 12, y: 12, width: 100, height: 50 });
+  });
+
+  test('an absent id is null', () => {
+    expect(absoluteRectOf(layout(), 'nope')).toBeNull();
   });
 });
 

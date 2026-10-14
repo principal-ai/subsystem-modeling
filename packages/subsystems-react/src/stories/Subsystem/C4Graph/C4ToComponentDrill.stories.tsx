@@ -1,85 +1,70 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import '@xyflow/react/dist/style.css';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
+import { FileText, LayoutDashboard } from 'lucide-react';
+import { IndustryMarkdownSlide } from 'themed-markdown';
 import { C4Graph } from '../../../subsystem/C4Graph';
 import { GraphWithSidebar } from '../../../subsystem/GraphWithSidebar';
-import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
 import { TrailStepsNav } from '../../../subsystem/TrailStepsNav';
-import type { C4Edge } from '../../../subsystem/c4';
+import type { C4ConstructGraph } from '../../../subsystem/C4Graph';
+import { deriveGraphEdges, trailStepGraphEdgeId } from '../../../subsystem/model';
 import {
   DRILLDOWN_C4_MODEL,
   DRILLDOWN_COMPONENTS,
   DRILLDOWN_DOC,
+  DRILLDOWN_ELEMENTS,
   DRILLDOWN_MEMBERS,
   DRILLDOWN_TRAILS,
-  deriveCodeProcessKeys,
   deriveLitC4Edges,
   deriveTrailPlayerElements,
 } from '../../../subsystem/__fixtures__/c4Drilldown';
 
-/**
- * Process claims the accepted element set backs with nothing — the
- * anti-library trio (`subsystems-core/types`, `subsystems-react/ui`,
- * `proposed/studio-gist`). The component graph draws these with package
- * chrome (dashed, rounded) instead of the solid runtime chrome a real
- * deployment unit wears: the accepted C4 set is what says "box", and these
- * three have no box.
- */
-const CODE_PROCESS_KEYS = deriveCodeProcessKeys(
-  DRILLDOWN_C4_MODEL.nodes,
-  DRILLDOWN_COMPONENTS,
-);
+/** The model this story is grounded in — shown in the sidebar header. */
+const MODEL_DESCRIPTION =
+  'The subsystem this C4 view summarizes. Focusing a trail opens the containers that hold its cast and folds the trail in as real nodes and edges, nested under their C4 component.';
 
 /**
- * The C4 → component-graph drill-down, side by side.
+ * The C4 → construct drill-down, in one canvas.
  *
- * The C4 view (top) is the high-level summary: containers, externals, and the
- * rolled-up lines between them. The component graph (bottom) is the
- * implementation: nodes, mechanism edges, and trails — the REAL subsystem
- * model this repo lives under (`sg-1788913589907-ieokymqg9` "Gist share from
- * Studio": 19 components, 15/15 verified claims, 7 walkthroughs checked). The
- * C4 layer assumes the accepted element set on top of it; the two must agree.
+ * The C4 view is the high-level summary: containers, externals, and the
+ * rolled-up lines between them. Focusing a trail folds the implementation into
+ * it — the constructs (the component graph's own `subsystem-component` nodes
+ * and `subsystem-edge` edges) are laid out by ELK inside the opened containers
+ * and morphed in with them, so the C4 canvas carries both the summary and the
+ * implementation. The model is the REAL subsystem model this repo lives under
+ * (`sg-1788913589907-ieokymqg9` "Gist share from Studio": 19 components, 15/15
+ * verified claims, 7 walkthroughs checked).
  *
- * Interaction under iteration:
- *   - click a C4 edge → it selects, and the story deep-links the component
- *     graph to the first trail that backs the line (`initialTrailId`, via a
- *     remount) — the "edge is the summary, the trail is the implementation"
- *     jump;
- *   - the C4 edge inspector lists every backing trail; clicking one re-targets
- *     the component graph there;
+ * Interaction:
+ *   - click a C4 edge → it selects, and the story focuses the first trail that
+ *     backs the line — the "edge is the summary, the trail is the
+ *     implementation" jump;
+ *   - the C4 edge inspector lists every backing trail; clicking one focuses it;
  *   - focusing a trail HIDES every C4 element whose components don't appear in
- *     it — the two graphs converge on the same cast, and lines touching a
- *     hidden box go with it. It also OPENS the containers that hold the cast,
- *     so the participating components come in at Level 3 instead of staying a
- *     collapsed box. (The component graph's opened-flow hide, on the C4 view.)
- *     Focus can come from either side: a C4 edge or inspector trail row, or a
- *     trail clicked in the component graph's own Trails panel (reported back up
- *     through `onTrailSelect`);
- *   - hovering a *step* row in the Trails panel instead DIMS the C4 down to
- *     that single hop's `from → to` participants — elements AND lines: an edge
- *     stays lit only if it folds this hop, so a step entirely internal to a
- *     container dims every line while the container stays bright (no drawn
- *     edge represents it). Transient: falls back to the focused-hide view on
- *     leave (`onTrailStepHover`);
- *   - container cards still open their authored Level-3 components (the
- *     existing C4 drill-down) — orthogonal to the graph-to-graph jump;
- *   - frame chrome agrees too: a process claim the accepted element set
- *     backs with nothing (`subsystems-react/ui`,
- *     `subsystems-core/types`, `proposed/studio-gist`) draws as a package
- *     boundary — rounded, dashed, with the Package glyph — instead of the
- *     solid runtime chrome a deployment unit wears (`codeProcessKeys`,
- *     computed from the same elements the C4 view renders);
- *   - the C4 view is composed with its own sidebar by the story, through the
- *     shared `GraphWithSidebar` wrapper: the sidebar carries the **trails**
- *     (the same `TrailsPanel` the component graph shows) — pick a trail beside
- *     the summary and it dims the C4 to that trail's cast and deep-links the
- *     component graph below. The C4 selection inspector stays the graph's own
- *     floating overlay; the wrapper is the composition point, so the C4 graph
- *     itself stays overlay-only.
+ *     it, and OPENS the containers that hold the cast, so the participating
+ *     components come in at Level 3 instead of staying a collapsed box;
+ *   - each opened container hosts the focused trail's components as real
+ *     `subsystem-component` nodes and `subsystem-edge` edges. The constructs
+ *     nest under the authored C4 component that claims them (container →
+ *     component → construct); one no component claims sits directly in the
+ *     container. An edge between constructs in the same container draws as a
+ *     subsystem edge; one that would cross containers is left to the C4
+ *     container-level line. Clicking a construct opens its **functionality** —
+ *     the rendered declaration and its purpose — in the bottom-left panel. The
+ *     host resolves it (`constructGraphByContainer`) so the C4 view stays free
+ *     of the document;
+ *   - hovering a *step* row DIMS the constructs down to that single hop: every
+ *     construct except the step's `from`/`to`, and every construct edge except
+ *     the step's own, fades (`dimmedConstructIds` / `dimmedConstructEdgeIds`).
+ *     Transient: falls back to the focused view on leave;
+ *   - the C4 view is composed with its own sidebar through the shared
+ *     `GraphWithSidebar` wrapper: the sidebar carries the **trails**. The C4
+ *     selection inspector stays the graph's own floating overlay; the wrapper
+ *     is the composition point, so the C4 graph itself stays overlay-only.
  *
- * The status bar below the C4 view shows what the two graphs currently agree
- * on, so the wiring is visible while it is being argued with.
+ * The status bar below the C4 view shows the current selection, so the wiring
+ * is visible while it is being argued with.
  */
 
 const meta = {
@@ -101,38 +86,48 @@ type Story = StoryObj<typeof meta>;
 
 function Demo() {
   const [openIds, setOpenIds] = useState<string[]>([]);
-  const [selectedEdge, setSelectedEdge] = useState<C4Edge | null>(null);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  // The component graph is deep-linked by remount: `initialTrailId` re-applies
-  // on a new id or a remount, so bumping the key is the reliable way to drop a
-  // fresh focus. A real host would wire a controlled focus instead.
   const [focusedTrailId, setFocusedTrailId] = useState<string | null>(null);
-  const [graphEpoch, setGraphEpoch] = useState(0);
-  // The trail (or step) currently hovered in either trails panel — its
-  // transient preview drives a step-scoped dim upstairs. `stepIndex: null`
-  // means the whole trail (a collapsed row hover).
+  // The trail (or step) currently hovered in the trails panel — its transient
+  // preview drives a step-scoped dim. `stepIndex: null` means the whole trail
+  // (a collapsed row hover).
   const [hoveredStep, setHoveredStep] = useState<{
     trailId: string;
     stepIndex: number | null;
   } | null>(null);
-  // The C4 sidebar's own step pane (composed by the story through
-  // GraphWithSidebar): which step the focused trail shows selected. The
-  // focused trail itself is the shared state above.
-  const [c4FocusedStepIndex, setC4FocusedStepIndex] = useState<number | null>(null);
+  // The persistently-focused step (a step click in the sidebar). Drives the
+  // sticky construct spotlight and the C4 graph's code drawer; the hover below
+  // is the transient preview that shares the same dim.
+  const [focusedStep, setFocusedStep] = useState<{
+    trailId: string;
+    stepIndex: number;
+  } | null>(null);
+  // The header description, collapsible like the component graph's sidebar.
+  const [descriptionVisible, setDescriptionVisible] = useState(true);
 
-  const model = useMemo(
-    () => ({ ...DRILLDOWN_C4_MODEL, openContainerIds: openIds }),
-    [openIds],
-  );
+  /**
+   * EXPERIMENT: when a trail is focused, remove the elements it does not touch
+   * from the model outright, so ELK lays the diagram out to the cast alone
+   * instead of leaving gaps where the hidden boxes were. `null` = nothing
+   * focused, the whole model.
+   */
+  const trailPlayers = useMemo(() => {
+    if (!focusedTrailId) return null;
+    const trail = DRILLDOWN_TRAILS.find((t) => t.id === focusedTrailId);
+    return trail ? deriveTrailPlayerElements(trail.steps, DRILLDOWN_MEMBERS) : null;
+  }, [focusedTrailId]);
+
+  const model = useMemo(() => {
+    if (!trailPlayers) return { ...DRILLDOWN_C4_MODEL, openContainerIds: openIds };
+    const nodes = DRILLDOWN_C4_MODEL.nodes.filter((n) => trailPlayers.has(n.id));
+    const ids = new Set(nodes.map((n) => n.id));
+    const edges = DRILLDOWN_C4_MODEL.edges.filter(
+      (e) => ids.has(e.source) && ids.has(e.target),
+    );
+    return { ...DRILLDOWN_C4_MODEL, nodes, edges, openContainerIds: openIds };
+  }, [openIds, trailPlayers]);
 
   const toggle = useCallback((id: string) => {
     setOpenIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id].sort()));
-  }, []);
-
-  const trailTitles = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const t of DRILLDOWN_TRAILS) map.set(t.id, t.title);
-    return map;
   }, []);
 
   const allElementIds = useMemo(
@@ -167,14 +162,30 @@ function Demo() {
     return out;
   }, []);
 
+  /**
+   * The containers the *current* trail focus opened — remembered so clearing
+   * the focus (or moving to another trail) can close exactly those and leave any
+   * the reader opened by hand alone.
+   */
+  const trailOpenedRef = useRef<Set<string>>(new Set());
+
   const openContainersForTrail = useCallback(
     (trailId: string) => {
       const ids = containersForTrail(trailId);
       if (ids.length === 0) return;
+      trailOpenedRef.current = new Set([...trailOpenedRef.current, ...ids]);
       setOpenIds((prev) => [...new Set([...prev, ...ids])].sort());
     },
     [containersForTrail],
   );
+
+  /** Close the containers the current trail focus opened. */
+  const closeTrailContainers = useCallback(() => {
+    const opened = trailOpenedRef.current;
+    trailOpenedRef.current = new Set();
+    if (opened.size === 0) return;
+    setOpenIds((prev) => prev.filter((id) => !opened.has(id)));
+  }, []);
 
   /**
    * The single source of the C4 emphasis, derived from the two focus facts —
@@ -188,7 +199,11 @@ function Demo() {
    *
    * A step internal to a container folds into no C4 line, so its hover dims
    * every edge while the container stays bright — no drawn edge represents it.
+   *
+   * The spotlight is the *selected* step when one is focused (sticky), else the
+   * hovered one (transient) — so a step click keeps its implementation lit.
    */
+  const activeStep = focusedStep ?? hoveredStep;
   const emphasis = useMemo(() => {
     let hiddenElementIds: ReadonlySet<string> | null = null;
     let hiddenEdgeIds: ReadonlySet<string> | null = null;
@@ -204,20 +219,20 @@ function Demo() {
 
     let dimmedElementIds: ReadonlySet<string> | null = null;
     let dimmedEdgeIds: ReadonlySet<string> | null = null;
-    if (hoveredStep) {
-      const trail = DRILLDOWN_TRAILS.find((t) => t.id === hoveredStep.trailId);
+    if (activeStep) {
+      const trail = DRILLDOWN_TRAILS.find((t) => t.id === activeStep.trailId);
       const steps =
         !trail
           ? []
-          : hoveredStep.stepIndex != null
-            ? trail.steps.slice(hoveredStep.stepIndex, hoveredStep.stepIndex + 1)
+          : activeStep.stepIndex != null
+            ? trail.steps.slice(activeStep.stepIndex, activeStep.stepIndex + 1)
             : trail.steps;
       const spotlight = deriveTrailPlayerElements(steps, DRILLDOWN_MEMBERS);
       dimmedElementIds = new Set(allElementIds.filter((id) => !spotlight.has(id)));
       const lit = deriveLitC4Edges(
         {
-          trailId: hoveredStep.trailId,
-          ...(hoveredStep.stepIndex != null ? { stepIndex: hoveredStep.stepIndex } : {}),
+          trailId: activeStep.trailId,
+          ...(activeStep.stepIndex != null ? { stepIndex: activeStep.stepIndex } : {}),
         },
         DRILLDOWN_C4_MODEL.edges,
       );
@@ -225,7 +240,76 @@ function Demo() {
     }
 
     return { hiddenElementIds, hiddenEdgeIds, dimmedElementIds, dimmedEdgeIds };
-  }, [focusedTrailId, hoveredStep, allElementIds, allEdgeIds]);
+  }, [focusedTrailId, activeStep, allElementIds, allEdgeIds]);
+
+  /**
+   * The construct-level subgraph each opened container hosts: the focused
+   * trail's referenced components, grouped by the authored C4 component that
+   * claims each (so constructs nest container → component → construct), with
+   * the trail's steps as their edges. Scoped per container, so an edge that
+   * crosses containers is dropped here and stays a C4 container-level line.
+   */
+  const constructGraphByContainer = useMemo(() => {
+    if (!focusedTrailId) return undefined;
+    const trail = DRILLDOWN_TRAILS.find((t) => t.id === focusedTrailId);
+    if (!trail) return undefined;
+    const byAlias = new Map(DRILLDOWN_COMPONENTS.map((c) => [c.alias, c]));
+    const referenced = new Set<string>();
+    for (const s of trail.steps) {
+      referenced.add(s.from);
+      referenced.add(s.to);
+    }
+    const componentOf = new Map<string, string>();
+    for (const el of DRILLDOWN_ELEMENTS) {
+      if (el.kind === 'component') for (const a of el.members ?? []) componentOf.set(a, el.id);
+    }
+    const out = new Map<string, C4ConstructGraph>();
+    for (const el of DRILLDOWN_ELEMENTS) {
+      if (el.kind !== 'container') continue;
+      const aliases = (DRILLDOWN_MEMBERS[el.id] ?? []).filter(
+        (a) => referenced.has(a) && byAlias.has(a),
+      );
+      if (aliases.length === 0) continue;
+      out.set(el.id, {
+        components: aliases.map((a) => byAlias.get(a)!),
+        trails: [trail],
+        componentOf,
+      });
+    }
+    return out;
+  }, [focusedTrailId]);
+
+  /**
+   * The construct-level spotlight for the active step, matching the component
+   * graph: every construct except the step's `from`/`to`, and every construct
+   * edge except the step's own, fades. The C4-element spotlight (`emphasis`)
+   * only reaches containers, so this is what narrows the constructs to the hop.
+   */
+  const constructEmphasis = useMemo(() => {
+    const none = { ids: null as ReadonlySet<string> | null, edgeIds: null as ReadonlySet<string> | null };
+    if (!activeStep) return none;
+    const trail = DRILLDOWN_TRAILS.find((t) => t.id === activeStep.trailId);
+    if (!trail) return none;
+    const steps =
+      activeStep.stepIndex != null ? [trail.steps[activeStep.stepIndex]] : trail.steps;
+    const spotlight = new Set<string>();
+    const litEdges = new Set<string>();
+    for (const s of steps) {
+      spotlight.add(s.from);
+      spotlight.add(s.to);
+      litEdges.add(trailStepGraphEdgeId(s));
+    }
+    const allAliases = new Set<string>();
+    const allEdgeIds = new Set<string>();
+    for (const cg of constructGraphByContainer?.values() ?? []) {
+      for (const c of cg.components) allAliases.add(c.alias);
+      for (const e of deriveGraphEdges({ trails: [...cg.trails] })) allEdgeIds.add(e.id);
+    }
+    return {
+      ids: new Set([...allAliases].filter((a) => !spotlight.has(a))),
+      edgeIds: new Set([...allEdgeIds].filter((id) => !litEdges.has(id))),
+    };
+  }, [activeStep, constructGraphByContainer]);
 
   /**
    * Focus a trail: the C4 hides non-members, opens the containers that hold
@@ -234,52 +318,22 @@ function Demo() {
   const focusTrail = useCallback(
     (trailId: string) => {
       setFocusedTrailId(trailId);
-      setGraphEpoch((e) => e + 1);
       setHoveredStep(null);
+      // Swap the previous trail's opened containers for this one's, so moving
+      // between trails does not accumulate open boxes.
+      closeTrailContainers();
       openContainersForTrail(trailId);
     },
-    [openContainersForTrail],
-  );
-
-  /**
-   * The component graph's own trail focus (its trails panel) reported back up.
-   * The graph already focused itself, so the host only syncs the C4 hide,
-   * container expansion, and the status line.
-   */
-  const handleGraphTrailSelect = useCallback(
-    (ref: { trailId: string; stepIndices?: number[] } | null) => {
-      setFocusedTrailId(ref?.trailId ?? null);
-      setHoveredStep(null);
-      if (ref?.trailId) openContainersForTrail(ref.trailId);
-    },
-    [openContainersForTrail],
-  );
-
-  /**
-   * Step-level preview: while a step row is hovered the C4 dim narrows to that
-   * single hop's participants (from + to); leaving clears the dim, restoring
-   * the focused-hide view (or the whole graph when nothing is focused).
-   */
-  const handleTrailStepHover = useCallback(
-    (ref: { trailId: string; stepIndex: number } | null) => {
-      setHoveredStep(ref);
-    },
-    [],
+    [openContainersForTrail, closeTrailContainers],
   );
 
   const clearFocus = useCallback(() => {
     setFocusedTrailId(null);
-    setGraphEpoch((e) => e + 1);
     setHoveredStep(null);
-  }, []);
-
-  /** The trail currently focused in the component graph, for the status line. */
-  const focusedTrailTitle = focusedTrailId ? (trailTitles.get(focusedTrailId) ?? focusedTrailId) : null;
-  /** The hovered step's `from → to`, for the status line. */
-  const hoveredStepDef =
-    hoveredStep && hoveredStep.stepIndex != null
-      ? DRILLDOWN_TRAILS.find((t) => t.id === hoveredStep.trailId)?.steps[hoveredStep.stepIndex]
-      : undefined;
+    // Collapse the containers the focus opened, so Back leaves the diagram as
+    // it was rather than with the trail's boxes still expanded.
+    closeTrailContainers();
+  }, [closeTrailContainers]);
 
   return (
     <div
@@ -292,43 +346,110 @@ function Demo() {
         fontFamily: 'monospace',
       }}
     >
-      {/* C4 — the summary level, beside its trails. */}
-      <div style={{ flex: '1 1 52%', minHeight: 0, position: 'relative' }}>
+      {/* C4 — the summary and, on focus, the construct implementation. */}
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <GraphWithSidebar
           persistKey="c4-drill"
           defaultWidth={320}
           minWidth={240}
           maxWidth={480}
           header={
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <span style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: 13, color: '#ddd' }}>
-                Trails
-              </span>
-              <span style={{ fontSize: 12, color: '#777', lineHeight: 1.5 }}>
-                Pick a trail to hide the C4 down to its cast and deep-link the
-                component graph below; hover a step to dim to one hop. An edge
-                clicked in the C4 view deep-links here the same way. Boxes the
-                focused trail does not touch leave the canvas — a hop internal
-                to a container dims every line.
-              </span>
-            </div>
+            <>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                {/* Icon + title centred as a group, so the icon stays vertically
+                    centred when the title wraps. */}
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <LayoutDashboard
+                    size={15}
+                    strokeWidth={2}
+                    aria-hidden
+                    style={{
+                      flexShrink: 0,
+                      color:
+                        defaultEditorTheme.colors.textMuted ??
+                        defaultEditorTheme.colors.textSecondary,
+                    }}
+                  />
+                  <h2
+                    style={{
+                      margin: 0,
+                      flex: 1,
+                      minWidth: 0,
+                      fontSize: defaultEditorTheme.fontSizes[2],
+                      fontWeight: 600,
+                      color: defaultEditorTheme.colors.primary,
+                      fontFamily: defaultEditorTheme.fonts.monospace,
+                    }}
+                  >
+                    {DRILLDOWN_DOC.title}
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  aria-expanded={descriptionVisible}
+                  aria-label={descriptionVisible ? 'Hide description' : 'Show description'}
+                  title={descriptionVisible ? 'Hide description' : 'Show description'}
+                  onClick={() => setDescriptionVisible((v) => !v)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    width: 22,
+                    height: 22,
+                    padding: 0,
+                    border: 'none',
+                    borderRadius: 4,
+                    background: descriptionVisible ? '#333' : 'transparent',
+                    color: descriptionVisible ? '#ddd' : '#999',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <FileText size={14} />
+                </button>
+              </div>
+              {descriptionVisible && (
+                <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+                  <IndustryMarkdownSlide
+                    content={MODEL_DESCRIPTION}
+                    slideIdPrefix="c4-desc"
+                    slideIndex={0}
+                    isVisible={true}
+                    theme={defaultEditorTheme}
+                    disableScroll={true}
+                    disableBasePadding
+                    enableKeyboardScrolling={false}
+                    autoFocusOnVisible={false}
+                  />
+                </div>
+              )}
+            </>
           }
           sidebarBody={
             <TrailStepsNav
               trails={DRILLDOWN_TRAILS}
               focusedTrailId={focusedTrailId}
-              focusedStepIndex={c4FocusedStepIndex}
+              focusedStepIndex={
+                focusedStep && focusedStep.trailId === focusedTrailId
+                  ? focusedStep.stepIndex
+                  : null
+              }
               hoveredTrailStep={hoveredStep}
               onFocusFlow={(tl) => {
-                setC4FocusedStepIndex(null);
+                setFocusedStep(null);
                 focusTrail(tl.id);
               }}
               onClearFocus={() => {
-                setC4FocusedStepIndex(null);
+                setFocusedStep(null);
                 clearFocus();
               }}
               onFocusStep={(tl, stepIndex) => {
-                setC4FocusedStepIndex(stepIndex);
+                // Toggle: clicking the selected step again clears it.
+                setFocusedStep((prev) =>
+                  prev && prev.trailId === tl.id && prev.stepIndex === stepIndex
+                    ? null
+                    : { trailId: tl.id, stepIndex },
+                );
                 focusTrail(tl.id);
               }}
               onHoverStep={(tl, stepIndex) => {
@@ -345,18 +466,10 @@ function Demo() {
         >
           <C4Graph
             model={model}
-            onSelectNode={(id) => {
-              setSelectedNodeId(id);
-              if (id == null) setSelectedEdge(null);
-            }}
             onSelectEdge={(edge) => {
-              setSelectedEdge(edge);
               if (edge && (edge.trailRefs ?? []).length > 0) {
-                // Auto-drill: an edge click lands the component graph on its
-                // first backing trail.
+                // Auto-drill: an edge click focuses its first backing trail.
                 focusTrail(edge.trailRefs![0]!.trailId);
-              } else if (!edge) {
-                // Deselecting the edge leaves the component graph as it is.
               }
             }}
             onTrailClick={(ref) => focusTrail(ref.trailId)}
@@ -365,66 +478,15 @@ function Demo() {
             hiddenEdgeIds={emphasis.hiddenEdgeIds}
             dimmedElementIds={emphasis.dimmedElementIds}
             dimmedEdgeIds={emphasis.dimmedEdgeIds}
+            dimmedConstructIds={constructEmphasis.ids}
+            dimmedConstructEdgeIds={constructEmphasis.edgeIds}
+            constructGraphByContainer={constructGraphByContainer}
+            focusedStep={focusedStep}
+            onCloseStep={() => setFocusedStep(null)}
           />
         </GraphWithSidebar>
       </div>
 
-      {/* Status bar — what the two graphs currently agree on. */}
-      <div
-        style={{
-          flex: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 18,
-          padding: '6px 12px',
-          fontSize: 12,
-          color: '#aaa',
-          borderTop: '1px solid #333',
-          borderBottom: '1px solid #333',
-          background: '#141414',
-        }}
-      >
-        <span>
-          c4 edge: {selectedEdge ? `${selectedEdge.source.split(':').pop()} → ${selectedEdge.target.split(':').pop()} (${selectedEdge.protocol})` : '(none)'}
-        </span>
-        <span>
-          component graph focused trail: {focusedTrailTitle ?? '(none)'}
-        </span>
-        {hoveredStepDef && (
-          <span>
-            hovered step: {hoveredStepDef.from} → {hoveredStepDef.to}
-          </span>
-        )}
-        {focusedTrailId && (
-          <button
-            type="button"
-            onClick={clearFocus}
-            style={{ border: 'none', background: 'transparent', color: '#aaa', cursor: 'pointer', fontSize: 12 }}
-          >
-            clear focus
-          </button>
-        )}
-        <span style={{ color: '#777' }}>
-          hover a step row to narrow the dim to one hop (the guidance now also
-          lives in the trails sidebar beside the C4 view)
-        </span>
-      </div>
-
-      {/* The component graph — the implementation level. */}
-      <div style={{ flex: '1 1 48%', minHeight: 0, position: 'relative' }}>
-        <SubsystemComponentGraph
-          key={`${graphEpoch}:${focusedTrailId ?? ''}`}
-          title={DRILLDOWN_DOC.title}
-          description="The subsystem the C4 view summarizes. Focused trails are the implementation of the selected C4 line. Solid frames are accepted deployment units; dashed frames with a package glyph are code regions the C4 layer gave no container."
-          components={DRILLDOWN_COMPONENTS}
-          trails={DRILLDOWN_TRAILS}
-          initialTrailId={focusedTrailId}
-          codeProcessKeys={CODE_PROCESS_KEYS}
-          onSelect={(alias) => void alias}
-          onTrailSelect={handleGraphTrailSelect}
-          onTrailStepHover={handleTrailStepHover}
-        />
-      </div>
     </div>
   );
 }

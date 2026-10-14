@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronRight, Route, X } from 'lucide-react';
 import { useTheme } from '@principal-ade/industry-theme';
 import type { SubsystemTrail } from './model';
 
@@ -15,6 +15,13 @@ import type { SubsystemTrail } from './model';
  * the trail does not touch); `onClearFocus` closes it. Hovering a row previews
  * that trail (`onHoverFlow`); hovering a step previews the hop
  * (`onHoverStep`), which the host dims to.
+ *
+ * Back is a slide, not a swap: clearing the focus leaves the last trail's steps
+ * rendered until the pane has finished sliding out, so the detail view is what
+ * moves, not a blank pane.
+ *
+ * Each step row leads with its `annotation` (the free-text note anchored to its
+ * site line) as the row's description, with the `symbol` beneath it.
  */
 
 export interface TrailStepsNavProps {
@@ -78,9 +85,27 @@ export function TrailStepsNav({
   // Hovering a collapsed row previews the whole trail while nothing is focused;
   // the list pane is the only place that happens.
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
+  // Hovering the detail title (or the close) lights the close, so the title
+  // reads as the same back action.
+  const [headerHover, setHeaderHover] = useState(false);
 
   const focused = trails.find((t) => t.id === focusedTrailId) ?? null;
   const open = focused != null;
+
+  // The step pane is a translated layer, not a mounted/unmounted one: on back,
+  // `focused` goes null immediately, which would blank the pane's content the
+  // instant the slide-out starts. Hold the last focused trail through the
+  // transition, then drop it — slide first, unmount after. A fresh focus lands
+  // immediately (and cancels any pending drop).
+  const [displayedTrail, setDisplayedTrail] = useState<SubsystemTrail | null>(focused);
+  useEffect(() => {
+    if (focused) {
+      setDisplayedTrail(focused);
+      return;
+    }
+    const timer = setTimeout(() => setDisplayedTrail(null), transitionMs);
+    return () => clearTimeout(timer);
+  }, [focused, transitionMs]);
 
   // A focused trail (from the graph side) always lands on the step pane.
   const leaveList = useCallback(() => {
@@ -89,6 +114,7 @@ export function TrailStepsNav({
 
   useEffect(() => {
     if (open) setHoveredRow(null);
+    setHeaderHover(false);
   }, [open]);
 
   return (
@@ -124,7 +150,7 @@ export function TrailStepsNav({
                   gap: 8,
                   width: '100%',
                   minWidth: 0,
-                  padding: '10px 8px 10px 16px',
+                  padding: '10px 8px 10px 12px',
                   border: 'none',
                   borderRadius: 0,
                   background: focusedRow || hovered ? hoverBg : 'transparent',
@@ -133,13 +159,21 @@ export function TrailStepsNav({
                   transition: 'background 120ms ease',
                 }}
               >
+                <Route
+                  size={14}
+                  strokeWidth={2}
+                  aria-hidden
+                  style={{
+                    flexShrink: 0,
+                    color: focusedRow || hovered ? theme.colors.primary : muted,
+                    transition: 'color 120ms ease',
+                  }}
+                />
                 <span
                   style={{
                     flex: 1,
                     minWidth: 0,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
+                    overflowWrap: 'anywhere',
                     fontSize: theme.fontSizes[1],
                     fontFamily: theme.fonts.monospace,
                     fontWeight: 600,
@@ -174,23 +208,61 @@ export function TrailStepsNav({
           transition,
         }}
       >
-        {focused && (
+        {displayedTrail && (
           <>
             <div
               style={{
                 flexShrink: 0,
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
-                padding: '6px 8px 6px 6px',
+                gap: 8,
+                // Left inset + leading cell + gap match the step rows below, so
+                // the trail icon and the step numbers share one column.
+                padding: '6px 6px 6px 12px',
                 borderBottom: `1px solid ${theme.colors.border}`,
               }}
             >
+              <Route
+                size={14}
+                strokeWidth={2}
+                aria-hidden
+                // The focused trail: the icon stays primary, matching the row's
+                // hover colour in the list it came from.
+                style={{ flexShrink: 0, color: theme.colors.primary }}
+              />
+              {/* The title is the back affordance too: clicking it goes back to
+                  the list, like the trailing close. */}
+              <button
+                type="button"
+                onClick={onClearFocus}
+                onMouseEnter={() => setHeaderHover(true)}
+                onMouseLeave={() => setHeaderHover(false)}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: 0,
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  overflowWrap: 'anywhere',
+                  fontSize: theme.fontSizes[1],
+                  fontFamily: theme.fonts.monospace,
+                  fontWeight: 600,
+                  color: touchesProposed(displayedTrail, proposedAliases) ? PROPOSED_COLOR : theme.colors.text,
+                }}
+              >
+                {displayedTrail.title}
+              </button>
               <button
                 type="button"
                 aria-label="Back to trails"
                 title="All trails"
                 onClick={onClearFocus}
+                onMouseEnter={() => setHeaderHover(true)}
+                onMouseLeave={() => setHeaderHover(false)}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -201,50 +273,37 @@ export function TrailStepsNav({
                   padding: 0,
                   border: 'none',
                   borderRadius: 4,
-                  background: 'transparent',
-                  color: muted,
+                  background: headerHover ? (theme.colors.border ?? hoverBg) : 'transparent',
+                  color: headerHover ? theme.colors.text : muted,
                   cursor: 'pointer',
+                  transition: 'background 120ms ease, color 120ms ease',
                 }}
               >
-                <ChevronLeft size={16} strokeWidth={2} />
+                <X size={16} strokeWidth={2} />
               </button>
-              <span
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  fontSize: theme.fontSizes[1],
-                  fontFamily: theme.fonts.monospace,
-                  fontWeight: 600,
-                  color: touchesProposed(focused, proposedAliases) ? PROPOSED_COLOR : theme.colors.text,
-                }}
-              >
-                {focused.title}
-              </span>
             </div>
             <div
               style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 0 12px' }}
               onMouseLeave={onLeaveStep}
             >
-              {focused.steps.map((step, i) => {
+              {displayedTrail.steps.map((step, i) => {
                 const active = focusedStepIndex === i;
                 const hovered =
-                  hoveredTrailStep?.trailId === focused.id && hoveredTrailStep.stepIndex === i;
+                  hoveredTrailStep?.trailId === displayedTrail.id &&
+                  hoveredTrailStep.stepIndex === i;
                 return (
                   <button
                     key={`${step.from}->${step.to}-${i}`}
                     type="button"
-                    onMouseEnter={() => onHoverStep(focused, i)}
-                    onClick={() => onFocusStep(focused, i)}
+                    onMouseEnter={() => onHoverStep(displayedTrail, i)}
+                    onClick={() => onFocusStep(displayedTrail, i)}
                     style={{
                       display: 'flex',
-                      alignItems: 'center',
+                      alignItems: 'flex-start',
                       gap: 8,
                       width: '100%',
                       minWidth: 0,
-                      padding: '8px 16px 8px 17px',
+                      padding: '8px 16px 8px 12px',
                       border: 'none',
                       borderRadius: 0,
                       background: active || hovered ? hoverBg : 'transparent',
@@ -256,7 +315,11 @@ export function TrailStepsNav({
                     <span
                       style={{
                         flexShrink: 0,
+                        // Same 14px leading column as the header's trail icon,
+                        // so the digit sits under it.
                         width: 14,
+                        textAlign: 'center',
+                        paddingTop: 1,
                         fontSize: theme.fontSizes[0],
                         fontFamily: theme.fonts.monospace,
                         color: active ? theme.colors.text : muted,
@@ -268,15 +331,34 @@ export function TrailStepsNav({
                       style={{
                         flex: 1,
                         minWidth: 0,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        fontSize: theme.fontSizes[1],
-                        fontFamily: theme.fonts.monospace,
-                        color: theme.colors.text,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 2,
                       }}
                     >
-                      {step.symbol ?? step.from}
+                      {step.annotation && (
+                        <span
+                          style={{
+                            minWidth: 0,
+                            overflowWrap: 'anywhere',
+                            fontSize: theme.fontSizes[1],
+                            fontFamily: theme.fonts.monospace,
+                            color: theme.colors.text,
+                          }}
+                        >
+                          {step.annotation}
+                        </span>
+                      )}
+                      <span
+                        style={{
+                          fontSize: theme.fontSizes[0],
+                          fontFamily: theme.fonts.body,
+                          color: muted,
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        {step.symbol ?? step.from}
+                      </span>
                     </span>
                   </button>
                 );

@@ -91,6 +91,15 @@ const CARD_PAD_Y = 10;
 /** The card's flex `gap`, between each of its rows. */
 const CARD_GAP = 3;
 
+/**
+ * Space a component card reserves above and below the constructs nested inside
+ * it when it is grown (a component with constructs becomes an ELK parent, the
+ * same way an opened container does). A component has no technology row and no
+ * collapse affordance, so this is its label slot plus padding.
+ */
+export const COMPONENT_HEADER_PAD = CARD_PAD_Y * 2 + LABEL_SLOT_H + CARD_GAP;
+export const COMPONENT_FOOTER_PAD = CARD_PAD_Y;
+
 /** The description's line height, as a multiple of its font size. */
 const DESC_LINE_HEIGHT = 1.35;
 
@@ -416,9 +425,22 @@ export interface C4NodeCardProps {
    * the grown card to host its component cards.
    */
   children?: React.ReactNode;
+  /**
+   * Delay the width/height transition by this many ms — the drill-down
+   * sequences the fade before the move/grow, so the size change waits it out.
+   * @default 0
+   */
+  transitionDelayMs?: number;
+  /**
+   * The width/height transition duration, in ms. The graph passes its
+   * `MORPH_MS` so the grow and the component reveal (`settled`) share one clock
+   * and cannot drift apart.
+   * @default 420
+   */
+  sizeTransitionMs?: number;
 }
 
-export function C4NodeCard({ node, selected = false, handles, onClick, componentCount = 0, onExpand, width, height, showDescription = true, children }: C4NodeCardProps) {
+export function C4NodeCard({ node, selected = false, handles, onClick, componentCount = 0, onExpand, width, height, showDescription = true, children, transitionDelayMs = 0, sizeTransitionMs = 420 }: C4NodeCardProps) {
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const style = nodeStyle(node, theme, selected);
@@ -465,7 +487,7 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
         // rather than drawn outside the boundary. The description is clamped above
         // so that clipping is never what you actually see.
         height: reservedHeight,
-        transition: 'width 420ms ease-out, height 420ms ease-out',
+        transition: `width ${sizeTransitionMs}ms ease-out ${transitionDelayMs}ms, height ${sizeTransitionMs}ms ease-out ${transitionDelayMs}ms`,
         overflow: 'hidden',
         boxSizing: 'border-box',
         display: 'flex',

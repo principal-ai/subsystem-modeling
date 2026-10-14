@@ -223,7 +223,7 @@ function TrailFlow({
           display: 'flex',
           alignItems: 'center',
           gap: 4,
-          height: TRAIL_CONTROL_SIZE,
+          minHeight: TRAIL_CONTROL_SIZE,
           padding: '0 0 0 16px',
           background: wholeFlowActive || headerHover ? hoverBg : 'transparent',
           transition: 'background 120ms ease',
@@ -259,9 +259,8 @@ function TrailFlow({
         >
           <span
             style={{
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
+              minWidth: 0,
+              overflowWrap: 'anywhere',
               fontSize: theme.fontSizes[1],
               fontFamily: theme.fonts.monospace,
               fontWeight: 600,

@@ -67,14 +67,20 @@ interface C4ElementBase {
   state: C4ElementState;
   /** Why this element is proposed as it is — shown in the confirm UI. */
   rationale?: string;
-  /** The component aliases this element groups. */
-  members?: string[];
-  /** Distinct constructs among the members, when resolved from a document. */
-  constructs?: string[];
-  /** Source model ids that contributed members, when attribution is supplied. */
-  models?: string[];
   /** When the state last changed (ISO). */
   decidedAt?: string;
+}
+
+/**
+ * The component aliases an element groups — the explicit member list.
+ *
+ * Only the kinds that have no `process` claim to resolve members from carry
+ * one: an external system (its few aliases) and an authored C4 component (the
+ * aliases it groups). A container's members are *derived* from its `process`
+ * claim against the model document, never stored here.
+ */
+interface C4MemberList {
+  members?: string[];
 }
 
 /**
@@ -112,7 +118,7 @@ export interface C4Container extends C4ElementBase {
  * split across containers (an RPC bridge with a renderer half and a host half),
  * which is precisely the case worth being able to state.
  */
-export interface C4Component extends C4ElementBase {
+export interface C4Component extends C4ElementBase, C4MemberList {
   kind: 'component';
   /** The id of the container this component sits inside. */
   container: string;
@@ -120,7 +126,7 @@ export interface C4Component extends C4ElementBase {
   technology: string;
 }
 /** A software system outside the boundary we are drawing. */
-export interface C4ExternalSystem extends C4ElementBase {
+export interface C4ExternalSystem extends C4ElementBase, C4MemberList {
   kind: 'external-system';
   /** Often unknown for a third-party system, so optional here. */
   technology?: string;

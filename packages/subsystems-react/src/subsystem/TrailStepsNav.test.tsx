@@ -25,7 +25,7 @@ globals.matchMedia = dom.matchMedia.bind(dom);
 
 afterEach(cleanup);
 
-const step = (from: string, to: string, symbol: string) => ({
+const step = (from: string, to: string, symbol: string, annotation?: string) => ({
   from,
   to,
   mechanism: 'calls' as const,
@@ -33,10 +33,15 @@ const step = (from: string, to: string, symbol: string) => ({
   line: 1,
   purl: `pkg:github/x#${from}.ts`,
   symbol,
+  ...(annotation ? { annotation } : {}),
 });
 
 const TRAILS: SubsystemTrail[] = [
-  { id: 't1', title: 'First flow', steps: [step('a', 'b', 'A.go'), step('b', 'c', 'B.go')] },
+  {
+    id: 't1',
+    title: 'First flow',
+    steps: [step('a', 'b', 'A.go', 'Read the source seam.'), step('b', 'c', 'B.go')],
+  },
   { id: 't2', title: 'Second flow', steps: [step('c', 'd', 'C.go')] },
 ];
 
@@ -91,6 +96,35 @@ describe('TrailStepsNav', () => {
     expect(hovered).toContain('t2');
   });
 
+  test('back slides the step pane out before its steps unmount', async () => {
+    const base = {
+      trails: TRAILS,
+      focusedStepIndex: null,
+      hoveredTrailStep: null,
+      onFocusFlow: () => {},
+      onClearFocus: () => {},
+      onFocusStep: () => {},
+      onHoverStep: () => {},
+      onHoverFlow: () => {},
+      onLeaveStep: () => {},
+      transitionMs: 30,
+    };
+    const { getByText, queryByText, rerender } = renderNav({ ...base, focusedTrailId: 't1' });
+    expect(getByText('A.go')).toBeTruthy();
+    // Back clears the focus, but the pane keeps its content while it slides out.
+    rerender(
+      createElement(
+        ThemeProvider,
+        { theme: defaultEditorTheme },
+        createElement(TrailStepsNav as never, { ...base, focusedTrailId: null } as never),
+      ),
+    );
+    expect(queryByText('A.go')).toBeTruthy();
+    // Once the transition has run, the step content is dropped.
+    await new Promise((r) => setTimeout(r, 30 + 40));
+    expect(queryByText('A.go')).toBeNull();
+  });
+
   test('a focused trail shows its steps; back clears the focus', () => {
     let cleared = false;
     let focusedStep: number | null = null;
@@ -110,12 +144,36 @@ describe('TrailStepsNav', () => {
       onHoverFlow: () => {},
       onLeaveStep: () => {},
     });
-    // The step pane is translated in; both steps render by symbol.
+    // The step pane is translated in; both steps render by symbol, and an
+    // annotated step shows its note as the row's description.
     expect(getByText('A.go')).toBeTruthy();
     expect(getByText('B.go')).toBeTruthy();
+    expect(getByText('Read the source seam.')).toBeTruthy();
     fireEvent.click(getByRole('button', { name: /B\.go/ }));
     expect(focusedStep).toBe(1);
     fireEvent.click(getByLabelText('Back to trails'));
+    expect(cleared).toBe(true);
+  });
+
+  test('clicking the step-pane header title also goes back', () => {
+    let cleared = false;
+    const { getByRole } = renderNav({
+      trails: TRAILS,
+      focusedTrailId: 't1',
+      focusedStepIndex: null,
+      hoveredTrailStep: null,
+      onFocusFlow: () => {},
+      onClearFocus: () => {
+        cleared = true;
+      },
+      onFocusStep: () => {},
+      onHoverStep: () => {},
+      onHoverFlow: () => {},
+      onLeaveStep: () => {},
+    });
+    // The header title is its own button (the list row's accessible name
+    // includes the step count, so the exact title matches the header).
+    fireEvent.click(getByRole('button', { name: 'First flow' }));
     expect(cleared).toBe(true);
   });
 });

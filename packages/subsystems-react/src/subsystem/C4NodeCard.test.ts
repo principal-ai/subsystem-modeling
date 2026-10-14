@@ -221,7 +221,6 @@ describe('nodeSubtitle', () => {
 
   test('is empty when nothing is stated — there is no fallback', () => {
     const withTech = node({ technology: 'Bun + Electrobun' });
-    const withMembers = node({ constructs: ['function', 'store'], members: ['a', 'b'] });
     const component = node({
       kind: 'component',
       component: {
@@ -232,7 +231,7 @@ describe('nodeSubtitle', () => {
         purl: 'pkg:x#src/subsystem/model.ts',
       },
     });
-    for (const n of [withTech, withMembers, component]) {
+    for (const n of [withTech, component]) {
       expect(nodeSubtitle(n)).toBe('');
     }
   });
