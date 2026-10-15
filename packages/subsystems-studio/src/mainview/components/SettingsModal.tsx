@@ -243,6 +243,7 @@ export function SettingsModal({
 		source: string;
 		freeCount: number;
 	} | null>(null);
+	const [maintainerModelsError, setMaintainerModelsError] = useState<string | null>(null);
 	const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
 	const [narrow, setNarrow] = useState(() =>
 		typeof window !== "undefined"
@@ -278,15 +279,19 @@ export function SettingsModal({
 		void electrobun.rpc!.request
 			.getSubsystemMaintainerModels({})
 			.then((res) => {
-				if (!alive || !res.ok || !res.resolved) return;
+				if (!alive) return;
+				if (!res.ok || !res.resolved) {
+					setMaintainerModelsError(res.error ?? "Failed to load the OpenCode model catalog");
+					return;
+				}
 				setMaintainerModels({
 					resolved: res.resolved,
 					source: res.source ?? "auto",
 					freeCount: res.freeModels?.length ?? 0,
 				});
 			})
-			.catch(() => {
-				/* optional */
+			.catch((err) => {
+				if (alive) setMaintainerModelsError(err instanceof Error ? err.message : String(err));
 			});
 		return () => {
 			alive = false;
@@ -921,13 +926,13 @@ export function SettingsModal({
 											marginTop: 4,
 										}}
 									>
-										{maintainerModels
-											? `Auto free-tier → ${maintainerModels.resolved} (${maintainerModels.source}${
+										{maintainerModelsError ?? (maintainerModels
+											? `OpenCode catalog → ${maintainerModels.resolved} (${maintainerModels.source}${
 													maintainerModels.freeCount > 0
 														? ` · ${maintainerModels.freeCount} free found`
 														: ""
-												}). Manual picker coming later.`
-											: "Discovering free OpenCode models…"}
+												}). Choose a model when starting Maintain.`
+											: "Loading the OpenCode server model catalog…")}
 									</span>
 								</div>
 								<div

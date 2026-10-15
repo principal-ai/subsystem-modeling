@@ -46,7 +46,7 @@ import {
 	type MaintainSequenceOutcome,
 	type MaintainStageOutcome,
 } from "./maintain-sequence";
-import { resolveSubsystemMaintainerModel, modelProviderOf, FALLBACK_MAINTAINER_MODEL } from "./opencode-models";
+import { resolveSubsystemMaintainerModel, modelProviderOf } from "./opencode-models";
 import {
 	firstActivityTimeoutMsFor,
 	isModelUnusable,
@@ -1021,7 +1021,7 @@ interface MaintainRunContext {
 	graph: StoredSubsystemModel;
 	/** Model resolved for this run (before any per-run fallback). */
 	model: string;
-	credentialed: string[] | null;
+	fallbackModel?: string;
 	root?: string;
 }
 
@@ -1045,13 +1045,20 @@ async function resolveMaintainRunContext(
 
 	const settings = loadViewerSettings();
 	const override = opts?.model?.trim();
-	const resolved = await resolveSubsystemMaintainerModel({
-		configured: override || settings.subsystemMaintainerModel,
-	});
+	const root = primaryRepoRoot(graph);
+	let resolved: Awaited<ReturnType<typeof resolveSubsystemMaintainerModel>>;
+	try {
+		resolved = await resolveSubsystemMaintainerModel({
+			configured: override || settings.subsystemMaintainerModel,
+			strictConfigured: !!override,
+			directory: root,
+		});
+	} catch (err) {
+		return { ok: false, error: err instanceof Error ? err.message : String(err) };
+	}
 
-	// A remembered model whose provider has no credential (e.g. a free
-	// opencode/Zen model from the old picker) can never execute headless and
-	// would override the working credentialed default forever — drop it.
+	// Drop remembered selections that no longer exist in this location's
+	// available tool-capable catalog.
 	if (
 		!override &&
 		resolved.source !== "settings" &&
@@ -1061,21 +1068,24 @@ async function resolveMaintainRunContext(
 		patchViewerSettings(settings, { subsystemMaintainerModel: null });
 	}
 
-	const credentialed = resolved.credentialedProviders ?? null;
+	const fallbackModel = resolved.candidates.find(
+		(m) => m.ref !== resolved.model && modelProviderOf(m.ref) !== "opencode" &&
+			!isModelUnusable(m.ref),
+	)?.ref;
 	let model = resolved.model;
 	// Degraded-memory fast path: the free tier just proved unusable, so don't
 	// re-burn the 30s liveness timeout — go straight to the credentialed fallback.
 	if (
 		isModelUnusable(model) &&
 		modelProviderOf(model) === "opencode" &&
-		credentialed?.includes("opencode-go")
+		fallbackModel
 	) {
-		model = FALLBACK_MAINTAINER_MODEL;
+		model = fallbackModel;
 	}
 
 	return {
 		ok: true,
-		ctx: { graph, model, credentialed, root: primaryRepoRoot(graph) },
+		ctx: { graph, model, fallbackModel, root },
 	};
 }
 
@@ -1183,9 +1193,10 @@ async function runMaintainStage(opts: {
 		rememberModelUnusable(run.model);
 		if (
 			modelProviderOf(run.model) === "opencode" &&
-			ctx.credentialed?.includes("opencode-go")
+			ctx.fallbackModel &&
+			ctx.fallbackModel !== run.model
 		) {
-			({ run, runId } = await runOnce(FALLBACK_MAINTAINER_MODEL, randomUUID()));
+			({ run, runId } = await runOnce(ctx.fallbackModel, randomUUID()));
 		}
 	}
 
@@ -1312,8 +1323,18 @@ export async function maintainSubsystemModelSequence(
 		maxStages?: number;
 	},
 ): Promise<MaintainSequenceHostResult> {
+	const startedAt = new Date().toISOString();
 	const resolved = await resolveMaintainRunContext(graphId, opts);
 	if (!resolved.ok) {
+		// No stage/session exists yet, but this was still a user-requested run.
+		await noteSubsystemModelRunFinish({
+			graphId,
+			model: opts?.model,
+			status: "error",
+			ok: false,
+			error: resolved.error,
+			startedAt,
+		}).catch(() => {});
 		return {
 			ok: false,
 			outcome: "error",
@@ -1354,6 +1375,19 @@ export async function maintainSubsystemModelSequence(
 	});
 
 	const pendingCount = await pendingProposalCount(graphId);
+	if (result.stages.length === 0) {
+		await noteSubsystemModelRunFinish({
+			graphId,
+			graphTitle: ctx.graph.title,
+			model: ctx.model,
+			status: result.ok ? "skipped" : "error",
+			ok: result.ok,
+			error: result.error,
+			summary: result.ok ? "Nothing to run: the audit found no maintenance stage to execute." : undefined,
+			pendingCount,
+			startedAt,
+		}).catch(() => {});
+	}
 	return {
 		ok: result.ok,
 		outcome: result.outcome,

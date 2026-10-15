@@ -30,6 +30,7 @@ import {
 	subsystemModelRunsChangeSubscribers,
 } from "../rpc";
 import { MaintainModelPickerModal } from "../components/MaintainModelPickerModal";
+import { maintainRunFeedback } from "../maintain-run-feedback";
 import { ProposalsModal } from "../components/ProposalsModal";
 import { DeleteAllProposalsDialog } from "../components/DeleteAllProposalsDialog";
 import { RunMaintenanceConfirm } from "../components/RunMaintenanceConfirm";
@@ -323,6 +324,13 @@ export function MaintenancePanel() {
 	// Re-paint when a background re-audit finishes (or a run/proposal changes).
 	useEffect(() => {
 		const refresh = () => void load();
+		const onMaintain = (payload: StudioMessages["subsystemModelMaintainChanged"]) => {
+			setFeeds((prev) => ({
+				...prev,
+				[payload.graphId]: maintainRunFeedback(prev[payload.graphId], payload),
+			}));
+			void load();
+		};
 		// `load()` refreshes the overview and run log but not `proposalsByGraph`
 		// (that is loaded lazily on Runs-section expand), so proposal events must
 		// refetch the affected model's list — a run that posts proposals while
@@ -336,12 +344,12 @@ export function MaintenancePanel() {
 		};
 		subsystemModelChangeSubscribers.add(refresh);
 		subsystemModelProposalsChangeSubscribers.add(onProposals);
-		subsystemModelMaintainChangeSubscribers.add(refresh);
+		subsystemModelMaintainChangeSubscribers.add(onMaintain);
 		subsystemModelRunsChangeSubscribers.add(refresh);
 		return () => {
 			subsystemModelChangeSubscribers.delete(refresh);
 			subsystemModelProposalsChangeSubscribers.delete(onProposals);
-			subsystemModelMaintainChangeSubscribers.delete(refresh);
+			subsystemModelMaintainChangeSubscribers.delete(onMaintain);
 			subsystemModelRunsChangeSubscribers.delete(refresh);
 		};
 	}, [load, loadProposalsFor]);
@@ -378,10 +386,13 @@ export function MaintenancePanel() {
 			if (info.alreadyRunning) {
 				setError("Maintenance is already running for this model.");
 			}
+			if (pickTarget) {
+				setExpandedRunsIds((prev) => new Set([...prev, pickTarget.graphId]));
+			}
 			setPickTarget(null);
 			void load();
 		},
-		[load],
+		[load, pickTarget],
 	);
 
 	// Sequentially accept the confident pending proposals, then refresh so the
@@ -940,7 +951,7 @@ export function MaintenancePanel() {
 				{overview && (
 					<MaintenanceModelList
 						models={cardModels}
-						running={overview.running}
+						running={inFlightGraphs}
 						auditing={auditing}
 						runsByGraph={runsByGraph}
 						proposalsByGraph={proposalsByGraph}

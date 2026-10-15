@@ -59,6 +59,7 @@ export function laneForFindingKind(
 		case "symbol_ambiguous":
 		case "symbol_unmatched":
 		case "construct_span_unconfirmed":
+		case "construct_span_capturable":
 		case "construct_span_stale":
 		case "repo_unresolved":
 		case "graphify_unavailable":

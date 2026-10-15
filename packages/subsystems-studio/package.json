@@ -82,6 +82,8 @@
     "ajv": "^8.20.0",
     "better-sqlite3": "^13.0.2",
     "react-resizable-panels": "^4.14.1",
-    "three": "^0.184.0"
+    "three": "^0.184.0",
+    "tree-sitter-wasms": "0.1.13",
+    "web-tree-sitter": "0.25.10"
   }
 }

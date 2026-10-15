@@ -1060,6 +1060,22 @@ export function MaintenanceModelCard({
 					)}
 				</div>
 			)}
+			{!maintainRunning && feed && (feed.status === "error" || feed.status === "done") && (
+				<div
+					role={feed.status === "error" ? "alert" : "status"}
+					style={{
+						borderTop: `1px solid ${theme.colors.border}`,
+						padding: "12px 10px",
+						fontSize: theme.fontSizes[1],
+						lineHeight: 1.45,
+						color: feed.status === "error"
+							? theme.colors.error ?? "#e5534b"
+							: muted,
+					}}
+				>
+					{feed.error ?? feed.last ?? (feed.status === "error" ? "Maintenance failed." : "Maintenance finished.")}
+				</div>
+			)}
 			{runsOpen && (
 				<div
 					onClick={(e) => e.stopPropagation()}

@@ -77,7 +77,6 @@ import {
 	listSubsystemModelRuns,
 } from "./subsystem-model-runs";
 import {
-	modelProviderOf,
 	resolveSubsystemMaintainerModel,
 	type OpenCodeModelInfo,
 } from "./opencode-models";
@@ -2380,6 +2379,22 @@ const requests: RequestHandlers = {
 				if (maintainingGraphIds.has(graphId)) {
 					return { ok: true, started: false, alreadyRunning: true };
 				}
+				const directory = full.components
+					.map((c) => resolveRepoRootForComponent(c.purl)).find(Boolean);
+				let selected: Awaited<ReturnType<typeof resolveSubsystemMaintainerModel>>;
+				try {
+					selected = await resolveSubsystemMaintainerModel({
+						configured: model === null || (model === undefined && remember === true)
+							? null : model?.trim() || viewerSettings.subsystemMaintainerModel,
+						strictConfigured: !!model?.trim(),
+						directory,
+					});
+				} catch (err) {
+					return { ok: false, error: err instanceof Error ? err.message : String(err) };
+				}
+				if (maintainingGraphIds.has(graphId)) {
+					return { ok: true, started: false, alreadyRunning: true };
+				}
 				if (remember === true) {
 					const trimmed = typeof model === "string" ? model.trim() : "";
 					viewerSettings = patchViewerSettings(viewerSettings, {
@@ -2387,19 +2402,24 @@ const requests: RequestHandlers = {
 					});
 				}
 				maintainSubsystemModelInBackground(graphId, {
-					model: typeof model === "string" && model.trim() ? model.trim() : undefined,
+					model: selected.model,
 				});
-				return { ok: true, started: true };
+				return { ok: true, started: true, model: selected.model };
 			},
 			openMaintainLive: async ({ sessionId, graphId, title, agent }) => {
 				if (!sessionId) return { ok: false, error: "sessionId is required" };
 				return await openMaintainLive({ sessionId, graphId, title, agent });
 			},
-			getSubsystemMaintainerModels: async ({ refresh }) => {
+			getSubsystemMaintainerModels: async ({ refresh, graphId }) => {
 				try {
+					const graph = graphId ? await getSubsystemModel(graphId) : null;
+					if (graphId && !graph) return { ok: false, error: `unknown graph: ${graphId}` };
+					const directory = graph?.components
+						.map((c) => resolveRepoRootForComponent(c.purl)).find(Boolean);
 					const resolved = await resolveSubsystemMaintainerModel({
 						configured: viewerSettings.subsystemMaintainerModel,
 						refresh: refresh === true,
+						directory,
 					});
 					const toRow = (m: OpenCodeModelInfo) => ({
 						ref: m.ref,
@@ -2408,42 +2428,17 @@ const requests: RequestHandlers = {
 						name: m.name,
 					});
 					const freeModels = resolved.freeModels.map(toRow);
-					const models = (resolved.candidates ?? resolved.freeModels).map(
-						toRow,
-					);
-					const goModels = (resolved.goModels ?? []).map(toRow);
-					const credentialed = resolved.credentialedProviders;
-					let note: string | undefined;
-					const remembered = viewerSettings.subsystemMaintainerModel;
-					if (
-						credentialed &&
-						!credentialed.includes("opencode") &&
-						freeModels.length > 0 &&
-						!freeModels.some((m) => m.ref === resolved.model)
-					) {
-						note = `OpenCode Zen free models (opencode/*) need an OpenCode Zen credential, which is not configured here — using ${resolved.model} instead.`;
-					}
-					if (
-						credentialed &&
-						remembered &&
-						modelProviderOf(remembered) &&
-						!credentialed.includes(modelProviderOf(remembered)) &&
-						resolved.model !== remembered
-					) {
-						note = `Remembered model ${remembered} is unusable (no credential for its provider) — using ${resolved.model} instead.`;
-					}
+					const models = resolved.candidates.map(toRow);
+					const goModels = resolved.goModels.map(toRow);
 					return {
 						ok: true,
 						resolved: resolved.model,
 						source: resolved.source,
 						configured: viewerSettings.subsystemMaintainerModel,
 						freeModels,
-						models:
-							models.length > 0
-								? models
-								: freeModels,
+						models,
 						goModels,
-						note,
+						note: resolved.note,
 					};
 				} catch (err) {
 					return {
@@ -3087,7 +3082,7 @@ function maintainSubsystemModelInBackground(
 	if (maintainingGraphIds.has(graphId)) return;
 	maintainingGraphIds.add(graphId);
 	ensureLiveFeedBroadcast();
-	broadcastSubsystemModelMaintainChanged({ graphId, status: "running" });
+	broadcastSubsystemModelMaintainChanged({ graphId, status: "running", model: opts?.model });
 	void (async () => {
 		try {
 			const result = await maintainSubsystemModelSequence(graphId, {

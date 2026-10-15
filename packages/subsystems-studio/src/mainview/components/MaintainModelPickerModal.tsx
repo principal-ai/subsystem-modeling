@@ -1,7 +1,5 @@
 /**
- * Pick a model to run Maintain with: Auto (best available — free Zen when
- * healthy, credentialed fallback otherwise), a credentialed model, or a free
- * OpenCode Zen model.
+ * Pick an available tool-capable model from the executing V2 server catalog.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -57,15 +55,14 @@ export function MaintainModelPickerModal({
 	const [loading, setLoading] = useState(true);
 	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	// Credentialed tool-capable models (e.g. opencode-go/*) vs free Zen (opencode/*).
+	// All available tool-capable models, with free Zen rows shown separately.
 	const [credModels, setCredModels] = useState<ModelRow[]>([]);
 	const [freeModels, setFreeModels] = useState<ModelRow[]>([]);
 	const [resolved, setResolved] = useState<string | null>(null);
 	const [source, setSource] = useState<string | null>(null);
 	const [note, setNote] = useState<string | null>(null);
 	const [selected, setSelected] = useState<string | null>(null);
-	// Visible-tier flag: "go" = credentialed (opencode-go etc.), "free" = OpenCode
-	// Zen free tier, "auto" = show both (Auto resolves the best).
+	// "go" shows non-Zen-free models; "auto" shows both groups.
 	const [tier, setTier] = useState<"auto" | "go" | "free">("auto");
 	const [remember, setRemember] = useState(true);
 	const [starting, setStarting] = useState(false);
@@ -92,6 +89,7 @@ export function MaintainModelPickerModal({
 		try {
 			const res = await electrobun.rpc!.request.getSubsystemMaintainerModels({
 				refresh: refresh === true,
+				graphId,
 			});
 			if (!res.ok) {
 				setError(res.error ?? "Failed to list models");
@@ -99,18 +97,13 @@ export function MaintainModelPickerModal({
 				setFreeModels([]);
 				return;
 			}
-			// Go tier = paid Zen Go tool-call models; Free tier = OpenCode Zen
-			// (`opencode/*`) free models. `res.freeModels` can include other
-			// zero-cost providers, so keep the Free bucket to Zen only.
-			const go = (res.goModels ?? []).filter((r) => r.ref);
 			const zen = (res.freeModels ?? []).filter(
 				(r) => r.providerID === "opencode",
 			);
-			// Legacy fallback: model picker rows (non-Zen) when no goModels.
 			const credFallback = (res.models ?? []).filter(
-				(r) => r.providerID !== "opencode",
+				(r) => !zen.some((free) => free.ref === r.ref),
 			);
-			setCredModels(go.length > 0 ? go : credFallback);
+			setCredModels(credFallback);
 			setFreeModels(zen);
 			setResolved(res.resolved ?? null);
 			setSource(res.source ?? null);
@@ -120,7 +113,7 @@ export function MaintainModelPickerModal({
 				if (
 					prev &&
 					(prev === AUTO ||
-						go.some((r) => r.ref === prev) ||
+						credFallback.some((r) => r.ref === prev) ||
 						zen.some((r) => r.ref === prev))
 				) {
 					return prev;
@@ -133,7 +126,7 @@ export function MaintainModelPickerModal({
 			setLoading(false);
 			setRefreshing(false);
 		}
-	}, []);
+	}, [graphId]);
 
 	const openModelList = () => {
 		setModelsOpen(true);
@@ -168,15 +161,23 @@ export function MaintainModelPickerModal({
 		setStarting(true);
 		setError(null);
 		const runModel = selected;
-		onStarted({ model: runModel });
-		onClose();
-		electrobun.rpc!.request
-			.maintainSubsystemModel({
+		try {
+			const res = await electrobun.rpc!.request.maintainSubsystemModel({
 				graphId,
-				model: runModel === AUTO ? undefined : runModel,
+				model: runModel === AUTO ? null : runModel,
 				remember,
-			})
-			.catch(() => {});
+			});
+			if (!res.ok) {
+				setError(res.error ?? "Failed to start maintenance");
+				return;
+			}
+			onStarted({ model: res.model ?? runModel, alreadyRunning: res.alreadyRunning });
+			onClose();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setStarting(false);
+		}
 	}, [graphId, onClose, onStarted, remember, selected, starting]);
 
 	const hasAny = credModels.length > 0 || freeModels.length > 0;
@@ -205,7 +206,7 @@ export function MaintainModelPickerModal({
 			onClose={starting ? undefined : onClose}
 		>
 			<ModalHeader icon={Wrench} title={actionLabel} />
-			<ModalBody scroll={false}>
+			<ModalBody>
 				{(!hasAgent || (resolved && source)) && (
 					<p
 						style={{
@@ -281,7 +282,7 @@ export function MaintainModelPickerModal({
 				) : !hasAny ? (
 					<p style={{ color: muted, fontSize: theme.fontSizes[1] }}>
 						No eligible models found. Connect a provider in OpenCode,
-						refresh, or set SUBSYSTEM_MAINTAINER_MODEL.
+						or refresh the server catalog.
 					</p>
 				) : (
 					<div
@@ -322,7 +323,7 @@ export function MaintainModelPickerModal({
 											fontWeight: 500,
 										}}
 									>
-										{t === "auto" ? "Auto" : t === "go" ? "Go" : "Free Tier"}
+										{t === "auto" ? "Auto" : t === "go" ? "Other models" : "Free Zen"}
 									</button>
 								);
 							})}
@@ -372,22 +373,21 @@ export function MaintainModelPickerModal({
 										marginTop: 2,
 									}}
 								>
-									Uses the free Zen model when it works; falls back to the
-									credentialed model (e.g. opencode-go) if the free tier is
-									down or unauthenticated.
+									Chooses an available tool-capable model from the OpenCode
+									server catalog, preferring free models.
 								</span>
 							</span>
 						</label>
 
 						{tier === "go" && shownCred.length === 0 && (
 							<p style={{ color: muted, fontSize: theme.fontSizes[0] }}>
-								No credentialed Go models found — run Auto or connect a
+								No other models found — run Auto or connect a
 								provider in OpenCode.
 							</p>
 						)}
 						{tier === "free" && shownFree.length === 0 && (
 							<p style={{ color: muted, fontSize: theme.fontSizes[0] }}>
-								No free Zen models found — run Auto or pick Go.
+								No free Zen models found — run Auto or pick another model.
 							</p>
 						)}
 
@@ -402,13 +402,13 @@ export function MaintainModelPickerModal({
 										margin: "8px 2px 2px",
 									}}
 								>
-									Go — credentialed
+									Other available models
 								</div>
 								{shownCred.map((m) => (
 									<ModelRowRow
 										key={m.ref}
 										row={m}
-										tag="Go"
+										tag={m.providerID}
 										selected={selected}
 										disabled={starting}
 										theme={theme}
@@ -430,7 +430,7 @@ export function MaintainModelPickerModal({
 										margin: "8px 2px 2px",
 									}}
 								>
-									Free Tier — OpenCode Zen{note ? " (may be unavailable)" : ""}
+									Free Tier — OpenCode Zen
 								</div>
 								{shownFree.map((m) => (
 									<ModelRowRow
@@ -515,9 +515,8 @@ export function MaintainModelPickerModal({
 										marginTop: 2,
 									}}
 								>
-									Uses the free Zen model when it works; falls back to the
-									credentialed model (e.g. opencode-go) if the free tier is
-									down or unauthenticated.
+									Chooses an available tool-capable model from the OpenCode
+									server catalog, preferring free models.
 								</span>
 							</span>
 						</label>
@@ -534,7 +533,7 @@ export function MaintainModelPickerModal({
 								tag={
 									selectedRow
 										? credModels.some((r) => r.ref === selected)
-											? "Go"
+											? selectedRow.providerID
 											: "Free"
 										: "Remembered"
 								}
@@ -605,7 +604,7 @@ export function MaintainModelPickerModal({
 					variant="primary"
 					icon={Wrench}
 					busy={starting}
-					disabled={!selected}
+					disabled={!selected || loading || refreshing}
 					onClick={() => void onRun()}
 				>
 					{starting ? "Starting…" : "Run"}

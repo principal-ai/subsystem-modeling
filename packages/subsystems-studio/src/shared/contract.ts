@@ -622,6 +622,18 @@ export interface SubsystemComponentVerificationResult {
 		 * move). A changed hash is not a move — it routes to the agent lane.
 		 */
 		repin?: SubsystemSourceSpan;
+		/**
+		 * Tree-sitter span derivation (graphify start + parse). `class` is the
+		 * decidability verdict; `span` is the derived range + hash, present only
+		 * when `class === "trivial"` (all structural gates pass).
+		 */
+		derivation?: {
+			class: "deterministic" | "trivial" | "ambiguous" | "unknown" | "skipped";
+			endLine?: number;
+			span?: SubsystemSourceSpan;
+			failedGates?: string[];
+			evidence?: string[];
+		};
 	};
 	/**
 	 * An in-memory store that declares no type — no `valueType` and no named
@@ -645,6 +657,12 @@ export type SubsystemModelAuditFindingKind =
 	 * verified. Parallel to `construct_unconfirmed`.
 	 */
 	| "construct_span_unconfirmed"
+	/**
+	 * A grounded claim with no captured span, but the span is *derivable* —
+	 * tree-sitter pins the declaration's end line and all structural gates pass.
+	 * Carries a deterministic one-click capture fix; not a hard failure.
+	 */
+	| "construct_span_capturable"
 	| "construct_mismatch"
 	| "construct_unconfirmed"
 	| "store_type_undeclared"
@@ -695,6 +713,12 @@ export type SubsystemModelAuditFix =
 			/** Re-pin the span to Graphify's `source_location`, shifted + re-hashed. */
 			declarationSpan: SubsystemSourceSpan;
 			previousStartLine?: number;
+	  }
+	| {
+			id: "adopt_tree_sitter_span";
+			label: string;
+			/** Fresh span derived from graphify's start + a tree-sitter parse. */
+			declarationSpan: SubsystemSourceSpan;
 	  };
 
 /**
@@ -1991,7 +2015,8 @@ export type StudioRequests = {
 			fixId:
 				| "adopt_graphify_signature"
 				| "adopt_graphify_file"
-				| "adopt_graphify_declaration_ref";
+				| "adopt_graphify_declaration_ref"
+				| "adopt_tree_sitter_span";
 			/** One component, or omit to apply every adoptable instance of this fix. */
 			componentAlias?: string;
 		};
@@ -2187,8 +2212,8 @@ export type StudioRequests = {
 	maintainSubsystemModel: {
 		params: {
 			graphId: string;
-			/** OpenCode `provider/id`. Omit to use settings / auto free-tier. */
-			model?: string;
+			/** Available OpenCode `provider/id`; null selects Auto, omitted uses settings. */
+			model?: string | null;
 			/** Persist `model` (or clear when null) as subsystemMaintainerModel. */
 			remember?: boolean;
 		};
@@ -2196,6 +2221,8 @@ export type StudioRequests = {
 			ok: boolean;
 			started?: boolean;
 			error?: string;
+			/** Catalog-resolved model selected for this run. */
+			model?: string;
 			/** True when a run is already in flight for this graph. */
 			alreadyRunning?: boolean;
 		};
@@ -2215,44 +2242,42 @@ export type StudioRequests = {
 		response: { ok: boolean; tabId?: string; error?: string };
 	};
 	/**
-	 * Free / configured OpenCode models for the subsystem maintainer.
-	 * `models` is the credential-aware selectable list; `freeModels` is the
-	 * raw free list (may include `opencode/*` models that are unusable
-	 * without an OpenCode Zen credential). `configured` is the persisted
-	 * picker override (`subsystemMaintainerModel` setting).
+	 * Available tool-capable models from the executing V2 server catalog.
+	 * `configured` is the persisted picker override. Scope discovery to the
+	 * model's repository when graphId is provided.
 	 */
 	getSubsystemMaintainerModels: {
-		params: { refresh?: boolean };
+		params: { refresh?: boolean; graphId?: string };
 		response: {
 			ok: boolean;
 			error?: string;
 			/** Model that will be used on the next Maintain run. */
 			resolved?: string;
-			source?: "settings" | "env" | "auto" | "fallback";
+			source?: "settings" | "env" | "auto";
 			/** Persisted override, or null when auto. */
 			configured?: string | null;
-			/** Raw free OpenCode models (not all usable headless). */
+			/** Available free tool-capable models from the server catalog. */
 			freeModels?: Array<{
 				ref: string;
 				id: string;
 				providerID: string;
 				name?: string;
 			}>;
-			/** Credential-aware selectable maintainer models. */
+			/** All available tool-capable maintainer models. */
 			models?: Array<{
 				ref: string;
 				id: string;
 				providerID: string;
 				name?: string;
 			}>;
-			/** Paid Zen Go (`opencode-go/*`) tool-call models for the Go tier. */
+			/** Available Zen Go (`opencode-go/*`) tool-capable models. */
 			goModels?: Array<{
 				ref: string;
 				id: string;
 				providerID: string;
 				name?: string;
 			}>;
-			/** Optional explanatory hint (e.g. free Zen models skipped). */
+			/** Optional hint when a saved model is no longer available. */
 			note?: string;
 		};
 	};

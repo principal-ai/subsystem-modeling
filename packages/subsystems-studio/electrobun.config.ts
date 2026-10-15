@@ -1,4 +1,5 @@
 import type { ElectrobunConfig } from "electrobun";
+import { TREE_SITTER_ASSET_COPIES } from "./src/bun/tree-sitter-assets";
 
 export default {
 	app: {
@@ -21,6 +22,8 @@ export default {
 			},
 		},
 		copy: {
+			// Runtime + language grammars are not included by JS bundling.
+			...TREE_SITTER_ASSET_COPIES,
 			"src/mainview/index.html": "views/mainview/index.html",
 			"src/mainview/index.css": "views/mainview/index.css",
 			"src/mainview/agent-logos": "views/mainview/agent-logos",

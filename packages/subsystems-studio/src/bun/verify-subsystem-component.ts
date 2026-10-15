@@ -38,6 +38,7 @@ import {
 	parseSourceLocation,
 	type SubsystemSourceSpan,
 } from "./declaration-ref";
+import { deriveSpan, type SpanTreeCache } from "./span-derivation";
 import { loadGraphifyGraph } from "./graphify-runner";
 import {
 	assessSubsystemGraphifyReadiness,
@@ -145,6 +146,24 @@ export function adoptGraphifyDeclarationRefFixFromVerify(
 		label: `Re-pin declaration to L${repin.startLine} (was L${stored.startLine})`,
 		declarationSpan: repin,
 		previousStartLine: stored.startLine,
+	};
+}
+
+/**
+ * A grounded claim with no stored span whose declaration tree-sitter can pin
+ * exactly — every structural gate passed, so the derived `[start, end]` range
+ * and its content hash are deterministic. The fresh-capture counterpart to the
+ * declaration re-pin: one click writes `declarationSpan`, no agent needed.
+ */
+export function adoptTreeSitterSpanFixFromVerify(
+	declaration: NonNullable<SubsystemComponentVerificationResult["declaration"]>,
+): Extract<SubsystemModelAuditFix, { id: "adopt_tree_sitter_span" }> | undefined {
+	const span = declaration.derivation?.span;
+	if (declaration.derivation?.class !== "trivial" || !span) return undefined;
+	return {
+		id: "adopt_tree_sitter_span",
+		label: `Capture declaration span L${span.startLine}–${span.endLine}`,
+		declarationSpan: span,
 	};
 }
 
@@ -323,7 +342,7 @@ async function captureDeclaration(
 	anchor: ComponentAnchorResult,
 	fileContent: string | null,
 	_repoRoot: string | null,
-	opts?: { dryRun?: boolean },
+	opts?: { dryRun?: boolean; treeCache?: SpanTreeCache },
 ): Promise<NonNullable<SubsystemComponentVerificationResult["declaration"]> | undefined> {
 	const stored = component.declarationSpan;
 
@@ -347,15 +366,53 @@ async function captureDeclaration(
 	}
 
 	const current = captured ?? stored;
-	if (!current) return { freshness: "unanchored" };
-	if (!fileContent) return { freshness: "unchecked", span: current };
+
+	// Tree-sitter derivation: graphify start + a parse of the file gives the
+	// declaration's end line for *any* grounded claim, not only ones with a
+	// stored span. This is what makes an unanchored construct capturable
+	// without an agent when every structural gate passes.
+	let derivation: NonNullable<
+		SubsystemComponentVerificationResult["declaration"]
+	>["derivation"];
+	if (fileContent && component.file) {
+		const d = await deriveSpan({
+			content: fileContent,
+			file: component.file,
+			symbol: component.symbol,
+			construct: component.construct,
+			anchor,
+			storedSpan: stored,
+			treeCache: opts?.treeCache,
+		});
+		let span: SubsystemSourceSpan | undefined;
+		if (d.class === "trivial" && d.graphifyStart != null && d.derivedEnd != null) {
+			const hash = hashContentRange(fileContent, d.graphifyStart, d.derivedEnd);
+			if (hash) {
+				span = buildSourceSpan({
+					startLine: d.graphifyStart,
+					endLine: d.derivedEnd,
+					contentHash: hash,
+				});
+			}
+		}
+		derivation = {
+			class: d.class,
+			endLine: d.derivedEnd ?? undefined,
+			span,
+			failedGates: d.failedGates,
+			evidence: d.evidence,
+		};
+	}
+
+	if (!current) return { freshness: "unanchored", derivation };
+	if (!fileContent) return { freshness: "unchecked", span: current, derivation };
 
 	const liveHash = hashContentRange(
 		fileContent,
 		current.startLine,
 		current.endLine,
 	);
-	if (liveHash == null) return { freshness: "missing", span: current };
+	if (liveHash == null) return { freshness: "missing", span: current, derivation };
 
 	const graphifyStart =
 		anchor.resolution === "exact" && anchor.node
@@ -410,7 +467,7 @@ async function captureDeclaration(
 		});
 	}
 
-	return { freshness, span: current, liveContentHash: liveHash, repin };
+	return { freshness, span: current, liveContentHash: liveHash, repin, derivation };
 }
 
 async function finalizeResult(
@@ -421,7 +478,7 @@ async function finalizeResult(
 	fileContent: string | null,
 	repoRoot: string | null,
 	result: SubsystemComponentVerificationResult,
-	opts?: { dryRun?: boolean },
+	opts?: { dryRun?: boolean; treeCache?: SpanTreeCache },
 ): Promise<SubsystemComponentVerificationResult> {
 	if (!anchor) return result;
 	const declaration = await captureDeclaration(
@@ -480,7 +537,7 @@ async function loadGraphifyBundle(
 export async function verifySubsystemComponent(
 	graphId: string,
 	componentAlias: string,
-	opts?: { dryRun?: boolean; graphifyCache?: GraphifyPassCache },
+	opts?: { dryRun?: boolean; graphifyCache?: GraphifyPassCache; treeCache?: SpanTreeCache },
 ): Promise<SubsystemComponentVerificationResult> {
 	const graph = await getSubsystemModel(graphId);
 	if (!graph) {
@@ -970,10 +1027,12 @@ export async function verifySubsystemModel(
 	const results: SubsystemModelVerificationSummary["results"] = [];
 	const tally: Record<string, number> = {};
 	const graphifyCache: GraphifyPassCache = new Map();
+	const treeCache: SpanTreeCache = new Map();
 	for (const c of graph.components) {
 		const r = await verifySubsystemComponent(graphId, c.alias, {
 			...opts,
 			graphifyCache,
+			treeCache,
 		});
 		const { category, detail } = verifyVerdict(r);
 		tally[category] = (tally[category] ?? 0) + 1;
@@ -1043,6 +1102,8 @@ export async function auditSubsystemModel(
 	// One parsed graphify graph per purl for the whole pass — shared by the
 	// per-component loop and the topology pass below.
 	const graphifyCache: GraphifyPassCache = new Map();
+	// One parsed tree-sitter tree per file for the whole pass.
+	const treeCache: SpanTreeCache = new Map();
 
 	// missing_file findings are attached in the per-component loop so we can
 	// include a deterministic Graphify file-relocate fix when available.
@@ -1184,6 +1245,7 @@ export async function auditSubsystemModel(
 		const r = await verifySubsystemComponent(graphId, c.alias, {
 			dryRun: true,
 			graphifyCache,
+			treeCache,
 		});
 		let issue = seenComponentIssue.has(c.alias);
 
@@ -1266,17 +1328,36 @@ export async function auditSubsystemModel(
 			check.declarationFreshness = r.declaration.freshness;
 			if (r.declaration.freshness === "full") declarationsFresh++;
 			if (r.declaration.freshness === "unanchored") {
-				// A hard failure: with no captured span the construct cannot be
-				// verified at all — the agent lane must mint one from source.
-				issue = true;
-				findings.push({
-					kind: "construct_span_unconfirmed",
-					severity: "error",
-					componentAlias: c.alias,
-					componentName: c.name,
-					message: `No source span captured — capture a span (start/end/content hash) from source to verify this construct.`,
-				});
-				seenComponentIssue.add(c.alias);
+				// An unanchored claim whose declaration span tree-sitter can pin
+				// exactly is a deterministic one-click capture, not a hard failure.
+				// Only the residual that needs source judgment stays an error.
+				const derivedFix = adoptTreeSitterSpanFixFromVerify(r.declaration);
+				if (derivedFix) {
+					findings.push({
+						kind: "construct_span_capturable",
+						severity: "info",
+						componentAlias: c.alias,
+						componentName: c.name,
+						message: `No span captured, but the declaration is derivable — ${derivedFix.label}.`,
+						fix: derivedFix,
+					});
+				} else {
+					// A hard failure: no captured span and tree-sitter could not
+					// derive one deterministically — the agent lane must mint it.
+					issue = true;
+					const deriv = r.declaration.derivation;
+					const why = deriv?.failedGates?.length
+						? ` (derivation ${deriv.class}: ${deriv.failedGates.join(", ")})`
+						: "";
+					findings.push({
+						kind: "construct_span_unconfirmed",
+						severity: "error",
+						componentAlias: c.alias,
+						componentName: c.name,
+						message: `No source span captured — capture a span (start/end/content hash) from source to verify this construct.${why}`,
+					});
+					seenComponentIssue.add(c.alias);
+				}
 			}
 			if (r.declaration.freshness === "stale") {
 				// A warning: the span was captured but drifted. A content-preserving
@@ -1729,13 +1810,15 @@ export async function auditSubsystemModel(
  * - `adopt_graphify_signature` — copy graphify named type bags into declaration
  * - `adopt_graphify_file` — update component.file from Graphify when claimed path missing
  * - `adopt_graphify_declaration_ref` — re-pin the span to Graphify's source_location (content-preserving move)
+ * - `adopt_tree_sitter_span` — capture a fresh span from Graphify's start + a tree-sitter parse
  */
 export async function applySubsystemModelAuditFix(opts: {
 	graphId: string;
 	fixId:
 		| "adopt_graphify_signature"
 		| "adopt_graphify_file"
-		| "adopt_graphify_declaration_ref";
+		| "adopt_graphify_declaration_ref"
+		| "adopt_tree_sitter_span";
 	componentAlias?: string;
 }): Promise<
 	| {
@@ -1749,7 +1832,8 @@ export async function applySubsystemModelAuditFix(opts: {
 	if (
 		opts.fixId !== "adopt_graphify_signature" &&
 		opts.fixId !== "adopt_graphify_file" &&
-		opts.fixId !== "adopt_graphify_declaration_ref"
+		opts.fixId !== "adopt_graphify_declaration_ref" &&
+		opts.fixId !== "adopt_tree_sitter_span"
 	) {
 		return { ok: false, error: `unknown fix: ${opts.fixId}` };
 	}
@@ -1855,6 +1939,67 @@ export async function applySubsystemModelAuditFix(opts: {
 
 		if (spanUpdates.size === 0) {
 			return { ok: false, error: "no adoptable declaration re-pins found" };
+		}
+
+		const components = graph.components.map((c) => {
+			const declarationSpan = spanUpdates.get(c.alias);
+			if (!declarationSpan) return c;
+			return { ...c, declarationSpan };
+		});
+
+		const updated = await updateSubsystemModel(opts.graphId, { components });
+		if (!updated) {
+			return { ok: false, error: `failed to update graph: ${opts.graphId}` };
+		}
+
+		const audited = await auditSubsystemModel(opts.graphId);
+		if (!audited.ok) return { ok: false, error: audited.error };
+		return {
+			ok: true,
+			applied: spanUpdates.size,
+			report: audited.report,
+			fingerprint: audited.fingerprint,
+		};
+	}
+
+	if (opts.fixId === "adopt_tree_sitter_span") {
+		const spanUpdates = new Map<string, SubsystemSourceSpan>();
+
+		for (const componentAlias of targetAliases) {
+			const component = graph.components.find((c) => c.alias === componentAlias);
+			if (!component) {
+				if (opts.componentAlias) {
+					return { ok: false, error: `unknown component: ${componentAlias}` };
+				}
+				continue;
+			}
+
+			// Re-derive per component: the audit-time span may be stale, so the
+			// fix is a hint — the write always uses a fresh parse.
+			const verified = await verifySubsystemComponent(opts.graphId, componentAlias, {
+				dryRun: true,
+			});
+			const decl = verified.declaration;
+			const canCapture =
+				decl?.freshness === "unanchored" &&
+				decl.derivation?.class === "trivial" &&
+				verified.anchor?.resolution === "exact" &&
+				decl.derivation.span != null;
+			if (!canCapture || !decl?.derivation?.span) {
+				if (opts.componentAlias) {
+					return {
+						ok: false,
+						error:
+							"no derivable declaration span (need exact anchor + all structural gates passing)",
+					};
+				}
+				continue;
+			}
+			spanUpdates.set(componentAlias, decl.derivation.span);
+		}
+
+		if (spanUpdates.size === 0) {
+			return { ok: false, error: "no derivable declaration spans found" };
 		}
 
 		const components = graph.components.map((c) => {

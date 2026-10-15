@@ -361,6 +361,25 @@ export async function handleSubsystemModelRequest(
 		return json({ ok: true, ...result.data });
 	}
 
+	// Dry-run span-derivation classification (graphify anchor + tree-sitter).
+	// Read-only spike: reports how decidable each construct's span is.
+	if (path === "/api/subsystem-model/classify-spans" && method === "GET") {
+		const ensure = url.searchParams.get("ensure") === "1";
+		const { classifyAllSpans } = await import("./span-derivation");
+		const report = await classifyAllSpans({ ensure });
+		return json({ ok: true, ...report });
+	}
+	const classifySpansMatch = path.match(
+		/^\/api\/subsystem-model\/([^/]+)\/classify-spans$/,
+	);
+	if (classifySpansMatch && method === "GET") {
+		const ensure = url.searchParams.get("ensure") === "1";
+		const { classifyModelSpans } = await import("./span-derivation");
+		const report = await classifyModelSpans(classifySpansMatch[1]!, { ensure });
+		if (!report) return error("unknown graph", 404);
+		return json({ ok: true, ...report });
+	}
+
 	// Verify a single component of a graph
 	const componentVerifyMatch = path.match(
 		/^\/api\/subsystem-model\/([^/]+)\/verify\/([^/]+)$/,
