@@ -421,9 +421,11 @@ export interface SubsystemTrailStep {
   file: string;
   /**
    * The step's source span — the call-site range and its content hash. The
-   * trail-step counterpart of a component's `declarationSpan`, captured by
-   * verify tooling from the call site. `file` + `symbol` locate the frame;
-   * absent until verification anchors it.
+   * trail-step counterpart of a component's `declarationSpan`, but
+   * **hand-authored**: nothing derives it (construct spans come from graphify
+   * + tree-sitter; step spans do not). `file` + `symbol` locate the frame; the
+   * span pins that frame's exact seam range. Absent means the seam is
+   * unverified and the Trails view has no line to highlight.
    */
   span?: SubsystemSourceSpan;
   /**

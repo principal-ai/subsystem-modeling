@@ -80,7 +80,7 @@ import {
 	resolveSubsystemMaintainerModel,
 	type OpenCodeModelInfo,
 } from "./opencode-models";
-import { auditSubsystemModel, applySubsystemModelAuditFix, verifySubsystemComponent } from "./verify-subsystem-component";
+import { auditSubsystemModel, applyDeterministicSpanFixes, applySubsystemModelAuditFix, promoteAcceptedDeclarationSpans, verifySubsystemComponent } from "./verify-subsystem-component";
 import { inspectSubsystemSymbol } from "./inspect-symbol";
 import { listVerifiedConstructs, readSubsystemSpan } from "./verified-constructs";
 import {
@@ -2960,20 +2960,58 @@ function setPendingAuditFixPreview(
 	pendingAuditFixPreviews.set(graphId, groups);
 }
 
-/** Audit, then stage any one-click fixes it found for confirmation. */
+/**
+ * Promote accepted span augmentations, then audit, auto-apply the clear span
+ * captures, and stage any remaining one-click fixes for confirmation.
+ *
+ * The promotion + auto-apply is the non-dry-run half of the span pipeline. Two
+ * lanes are "clear" and need no human click: an accepted augmentation (already
+ * confirmation-cleared, so pinning it is a sync), and the deterministic span
+ * fixes the audit derives — a `trivial` tree-sitter capture and a
+ * content-preserving re-pin. Both are written here; everything else stays a
+ * staged one-click. Promotion runs before the audit so the report reflects the
+ * freshly pinned spans; the span fixes are applied, then the model is
+ * re-audited so the report and previews describe the post-write state.
+ *
+ * Every audit funnels through here — the on-demand audit RPC and the
+ * regular-audit timer — so this is the choke point that makes it automatic.
+ */
 async function auditAndStageOneClickFixes(
 	graphId: string,
 ): Promise<
 	| { ok: true; report: SubsystemModelAuditReport; fingerprint: string }
 	| { ok: false; error: string }
 > {
+	const promoted = await promoteAcceptedDeclarationSpans(graphId);
+	if (promoted > 0) {
+		// The write lands on disk: notify every surface so the new spans appear
+		// without waiting for the next read.
+		broadcastSubsystemModelChanged({ graphId, reason: "updated" });
+	}
+
 	const audited = await auditSubsystemModel(graphId);
 	if (!audited.ok) return audited;
+	let report = audited.report;
+	let fingerprint = audited.fingerprint;
+
+	// Auto-apply the deterministic span fixes, then re-audit so the report and
+	// the staged previews reflect the writes (a captured span closes its own
+	// finding, so it must not linger in the preview).
+	const appliedSpans = await applyDeterministicSpanFixes(graphId, report);
+	if (appliedSpans > 0) {
+		broadcastSubsystemModelChanged({ graphId, reason: "updated" });
+		const reaudited = await auditSubsystemModel(graphId);
+		if (reaudited.ok) {
+			report = reaudited.report;
+			fingerprint = reaudited.fingerprint;
+		}
+	}
+
 	if (viewerSettings.autoApplyAuditFixes) {
-		const groups = auditFixGroups(audited.report);
+		const groups = auditFixGroups(report);
 		if (groups.length > 0) setPendingAuditFixPreview(graphId, groups);
 	}
-	return audited;
+	return { ok: true, report, fingerprint };
 }
 
 /**

@@ -304,6 +304,32 @@ describe("trail verify pass", () => {
 		expect(reasons.some((r) => r.includes("not found"))).toBe(true);
 		expect(reasons.some((r) => r.includes("blank"))).toBe(true);
 	});
+
+	test("counts authored vs missing step spans (proposed steps excluded)", async () => {
+		// Step spans are hand-authored, not derived — create surfaces how many
+		// the model carries so an unauthored span is an expected-to-fill gap.
+		const components: SubsystemComponent[] = [
+			{ alias: "a", name: "a", construct: "function", symbol: "a", file: "src/seam.ts", purl: "pkg:github/a/repo-a" },
+			{ alias: "store", name: "store", construct: "store", file: "src/seam.ts", purl: "pkg:github/a/repo-a" },
+		];
+		const result = await verifyModelFiles({
+			components,
+			trails: [
+				{
+					id: "wt",
+					title: "save",
+					steps: [
+						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", span: { startLine: 1, endLine: 1, contentHash: "h" }, purl: "pkg:github/a/repo-a#src/seam.ts", symbol: "a" },
+						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", purl: "pkg:github/a/repo-a#src/seam.ts", symbol: "a" },
+						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", purl: "pkg:github/a/repo-a#src/seam.ts", symbol: "a", proposed: true },
+					],
+				},
+			],
+		});
+
+		expect(result.stepsWithSpan).toBe(1);
+		expect(result.stepsMissingSpan).toBe(1);
+	});
 });
 
 describe("commit provenance", () => {

@@ -266,6 +266,21 @@ export interface SubsystemModelVerification {
 		line?: number;
 		reason: string;
 	}>;
+	/**
+	 * Trail steps carrying a source span. Step spans are **hand-authored** —
+	 * unlike a construct's `declarationSpan`, nothing derives them — so this is
+	 * the author's own count, surfaced at create time so a missing span is
+	 * expected-to-be-filled rather than a silent omission. Proposed steps are
+	 * excluded (their code may not exist yet).
+	 */
+	stepsWithSpan: number;
+	/**
+	 * Trail steps with no source span. The audit reports these as
+	 * `step_span_unconfirmed` (an error) and the Trails view has no line to
+	 * highlight — the seam reads as landing at the top of the file. Not a
+	 * create/update failure; purely informational.
+	 */
+	stepsMissingSpan: number;
 }
 
 /** Lightweight index entry for listing. */
@@ -522,6 +537,8 @@ export async function verifyModelFiles(
 	// repo-root logic as components.
 	let trailsChecked = 0;
 	const trailsFailed: SubsystemModelVerification["trailsFailed"] = [];
+	let stepsWithSpan = 0;
+	let stepsMissingSpan = 0;
 	if (Array.isArray(doc.trails)) {
 		const componentByAlias = new Map<string, SubsystemComponent>();
 		for (const c of doc.components) componentByAlias.set(c.alias, c);
@@ -529,6 +546,13 @@ export async function verifyModelFiles(
 			if (!Array.isArray(tl.steps)) continue;
 			for (let i = 0; i < tl.steps.length; i++) {
 				const step = tl.steps[i];
+				// Step spans are authored, not derived: count what the model
+				// carries so create surfaces the expected-to-fill gap. Proposed
+				// steps describe code that may not exist yet — not counted.
+				if (!step.proposed) {
+					if (step.span) stepsWithSpan++;
+					else stepsMissingSpan++;
+				}
 				const fail = (reason: string) =>
 					trailsFailed.push({
 						trailId: tl.id,
@@ -588,6 +612,8 @@ export async function verifyModelFiles(
 		declarationsAuthored,
 		trailsChecked,
 		trailsFailed,
+		stepsWithSpan,
+		stepsMissingSpan,
 	};
 }
 

@@ -1065,6 +1065,130 @@ export async function verifySubsystemModel(
 }
 
 /**
+ * Promote accepted span augmentations into the model's `declarationSpan`.
+ *
+ * An accepted span augmentation is already confirmation-cleared (a human, or
+ * Jev above the confidence bar) — pinning it onto the component is a sync, not
+ * a fresh judgment. The audit is dry-run and never writes; without this pass a
+ * model can lag the augmentation store indefinitely, showing no span even
+ * though one was accepted. This is the non-dry-run counterpart to the promotion
+ * in {@link captureDeclaration}.
+ *
+ * Anchor-independent by design: copying a stored
+ * `[startLine, endLine, contentHash]` needs neither Graphify nor a parse, so a
+ * component promotes even when Graphify cannot anchor it. Skips proposed,
+ * external, custom-entity, and identity-less components, and components whose
+ * stored span already matches. Returns the number of spans written.
+ */
+export async function promoteAcceptedDeclarationSpans(
+	graphId: string,
+	opts?: { storeRoot?: string },
+): Promise<number> {
+	const graph = await getSubsystemModel(graphId);
+	if (!graph || graph.components.length === 0) return 0;
+
+	const updates = new Map<string, SubsystemSourceSpan>();
+	for (const component of graph.components) {
+		if (component.proposed) continue;
+		if (component.construct === "external") continue;
+		if (component.construct === "custom_entity") continue;
+		if (!component.purl || !component.file || !component.symbol) continue;
+
+		const aug = await findAcceptedSpanAugmentation({
+			purl: component.purl,
+			file: component.file,
+			symbol: component.symbol,
+			storeRoot: opts?.storeRoot,
+		});
+		const claim = aug?.claims.span;
+		if (!claim) continue;
+
+		const stored = component.declarationSpan;
+		if (
+			stored &&
+			stored.startLine === claim.startLine &&
+			stored.endLine === claim.endLine &&
+			stored.contentHash === claim.contentHash
+		) {
+			continue;
+		}
+		updates.set(
+			component.alias,
+			buildSourceSpan({
+				startLine: claim.startLine,
+				endLine: claim.endLine,
+				contentHash: claim.contentHash,
+			}),
+		);
+	}
+
+	if (updates.size === 0) return 0;
+	await updateSubsystemModel(graphId, {
+		components: graph.components.map((c) =>
+			updates.has(c.alias) ? { ...c, declarationSpan: updates.get(c.alias) } : c,
+		),
+	});
+	return updates.size;
+}
+
+/**
+ * The deterministic span lane: apply the audit's just-computed span fixes.
+ *
+ * Two findings are "clear" enough to write without a human click, because the
+ * audit already derived them exactly:
+ *
+ *  - `adopt_tree_sitter_span` — a grounded claim whose declaration tree-sitter
+ *    pinned with every structural gate passing (class `trivial`).
+ *  - `adopt_graphify_declaration_ref` — a content-preserving re-pin: the range
+ *    shifted to Graphify's start still re-hashes to the stored `contentHash`,
+ *    i.e. the construct moved intact.
+ *
+ * The spans ride on the report this pass already bundled, so applying them is a
+ * write, not a new derivation — the caller applies them immediately, then
+ * re-audits. Everything else (`ambiguous` / `unknown` derivations, file
+ * relocate, signature fill) stays a staged one-click. Returns spans written.
+ */
+export async function applyDeterministicSpanFixes(
+	graphId: string,
+	report: SubsystemModelAuditReport,
+): Promise<number> {
+	const graph = await getSubsystemModel(graphId);
+	if (!graph) return 0;
+
+	const updates = new Map<string, SubsystemSourceSpan>();
+	for (const finding of report.findings) {
+		const fix = finding.fix;
+		if (!fix || !finding.componentAlias) continue;
+		if (
+			fix.id !== "adopt_tree_sitter_span" &&
+			fix.id !== "adopt_graphify_declaration_ref"
+		) {
+			continue;
+		}
+		const next = fix.declarationSpan;
+		const alias = finding.componentAlias;
+		const stored = graph.components.find((c) => c.alias === alias)?.declarationSpan;
+		if (
+			stored &&
+			stored.startLine === next.startLine &&
+			stored.endLine === next.endLine &&
+			stored.contentHash === next.contentHash
+		) {
+			continue;
+		}
+		updates.set(alias, next);
+	}
+
+	if (updates.size === 0) return 0;
+	await updateSubsystemModel(graphId, {
+		components: graph.components.map((c) =>
+			updates.has(c.alias) ? { ...c, declarationSpan: updates.get(c.alias) } : c,
+		),
+	});
+	return updates.size;
+}
+
+/**
  * Dry-run deterministic audit focused on component currency: files exist,
  * symbols declare, declaration freshness, and (when graphify is ready)
  * construct/signature/anchor checks, plus mechanical process/module boundary
