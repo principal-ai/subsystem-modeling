@@ -30,6 +30,7 @@ export type {
   TopicStatus,
   TopicAsset,
   TopicCreator,
+  TopicSubsystemModelRef,
 } from './storage/topic-types';
 
 // OpenCode event retrieval (Node.js only - SQLite)

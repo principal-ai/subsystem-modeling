@@ -80,6 +80,7 @@ describe('CRUD', () => {
       title: 'Pub',
       description: 'has a description',
       repos: ['pkg:github/acme/web'],
+      subsystemModels: [{ modelId: 'sg-1-abc', trailIds: ['trail-a'] }],
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-02T00:00:00.000Z',
     };
@@ -89,6 +90,26 @@ describe('CRUD', () => {
     });
     expect(published.repos).toEqual(['pkg:github/acme/web']);
     expect(published).not.toHaveProperty('trailIds');
+    // Local-only model refs must not travel on publish.
+    expect(published).not.toHaveProperty('subsystemModels');
+  });
+
+  test('subsystemModels persist on create and are updatable', async () => {
+    const store = makeStore();
+    const created = await store.createTopic({
+      id: 'topic-models',
+      title: 'Model-scoped',
+      subsystemModels: [{ modelId: 'sg-1-abc', trailIds: ['trail-a'] }],
+    });
+    expect(created.subsystemModels).toEqual([{ modelId: 'sg-1-abc', trailIds: ['trail-a'] }]);
+
+    const reread = await store.getTopic('topic-models');
+    expect(reread?.subsystemModels).toEqual([{ modelId: 'sg-1-abc', trailIds: ['trail-a'] }]);
+
+    const updated = await store.updateTopic('topic-models', {
+      subsystemModels: [{ modelId: 'sg-2-def' }],
+    });
+    expect(updated.subsystemModels).toEqual([{ modelId: 'sg-2-def' }]);
   });
 
   test('delete removes the file and the index entry', async () => {
@@ -156,7 +177,7 @@ describe('index rebuild', () => {
     );
   });
 
-  test('legacy topic files drop trailIds but preserve other fields', async () => {
+  test('legacy topic files preserve unknown fields verbatim', async () => {
     const store = makeStore();
     await store.createTopic({
       id: 'topic-legacy',
@@ -179,8 +200,8 @@ describe('index rebuild', () => {
       description: 'Keep this description',
       repos: ['pkg:github/a/b'],
     });
-    expect(loaded).not.toHaveProperty('trailIds');
-    expect(JSON.parse(readFileSync(topicPath, 'utf8'))).not.toHaveProperty('trailIds');
+    expect(loaded).toHaveProperty('trailIds', ['old-trail']);
+    expect(JSON.parse(readFileSync(topicPath, 'utf8'))).toHaveProperty('trailIds', ['old-trail']);
   });
 });
 
@@ -212,12 +233,12 @@ describe('migration', () => {
     const one = await store.getTopic('topic-1');
     expect(one?.title).toBe('One');
     expect(one?.createdAt).toBe('2026-01-01T00:00:00.000Z');
-    expect(one).not.toHaveProperty('trailIds');
+    expect(one).toHaveProperty('trailIds', ['a']);
     expect(await store.getTopic('topic-2')).toMatchObject({
       title: 'Two',
       repos: ['pkg:github/a/b'],
     });
-    expect(await store.getTopic('topic-2')).not.toHaveProperty('trailIds');
+    expect(await store.getTopic('topic-2')).toHaveProperty('trailIds', []);
     expect(existsSync(join(topicsDir, 'topic-1.json'))).toBe(true);
   });
 

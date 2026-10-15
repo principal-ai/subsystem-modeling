@@ -95,6 +95,21 @@ export interface TopicCreator {
 }
 
 /**
+ * A topic's reference to a subsystem model it concerns, optionally narrowed to
+ * specific runtime trails (flows) within that model.
+ *
+ * The link lives on the **topic** side, in the local store id namespace, and
+ * never on the model: a subsystem-model document is a portable, host-free
+ * artifact (shared/published) that must not embed local topic or store ids.
+ */
+export interface TopicSubsystemModelRef {
+  /** Store-assigned model id, e.g. "sg-1781...". */
+  modelId: string;
+  /** Specific runtime trails (flows) within the model, if narrower than the whole. */
+  trailIds?: string[];
+}
+
+/**
  * Locally-authored topic — the shape desktop persists to
  * `~/.principal/topics/<id>.json` and edits.
  *
@@ -132,6 +147,11 @@ export interface DraftTopic {
   status?: TopicStatus;
   /** Local image attachments, referenced from the description via `asset://<id>`. */
   assets?: TopicAsset[];
+  /**
+   * Subsystem models this topic concerns, as local store ids. Local-only: not
+   * carried on publish, since the referenced models are a local artifact.
+   */
+  subsystemModels?: TopicSubsystemModelRef[];
 }
 
 /**
