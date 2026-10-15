@@ -46,7 +46,7 @@
     "@pierre/diffs": "1.3.6",
     "@principal-ade/industry-theme": "0.1.7",
     "@principal-ai/agent-monitoring": "^0.3.38",
-    "@principal-ai/subsystems-core": "^0.49.0",
+    "@principal-ai/subsystems-core": "^0.49.1",
     "@storybook/addon-docs": "10.1.2",
     "@storybook/addon-links": "10.1.2",
     "@storybook/addon-onboarding": "10.1.2",
