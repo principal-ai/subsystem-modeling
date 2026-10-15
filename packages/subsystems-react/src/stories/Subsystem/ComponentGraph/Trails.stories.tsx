@@ -272,6 +272,82 @@ const proposedTrails: SubsystemTrail[] = [
       },
     ],
   },
+  // Neighbours for the wrapped title above: a couple of one-line titles and
+  // one that wraps to two, so the header's padding reads against the rows on
+  // either side of it rather than in isolation.
+  {
+    id: 'tl-open-drawing',
+    title: 'Open drawing',
+    steps: [
+      {
+        from: 'panel',
+        to: 'host',
+        mechanism: 'produces',
+        file: 'src/panels/DrawingsLeftPanel.tsx',
+        span: { startLine: 85, endLine: 85, contentHash: 'fixture' },
+        purl: stepPurl('src/panels/DrawingsLeftPanel.tsx'),
+        symbol: 'DrawingsLeftPanel.openDrawing',
+        annotation: 'Emits the open intent up to the host.',
+      },
+      {
+        from: 'host',
+        to: 'storage',
+        mechanism: 'calls',
+        file: 'src/hooks/useDrawingsHost.ts',
+        span: { startLine: 45, endLine: 45, contentHash: 'fixture' },
+        purl: stepPurl('src/hooks/useDrawingsHost.ts'),
+        symbol: 'useDrawingsHost.openDrawing',
+      },
+    ],
+  },
+  {
+    id: 'tl-save-drawing',
+    title: 'Save the drawing and refresh the list',
+    steps: [
+      {
+        from: 'tab',
+        to: 'fs',
+        mechanism: 'calls',
+        file: 'src/components/DrawingTabContent.tsx',
+        span: { startLine: 112, endLine: 112, contentHash: 'fixture' },
+        purl: stepPurl('src/components/DrawingTabContent.tsx'),
+        symbol: 'DrawingTabContent.save',
+      },
+      {
+        from: 'host',
+        to: 'panel',
+        mechanism: 'produces',
+        file: 'src/hooks/useDrawingsHost.ts',
+        span: { startLine: 64, endLine: 64, contentHash: 'fixture' },
+        purl: stepPurl('src/hooks/useDrawingsHost.ts'),
+        symbol: 'useDrawingsHost.onSaved',
+      },
+    ],
+  },
+  {
+    id: 'tl-delete-drawing',
+    title: 'Delete drawing',
+    steps: [
+      {
+        from: 'host',
+        to: 'fs',
+        mechanism: 'calls',
+        file: 'src/hooks/useDrawingsHost.ts',
+        span: { startLine: 66, endLine: 66, contentHash: 'fixture' },
+        purl: stepPurl('src/hooks/useDrawingsHost.ts'),
+        symbol: 'useDrawingsHost.deleteDrawing',
+      },
+      {
+        from: 'panel',
+        to: 'storage',
+        mechanism: 'calls',
+        file: 'src/panels/DrawingsLeftPanel.tsx',
+        span: { startLine: 56, endLine: 56, contentHash: 'fixture' },
+        purl: stepPurl('src/panels/DrawingsLeftPanel.tsx'),
+        symbol: 'DrawingsLeftPanel.scan',
+      },
+    ],
+  },
 ];
 
 function ProposedMissingStepDemo() {
@@ -306,7 +382,7 @@ function ProposedMissingStepDemo() {
         components={proposedComponents}
         trails={proposedTrails}
         title="proposed seam with a missing file"
-        description="Expand **Associate a finished run with its model** and click either step. The proposed step has no file in the checkout, so its snippet shows an inline *Proposed — … isn't in the local checkout yet.* placeholder instead of failing the whole flow."
+        description="The **Trails** panel lists four flows so the long, wrapped title (*Associate a finished run with its model (proposed)*) reads against its neighbours — two one-line titles and one (*Save the drawing and refresh the list*) that also wraps. Expand **Associate a finished run with its model** and click either step: the proposed step has no file in the checkout, so its snippet shows an inline *Proposed — … isn't in the local checkout yet.* placeholder instead of failing the whole flow."
         renderTrailViewer={renderTrailViewer}
         renderFileViewer={(file) => (
           <div

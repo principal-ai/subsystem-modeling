@@ -250,7 +250,13 @@ function TrailFlow({
             display: 'flex',
             alignItems: 'center',
             minWidth: 0,
-            padding: 0,
+            // Vertical padding, not just the row's min-height: a title that
+            // wraps to two+ lines must grow the header past `minHeight`, and
+            // without this the text sits flush against the row's top and bottom
+            // edges (the controls stretch to the text height). 6px keeps a
+            // one-line title under `TRAIL_CONTROL_SIZE`, so single-line rows
+            // stay 34px.
+            padding: '6px 0',
             border: 'none',
             background: 'transparent',
             textAlign: 'left',
