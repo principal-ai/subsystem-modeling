@@ -2157,5 +2157,28 @@ export async function buildSubsystemGraph(
     }
   }
 
+  // ELK can return an edge with no sections without throwing, which nothing
+  // else reports.
+  const unrouted = unroutedEdgeIds(edges);
+  if (unrouted.length > 0) {
+    console.warn(
+      `[subsystem-graph] ${unrouted.length}/${edges.length} edge(s) have no ELK path and will not render:`,
+      unrouted,
+    );
+  }
+
   return { nodes: placedNodes, edges, regions, absoluteRects };
+}
+
+/**
+ * Ids of shown edges that ELK left without a path. `SubsystemEdge` draws
+ * `elkPath` with no fallback, so these edges are invisible on the canvas.
+ * Hidden edges are skipped: they would not render either way.
+ */
+export function unroutedEdgeIds(
+  edges: readonly { id: string; hidden?: boolean; data?: unknown }[],
+): string[] {
+  return edges
+    .filter((e) => !e.hidden && !(e.data as SubsystemGraphEdgeData | undefined)?.elkPath)
+    .map((e) => e.id);
 }

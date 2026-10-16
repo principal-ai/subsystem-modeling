@@ -26,6 +26,7 @@ import {
   buildBoundaryLayoutGroups,
   buildBoundaryLayoutGroupsByPath,
   buildSubsystemGraph,
+  unroutedEdgeIds,
   componentPackageKey,
   deriveNameFromSymbol,
   isConstructsOnlyModel,
@@ -1225,5 +1226,21 @@ describe('graphify-native edges', () => {
     const g = edges.find((e) => e.id === 'g1');
     expect((g?.data as { provenance?: string })?.provenance).toBe('graphify');
     expect((g?.data as { mechanism?: string })?.mechanism).toBe('imports');
+  });
+});
+
+describe('unroutedEdgeIds', () => {
+  test('lists shown edges with no elkPath', () => {
+    const ids = unroutedEdgeIds([
+      { id: 'routed', data: { elkPath: 'M 0 0 L 10 0' } },
+      { id: 'no-path', data: { mechanism: 'calls' } },
+      { id: 'no-data' },
+      { id: 'empty-path', data: { elkPath: '' } },
+    ]);
+    expect(ids).toEqual(['no-path', 'no-data', 'empty-path']);
+  });
+
+  test('skips hidden edges', () => {
+    expect(unroutedEdgeIds([{ id: 'hidden', hidden: true, data: {} }])).toEqual([]);
   });
 });

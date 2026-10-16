@@ -32,7 +32,7 @@ import {
   applyNodeChanges,
 } from '@xyflow/react';
 import { useTheme } from '@principal-ade/industry-theme';
-import { FileText, X } from 'lucide-react';
+import { FileText, Unlink, X } from 'lucide-react';
 import { IndustryMarkdownSlide } from 'themed-markdown';
 import {
   buildSubsystemGraph,
@@ -45,6 +45,7 @@ import {
   MECHANISM_DESCRIPTIONS,
   subsystemGraphLayoutKey,
   trailStepGraphEdgeId,
+  unroutedEdgeIds,
   type SubsystemComponentEdge,
   type SubsystemComponent,
   type SubsystemEdgeProvenance,
@@ -1652,6 +1653,12 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
     return proposedStampedEdges.map((e) => ({ ...e, hidden: !edgeInView(e) }));
   }, [proposedStampedEdges, selectedEdgeId, openedEdgeIds, focusEdgeIds, previewEdgeIds, issueFocusEdgeIds, resolvedEdgeView]);
 
+  // Gated on layoutReady so the pre-reveal Pass 1 swap never flashes a count.
+  const unroutedIds = useMemo(
+    () => (layoutReady ? unroutedEdgeIds(dispEdges) : []),
+    [dispEdges, layoutReady],
+  );
+
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
       // Capture dimension changes (React Flow's measurement callback).
@@ -3062,6 +3069,32 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
       >
         <GraphChrome />
       </ReactFlow>
+      {unroutedIds.length > 0 && (
+        <div
+          role="status"
+          title={`Edges with no routed path (not drawn):\n${unroutedIds.join('\n')}`}
+          style={{
+            position: 'absolute',
+            top: 10,
+            left: 10,
+            zIndex: 6,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '4px 10px',
+            fontSize: theme.fontSizes[0],
+            fontFamily: theme.fonts.body,
+            color: theme.colors.text,
+            background: theme.colors.backgroundSecondary ?? theme.colors.background,
+            border: `1px solid ${theme.colors.warning ?? '#d4a017'}`,
+            borderRadius: 6,
+            boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+          }}
+        >
+          <Unlink size={13} color={theme.colors.warning ?? '#d4a017'} aria-hidden />
+          {unroutedIds.length} {unroutedIds.length === 1 ? 'edge' : 'edges'} not drawn
+        </div>
+      )}
       {/* Graph / trail / step titles — non-interactive chips at the top
           of the canvas. Graph-only embeds use these without opening the sidebar. */}
       {(graphTitle || overlayTrailTitle || overlayTrailStep) && (
