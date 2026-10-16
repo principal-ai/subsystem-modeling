@@ -37,7 +37,7 @@ export const TYPESAFE_KEY_HELP =
 	"Missing Jev API key — add your TypeSafe AI key in Settings → Jev, set TYPESAFE_API_KEY, or get one at https://console.typesafe.ai/keys.";
 
 /** Env fallback for the TypeSafe AI key. */
-function envTypesafeKey(): string | null {
+export function envTypesafeKey(): string | null {
 	const key =
 		process.env["TYPESAFE_API_KEY"]?.trim() ||
 		process.env["PRINCIPAL_JEV_API_KEY"]?.trim() ||

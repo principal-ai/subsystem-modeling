@@ -83,6 +83,7 @@ import {
 import { auditSubsystemModel, applyDeterministicSpanFixes, applySubsystemModelAuditFix, promoteAcceptedDeclarationSpans, verifySubsystemComponent } from "./verify-subsystem-component";
 import { inspectSubsystemSymbol } from "./inspect-symbol";
 import { listVerifiedConstructs, readSubsystemSpan } from "./verified-constructs";
+import { assessConstructComplexity } from "./jev-complexity";
 import {
 	getGraphifyStatus,
 	getGraphifyStatusDetailed,
@@ -1517,6 +1518,10 @@ const requests: RequestHandlers = {
 			},
 			readSubsystemSpan: async ({ purl, file, startLine, endLine, contentHash }) =>
 				readSubsystemSpan({ purl, file, startLine, endLine, contentHash }),
+			assessConstructComplexity: async (input) =>
+				assessConstructComplexity(input, {
+					apiKey: viewerSettings.typesafeApiKey ?? undefined,
+				}),
 		readFile: async ({ tabId, path, repo }) => {
 			const tab = getTab(tabId);
 			if (!tab) return { ok: false, error: `unknown tab: ${tabId}` };

@@ -1,0 +1,850 @@
+{
+  "claims": 195,
+  "uniqueSpans": 129,
+  "duplicateClaimsRemoved": 66,
+  "actualModels": {
+    "jev-1.13.0": 129
+  },
+  "rubricHash": "51d5cf6fc2546526f006574eb406813b8b037ac0bd8fd2dd179b5f0ecfd66428",
+  "all": {
+    "n": 129,
+    "files": 84,
+    "constructKinds": {
+      "function": 107,
+      "class": 13,
+      "interface": 4,
+      "type_alias": 2,
+      "store": 3
+    },
+    "medianTotalLines": 53,
+    "medianNonblankLines": 48,
+    "medianScore100": 49.0,
+    "scoreRange": [
+      0,
+      96.75
+    ],
+    "correlations": {
+      "totalLines": {
+        "pearson": 0.6015392783252399,
+        "spearman": 0.8490959601807776,
+        "pearsonLog2Length": 0.8315969738440984,
+        "spearmanFileCluster95CI": [
+          0.7600142097010406,
+          0.8970194230333304
+        ]
+      },
+      "nonblankLines": {
+        "pearson": 0.6026756995012452,
+        "spearman": 0.849163487607536,
+        "pearsonLog2Length": 0.8307562090751242,
+        "spearmanFileCluster95CI": [
+          0.7604548623594803,
+          0.8976013879775496
+        ]
+      },
+      "characters": {
+        "pearson": 0.6159570740018233,
+        "spearman": 0.8503577741878626,
+        "pearsonLog2Length": 0.8331152867630953
+      },
+      "words": {
+        "pearson": 0.624499011944201,
+        "spearman": 0.8597112951834994,
+        "pearsonLog2Length": 0.8451378462816158
+      }
+    },
+    "logLengthRegression": {
+      "scorePointsPerDoublingOfNonblankLines": 10.329367407306684,
+      "intercept": -11.392731357163377,
+      "rSquared": 0.6901558789168714,
+      "residualRmse": 15.836869309099086
+    }
+  },
+  "executable": {
+    "n": 107,
+    "files": 69,
+    "constructKinds": {
+      "function": 107
+    },
+    "medianTotalLines": 53,
+    "medianNonblankLines": 48,
+    "medianScore100": 54.25,
+    "scoreRange": [
+      0,
+      96.75
+    ],
+    "correlations": {
+      "totalLines": {
+        "pearson": 0.634007065298762,
+        "spearman": 0.9032795447290332,
+        "pearsonLog2Length": 0.8924429822262242,
+        "spearmanFileCluster95CI": [
+          0.848166513588741,
+          0.9332906844935389
+        ]
+      },
+      "nonblankLines": {
+        "pearson": 0.6305210346625226,
+        "spearman": 0.8998461549887501,
+        "pearsonLog2Length": 0.8889821912247561,
+        "spearmanFileCluster95CI": [
+          0.8423921945979554,
+          0.9313783532986271
+        ]
+      },
+      "characters": {
+        "pearson": 0.649142494721382,
+        "spearman": 0.9106992890915004,
+        "pearsonLog2Length": 0.902570819621233
+      },
+      "words": {
+        "pearson": 0.654387309136021,
+        "spearman": 0.9261677929456745,
+        "pearsonLog2Length": 0.9202561793858262
+      }
+    },
+    "logLengthRegression": {
+      "scorePointsPerDoublingOfNonblankLines": 10.831100376722464,
+      "intercept": -10.854378550459032,
+      "rSquared": 0.7902893363147683,
+      "residualRmse": 12.010127497356121
+    }
+  },
+  "leafSpans": {
+    "n": 129,
+    "files": 84,
+    "constructKinds": {
+      "function": 107,
+      "class": 13,
+      "interface": 4,
+      "type_alias": 2,
+      "store": 3
+    },
+    "medianTotalLines": 53,
+    "medianNonblankLines": 48,
+    "medianScore100": 49.0,
+    "scoreRange": [
+      0,
+      96.75
+    ],
+    "correlations": {
+      "totalLines": {
+        "pearson": 0.6015392783252399,
+        "spearman": 0.8490959601807776,
+        "pearsonLog2Length": 0.8315969738440984,
+        "spearmanFileCluster95CI": [
+          0.7600142097010406,
+          0.8970194230333304
+        ]
+      },
+      "nonblankLines": {
+        "pearson": 0.6026756995012452,
+        "spearman": 0.849163487607536,
+        "pearsonLog2Length": 0.8307562090751242,
+        "spearmanFileCluster95CI": [
+          0.7604548623594803,
+          0.8976013879775496
+        ]
+      },
+      "characters": {
+        "pearson": 0.6159570740018233,
+        "spearman": 0.8503577741878626,
+        "pearsonLog2Length": 0.8331152867630953
+      },
+      "words": {
+        "pearson": 0.624499011944201,
+        "spearman": 0.8597112951834994,
+        "pearsonLog2Length": 0.8451378462816158
+      }
+    },
+    "logLengthRegression": {
+      "scorePointsPerDoublingOfNonblankLines": 10.329367407306684,
+      "intercept": -11.392731357163377,
+      "rSquared": 0.6901558789168714,
+      "residualRmse": 15.836869309099086
+    }
+  },
+  "byKind": {
+    "class": {
+      "n": 13,
+      "files": 13,
+      "constructKinds": {
+        "class": 13
+      },
+      "medianTotalLines": 187,
+      "medianNonblankLines": 163,
+      "medianScore100": 43.25,
+      "scoreRange": [
+        3.5000000000000004,
+        80.25
+      ],
+      "correlations": {
+        "totalLines": {
+          "pearson": 0.5823960052118926,
+          "spearman": 0.7427792446389848,
+          "pearsonLog2Length": 0.6784326077291768
+        },
+        "nonblankLines": {
+          "pearson": 0.5833722264768239,
+          "spearman": 0.7427792446389848,
+          "pearsonLog2Length": 0.6829999561371864
+        },
+        "characters": {
+          "pearson": 0.5880395796875938,
+          "spearman": 0.7812937239906359,
+          "pearsonLog2Length": 0.6973308043299621
+        },
+        "words": {
+          "pearson": 0.6295457749759205,
+          "spearman": 0.7840447582300395,
+          "pearsonLog2Length": 0.7311257765021986
+        }
+      },
+      "logLengthRegression": {
+        "scorePointsPerDoublingOfNonblankLines": 9.864820549453768,
+        "intercept": -22.976180876212503,
+        "rSquared": 0.4664889400833986,
+        "residualRmse": 21.26574505363915
+      }
+    },
+    "function": {
+      "n": 107,
+      "files": 69,
+      "constructKinds": {
+        "function": 107
+      },
+      "medianTotalLines": 53,
+      "medianNonblankLines": 48,
+      "medianScore100": 54.25,
+      "scoreRange": [
+        0,
+        96.75
+      ],
+      "correlations": {
+        "totalLines": {
+          "pearson": 0.634007065298762,
+          "spearman": 0.9032795447290332,
+          "pearsonLog2Length": 0.8924429822262242
+        },
+        "nonblankLines": {
+          "pearson": 0.6305210346625226,
+          "spearman": 0.8998461549887501,
+          "pearsonLog2Length": 0.8889821912247561
+        },
+        "characters": {
+          "pearson": 0.649142494721382,
+          "spearman": 0.9106992890915004,
+          "pearsonLog2Length": 0.902570819621233
+        },
+        "words": {
+          "pearson": 0.654387309136021,
+          "spearman": 0.9261677929456745,
+          "pearsonLog2Length": 0.9202561793858262
+        }
+      },
+      "logLengthRegression": {
+        "scorePointsPerDoublingOfNonblankLines": 10.831100376722464,
+        "intercept": -10.854378550459032,
+        "rSquared": 0.7902893363147683,
+        "residualRmse": 12.010127497356121
+      }
+    },
+    "interface": {
+      "n": 4,
+      "files": 2,
+      "constructKinds": {
+        "interface": 4
+      },
+      "medianTotalLines": 25.5,
+      "medianNonblankLines": 25.5,
+      "medianScore100": 1.0,
+      "scoreRange": [
+        0.75,
+        4.5
+      ],
+      "correlations": {
+        "totalLines": {
+          "pearson": 0.9734609267464349,
+          "spearman": 0.6324555320336759,
+          "pearsonLog2Length": 0.8664356198734245
+        },
+        "nonblankLines": {
+          "pearson": 0.9734609267464349,
+          "spearman": 0.6324555320336759,
+          "pearsonLog2Length": 0.8664356198734245
+        },
+        "characters": {
+          "pearson": 0.9752792518326262,
+          "spearman": 0.6324555320336759,
+          "pearsonLog2Length": 0.8854045406733534
+        },
+        "words": {
+          "pearson": 0.9686796254456628,
+          "spearman": 0.6324555320336759,
+          "pearsonLog2Length": 0.8548911282811036
+        }
+      },
+      "logLengthRegression": {
+        "scorePointsPerDoublingOfNonblankLines": 1.1166920501617603,
+        "intercept": -3.543312931638644,
+        "rSquared": 0.7507106833854456,
+        "residualRmse": 0.7763850702343833
+      }
+    },
+    "store": {
+      "n": 3,
+      "files": 2,
+      "constructKinds": {
+        "store": 3
+      },
+      "medianTotalLines": 1,
+      "medianNonblankLines": 1,
+      "medianScore100": 0.5,
+      "scoreRange": [
+        0.25,
+        0.75
+      ],
+      "correlations": {
+        "totalLines": {
+          "pearson": 0.8660254037844385,
+          "spearman": 0.8660254037844387,
+          "pearsonLog2Length": 0.8660254037844387
+        },
+        "nonblankLines": {
+          "pearson": 0.8660254037844385,
+          "spearman": 0.8660254037844387,
+          "pearsonLog2Length": 0.8660254037844387
+        },
+        "characters": {
+          "pearson": 0.988897258621257,
+          "spearman": 1.0,
+          "pearsonLog2Length": 0.9998348583350907
+        },
+        "words": {
+          "pearson": 0.9707253433941511,
+          "spearman": 1.0,
+          "pearsonLog2Length": 0.944359904014104
+        }
+      },
+      "logLengthRegression": {
+        "scorePointsPerDoublingOfNonblankLines": 0.23659865758929657,
+        "intercept": 0.375,
+        "rSquared": 0.75,
+        "residualRmse": 0.10206207261596575
+      }
+    },
+    "type_alias": {
+      "n": 2,
+      "files": 2,
+      "constructKinds": {
+        "type_alias": 2
+      },
+      "medianTotalLines": 8.0,
+      "medianNonblankLines": 8.0,
+      "medianScore100": 0.0,
+      "scoreRange": [
+        0,
+        0
+      ],
+      "correlations": {
+        "totalLines": {
+          "pearson": null,
+          "spearman": null,
+          "pearsonLog2Length": null
+        },
+        "nonblankLines": {
+          "pearson": null,
+          "spearman": null,
+          "pearsonLog2Length": null
+        },
+        "characters": {
+          "pearson": null,
+          "spearman": null,
+          "pearsonLog2Length": null
+        },
+        "words": {
+          "pearson": null,
+          "spearman": null,
+          "pearsonLog2Length": null
+        }
+      },
+      "logLengthRegression": null
+    }
+  },
+  "byRepo": {
+    "pkg:github/Graphify-Labs/graphify": {
+      "n": 3,
+      "files": 1,
+      "constructKinds": {
+        "function": 3
+      },
+      "medianTotalLines": 96,
+      "medianNonblankLines": 94,
+      "medianScore100": 65.75,
+      "scoreRange": [
+        29.25,
+        75.25
+      ],
+      "correlations": {
+        "totalLines": {
+          "pearson": 0.90664619039761,
+          "spearman": 1.0,
+          "pearsonLog2Length": 0.9905228346365612
+        },
+        "nonblankLines": {
+          "pearson": 0.9156046837451114,
+          "spearman": 1.0,
+          "pearsonLog2Length": 0.9919979936215032
+        },
+        "characters": {
+          "pearson": 0.9731853099833706,
+          "spearman": 1.0,
+          "pearsonLog2Length": 0.9999739551907574
+        },
+        "words": {
+          "pearson": 0.9972292132584472,
+          "spearman": 1.0,
+          "pearsonLog2Length": 0.9964469588559216
+        }
+      },
+      "logLengthRegression": {
+        "scorePointsPerDoublingOfNonblankLines": 14.755328594066528,
+        "intercept": -34.434799196425374,
+        "rSquared": 0.9840600193490878,
+        "residualRmse": 2.50341148420516
+      }
+    },
+    "pkg:github/principal-ade/electron-app": {
+      "n": 10,
+      "files": 9,
+      "constructKinds": {
+        "function": 3,
+        "class": 7
+      },
+      "medianTotalLines": 161.0,
+      "medianNonblankLines": 148.5,
+      "medianScore100": 48.25,
+      "scoreRange": [
+        9.5,
+        80.25
+      ],
+      "correlations": {
+        "totalLines": {
+          "pearson": 0.4877154177129798,
+          "spearman": 0.47416632407045034,
+          "pearsonLog2Length": 0.3871882628034454
+        },
+        "nonblankLines": {
+          "pearson": 0.4952177813307392,
+          "spearman": 0.5121951219512195,
+          "pearsonLog2Length": 0.4067575420694816
+        },
+        "characters": {
+          "pearson": 0.49356961449157544,
+          "spearman": 0.47416632407045034,
+          "pearsonLog2Length": 0.4005325323217791
+        },
+        "words": {
+          "pearson": 0.5028986419877459,
+          "spearman": 0.4376919914496465,
+          "pearsonLog2Length": 0.4023857511313409
+        }
+      },
+      "logLengthRegression": {
+        "scorePointsPerDoublingOfNonblankLines": 5.005122814708917,
+        "intercept": 12.770583256682414,
+        "rSquared": 0.16545169803040616,
+        "residualRmse": 23.796794839550696
+      }
+    },
+    "pkg:github/MapleTechLabs/maple": {
+      "n": 1,
+      "files": 1,
+      "constructKinds": {
+        "class": 1
+      },
+      "medianTotalLines": 159,
+      "medianNonblankLines": 147,
+      "medianScore100": 74.25,
+      "scoreRange": [
+        74.25,
+        74.25
+      ],
+      "correlations": {
+        "totalLines": {
+          "pearson": null,
+          "spearman": null,
+          "pearsonLog2Length": null
+        },
+        "nonblankLines": {
+          "pearson": null,
+          "spearman": null,
+          "pearsonLog2Length": null
+        },
+        "characters": {
+          "pearson": null,
+          "spearman": null,
+          "pearsonLog2Length": null
+        },
+        "words": {
+          "pearson": null,
+          "spearman": null,
+          "pearsonLog2Length": null
+        }
+      },
+      "logLengthRegression": null
+    },
+    "pkg:github/principal-ai/repository-monitoring-server": {
+      "n": 2,
+      "files": 2,
+      "constructKinds": {
+        "class": 2
+      },
+      "medianTotalLines": 341.0,
+      "medianNonblankLines": 302.0,
+      "medianScore100": 75.0,
+      "scoreRange": [
+        73.5,
+        76.5
+      ],
+      "correlations": {
+        "totalLines": {
+          "pearson": null,
+          "spearman": null,
+          "pearsonLog2Length": null
+        },
+        "nonblankLines": {
+          "pearson": null,
+          "spearman": null,
+          "pearsonLog2Length": null
+        },
+        "characters": {
+          "pearson": null,
+          "spearman": null,
+          "pearsonLog2Length": null
+        },
+        "words": {
+          "pearson": null,
+          "spearman": null,
+          "pearsonLog2Length": null
+        }
+      },
+      "logLengthRegression": null
+    },
+    "pkg:github/principal-ai/subsystem-modeling": {
+      "n": 107,
+      "files": 65,
+      "constructKinds": {
+        "function": 98,
+        "interface": 4,
+        "type_alias": 2,
+        "store": 3
+      },
+      "medianTotalLines": 43,
+      "medianNonblankLines": 42,
+      "medianScore100": 49.0,
+      "scoreRange": [
+        0,
+        96.75
+      ],
+      "correlations": {
+        "totalLines": {
+          "pearson": 0.6368391362923,
+          "spearman": 0.896509486457284,
+          "pearsonLog2Length": 0.8838837684498305
+        },
+        "nonblankLines": {
+          "pearson": 0.6334034556622241,
+          "spearman": 0.8941926562044707,
+          "pearsonLog2Length": 0.8802019077774569
+        },
+        "characters": {
+          "pearson": 0.6435652846255226,
+          "spearman": 0.892464357768781,
+          "pearsonLog2Length": 0.8806197464102319
+        },
+        "words": {
+          "pearson": 0.6485839840976939,
+          "spearman": 0.895183579084925,
+          "pearsonLog2Length": 0.8828909026163815
+        }
+      },
+      "logLengthRegression": {
+        "scorePointsPerDoublingOfNonblankLines": 10.877883754396482,
+        "intercept": -12.699308179864488,
+        "rSquared": 0.7747553984550758,
+        "residualRmse": 13.598361755444959
+      }
+    },
+    "pkg:github/temporalio/temporal": {
+      "n": 6,
+      "files": 6,
+      "constructKinds": {
+        "function": 3,
+        "class": 3
+      },
+      "medianTotalLines": 27.0,
+      "medianNonblankLines": 25.5,
+      "medianScore100": 20.375,
+      "scoreRange": [
+        0,
+        64.5
+      ],
+      "correlations": {
+        "totalLines": {
+          "pearson": 0.6606279675542018,
+          "spearman": 0.5428571428571428,
+          "pearsonLog2Length": 0.6424153156831025
+        },
+        "nonblankLines": {
+          "pearson": 0.6353239582775856,
+          "spearman": 0.5428571428571428,
+          "pearsonLog2Length": 0.6076296315997441
+        },
+        "characters": {
+          "pearson": 0.8118901233864598,
+          "spearman": 0.8857142857142857,
+          "pearsonLog2Length": 0.8258830440221911
+        },
+        "words": {
+          "pearson": 0.9564069639285686,
+          "spearman": 0.7714285714285715,
+          "pearsonLog2Length": 0.9058761053772384
+        }
+      },
+      "logLengthRegression": {
+        "scorePointsPerDoublingOfNonblankLines": 14.235107370643462,
+        "intercept": -42.89292375228206,
+        "rSquared": 0.36921376919804083,
+        "residualRmse": 18.310783270273337
+      }
+    }
+  },
+  "lowConfidenceCount": 1,
+  "medianConfidence": 0.83,
+  "tokenUsage": {
+    "input_tokens": 289909,
+    "output_tokens": 2451
+  },
+  "bins": [
+    {
+      "nonblankLines": "1\u201310",
+      "n": 26,
+      "medianScore100": 5.875,
+      "scoreQuartiles": [
+        0.3125,
+        24.875
+      ]
+    },
+    {
+      "nonblankLines": "11\u201325",
+      "n": 20,
+      "medianScore100": 28.875,
+      "scoreQuartiles": [
+        23.1875,
+        36.375
+      ]
+    },
+    {
+      "nonblankLines": "26\u201350",
+      "n": 21,
+      "medianScore100": 46.25,
+      "scoreQuartiles": [
+        35.0,
+        60.5
+      ]
+    },
+    {
+      "nonblankLines": "51\u2013100",
+      "n": 21,
+      "medianScore100": 57.25,
+      "scoreQuartiles": [
+        49.0,
+        70.0
+      ]
+    },
+    {
+      "nonblankLines": "101\u2013200",
+      "n": 17,
+      "medianScore100": 73.75,
+      "scoreQuartiles": [
+        70.5,
+        74.75
+      ]
+    },
+    {
+      "nonblankLines": "201+",
+      "n": 24,
+      "medianScore100": 76.25,
+      "scoreQuartiles": [
+        74.6875,
+        84.125
+      ]
+    }
+  ],
+  "withinKindLogLengthPearson": 0.8597431118173208,
+  "moreComplexThanLengthPredicts": [
+    {
+      "repo": "pkg:github/principal-ai/subsystem-modeling",
+      "file": "packages/subsystems-studio/src/bun/proposal-store.ts",
+      "symbol": "acceptSubsystemModelProposal",
+      "construct": "function",
+      "nonblankLines": 54,
+      "score100": 74.75,
+      "predictedScore100": 51.47738564221911,
+      "residualScorePoints": 23.27261435778089
+    },
+    {
+      "repo": "pkg:github/principal-ai/subsystem-modeling",
+      "file": "packages/subsystems-studio/src/bun/server-sessions.ts",
+      "symbol": "setServerEventWatch",
+      "construct": "function",
+      "nonblankLines": 19,
+      "score100": 57.99999999999999,
+      "predictedScore100": 35.15535074068951,
+      "residualScorePoints": 22.844649259310486
+    },
+    {
+      "repo": "pkg:github/principal-ai/subsystem-modeling",
+      "file": "packages/subsystems-studio/src/bun/purl-commits.ts",
+      "symbol": "planAutoRePin",
+      "construct": "function",
+      "nonblankLines": 36,
+      "score100": 67.25,
+      "predictedScore100": 45.14159808028968,
+      "residualScorePoints": 22.108401919710317
+    },
+    {
+      "repo": "pkg:github/principal-ai/subsystem-modeling",
+      "file": "packages/subsystems-studio/src/bun/purl-commits.ts",
+      "symbol": "modelProvenanceDetail",
+      "construct": "function",
+      "nonblankLines": 50,
+      "score100": 71.25,
+      "predictedScore100": 50.2747943527774,
+      "residualScorePoints": 20.9752056472226
+    },
+    {
+      "repo": "pkg:github/principal-ai/subsystem-modeling",
+      "file": "packages/subsystems-studio/src/bun/jev-maintenance.ts",
+      "symbol": "autoAcceptProposalIfConfident",
+      "construct": "function",
+      "nonblankLines": 33,
+      "score100": 63.74999999999999,
+      "predictedScore100": 43.7819604960609,
+      "residualScorePoints": 19.968039503939096
+    },
+    {
+      "repo": "pkg:github/principal-ade/electron-app",
+      "file": "src/renderer/drawings-view/drawingsStorage.ts",
+      "symbol": "scanDrawings",
+      "construct": "function",
+      "nonblankLines": 33,
+      "score100": 61.25000000000001,
+      "predictedScore100": 43.7819604960609,
+      "residualScorePoints": 17.46803950393911
+    },
+    {
+      "repo": "pkg:github/principal-ade/electron-app",
+      "file": "src/renderer/drawings-view/useDrawingsHost.tsx",
+      "symbol": "useDrawingsHost",
+      "construct": "function",
+      "nonblankLines": 63,
+      "score100": 71.25,
+      "predictedScore100": 53.88614028073654,
+      "residualScorePoints": 17.36385971926346
+    },
+    {
+      "repo": "pkg:github/principal-ai/subsystem-modeling",
+      "file": "packages/subsystems-studio/src/bun/server-sessions.ts",
+      "symbol": "listRecentServerSessions",
+      "construct": "function",
+      "nonblankLines": 81,
+      "score100": 75.0,
+      "predictedScore100": 57.81317320414854,
+      "residualScorePoints": 17.18682679585146
+    }
+  ],
+  "lessComplexThanLengthPredicts": [
+    {
+      "repo": "pkg:github/temporalio/temporal",
+      "file": "service/frontend/fx.go",
+      "symbol": "NewServiceProvider",
+      "construct": "function",
+      "nonblankLines": 31,
+      "score100": 0,
+      "predictedScore100": 42.80501897332929,
+      "residualScorePoints": -42.80501897332929
+    },
+    {
+      "repo": "pkg:github/principal-ai/subsystem-modeling",
+      "file": "packages/subsystems-studio/src/bun/maintain-model.ts",
+      "symbol": "runMaintainAgent",
+      "construct": "function",
+      "nonblankLines": 41,
+      "score100": 18.5,
+      "predictedScore100": 47.173804985070085,
+      "residualScorePoints": -28.673804985070085
+    },
+    {
+      "repo": "pkg:github/principal-ai/subsystem-modeling",
+      "file": "packages/subsystems-studio/src/mainview/ui.tsx",
+      "symbol": "CenteredMessage",
+      "construct": "function",
+      "nonblankLines": 42,
+      "score100": 19.0,
+      "predictedScore100": 47.55035271880711,
+      "residualScorePoints": -28.550352718807112
+    },
+    {
+      "repo": "pkg:github/principal-ai/subsystem-modeling",
+      "file": "packages/subsystems-studio/src/mainview/excalidraw/subsystemToExcalidraw.ts",
+      "symbol": "principalMetaForComponent",
+      "construct": "function",
+      "nonblankLines": 17,
+      "score100": 7.75,
+      "predictedScore100": 33.41734176924659,
+      "residualScorePoints": -25.66734176924659
+    },
+    {
+      "repo": "pkg:github/temporalio/temporal",
+      "file": "service/worker/service.go",
+      "symbol": "NewService",
+      "construct": "function",
+      "nonblankLines": 65,
+      "score100": 29.5,
+      "predictedScore100": 54.3744917379947,
+      "residualScorePoints": -24.874491737994703
+    },
+    {
+      "repo": "pkg:github/principal-ai/subsystem-modeling",
+      "file": "packages/subsystems-studio/src/mainview/components/SettingsModal.tsx",
+      "symbol": "SettingsModal",
+      "construct": "function",
+      "nonblankLines": 1051,
+      "score100": 76.0,
+      "predictedScore100": 97.86330004397013,
+      "residualScorePoints": -21.863300043970128
+    },
+    {
+      "repo": "pkg:github/principal-ai/subsystem-modeling",
+      "file": "packages/subsystems-react/src/subsystem/model.ts",
+      "symbol": "getSubsystemModuleRegions",
+      "construct": "function",
+      "nonblankLines": 8,
+      "score100": 1.5,
+      "predictedScore100": 21.638922579708364,
+      "residualScorePoints": -20.138922579708364
+    },
+    {
+      "repo": "pkg:github/principal-ai/subsystem-modeling",
+      "file": "packages/subsystems-react/src/subsystem/SubsystemAggregateGraph.tsx",
+      "symbol": "SubsystemAggregateGraph",
+      "construct": "function",
+      "nonblankLines": 7,
+      "score100": 0,
+      "predictedScore100": 19.552364403432748,
+      "residualScorePoints": -19.552364403432748
+    }
+  ]
+}

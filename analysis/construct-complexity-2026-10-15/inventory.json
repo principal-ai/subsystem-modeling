@@ -1,0 +1,3111 @@
+{
+  "capturedAt": "2026-10-16T01:37:06.139Z",
+  "model": "jev-latest",
+  "rubricHash": "51d5cf6fc2546526f006574eb406813b8b037ac0bd8fd2dd179b5f0ecfd66428",
+  "claims": 195,
+  "uniqueSpans": 129,
+  "constructs": [
+    {
+      "modelId": "sg-1789495527214-q3nvs8fw9",
+      "modelTitle": "graphify — free-function type-ref edges + inline-param markers",
+      "alias": "ts-class-members",
+      "name": "_ts_walk_class_members",
+      "construct": "function",
+      "symbol": "_ts_walk_class_members",
+      "file": "graphify/extractors/resolution.py",
+      "purl": "pkg:github/Graphify-Labs/graphify#graphify/extractors/resolution.py",
+      "repoKey": "pkg:github/Graphify-Labs/graphify",
+      "startLine": 2004,
+      "endLine": 2099,
+      "contentHash": "162033bef651209cb1f82797a2ee8e2d",
+      "auditedAt": "2026-10-16T01:36:57.348Z",
+      "packageRelativeFile": "graphify/extractors/resolution.py",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789495527214-q3nvs8fw9",
+          "alias": "ts-class-members"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789495527214-q3nvs8fw9",
+      "modelTitle": "graphify — free-function type-ref edges + inline-param markers",
+      "alias": "collect-js-facts",
+      "name": "_collect_js_symbol_resolution_facts",
+      "construct": "function",
+      "symbol": "_collect_js_symbol_resolution_facts",
+      "file": "graphify/extractors/resolution.py",
+      "purl": "pkg:github/Graphify-Labs/graphify#graphify/extractors/resolution.py",
+      "repoKey": "pkg:github/Graphify-Labs/graphify",
+      "startLine": 2113,
+      "endLine": 2318,
+      "contentHash": "d671641d3ef5524381af3650dee5204a",
+      "auditedAt": "2026-10-16T01:36:57.348Z",
+      "packageRelativeFile": "graphify/extractors/resolution.py",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789495527214-q3nvs8fw9",
+          "alias": "collect-js-facts"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789495527214-q3nvs8fw9",
+      "modelTitle": "graphify — free-function type-ref edges + inline-param markers",
+      "alias": "augment-edges",
+      "name": "_augment_symbol_resolution_edges",
+      "construct": "function",
+      "symbol": "_augment_symbol_resolution_edges",
+      "file": "graphify/extractors/resolution.py",
+      "purl": "pkg:github/Graphify-Labs/graphify#graphify/extractors/resolution.py",
+      "repoKey": "pkg:github/Graphify-Labs/graphify",
+      "startLine": 2760,
+      "endLine": 2780,
+      "contentHash": "4186fb0c736d4cd53a156c3c10808b37",
+      "auditedAt": "2026-10-16T01:36:57.348Z",
+      "packageRelativeFile": "graphify/extractors/resolution.py",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789495527214-q3nvs8fw9",
+          "alias": "augment-edges"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1792094543346-bb1y6hohn",
+      "modelTitle": "Maple local mode (fed by Principal ADE telemetry)",
+      "alias": "local-store",
+      "name": "Chdb",
+      "construct": "class",
+      "symbol": "Chdb",
+      "file": "apps/cli/src/server/chdb.ts",
+      "purl": "pkg:github/MapleTechLabs/maple#apps/cli/src/server/chdb.ts",
+      "repoKey": "pkg:github/MapleTechLabs/maple",
+      "startLine": 317,
+      "endLine": 475,
+      "contentHash": "5e8f7bb7022bd01b29b6717dab891eb5",
+      "auditedAt": "2026-10-16T01:31:42.137Z",
+      "packageRelativeFile": "src/server/chdb.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1792094543346-bb1y6hohn",
+          "alias": "local-store"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1791931717767-uq0akpd5c",
+      "modelTitle": "Document notes persistence",
+      "alias": "notes-persistence",
+      "name": "DocumentNotesPersistence",
+      "construct": "class",
+      "symbol": "DocumentNotesPersistence",
+      "file": "src/main/document-notes/documentNotesPersistence.ts",
+      "purl": "pkg:github/principal-ade/electron-app#src/main/document-notes/documentNotesPersistence.ts",
+      "repoKey": "pkg:github/principal-ade/electron-app",
+      "startLine": 50,
+      "endLine": 266,
+      "contentHash": "96658185eb826add8990440d4a5762d6",
+      "auditedAt": "2026-10-16T01:31:39.641Z",
+      "packageRelativeFile": "src/main/document-notes/documentNotesPersistence.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1791931717767-uq0akpd5c",
+          "alias": "notes-persistence"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1791931717767-uq0akpd5c",
+      "modelTitle": "Document notes persistence",
+      "alias": "get-persistence",
+      "name": "getDocumentNotesPersistence",
+      "construct": "function",
+      "symbol": "getDocumentNotesPersistence",
+      "file": "src/main/document-notes/documentNotesPersistence.ts",
+      "purl": "pkg:github/principal-ade/electron-app#src/main/document-notes/documentNotesPersistence.ts",
+      "repoKey": "pkg:github/principal-ade/electron-app",
+      "startLine": 270,
+      "endLine": 275,
+      "contentHash": "4b3a22874c4255422e0ab79ae4d7b8fa",
+      "auditedAt": "2026-10-16T01:31:39.641Z",
+      "packageRelativeFile": "src/main/document-notes/documentNotesPersistence.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1791931717767-uq0akpd5c",
+          "alias": "get-persistence"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1791522952887-sdruxunig",
+      "modelTitle": "Drawings: on-disk change to open drawing tab",
+      "alias": "fs-adapter",
+      "name": "ElectronFileSystemAdapter",
+      "construct": "class",
+      "symbol": "ElectronFileSystemAdapter",
+      "file": "src/main/file-system/fileSystemHandlers.ts",
+      "purl": "pkg:github/principal-ade/electron-app#src/main/file-system/fileSystemHandlers.ts",
+      "repoKey": "pkg:github/principal-ade/electron-app",
+      "startLine": 47,
+      "endLine": 1164,
+      "contentHash": "99ed9467ce35210d0c356c0e68bbb7f4",
+      "auditedAt": "2026-10-16T01:31:38.500Z",
+      "packageRelativeFile": "src/main/file-system/fileSystemHandlers.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1791522952887-sdruxunig",
+          "alias": "fs-adapter"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1791933199340-6gxbwjucp",
+      "modelTitle": "Topics side panel — refresh button",
+      "alias": "alexandria-registry-service",
+      "name": "AlexandriaRegistryService",
+      "construct": "class",
+      "symbol": "AlexandriaRegistryService",
+      "file": "src/main/stores/AlexandriaRegistryService.ts",
+      "purl": "pkg:github/principal-ade/electron-app#src/main/stores/AlexandriaRegistryService.ts",
+      "repoKey": "pkg:github/principal-ade/electron-app",
+      "startLine": 28,
+      "endLine": 764,
+      "contentHash": "9c0f7b34bbae9ba75f6cf48314924b3c",
+      "auditedAt": "2026-10-16T01:31:39.865Z",
+      "packageRelativeFile": "src/main/stores/AlexandriaRegistryService.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1791933199340-6gxbwjucp",
+          "alias": "alexandria-registry-service"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788542570465-q9x8tr784",
+      "modelTitle": "Excalidraw file update → open drawing tab",
+      "alias": "drawings-storage",
+      "name": "scanDrawings",
+      "construct": "function",
+      "symbol": "scanDrawings",
+      "file": "src/renderer/drawings-view/drawingsStorage.ts",
+      "purl": "pkg:github/principal-ade/electron-app",
+      "repoKey": "pkg:github/principal-ade/electron-app",
+      "startLine": 80,
+      "endLine": 112,
+      "contentHash": "53bc2831f90ea3fc0a276fa2c9fef94f",
+      "auditedAt": "2026-10-16T01:36:43.961Z",
+      "packageRelativeFile": "src/renderer/drawings-view/drawingsStorage.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788542570465-q9x8tr784",
+          "alias": "drawings-storage"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1791522952887-sdruxunig",
+      "modelTitle": "Drawings: on-disk change to open drawing tab",
+      "alias": "drawings-host",
+      "name": "useDrawingsHost",
+      "construct": "function",
+      "symbol": "useDrawingsHost",
+      "file": "src/renderer/drawings-view/useDrawingsHost.tsx",
+      "purl": "pkg:github/principal-ade/electron-app#src/renderer/drawings-view/useDrawingsHost.tsx",
+      "repoKey": "pkg:github/principal-ade/electron-app",
+      "startLine": 31,
+      "endLine": 98,
+      "contentHash": "b68281d10dc7fed07693e6222c94f9a9",
+      "auditedAt": "2026-10-16T01:31:38.500Z",
+      "packageRelativeFile": "src/renderer/drawings-view/useDrawingsHost.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788542570465-q9x8tr784",
+          "alias": "drawings-host"
+        },
+        {
+          "modelId": "sg-1791522952887-sdruxunig",
+          "alias": "drawings-host"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1792085423395-cfwjgof6f",
+      "modelTitle": "Home side panel in-progress population",
+      "alias": "alexandria-service",
+      "name": "AlexandriaService",
+      "construct": "class",
+      "symbol": "AlexandriaService",
+      "file": "src/renderer/main-process-api/AlexandriaService.ts",
+      "purl": "pkg:github/principal-ade/electron-app#src/renderer/main-process-api/AlexandriaService.ts",
+      "repoKey": "pkg:github/principal-ade/electron-app",
+      "startLine": 15,
+      "endLine": 119,
+      "contentHash": "aabf9aefec7a6595c278f4e54feed135",
+      "auditedAt": "2026-10-16T01:31:41.100Z",
+      "packageRelativeFile": "src/renderer/main-process-api/AlexandriaService.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1791933199340-6gxbwjucp",
+          "alias": "alexandria-service"
+        },
+        {
+          "modelId": "sg-1792085423395-cfwjgof6f",
+          "alias": "alexandria-service"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1791522952887-sdruxunig",
+      "modelTitle": "Drawings: on-disk change to open drawing tab",
+      "alias": "fs-service",
+      "name": "FileSystemService",
+      "construct": "class",
+      "symbol": "FileSystemService",
+      "file": "src/renderer/main-process-api/FileSystemService.ts",
+      "purl": "pkg:github/principal-ade/electron-app#src/renderer/main-process-api/FileSystemService.ts",
+      "repoKey": "pkg:github/principal-ade/electron-app",
+      "startLine": 3,
+      "endLine": 277,
+      "contentHash": "ba9931cc370090831713775a50170e52",
+      "auditedAt": "2026-10-16T01:31:38.500Z",
+      "packageRelativeFile": "src/renderer/main-process-api/FileSystemService.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788542570465-q9x8tr784",
+          "alias": "file-system"
+        },
+        {
+          "modelId": "sg-1791522952887-sdruxunig",
+          "alias": "fs-service"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1792087736271-lfci8hh17",
+      "modelTitle": "Push updates the Home in-progress ahead count",
+      "alias": "repo-monitoring-service",
+      "name": "RepositoryMonitoringService",
+      "construct": "class",
+      "symbol": "RepositoryMonitoringService",
+      "file": "src/renderer/main-process-api/RepositoryMonitoringService.ts",
+      "purl": "pkg:github/principal-ade/electron-app#src/renderer/main-process-api/RepositoryMonitoringService.ts",
+      "repoKey": "pkg:github/principal-ade/electron-app",
+      "startLine": 27,
+      "endLine": 524,
+      "contentHash": "bfddd7d50cf208095e7dc64a704250fd",
+      "auditedAt": "2026-10-16T01:31:41.237Z",
+      "packageRelativeFile": "src/renderer/main-process-api/RepositoryMonitoringService.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1792085423395-cfwjgof6f",
+          "alias": "repo-monitoring-service"
+        },
+        {
+          "modelId": "sg-1792087736271-lfci8hh17",
+          "alias": "repo-monitoring-service"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1791933199340-6gxbwjucp",
+      "modelTitle": "Topics side panel — refresh button",
+      "alias": "topic-service",
+      "name": "TopicService",
+      "construct": "class",
+      "symbol": "TopicService",
+      "file": "src/renderer/main-process-api/TopicService.ts",
+      "purl": "pkg:github/principal-ade/electron-app#src/renderer/main-process-api/TopicService.ts",
+      "repoKey": "pkg:github/principal-ade/electron-app",
+      "startLine": 21,
+      "endLine": 91,
+      "contentHash": "9de407cd5c9767228ec94f97b01f1a57",
+      "auditedAt": "2026-10-16T01:31:39.865Z",
+      "packageRelativeFile": "src/renderer/main-process-api/TopicService.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1791933199340-6gxbwjucp",
+          "alias": "topic-service"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1792087736271-lfci8hh17",
+      "modelTitle": "Push updates the Home in-progress ahead count",
+      "alias": "git-core",
+      "name": "GitCore",
+      "construct": "class",
+      "symbol": "GitCore",
+      "file": "src/shared/repository-core/GitCore.ts",
+      "purl": "pkg:github/principal-ai/repository-monitoring-server#src/shared/repository-core/GitCore.ts",
+      "repoKey": "pkg:github/principal-ai/repository-monitoring-server",
+      "startLine": 50,
+      "endLine": 544,
+      "contentHash": "1e84c5fd193466fc4ccbcfde09d9a13a",
+      "auditedAt": "2026-10-16T01:31:41.237Z",
+      "packageRelativeFile": "src/shared/repository-core/GitCore.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1792087736271-lfci8hh17",
+          "alias": "git-core"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1792087736271-lfci8hh17",
+      "modelTitle": "Push updates the Home in-progress ahead count",
+      "alias": "git-status-cache",
+      "name": "GitStatusCache",
+      "construct": "class",
+      "symbol": "GitStatusCache",
+      "file": "src/worker/cache/GitStatusCache.ts",
+      "purl": "pkg:github/principal-ai/repository-monitoring-server#src/worker/cache/GitStatusCache.ts",
+      "repoKey": "pkg:github/principal-ai/repository-monitoring-server",
+      "startLine": 53,
+      "endLine": 239,
+      "contentHash": "d4351c92e62e7cced0de0edcc9d2c1cd",
+      "auditedAt": "2026-10-16T01:31:41.237Z",
+      "packageRelativeFile": "src/worker/cache/GitStatusCache.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1792087736271-lfci8hh17",
+          "alias": "git-status-cache"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789078130739-z7z1qvwf4",
+      "modelTitle": "OpenCode V1/V2 session timeline processing",
+      "alias": "opencode-rows-to-universal",
+      "name": "opencodeRowsToUniversalEvents",
+      "construct": "function",
+      "symbol": "opencodeRowsToUniversalEvents",
+      "file": "packages/subsystems-core/src/opencode/pipeline.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-core/src/opencode/pipeline.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 36,
+      "endLine": 57,
+      "contentHash": "330b22e439e75427169178e83d5f42c5",
+      "auditedAt": "2026-10-16T01:36:55.113Z",
+      "packageRelativeFile": "packages/subsystems-core/src/opencode/pipeline.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788961422683-bxt28y6yc",
+          "alias": "opencode-rows-to-universal"
+        },
+        {
+          "modelId": "sg-1789078130739-z7z1qvwf4",
+          "alias": "opencode-rows-to-universal"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789078130739-z7z1qvwf4",
+      "modelTitle": "OpenCode V1/V2 session timeline processing",
+      "alias": "accumulate-events",
+      "name": "accumulateEvents",
+      "construct": "function",
+      "symbol": "accumulateEvents",
+      "file": "packages/subsystems-core/src/opencode/pipeline.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-core/src/opencode/pipeline.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 85,
+      "endLine": 94,
+      "contentHash": "c364169a698bf0a80330ce08010e03b4",
+      "auditedAt": "2026-10-16T01:36:55.113Z",
+      "packageRelativeFile": "packages/subsystems-core/src/opencode/pipeline.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789078130739-z7z1qvwf4",
+          "alias": "accumulate-events"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789167817307-w3wtd7e47",
+      "modelTitle": "Vestigial detail layer vs single-source declaration",
+      "alias": "core-declaration",
+      "name": "SubsystemConstructDeclaration",
+      "construct": "type_alias",
+      "symbol": "SubsystemConstructDeclaration",
+      "file": "packages/subsystems-core/src/types/subsystem-model.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-core/src/types/subsystem-model.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 294,
+      "endLine": 301,
+      "contentHash": "338e48c1e3654fdc78e55f59aba7d5db",
+      "auditedAt": "2026-10-16T01:36:55.573Z",
+      "packageRelativeFile": "packages/subsystems-core/src/types/subsystem-model.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789167817307-w3wtd7e47",
+          "alias": "core-declaration"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789167817307-w3wtd7e47",
+      "modelTitle": "Vestigial detail layer vs single-source declaration",
+      "alias": "core-component",
+      "name": "SubsystemComponent",
+      "construct": "interface",
+      "symbol": "SubsystemComponent",
+      "file": "packages/subsystems-core/src/types/subsystem-model.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-core/src/types/subsystem-model.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 304,
+      "endLine": 401,
+      "contentHash": "6f445ff56b970b48b48c2be91c180603",
+      "auditedAt": "2026-10-16T01:36:55.573Z",
+      "packageRelativeFile": "packages/subsystems-core/src/types/subsystem-model.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789167817307-w3wtd7e47",
+          "alias": "core-component"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789619568543-5uww1cd5z",
+      "modelTitle": "Subsystem model storage & repo resolution — portable document vs host binding",
+      "alias": "cross-field-rules",
+      "name": "validateSubsystemModelCrossField",
+      "construct": "function",
+      "symbol": "validateSubsystemModelCrossField",
+      "file": "packages/subsystems-core/src/validation.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-core/src/validation.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 82,
+      "endLine": 172,
+      "contentHash": "a7888ce348ca5a25873f2731be28ab24",
+      "auditedAt": "2026-10-16T01:37:00.390Z",
+      "packageRelativeFile": "packages/subsystems-core/src/validation.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789619568543-5uww1cd5z",
+          "alias": "cross-field-rules"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1792004589494-xypjfpi5x",
+      "modelTitle": "Construct declaration-span derivation",
+      "alias": "resolve-component-anchor",
+      "name": "resolveComponentAnchor",
+      "construct": "function",
+      "symbol": "resolveComponentAnchor",
+      "file": "packages/subsystems-react/src/graphify/anchor.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/graphify/anchor.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 84,
+      "endLine": 160,
+      "contentHash": "b3e6a28b8aa6830ae5006dff1ec81746",
+      "auditedAt": "2026-10-16T01:31:40.230Z",
+      "packageRelativeFile": "packages/subsystems-react/src/graphify/anchor.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789513798636-ld358u4pr",
+          "alias": "anchor"
+        },
+        {
+          "modelId": "sg-1792004589494-xypjfpi5x",
+          "alias": "resolve-component-anchor"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789167817307-w3wtd7e47",
+      "modelTitle": "Vestigial detail layer vs single-source declaration",
+      "alias": "graphify-detail",
+      "name": "GraphifyComponentDetail",
+      "construct": "type_alias",
+      "symbol": "GraphifyComponentDetail",
+      "file": "packages/subsystems-react/src/graphify/consolidated.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/graphify/consolidated.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 280,
+      "endLine": 287,
+      "contentHash": "0a34807c1f892b815ac88e6b50bce072",
+      "auditedAt": "2026-10-16T01:36:55.573Z",
+      "packageRelativeFile": "packages/subsystems-react/src/graphify/consolidated.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789167817307-w3wtd7e47",
+          "alias": "graphify-detail"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789513798636-ld358u4pr",
+      "modelTitle": "Two verification passes — write-time vs audit",
+      "alias": "infer-construct",
+      "name": "inferConstructFromGraphify",
+      "construct": "function",
+      "symbol": "inferConstructFromGraphify",
+      "file": "packages/subsystems-react/src/graphify/construct.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/graphify/construct.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 49,
+      "endLine": 105,
+      "contentHash": "c4e84eb6927a24f178d20efe573b61e5",
+      "auditedAt": "2026-10-16T01:36:58.257Z",
+      "packageRelativeFile": "packages/subsystems-react/src/graphify/construct.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789513798636-ld358u4pr",
+          "alias": "infer-construct"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789513798636-ld358u4pr",
+      "modelTitle": "Two verification passes — write-time vs audit",
+      "alias": "constructs-match",
+      "name": "constructsMatch",
+      "construct": "function",
+      "symbol": "constructsMatch",
+      "file": "packages/subsystems-react/src/graphify/construct.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/graphify/construct.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 113,
+      "endLine": 120,
+      "contentHash": "25ca3f619e0d1d53f5664bb3bf6ef535",
+      "auditedAt": "2026-10-16T01:36:58.257Z",
+      "packageRelativeFile": "packages/subsystems-react/src/graphify/construct.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789513798636-ld358u4pr",
+          "alias": "constructs-match"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789513798636-ld358u4pr",
+      "modelTitle": "Two verification passes — write-time vs audit",
+      "alias": "compare-signatures",
+      "name": "compareSignatures",
+      "construct": "function",
+      "symbol": "compareSignatures",
+      "file": "packages/subsystems-react/src/graphify/signature.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/graphify/signature.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 242,
+      "endLine": 354,
+      "contentHash": "e9ebd53ba60a8ea26930f7c5935a1abe",
+      "auditedAt": "2026-10-16T01:36:58.257Z",
+      "packageRelativeFile": "packages/subsystems-react/src/graphify/signature.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789513798636-ld358u4pr",
+          "alias": "compare-signatures"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789515244955-up4vbkmuk",
+      "modelTitle": "Subsystems Studio — opening a file",
+      "alias": "pierre-file-view",
+      "name": "PierreFileView",
+      "construct": "function",
+      "symbol": "PierreFileView",
+      "file": "packages/subsystems-react/src/pierre/PierreFileView.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/pierre/PierreFileView.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 32,
+      "endLine": 153,
+      "contentHash": "6bad9a956e1adfbcb93b745c25cb4299",
+      "auditedAt": "2026-10-16T01:36:59.061Z",
+      "packageRelativeFile": "packages/subsystems-react/src/pierre/PierreFileView.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789515244955-up4vbkmuk",
+          "alias": "pierre-file-view"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790398492016-ve01ziu9k",
+      "modelTitle": "Subsystems Studio — clickable constructs in walkthroughs",
+      "alias": "pierre-snippet-view",
+      "name": "PierreSnippetView",
+      "construct": "function",
+      "symbol": "PierreSnippetView",
+      "file": "packages/subsystems-react/src/pierre/PierreSnippetView.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/pierre/PierreSnippetView.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 42,
+      "endLine": 183,
+      "contentHash": "27552a8eaedaa091d671f0282b8612c9",
+      "auditedAt": "2026-10-16T01:31:23.507Z",
+      "packageRelativeFile": "packages/subsystems-react/src/pierre/PierreSnippetView.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789515244955-up4vbkmuk",
+          "alias": "pierre-snippet-view"
+        },
+        {
+          "modelId": "sg-1790398492016-ve01ziu9k",
+          "alias": "pierre-snippet-view"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790398492016-ve01ziu9k",
+      "modelTitle": "Subsystems Studio — clickable constructs in walkthroughs",
+      "alias": "walkthrough-code-view",
+      "name": "PierreTrailCodeView",
+      "construct": "function",
+      "symbol": "PierreTrailCodeView",
+      "file": "packages/subsystems-react/src/pierre/PierreTrailCodeView.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/pierre/PierreTrailCodeView.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 201,
+      "endLine": 644,
+      "contentHash": "c10ded3128115f861c893c3d7f0de975",
+      "auditedAt": "2026-10-16T01:31:23.507Z",
+      "packageRelativeFile": "packages/subsystems-react/src/pierre/PierreTrailCodeView.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789941321875-uu7o7raj6",
+          "alias": "walk-code"
+        },
+        {
+          "modelId": "sg-1790398492016-ve01ziu9k",
+          "alias": "walkthrough-code-view"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789515244955-up4vbkmuk",
+      "modelTitle": "Subsystems Studio — opening a file",
+      "alias": "component-declaration",
+      "name": "ComponentDeclaration",
+      "construct": "function",
+      "symbol": "ComponentDeclaration",
+      "file": "packages/subsystems-react/src/subsystem/ComponentDeclaration.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/ComponentDeclaration.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 328,
+      "endLine": 1182,
+      "contentHash": "0b6d7d775b34e6b9c7af2f67c083f32d",
+      "auditedAt": "2026-10-16T01:36:59.061Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/ComponentDeclaration.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789167817307-w3wtd7e47",
+          "alias": "component-declaration"
+        },
+        {
+          "modelId": "sg-1789515244955-up4vbkmuk",
+          "alias": "component-declaration"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789512356216-zbiy5x0wb",
+      "modelTitle": "Diagnostics overlay wiring",
+      "alias": "chip",
+      "name": "SubsystemDiagnosticToggle",
+      "construct": "function",
+      "symbol": "SubsystemDiagnosticToggle",
+      "file": "packages/subsystems-react/src/subsystem/DiagnosticToggle.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/DiagnosticToggle.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 95,
+      "endLine": 224,
+      "contentHash": "0789d9fcd0babd5e1399c4ba4fc0820b",
+      "auditedAt": "2026-10-16T01:36:57.791Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/DiagnosticToggle.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789512356216-zbiy5x0wb",
+          "alias": "chip"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790398492016-ve01ziu9k",
+      "modelTitle": "Subsystems Studio — clickable constructs in walkthroughs",
+      "alias": "file-drawer",
+      "name": "FileDrawer",
+      "construct": "function",
+      "symbol": "FileDrawer",
+      "file": "packages/subsystems-react/src/subsystem/FileDrawer.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/FileDrawer.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 22,
+      "endLine": 232,
+      "contentHash": "175bbd28f62893d25d1890345192293f",
+      "auditedAt": "2026-10-16T01:31:23.507Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/FileDrawer.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789515244955-up4vbkmuk",
+          "alias": "file-drawer"
+        },
+        {
+          "modelId": "sg-1790398492016-ve01ziu9k",
+          "alias": "file-drawer"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789167817307-w3wtd7e47",
+      "modelTitle": "Vestigial detail layer vs single-source declaration",
+      "alias": "generate-decl-string",
+      "name": "generateDeclarationString",
+      "construct": "function",
+      "symbol": "generateDeclarationString",
+      "file": "packages/subsystems-react/src/subsystem/formatDeclaration.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/formatDeclaration.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 52,
+      "endLine": 109,
+      "contentHash": "72bc2defca7bb0ceeab8e9e35631502b",
+      "auditedAt": "2026-10-16T01:36:55.573Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/formatDeclaration.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789167817307-w3wtd7e47",
+          "alias": "generate-decl-string"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788974222416-tvd82jthf",
+      "modelTitle": "Subsystem list click to graph load",
+      "alias": "layout-cover",
+      "name": "GraphLayoutCover",
+      "construct": "function",
+      "symbol": "GraphLayoutCover",
+      "file": "packages/subsystems-react/src/subsystem/GraphLayoutCover.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/GraphLayoutCover.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 23,
+      "endLine": 69,
+      "contentHash": "4cfc30d018e79b16cb3c64bc8a5be93d",
+      "auditedAt": "2026-10-16T01:36:52.309Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/GraphLayoutCover.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788914761888-v0kch2fs1",
+          "alias": "layout-cover"
+        },
+        {
+          "modelId": "sg-1788974222416-tvd82jthf",
+          "alias": "layout-cover"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1791177727948-7yja754se",
+      "modelTitle": "How the audit reaches the maintainer and the issues list",
+      "alias": "issue-list",
+      "name": "SubsystemIssueList",
+      "construct": "function",
+      "symbol": "SubsystemIssueList",
+      "file": "packages/subsystems-react/src/subsystem/IssueList.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/IssueList.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 685,
+      "endLine": 883,
+      "contentHash": "63a0a544e7be8ca217fcdbd140e15cf7",
+      "auditedAt": "2026-10-16T01:31:33.107Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/IssueList.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789512356216-zbiy5x0wb",
+          "alias": "issue-list"
+        },
+        {
+          "modelId": "sg-1791177727948-7yja754se",
+          "alias": "issue-list"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789167817307-w3wtd7e47",
+      "modelTitle": "Vestigial detail layer vs single-source declaration",
+      "alias": "react-component",
+      "name": "SubsystemComponent",
+      "construct": "interface",
+      "symbol": "SubsystemComponent",
+      "file": "packages/subsystems-react/src/subsystem/model.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/model.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 121,
+      "endLine": 130,
+      "contentHash": "4d5bea340f527b9ac25bed803d699bab",
+      "auditedAt": "2026-10-16T01:36:55.573Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/model.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789167817307-w3wtd7e47",
+          "alias": "react-component"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789244409127-fc6kmjrkp",
+      "modelTitle": "Process/module boundary framing",
+      "alias": "region-type",
+      "name": "SubsystemProcessRegion",
+      "construct": "interface",
+      "symbol": "SubsystemProcessRegion",
+      "file": "packages/subsystems-react/src/subsystem/model.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 435,
+      "endLine": 453,
+      "contentHash": "9e03a02648a49fb6fcf4eea485496169",
+      "auditedAt": "2026-10-16T01:36:56.402Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/model.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789244409127-fc6kmjrkp",
+          "alias": "region-type"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790385006118-u0s1dztxn",
+      "modelTitle": "Workspace-package boundary framing — wiring plan",
+      "alias": "frame-options",
+      "name": "BoundaryFrameOptions",
+      "construct": "interface",
+      "symbol": "BoundaryFrameOptions",
+      "file": "packages/subsystems-react/src/subsystem/model.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/model.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 456,
+      "endLine": 487,
+      "contentHash": "a6dd612ca30023d29551911861d33c3c",
+      "auditedAt": "2026-10-16T01:31:22.466Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/model.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790385006118-u0s1dztxn",
+          "alias": "frame-options"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789244409127-fc6kmjrkp",
+      "modelTitle": "Process/module boundary framing",
+      "alias": "process-id",
+      "name": "processGroupNodeId",
+      "construct": "function",
+      "symbol": "processGroupNodeId",
+      "file": "packages/subsystems-react/src/subsystem/model.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 490,
+      "endLine": 492,
+      "contentHash": "c0fa6f6e7b2583d2ebcba7eb361a793e",
+      "auditedAt": "2026-10-16T01:36:56.402Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/model.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789244409127-fc6kmjrkp",
+          "alias": "process-id"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789244409127-fc6kmjrkp",
+      "modelTitle": "Process/module boundary framing",
+      "alias": "module-id",
+      "name": "moduleGroupNodeId",
+      "construct": "function",
+      "symbol": "moduleGroupNodeId",
+      "file": "packages/subsystems-react/src/subsystem/model.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 495,
+      "endLine": 497,
+      "contentHash": "050df0a1e0ce6fc2f04d3ac313a9c092",
+      "auditedAt": "2026-10-16T01:36:56.402Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/model.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789244409127-fc6kmjrkp",
+          "alias": "module-id"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789244409127-fc6kmjrkp",
+      "modelTitle": "Process/module boundary framing",
+      "alias": "boundary-id",
+      "name": "boundaryGroupNodeId",
+      "construct": "function",
+      "symbol": "boundaryGroupNodeId",
+      "file": "packages/subsystems-react/src/subsystem/model.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 589,
+      "endLine": 594,
+      "contentHash": "ece36c4b12985f4ef84ff12d580ce59e",
+      "auditedAt": "2026-10-16T01:36:56.402Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/model.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789244409127-fc6kmjrkp",
+          "alias": "boundary-id"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790385006118-u0s1dztxn",
+      "modelTitle": "Workspace-package boundary framing — wiring plan",
+      "alias": "component-key",
+      "name": "componentPackageKey",
+      "construct": "function",
+      "symbol": "componentPackageKey",
+      "file": "packages/subsystems-react/src/subsystem/model.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/model.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 600,
+      "endLine": 607,
+      "contentHash": "d67dae4eb5f35ea418c4b0299d8c5aac",
+      "auditedAt": "2026-10-16T01:31:22.466Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/model.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790385006118-u0s1dztxn",
+          "alias": "component-key"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789249246380-7iscyspb1",
+      "modelTitle": "Process/module boundary framing",
+      "alias": "process-regions",
+      "name": "getSubsystemRegions",
+      "construct": "function",
+      "symbol": "getSubsystemRegions",
+      "file": "packages/subsystems-react/src/subsystem/model.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 618,
+      "endLine": 625,
+      "contentHash": "cb8e3de7a984576f94206e9652b9f585",
+      "auditedAt": "2026-10-16T01:36:56.928Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/model.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789244409127-fc6kmjrkp",
+          "alias": "process-regions"
+        },
+        {
+          "modelId": "sg-1789249246380-7iscyspb1",
+          "alias": "process-regions"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789249246380-7iscyspb1",
+      "modelTitle": "Process/module boundary framing",
+      "alias": "module-regions",
+      "name": "getSubsystemModuleRegions",
+      "construct": "function",
+      "symbol": "getSubsystemModuleRegions",
+      "file": "packages/subsystems-react/src/subsystem/model.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 632,
+      "endLine": 639,
+      "contentHash": "4c1fe0731fd74b6c81271326628f4f09",
+      "auditedAt": "2026-10-16T01:36:56.928Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/model.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789244409127-fc6kmjrkp",
+          "alias": "module-regions"
+        },
+        {
+          "modelId": "sg-1789249246380-7iscyspb1",
+          "alias": "module-regions"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790385006118-u0s1dztxn",
+      "modelTitle": "Workspace-package boundary framing — wiring plan",
+      "alias": "package-regions",
+      "name": "getSubsystemPackageRegions",
+      "construct": "function",
+      "symbol": "getSubsystemPackageRegions",
+      "file": "packages/subsystems-react/src/subsystem/model.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/model.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 646,
+      "endLine": 663,
+      "contentHash": "f4451082fcc1fc51c8bb1b23d7d591d6",
+      "auditedAt": "2026-10-16T01:31:22.466Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/model.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790385006118-u0s1dztxn",
+          "alias": "package-regions"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790385006118-u0s1dztxn",
+      "modelTitle": "Workspace-package boundary framing — wiring plan",
+      "alias": "layout-groups",
+      "name": "buildBoundaryLayoutGroups",
+      "construct": "function",
+      "symbol": "buildBoundaryLayoutGroups",
+      "file": "packages/subsystems-react/src/subsystem/model.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/model.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 692,
+      "endLine": 840,
+      "contentHash": "bc71a01664bb3e0442e56d437a850e3b",
+      "auditedAt": "2026-10-16T01:31:22.466Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/model.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789249246380-7iscyspb1",
+          "alias": "layout-groups"
+        },
+        {
+          "modelId": "sg-1790385006118-u0s1dztxn",
+          "alias": "layout-groups"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789249246380-7iscyspb1",
+      "modelTitle": "Process/module boundary framing",
+      "alias": "to-nodes",
+      "name": "convertSubsystemToNodes",
+      "construct": "function",
+      "symbol": "convertSubsystemToNodes",
+      "file": "packages/subsystems-react/src/subsystem/model.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 1721,
+      "endLine": 1785,
+      "contentHash": "022c31f58a001ef6c45257abb35fcf97",
+      "auditedAt": "2026-10-16T01:36:56.928Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/model.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789244409127-fc6kmjrkp",
+          "alias": "to-nodes"
+        },
+        {
+          "modelId": "sg-1789249246380-7iscyspb1",
+          "alias": "to-nodes"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788914761888-v0kch2fs1",
+      "modelTitle": "Open-tab update: stuck cover (fixed)",
+      "alias": "layout-key",
+      "name": "subsystemGraphLayoutKey",
+      "construct": "function",
+      "symbol": "subsystemGraphLayoutKey",
+      "file": "packages/subsystems-react/src/subsystem/model.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/model.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 1852,
+      "endLine": 1867,
+      "contentHash": "44c08a80cab9b99a31e3b4b2ea9537be",
+      "auditedAt": "2026-10-16T01:36:50.797Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/model.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788914761888-v0kch2fs1",
+          "alias": "layout-key"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789512356216-zbiy5x0wb",
+      "modelTitle": "Diagnostics overlay wiring",
+      "alias": "node",
+      "name": "SubsystemComponentNode",
+      "construct": "function",
+      "symbol": "SubsystemComponentNode",
+      "file": "packages/subsystems-react/src/subsystem/nodes.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/nodes.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 205,
+      "endLine": 561,
+      "contentHash": "5383867560559c4d8bd105fbed1a479c",
+      "auditedAt": "2026-10-16T01:36:57.791Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/nodes.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789512356216-zbiy5x0wb",
+          "alias": "node"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789249246380-7iscyspb1",
+      "modelTitle": "Process/module boundary framing",
+      "alias": "group-node",
+      "name": "SubsystemGroupNode",
+      "construct": "function",
+      "symbol": "SubsystemGroupNode",
+      "file": "packages/subsystems-react/src/subsystem/nodes.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 568,
+      "endLine": 764,
+      "contentHash": "fe7d28565b2e956d021982f96d35e79b",
+      "auditedAt": "2026-10-16T01:36:56.928Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/nodes.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789244409127-fc6kmjrkp",
+          "alias": "group-node"
+        },
+        {
+          "modelId": "sg-1789249246380-7iscyspb1",
+          "alias": "group-node"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789677925327-bhekgwkc4",
+      "modelTitle": "Subsystem list file trees — current flow and proposed change",
+      "alias": "repo-groups",
+      "name": "buildRepoGroups",
+      "construct": "function",
+      "symbol": "buildRepoGroups",
+      "file": "packages/subsystems-react/src/subsystem/paths.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/paths.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 93,
+      "endLine": 120,
+      "contentHash": "3afcb4879911f9b54dc73db0c459b707",
+      "auditedAt": "2026-10-16T01:37:00.852Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/paths.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789619568543-5uww1cd5z",
+          "alias": "model-listing"
+        },
+        {
+          "modelId": "sg-1789677925327-bhekgwkc4",
+          "alias": "repo-groups"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789843250755-90i1sxj0p",
+      "modelTitle": "Combined graph composition — scoped vs whole-repo",
+      "alias": "aggregate-graph",
+      "name": "SubsystemAggregateGraph",
+      "construct": "function",
+      "symbol": "SubsystemAggregateGraph",
+      "file": "packages/subsystems-react/src/subsystem/SubsystemAggregateGraph.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/SubsystemAggregateGraph.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 812,
+      "endLine": 818,
+      "contentHash": "a05e42fcf612a07ef7ed7aff7d7c06c5",
+      "auditedAt": "2026-10-16T01:37:01.324Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/SubsystemAggregateGraph.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789843250755-90i1sxj0p",
+          "alias": "aggregate-graph"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789677925327-bhekgwkc4",
+      "modelTitle": "Subsystem list file trees — current flow and proposed change",
+      "alias": "file-tree",
+      "name": "SubsystemFileTree",
+      "construct": "function",
+      "symbol": "SubsystemFileTree",
+      "file": "packages/subsystems-react/src/subsystem/SubsystemFileTree.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/SubsystemFileTree.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 33,
+      "endLine": 198,
+      "contentHash": "9d2a544abae3af735d336a78aa6447bf",
+      "auditedAt": "2026-10-16T01:37:00.852Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/SubsystemFileTree.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789677925327-bhekgwkc4",
+          "alias": "file-tree"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789167817307-w3wtd7e47",
+      "modelTitle": "Vestigial detail layer vs single-source declaration",
+      "alias": "tokenize-component",
+      "name": "tokenizeComponent",
+      "construct": "function",
+      "symbol": "tokenizeComponent",
+      "file": "packages/subsystems-react/src/subsystem/tokenizeComponent.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/tokenizeComponent.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 57,
+      "endLine": 109,
+      "contentHash": "e9a32c21bbf287d2bd3e9a1545f9ceed",
+      "auditedAt": "2026-10-16T01:36:55.573Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/tokenizeComponent.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789167817307-w3wtd7e47",
+          "alias": "tokenize-component"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790021162141-b4sp104x9",
+      "modelTitle": "Drag-to-reorder walkthroughs in the flows panel",
+      "alias": "walkthroughs-panel",
+      "name": "WalkthroughsPanel",
+      "construct": "function",
+      "symbol": "TrailsPanel",
+      "file": "packages/subsystems-react/src/subsystem/TrailsPanel.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react/src/subsystem/WalkthroughsPanel.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 540,
+      "endLine": 741,
+      "contentHash": "10d60878abba311f1d0f8b6493330bd3",
+      "auditedAt": "2026-10-16T01:37:04.319Z",
+      "packageRelativeFile": "packages/subsystems-react/src/subsystem/TrailsPanel.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790398492016-ve01ziu9k",
+          "alias": "walkthroughs-panel"
+        },
+        {
+          "modelId": "sg-1790021162141-b4sp104x9",
+          "alias": "walkthroughs-panel"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789249246380-7iscyspb1",
+      "modelTitle": "Process/module boundary framing",
+      "alias": "elk",
+      "name": "computeElkLayout",
+      "construct": "function",
+      "symbol": "computeElkLayout",
+      "file": "packages/subsystems-react/src/utils/elkLayout.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-react",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 774,
+      "endLine": 1502,
+      "contentHash": "917fb317f73661982c06a622b86f8cb4",
+      "auditedAt": "2026-10-16T01:36:56.928Z",
+      "packageRelativeFile": "packages/subsystems-react/src/utils/elkLayout.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788974222416-tvd82jthf",
+          "alias": "elk"
+        },
+        {
+          "modelId": "sg-1789244409127-fc6kmjrkp",
+          "alias": "elk"
+        },
+        {
+          "modelId": "sg-1789249246380-7iscyspb1",
+          "alias": "elk"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789619568543-5uww1cd5z",
+      "modelTitle": "Subsystem model storage & repo resolution — portable document vs host binding",
+      "alias": "alexandria-register",
+      "name": "registerProjectInAlexandria",
+      "construct": "function",
+      "symbol": "registerProjectInAlexandria",
+      "file": "packages/subsystems-studio/src/bun/alexandria.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/alexandria.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 185,
+      "endLine": 189,
+      "contentHash": "b869c3ffe5575a361020552a74bba582",
+      "auditedAt": "2026-10-16T01:37:00.390Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/alexandria.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789619568543-5uww1cd5z",
+          "alias": "alexandria-register"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789619568543-5uww1cd5z",
+      "modelTitle": "Subsystem model storage & repo resolution — portable document vs host binding",
+      "alias": "alexandria-resolve",
+      "name": "resolveRepoRootFromAlexandria",
+      "construct": "function",
+      "symbol": "resolveRepoRootFromAlexandria",
+      "file": "packages/subsystems-studio/src/bun/alexandria.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/alexandria.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 191,
+      "endLine": 217,
+      "contentHash": "78ae1d0a7ef1a02c20d3ea507cfd4e89",
+      "auditedAt": "2026-10-16T01:37:00.390Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/alexandria.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789619568543-5uww1cd5z",
+          "alias": "alexandria-resolve"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789513798636-ld358u4pr",
+      "modelTitle": "Two verification passes — write-time vs audit",
+      "alias": "module-agrees",
+      "name": "moduleAgreesWithFile",
+      "construct": "function",
+      "symbol": "moduleAgreesWithFile",
+      "file": "packages/subsystems-studio/src/bun/boundary-audit.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/boundary-audit.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 81,
+      "endLine": 88,
+      "contentHash": "67e64807ab82dbf8e7a06683349bce83",
+      "auditedAt": "2026-10-16T01:36:58.257Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/boundary-audit.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789513798636-ld358u4pr",
+          "alias": "module-agrees"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1791177727948-7yja754se",
+      "modelTitle": "How the audit reaches the maintainer and the issues list",
+      "alias": "boundary-fields",
+      "name": "auditBoundaryFields",
+      "construct": "function",
+      "symbol": "auditBoundaryFields",
+      "file": "packages/subsystems-studio/src/bun/boundary-audit.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/boundary-audit.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 134,
+      "endLine": 346,
+      "contentHash": "f67171bd456a37443c25ce7d10d90276",
+      "auditedAt": "2026-10-16T01:31:33.107Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/boundary-audit.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789513798636-ld358u4pr",
+          "alias": "boundary"
+        },
+        {
+          "modelId": "sg-1791177727948-7yja754se",
+          "alias": "boundary-fields"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790821993560-xdin7k60h",
+      "modelTitle": "Subsystem model verification provenance",
+      "alias": "files-dirty",
+      "name": "filesDirty",
+      "construct": "function",
+      "symbol": "filesDirty",
+      "file": "packages/subsystems-studio/src/bun/git-repo.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/git-repo.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 65,
+      "endLine": 80,
+      "contentHash": "c8765824ad40e2f15ddefbc9a62d8297",
+      "auditedAt": "2026-10-16T01:31:24.845Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/git-repo.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790821993560-xdin7k60h",
+          "alias": "files-dirty"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790821993560-xdin7k60h",
+      "modelTitle": "Subsystem model verification provenance",
+      "alias": "diff-scoped-files",
+      "name": "diffScopedFiles",
+      "construct": "function",
+      "symbol": "diffScopedFiles",
+      "file": "packages/subsystems-studio/src/bun/git-repo.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/git-repo.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 95,
+      "endLine": 115,
+      "contentHash": "a160eea3c040550d78f6c5e71f7b12bc",
+      "auditedAt": "2026-10-16T01:31:24.845Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/git-repo.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790821993560-xdin7k60h",
+          "alias": "diff-scoped-files"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790821993560-xdin7k60h",
+      "modelTitle": "Subsystem model verification provenance",
+      "alias": "remote-ref-sha",
+      "name": "remoteRefSha",
+      "construct": "function",
+      "symbol": "remoteRefSha",
+      "file": "packages/subsystems-studio/src/bun/git-repo.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/git-repo.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 233,
+      "endLine": 254,
+      "contentHash": "88874cdcce3460072309777eee675412",
+      "auditedAt": "2026-10-16T01:31:24.845Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/git-repo.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790821993560-xdin7k60h",
+          "alias": "remote-ref-sha"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790385006118-u0s1dztxn",
+      "modelTitle": "Workspace-package boundary framing — wiring plan",
+      "alias": "cache-slot-key",
+      "name": "cacheSlotKey",
+      "construct": "function",
+      "symbol": "cacheSlotKey",
+      "file": "packages/subsystems-studio/src/bun/graphify-store.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/graphify-store.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 167,
+      "endLine": 169,
+      "contentHash": "395f830690751ea2eb9899836482101d",
+      "auditedAt": "2026-10-16T01:31:22.466Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/graphify-store.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790385006118-u0s1dztxn",
+          "alias": "cache-slot-key"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790385006118-u0s1dztxn",
+      "modelTitle": "Workspace-package boundary framing — wiring plan",
+      "alias": "dirty-fingerprint",
+      "name": "dirtyFingerprint",
+      "construct": "function",
+      "symbol": "dirtyFingerprint",
+      "file": "packages/subsystems-studio/src/bun/graphify-store.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/graphify-store.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 294,
+      "endLine": 296,
+      "contentHash": "468d70d1a56ca38ffd6da1daa7e15520",
+      "auditedAt": "2026-10-16T01:31:22.466Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/graphify-store.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790385006118-u0s1dztxn",
+          "alias": "dirty-fingerprint"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789619568543-5uww1cd5z",
+      "modelTitle": "Subsystem model storage & repo resolution — portable document vs host binding",
+      "alias": "resolve-purl-root",
+      "name": "resolveRepoRootForPurl",
+      "construct": "function",
+      "symbol": "resolveRepoRootForPurl",
+      "file": "packages/subsystems-studio/src/bun/graphify-store.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/graphify-store.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 302,
+      "endLine": 313,
+      "contentHash": "de7662bf104309c669fe5bf58b18230f",
+      "auditedAt": "2026-10-16T01:37:00.390Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/graphify-store.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789619568543-5uww1cd5z",
+          "alias": "resolve-purl-root"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789619568543-5uww1cd5z",
+      "modelTitle": "Subsystem model storage & repo resolution — portable document vs host binding",
+      "alias": "audit-readiness",
+      "name": "assessSubsystemGraphifyReadiness",
+      "construct": "function",
+      "symbol": "assessSubsystemGraphifyReadiness",
+      "file": "packages/subsystems-studio/src/bun/graphify-store.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/graphify-store.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 928,
+      "endLine": 982,
+      "contentHash": "6781c6ee9d3556f77765aa4b62387690",
+      "auditedAt": "2026-10-16T01:37:00.390Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/graphify-store.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788970320680-bcv3xkg96",
+          "alias": "graphify-readiness"
+        },
+        {
+          "modelId": "sg-1789619568543-5uww1cd5z",
+          "alias": "audit-readiness"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789619568543-5uww1cd5z",
+      "modelTitle": "Subsystem model storage & repo resolution — portable document vs host binding",
+      "alias": "register-roots",
+      "name": "registerSuppliedRoots",
+      "construct": "function",
+      "symbol": "registerSuppliedRoots",
+      "file": "packages/subsystems-studio/src/bun/http-server.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/http-server.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 130,
+      "endLine": 143,
+      "contentHash": "7ee73dd925d0a299cd07eeeccd2e7bb6",
+      "auditedAt": "2026-10-16T01:37:00.390Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/http-server.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789619568543-5uww1cd5z",
+          "alias": "register-roots"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1792004589494-xypjfpi5x",
+      "modelTitle": "Construct declaration-span derivation",
+      "alias": "auto-accept-proposal-if-confident",
+      "name": "autoAcceptProposalIfConfident",
+      "construct": "function",
+      "symbol": "autoAcceptProposalIfConfident",
+      "file": "packages/subsystems-studio/src/bun/jev-maintenance.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/jev-maintenance.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 419,
+      "endLine": 451,
+      "contentHash": "2798330f62e55975512e1a1e83bd8e5f",
+      "auditedAt": "2026-10-16T01:31:40.230Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/jev-maintenance.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789924045526-wueisckoa",
+          "alias": "jev-gate"
+        },
+        {
+          "modelId": "sg-1792004589494-xypjfpi5x",
+          "alias": "auto-accept-proposal-if-confident"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789924045526-wueisckoa",
+      "modelTitle": "Jev second-opinion then auto-accept for proposals",
+      "alias": "route-selector",
+      "name": "selectMaintainRoute",
+      "construct": "function",
+      "symbol": "selectMaintainRoute",
+      "file": "packages/subsystems-studio/src/bun/maintain-model.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/maintain-model.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 283,
+      "endLine": 369,
+      "contentHash": "8780dd4504c0b1b5c91a95afba101221",
+      "auditedAt": "2026-10-16T01:37:01.789Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/maintain-model.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789924045526-wueisckoa",
+          "alias": "route-selector"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1792074290988-bghmj5tur",
+      "modelTitle": "Maintenance model discovery — UI listing and V2 execution mismatch",
+      "alias": "agent",
+      "name": "runMaintainAgent",
+      "construct": "function",
+      "symbol": "runMaintainAgent",
+      "file": "packages/subsystems-studio/src/bun/maintain-model.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/maintain-model.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 978,
+      "endLine": 1018,
+      "contentHash": "9e3cba3e1c02cabb200d44c9581fd135",
+      "auditedAt": "2026-10-16T01:31:40.708Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/maintain-model.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789054599792-4avspr98v",
+          "alias": "run-maintain-agent"
+        },
+        {
+          "modelId": "sg-1789951509967-ppkvezdy0",
+          "alias": "maintain-agent-launcher"
+        },
+        {
+          "modelId": "sg-1790039749866-j45ymp7qt",
+          "alias": "run-maintain-agent"
+        },
+        {
+          "modelId": "sg-1792074290988-bghmj5tur",
+          "alias": "agent"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789951509967-ppkvezdy0",
+      "modelTitle": "Maintain run — fire-and-forget RPC, wait for the finish event",
+      "alias": "maintain-probe-registry",
+      "name": "MaintainerProbeRegistry",
+      "construct": "store",
+      "symbol": "shared",
+      "file": "packages/subsystems-studio/src/bun/maintainer-probe.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/maintainer-probe.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 34,
+      "endLine": 34,
+      "contentHash": "de08ebcca59a9304eeed4a1a6830f6da",
+      "auditedAt": "2026-10-16T01:37:03.894Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/maintainer-probe.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789951509967-ppkvezdy0",
+          "alias": "maintain-probe-registry"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789843250755-90i1sxj0p",
+      "modelTitle": "Combined graph composition — scoped vs whole-repo",
+      "alias": "compose-merge",
+      "name": "mergeSubsystemModels",
+      "construct": "function",
+      "symbol": "mergeSubsystemModels",
+      "file": "packages/subsystems-studio/src/bun/merge-submodel-models.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/merge-submodel-models.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 240,
+      "endLine": 328,
+      "contentHash": "62d9e4a35084144cc5caf06eda0be35a",
+      "auditedAt": "2026-10-16T01:37:01.324Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/merge-submodel-models.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789843250755-90i1sxj0p",
+          "alias": "compose-merge"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789054599792-4avspr98v",
+      "modelTitle": "OpenCode V2 Maintain agent integration",
+      "alias": "opencode-bin",
+      "name": "resolveOpencode2Bin",
+      "construct": "function",
+      "symbol": "resolveOpencode2Bin",
+      "file": "packages/subsystems-studio/src/bun/opencode-v2.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/opencode-v2.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 48,
+      "endLine": 64,
+      "contentHash": "b558e1597577fdb21a9a7d249cfadad7",
+      "auditedAt": "2026-10-16T01:36:54.181Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/opencode-v2.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789054599792-4avspr98v",
+          "alias": "opencode-bin"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789054599792-4avspr98v",
+      "modelTitle": "OpenCode V2 Maintain agent integration",
+      "alias": "get-opencode-v2-status",
+      "name": "getOpencodeV2Status",
+      "construct": "function",
+      "symbol": "getOpencodeV2Status",
+      "file": "packages/subsystems-studio/src/bun/opencode-v2.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/opencode-v2.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 165,
+      "endLine": 178,
+      "contentHash": "504fe08a0842ec548085ae8771ffe2ea",
+      "auditedAt": "2026-10-16T01:36:54.181Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/opencode-v2.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789054599792-4avspr98v",
+          "alias": "get-opencode-v2-status"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789054599792-4avspr98v",
+      "modelTitle": "OpenCode V2 Maintain agent integration",
+      "alias": "install-opencode-v2",
+      "name": "installOpencodeV2",
+      "construct": "function",
+      "symbol": "installOpencodeV2",
+      "file": "packages/subsystems-studio/src/bun/opencode-v2.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/opencode-v2.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 309,
+      "endLine": 315,
+      "contentHash": "0cbd9031f6a0b6058317465cec8fe4c8",
+      "auditedAt": "2026-10-16T01:36:54.181Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/opencode-v2.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789054599792-4avspr98v",
+          "alias": "install-opencode-v2"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790385006118-u0s1dztxn",
+      "modelTitle": "Workspace-package boundary framing — wiring plan",
+      "alias": "discover",
+      "name": "runPackageLayerDiscover",
+      "construct": "function",
+      "symbol": "runPackageLayerDiscover",
+      "file": "packages/subsystems-studio/src/bun/package-layer-runner.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/package-layer-runner.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 102,
+      "endLine": 142,
+      "contentHash": "b07999989d8e9d9fc3ed6d5d8cfb0a0a",
+      "auditedAt": "2026-10-16T01:31:22.466Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/package-layer-runner.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790385006118-u0s1dztxn",
+          "alias": "discover"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790385006118-u0s1dztxn",
+      "modelTitle": "Workspace-package boundary framing — wiring plan",
+      "alias": "read-cache",
+      "name": "getCachedPackageLayers",
+      "construct": "function",
+      "symbol": "getCachedPackageLayers",
+      "file": "packages/subsystems-studio/src/bun/package-layer-store.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/package-layer-store.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 429,
+      "endLine": 469,
+      "contentHash": "ca91accb4224988f1bb2290141b9dd29",
+      "auditedAt": "2026-10-16T01:31:22.466Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/package-layer-store.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790385006118-u0s1dztxn",
+          "alias": "read-cache"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790385006118-u0s1dztxn",
+      "modelTitle": "Workspace-package boundary framing — wiring plan",
+      "alias": "load-slice",
+      "name": "readEnsuredPackageLayers",
+      "construct": "function",
+      "symbol": "readEnsuredPackageLayers",
+      "file": "packages/subsystems-studio/src/bun/package-layer-store.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/package-layer-store.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 472,
+      "endLine": 474,
+      "contentHash": "04945e903185cf363b7789332074c99e",
+      "auditedAt": "2026-10-16T01:31:22.466Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/package-layer-store.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790385006118-u0s1dztxn",
+          "alias": "load-slice"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790385006118-u0s1dztxn",
+      "modelTitle": "Workspace-package boundary framing — wiring plan",
+      "alias": "ensure-layers",
+      "name": "ensurePackageLayers",
+      "construct": "function",
+      "symbol": "ensurePackageLayers",
+      "file": "packages/subsystems-studio/src/bun/package-layer-store.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/package-layer-store.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 481,
+      "endLine": 550,
+      "contentHash": "7ab3376e7f15ab14fe390b4475d15ca5",
+      "auditedAt": "2026-10-16T01:31:22.466Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/package-layer-store.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790385006118-u0s1dztxn",
+          "alias": "ensure-layers"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790385006118-u0s1dztxn",
+      "modelTitle": "Workspace-package boundary framing — wiring plan",
+      "alias": "ensure-caches",
+      "name": "ensureCurrentPackageCachesForModel",
+      "construct": "function",
+      "symbol": "ensureCurrentPackageCachesForModel",
+      "file": "packages/subsystems-studio/src/bun/package-layer-store.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/package-layer-store.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 696,
+      "endLine": 750,
+      "contentHash": "7eb3f0f00ffca40d5b57fe808c523fb5",
+      "auditedAt": "2026-10-16T01:31:22.466Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/package-layer-store.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790385006118-u0s1dztxn",
+          "alias": "ensure-caches"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789940541398-3g17kvvag",
+      "modelTitle": "Subsystems tab RPC timeout",
+      "alias": "proposal-count",
+      "name": "pendingProposalCount",
+      "construct": "function",
+      "symbol": "pendingProposalCount",
+      "file": "packages/subsystems-studio/src/bun/proposal-store.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/proposal-store.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 971,
+      "endLine": 974,
+      "contentHash": "eaeac9974a5fbfbebc93fd177256bfd8",
+      "auditedAt": "2026-10-16T01:37:02.889Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/proposal-store.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789940541398-3g17kvvag",
+          "alias": "proposal-count"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1792004589494-xypjfpi5x",
+      "modelTitle": "Construct declaration-span derivation",
+      "alias": "create-subsystem-model-proposal",
+      "name": "createSubsystemModelProposal",
+      "construct": "function",
+      "symbol": "createSubsystemModelProposal",
+      "file": "packages/subsystems-studio/src/bun/proposal-store.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/proposal-store.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 1015,
+      "endLine": 1057,
+      "contentHash": "96f1a71f4e070fc418e6313f3678ef8b",
+      "auditedAt": "2026-10-16T01:31:40.230Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/proposal-store.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789054599792-4avspr98v",
+          "alias": "create-proposal"
+        },
+        {
+          "modelId": "sg-1789619568543-5uww1cd5z",
+          "alias": "proposal-create"
+        },
+        {
+          "modelId": "sg-1789924045526-wueisckoa",
+          "alias": "proposer"
+        },
+        {
+          "modelId": "sg-1792004589494-xypjfpi5x",
+          "alias": "create-subsystem-model-proposal"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1792004589494-xypjfpi5x",
+      "modelTitle": "Construct declaration-span derivation",
+      "alias": "accept-subsystem-model-proposal",
+      "name": "acceptSubsystemModelProposal",
+      "construct": "function",
+      "symbol": "acceptSubsystemModelProposal",
+      "file": "packages/subsystems-studio/src/bun/proposal-store.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/proposal-store.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 1059,
+      "endLine": 1118,
+      "contentHash": "f91d0cb300cb9fb0572e5fd2a5aca9fa",
+      "auditedAt": "2026-10-16T01:31:40.230Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/proposal-store.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789619568543-5uww1cd5z",
+          "alias": "proposal-accept"
+        },
+        {
+          "modelId": "sg-1789924045526-wueisckoa",
+          "alias": "accepter"
+        },
+        {
+          "modelId": "sg-1791052516428-gnyfe1tov",
+          "alias": "accept-proposal"
+        },
+        {
+          "modelId": "sg-1792004589494-xypjfpi5x",
+          "alias": "accept-subsystem-model-proposal"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790821993560-xdin7k60h",
+      "modelTitle": "Subsystem model verification provenance",
+      "alias": "referenced-files-by-purl",
+      "name": "referencedFilesByPurl",
+      "construct": "function",
+      "symbol": "referencedFilesByPurl",
+      "file": "packages/subsystems-studio/src/bun/purl-commits.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/purl-commits.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 125,
+      "endLine": 153,
+      "contentHash": "2dfd6871dc23cf96b0e8b4956b4925d2",
+      "auditedAt": "2026-10-16T01:31:24.845Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/purl-commits.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790821993560-xdin7k60h",
+          "alias": "referenced-files-by-purl"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790821993560-xdin7k60h",
+      "modelTitle": "Subsystem model verification provenance",
+      "alias": "model-provenance",
+      "name": "modelProvenance",
+      "construct": "function",
+      "symbol": "modelProvenance",
+      "file": "packages/subsystems-studio/src/bun/purl-commits.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/purl-commits.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 262,
+      "endLine": 351,
+      "contentHash": "df40363cbae3024e93f483eaf747f7d6",
+      "auditedAt": "2026-10-16T01:31:24.845Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/purl-commits.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790821993560-xdin7k60h",
+          "alias": "model-provenance"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790821993560-xdin7k60h",
+      "modelTitle": "Subsystem model verification provenance",
+      "alias": "plan-auto-repin",
+      "name": "planAutoRePin",
+      "construct": "function",
+      "symbol": "planAutoRePin",
+      "file": "packages/subsystems-studio/src/bun/purl-commits.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/purl-commits.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 370,
+      "endLine": 407,
+      "contentHash": "33666f9132b850164d8df887886d8e3c",
+      "auditedAt": "2026-10-16T01:31:24.845Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/purl-commits.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790821993560-xdin7k60h",
+          "alias": "plan-auto-repin"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790821993560-xdin7k60h",
+      "modelTitle": "Subsystem model verification provenance",
+      "alias": "model-provenance-detail",
+      "name": "modelProvenanceDetail",
+      "construct": "function",
+      "symbol": "modelProvenanceDetail",
+      "file": "packages/subsystems-studio/src/bun/purl-commits.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/purl-commits.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 416,
+      "endLine": 468,
+      "contentHash": "4e2b873708e1e4bda7c3c62a078628e8",
+      "auditedAt": "2026-10-16T01:31:24.845Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/purl-commits.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790821993560-xdin7k60h",
+          "alias": "model-provenance-detail"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789940541398-3g17kvvag",
+      "modelTitle": "Subsystems tab RPC timeout",
+      "alias": "regular-audit",
+      "name": "createRegularAuditScheduler",
+      "construct": "function",
+      "symbol": "createRegularAuditScheduler",
+      "file": "packages/subsystems-studio/src/bun/regular-audit.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/regular-audit.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 31,
+      "endLine": 174,
+      "contentHash": "693c87469f64378b1302903800453703",
+      "auditedAt": "2026-10-16T01:37:02.889Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/regular-audit.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788970320680-bcv3xkg96",
+          "alias": "regular-audit-scheduler"
+        },
+        {
+          "modelId": "sg-1789940541398-3g17kvvag",
+          "alias": "regular-audit"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789515244955-up4vbkmuk",
+      "modelTitle": "Subsystems Studio — opening a file",
+      "alias": "resolve-sandboxed",
+      "name": "resolveSandboxed",
+      "construct": "function",
+      "symbol": "resolveSandboxed",
+      "file": "packages/subsystems-studio/src/bun/sandboxed-path.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/sandboxed-path.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 14,
+      "endLine": 25,
+      "contentHash": "9ba8693a1747861c0ec79793c85ac944",
+      "auditedAt": "2026-10-16T01:36:59.061Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/sandboxed-path.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789515244955-up4vbkmuk",
+          "alias": "resolve-sandboxed"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788961422683-bxt28y6yc",
+      "modelTitle": "Subsystems Studio — OpenCode integrations",
+      "alias": "resolve-connection",
+      "name": "resolveOpencodeConnection",
+      "construct": "function",
+      "symbol": "resolveOpencodeConnection",
+      "file": "packages/subsystems-studio/src/bun/server-sessions.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/server-sessions.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 47,
+      "endLine": 91,
+      "contentHash": "ff63ef3be19e2130a2be12d8f28405d1",
+      "auditedAt": "2026-10-16T01:36:50.970Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/server-sessions.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788961422683-bxt28y6yc",
+          "alias": "resolve-connection"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788961422683-bxt28y6yc",
+      "modelTitle": "Subsystems Studio — OpenCode integrations",
+      "alias": "probe-server",
+      "name": "probeOpencodeServer",
+      "construct": "function",
+      "symbol": "probeOpencodeServer",
+      "file": "packages/subsystems-studio/src/bun/server-sessions.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/server-sessions.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 114,
+      "endLine": 143,
+      "contentHash": "c67d18d41aec26f3064f8639defd6226",
+      "auditedAt": "2026-10-16T01:36:50.970Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/server-sessions.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788961422683-bxt28y6yc",
+          "alias": "probe-server"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788961422683-bxt28y6yc",
+      "modelTitle": "Subsystems Studio — OpenCode integrations",
+      "alias": "set-event-watch",
+      "name": "setServerEventWatch",
+      "construct": "function",
+      "symbol": "setServerEventWatch",
+      "file": "packages/subsystems-studio/src/bun/server-sessions.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/server-sessions.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 169,
+      "endLine": 187,
+      "contentHash": "98e04c2ae42fbac64c03cfbff01318a7",
+      "auditedAt": "2026-10-16T01:36:50.970Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/server-sessions.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788961422683-bxt28y6yc",
+          "alias": "set-event-watch"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788961422683-bxt28y6yc",
+      "modelTitle": "Subsystems Studio — OpenCode integrations",
+      "alias": "list-server-sessions",
+      "name": "listRecentServerSessions",
+      "construct": "function",
+      "symbol": "listRecentServerSessions",
+      "file": "packages/subsystems-studio/src/bun/server-sessions.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/server-sessions.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 191,
+      "endLine": 278,
+      "contentHash": "05bc7f12bc0b58dd79b608a469f8bbd4",
+      "auditedAt": "2026-10-16T01:36:50.970Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/server-sessions.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788961422683-bxt28y6yc",
+          "alias": "list-server-sessions"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788961422683-bxt28y6yc",
+      "modelTitle": "Subsystems Studio — OpenCode integrations",
+      "alias": "build-session-index",
+      "name": "buildSessionIndex",
+      "construct": "function",
+      "symbol": "buildSessionIndex",
+      "file": "packages/subsystems-studio/src/bun/session-pipeline.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/session-pipeline.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 924,
+      "endLine": 1319,
+      "contentHash": "934b584459d3ab831f43b8150c78189d",
+      "auditedAt": "2026-10-16T01:36:50.970Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/session-pipeline.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788961422683-bxt28y6yc",
+          "alias": "build-session-index"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789078130739-z7z1qvwf4",
+      "modelTitle": "OpenCode V1/V2 session timeline processing",
+      "alias": "process-session-events",
+      "name": "processSessionEvents",
+      "construct": "function",
+      "symbol": "processSessionEvents",
+      "file": "packages/subsystems-studio/src/bun/session-pipeline.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/session-pipeline.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 1329,
+      "endLine": 1579,
+      "contentHash": "43c0bb42e8fada4385e0475ed2288366",
+      "auditedAt": "2026-10-16T01:36:55.113Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/session-pipeline.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788961422683-bxt28y6yc",
+          "alias": "process-session-events"
+        },
+        {
+          "modelId": "sg-1789075684426-hqu0p9jfc",
+          "alias": "process-session-events"
+        },
+        {
+          "modelId": "sg-1789078130739-z7z1qvwf4",
+          "alias": "process-session-events"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790021162141-b4sp104x9",
+      "modelTitle": "Drag-to-reorder walkthroughs in the flows panel",
+      "alias": "change-emit",
+      "name": "emitSubsystemModelChange",
+      "construct": "function",
+      "symbol": "emitSubsystemModelChange",
+      "file": "packages/subsystems-studio/src/bun/subsystem-model-store.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/subsystem-model-store.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 88,
+      "endLine": 96,
+      "contentHash": "f62808ebe62744791dc41c1a2a7659c0",
+      "auditedAt": "2026-10-16T01:37:04.319Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/subsystem-model-store.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788914761888-v0kch2fs1",
+          "alias": "emit"
+        },
+        {
+          "modelId": "sg-1790021162141-b4sp104x9",
+          "alias": "change-emit"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789619568543-5uww1cd5z",
+      "modelTitle": "Subsystem model storage & repo resolution — portable document vs host binding",
+      "alias": "input-validation",
+      "name": "findSubsystemModelProblems",
+      "construct": "function",
+      "symbol": "findSubsystemModelProblems",
+      "file": "packages/subsystems-studio/src/bun/subsystem-model-validation.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/subsystem-model-validation.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 54,
+      "endLine": 64,
+      "contentHash": "cbeb84fc168bbd70cb4579c8a205ec4b",
+      "auditedAt": "2026-10-16T01:37:00.390Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/subsystem-model-validation.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789619568543-5uww1cd5z",
+          "alias": "input-validation"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1791177727948-7yja754se",
+      "modelTitle": "How the audit reaches the maintainer and the issues list",
+      "alias": "audit",
+      "name": "auditSubsystemModel",
+      "construct": "function",
+      "symbol": "auditSubsystemModel",
+      "file": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 1201,
+      "endLine": 1930,
+      "contentHash": "e18f7bbf090fedf6b1b86b1e80c01037",
+      "auditedAt": "2026-10-16T01:31:33.107Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788970320680-bcv3xkg96",
+          "alias": "audit-model"
+        },
+        {
+          "modelId": "sg-1789512356216-zbiy5x0wb",
+          "alias": "audit-host"
+        },
+        {
+          "modelId": "sg-1789513798636-ld358u4pr",
+          "alias": "audit"
+        },
+        {
+          "modelId": "sg-1789619568543-5uww1cd5z",
+          "alias": "audit-model"
+        },
+        {
+          "modelId": "sg-1789924045526-wueisckoa",
+          "alias": "auditor"
+        },
+        {
+          "modelId": "sg-1790039749866-j45ymp7qt",
+          "alias": "audit"
+        },
+        {
+          "modelId": "sg-1790106863845-t4mvufu3m",
+          "alias": "audit"
+        },
+        {
+          "modelId": "sg-1790108945330-xnzp05iqt",
+          "alias": "audit"
+        },
+        {
+          "modelId": "sg-1791177727948-7yja754se",
+          "alias": "audit"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789924045526-wueisckoa",
+      "modelTitle": "Jev second-opinion then auto-accept for proposals",
+      "alias": "settings-store",
+      "name": "patchViewerSettings",
+      "construct": "function",
+      "symbol": "patchViewerSettings",
+      "file": "packages/subsystems-studio/src/bun/viewer-settings.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/viewer-settings.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 169,
+      "endLine": 213,
+      "contentHash": "407fbca47f1f3deab577af6c3918ca12",
+      "auditedAt": "2026-10-16T01:37:01.789Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/bun/viewer-settings.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789924045526-wueisckoa",
+          "alias": "settings-store"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788961422683-bxt28y6yc",
+      "modelTitle": "Subsystems Studio — OpenCode integrations",
+      "alias": "app-header",
+      "name": "AppHeader",
+      "construct": "function",
+      "symbol": "AppHeader",
+      "file": "packages/subsystems-studio/src/mainview/components/AppHeader.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/components/AppHeader.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 37,
+      "endLine": 358,
+      "contentHash": "568b3e654f984dc98954f811668ae2d4",
+      "auditedAt": "2026-10-16T01:36:50.970Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/components/AppHeader.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788961422683-bxt28y6yc",
+          "alias": "app-header"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789843250755-90i1sxj0p",
+      "modelTitle": "Combined graph composition — scoped vs whole-repo",
+      "alias": "files-drilldown",
+      "name": "FilesDrilldown",
+      "construct": "function",
+      "symbol": "FilesDrilldown",
+      "file": "packages/subsystems-studio/src/mainview/components/FilesDrilldown.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/components/FilesDrilldown.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 135,
+      "endLine": 278,
+      "contentHash": "3e45456bb634767366dfed619d326149",
+      "auditedAt": "2026-10-16T01:37:01.324Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/components/FilesDrilldown.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789843250755-90i1sxj0p",
+          "alias": "files-drilldown"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790821993560-xdin7k60h",
+      "modelTitle": "Subsystem model verification provenance",
+      "alias": "commit-dots",
+      "name": "CommitDots",
+      "construct": "function",
+      "symbol": "CommitDots",
+      "file": "packages/subsystems-studio/src/mainview/components/ModelProvenance.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/components/ModelProvenance.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 1178,
+      "endLine": 1308,
+      "contentHash": "ee36fe60ce5c34f132ca3db7e7d5c432",
+      "auditedAt": "2026-10-16T01:31:24.845Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/components/ModelProvenance.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790821993560-xdin7k60h",
+          "alias": "commit-dots"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790821993560-xdin7k60h",
+      "modelTitle": "Subsystem model verification provenance",
+      "alias": "dirty-badge",
+      "name": "DirtyBadge",
+      "construct": "function",
+      "symbol": "DirtyBadge",
+      "file": "packages/subsystems-studio/src/mainview/components/ModelProvenance.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/components/ModelProvenance.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 1323,
+      "endLine": 1360,
+      "contentHash": "ce9c71d81b495d6b8a1a976d96a726fc",
+      "auditedAt": "2026-10-16T01:31:24.845Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/components/ModelProvenance.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790821993560-xdin7k60h",
+          "alias": "dirty-badge"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789924045526-wueisckoa",
+      "modelTitle": "Jev second-opinion then auto-accept for proposals",
+      "alias": "proposals-modal",
+      "name": "ProposalsModal",
+      "construct": "function",
+      "symbol": "ProposalsModal",
+      "file": "packages/subsystems-studio/src/mainview/components/ProposalsModal.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/components/ProposalsModal.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 26,
+      "endLine": 345,
+      "contentHash": "0b6002411dad26bcbc3c00752b53b968",
+      "auditedAt": "2026-10-16T01:37:01.789Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/components/ProposalsModal.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789924045526-wueisckoa",
+          "alias": "proposals-modal"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789924045526-wueisckoa",
+      "modelTitle": "Jev second-opinion then auto-accept for proposals",
+      "alias": "settings-modal",
+      "name": "SettingsModal",
+      "construct": "function",
+      "symbol": "SettingsModal",
+      "file": "packages/subsystems-studio/src/mainview/components/SettingsModal.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/components/SettingsModal.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 227,
+      "endLine": 1303,
+      "contentHash": "d0754f8ec26bdcefb47a6a11552bb21f",
+      "auditedAt": "2026-10-16T01:37:01.789Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/components/SettingsModal.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789924045526-wueisckoa",
+          "alias": "settings-modal"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789619568543-5uww1cd5z",
+      "modelTitle": "Subsystem model storage & repo resolution — portable document vs host binding",
+      "alias": "excalidraw-model-rebuild",
+      "name": "excalidrawSceneToSubsystemModel",
+      "construct": "function",
+      "symbol": "excalidrawSceneToSubsystemModel",
+      "file": "packages/subsystems-studio/src/mainview/excalidraw/excalidrawToSubsystem.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/excalidraw/excalidrawToSubsystem.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 140,
+      "endLine": 170,
+      "contentHash": "aefe2dd193faf8e32ee1c0694fca957f",
+      "auditedAt": "2026-10-16T01:37:00.390Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/excalidraw/excalidrawToSubsystem.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789619568543-5uww1cd5z",
+          "alias": "excalidraw-model-rebuild"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789619568543-5uww1cd5z",
+      "modelTitle": "Subsystem model storage & repo resolution — portable document vs host binding",
+      "alias": "excalidraw-scene-build",
+      "name": "principalMetaForComponent",
+      "construct": "function",
+      "symbol": "principalMetaForComponent",
+      "file": "packages/subsystems-studio/src/mainview/excalidraw/subsystemToExcalidraw.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/excalidraw/subsystemToExcalidraw.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 152,
+      "endLine": 168,
+      "contentHash": "3c3cbd7c9b15defa1ae4785ba4754443",
+      "auditedAt": "2026-10-16T01:37:00.390Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/excalidraw/subsystemToExcalidraw.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789619568543-5uww1cd5z",
+          "alias": "excalidraw-scene-build"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789577690053-1mbsoli8a",
+      "modelTitle": "Subsystems Studio — closing a tab with ⌘W",
+      "alias": "reload-subs",
+      "name": "reloadSubscribers",
+      "construct": "store",
+      "symbol": "reloadSubscribers",
+      "file": "packages/subsystems-studio/src/mainview/rpc.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/rpc.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 34,
+      "endLine": 34,
+      "contentHash": "bb69354b4941cf46f0179f1127a8fc7d",
+      "auditedAt": "2026-10-16T01:36:59.669Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/rpc.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789577690053-1mbsoli8a",
+          "alias": "reload-subs"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788914761888-v0kch2fs1",
+      "modelTitle": "Open-tab update: stuck cover (fixed)",
+      "alias": "rpc-fanout",
+      "name": "subsystemModelChangeSubscribers",
+      "construct": "store",
+      "symbol": "subsystemModelChangeSubscribers",
+      "file": "packages/subsystems-studio/src/mainview/rpc.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/rpc.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 92,
+      "endLine": 94,
+      "contentHash": "4c5a8680e6ee673ceca3c8df7a4a8078",
+      "auditedAt": "2026-10-16T01:36:50.797Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/rpc.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788914761888-v0kch2fs1",
+          "alias": "rpc-fanout"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789941321875-uu7o7raj6",
+      "modelTitle": "Subsystem file serving: purl vs component check",
+      "alias": "bridge",
+      "name": "callReadFile",
+      "construct": "function",
+      "symbol": "callReadFile",
+      "file": "packages/subsystems-studio/src/mainview/rpc.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/rpc.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 230,
+      "endLine": 235,
+      "contentHash": "27f92087cb98f0b5f9a066ce3c45fff6",
+      "auditedAt": "2026-10-16T01:37:03.401Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/rpc.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789941321875-uu7o7raj6",
+          "alias": "bridge"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789940541398-3g17kvvag",
+      "modelTitle": "Subsystems tab RPC timeout",
+      "alias": "centered-message",
+      "name": "CenteredMessage",
+      "construct": "function",
+      "symbol": "CenteredMessage",
+      "file": "packages/subsystems-studio/src/mainview/ui.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/ui.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 16,
+      "endLine": 57,
+      "contentHash": "97a35646f58d8994ce96e4a62016237f",
+      "auditedAt": "2026-10-16T01:37:02.889Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/ui.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788974222416-tvd82jthf",
+          "alias": "empty-state"
+        },
+        {
+          "modelId": "sg-1789940541398-3g17kvvag",
+          "alias": "centered-message"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789078130739-z7z1qvwf4",
+      "modelTitle": "OpenCode V1/V2 session timeline processing",
+      "alias": "agent-sessions-overview",
+      "name": "AgentSessionsOverviewView",
+      "construct": "function",
+      "symbol": "AgentSessionsOverviewView",
+      "file": "packages/subsystems-studio/src/mainview/views/AgentSessions.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/views/AgentSessions.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 298,
+      "endLine": 1178,
+      "contentHash": "0650ea5aa6bae21afdda58ecbabe9016",
+      "auditedAt": "2026-10-16T01:36:55.113Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/views/AgentSessions.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788961422683-bxt28y6yc",
+          "alias": "agent-sessions-overview"
+        },
+        {
+          "modelId": "sg-1789075684426-hqu0p9jfc",
+          "alias": "agent-sessions-overview"
+        },
+        {
+          "modelId": "sg-1789078130739-z7z1qvwf4",
+          "alias": "agent-sessions-overview"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789843250755-90i1sxj0p",
+      "modelTitle": "Combined graph composition — scoped vs whole-repo",
+      "alias": "aggregate",
+      "name": "aggregateToFrames",
+      "construct": "function",
+      "symbol": "aggregateToFrames",
+      "file": "packages/subsystems-studio/src/mainview/views/composedAggregate.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/views/composedAggregate.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 104,
+      "endLine": 354,
+      "contentHash": "35a0ff82410d1aa18bf668b76f8478b8",
+      "auditedAt": "2026-10-16T01:37:01.324Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/views/composedAggregate.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789843250755-90i1sxj0p",
+          "alias": "aggregate"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789843250755-90i1sxj0p",
+      "modelTitle": "Combined graph composition — scoped vs whole-repo",
+      "alias": "composed-pane",
+      "name": "ComposedGraphPane",
+      "construct": "function",
+      "symbol": "ComposedGraphPane",
+      "file": "packages/subsystems-studio/src/mainview/views/ComposedGraphPane.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/views/ComposedGraphPane.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 31,
+      "endLine": 156,
+      "contentHash": "074fba868ac314cec24b9872bd99673d",
+      "auditedAt": "2026-10-16T01:37:01.324Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/views/ComposedGraphPane.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789843250755-90i1sxj0p",
+          "alias": "composed-pane"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1791177727948-7yja754se",
+      "modelTitle": "How the audit reaches the maintainer and the issues list",
+      "alias": "maintenance-panel",
+      "name": "MaintenancePanel",
+      "construct": "function",
+      "symbol": "MaintenancePanel",
+      "file": "packages/subsystems-studio/src/mainview/views/MaintenancePanel.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/views/MaintenancePanel.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 107,
+      "endLine": 1124,
+      "contentHash": "7fee84735003e8ee1aacf7644087d85d",
+      "auditedAt": "2026-10-16T01:31:33.107Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/views/MaintenancePanel.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790039749866-j45ymp7qt",
+          "alias": "maintenance-panel"
+        },
+        {
+          "modelId": "sg-1790821993560-xdin7k60h",
+          "alias": "maintenance-panel"
+        },
+        {
+          "modelId": "sg-1791177727948-7yja754se",
+          "alias": "maintenance-panel"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1789054599792-4avspr98v",
+      "modelTitle": "OpenCode V2 Maintain agent integration",
+      "alias": "opencode-v2-debug-view",
+      "name": "OpencodeV2DebugView",
+      "construct": "function",
+      "symbol": "OpencodeV2DebugView",
+      "file": "packages/subsystems-studio/src/mainview/views/OpencodeV2DebugView.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/views/OpencodeV2DebugView.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 28,
+      "endLine": 483,
+      "contentHash": "185e350103eb7e05f054011c7aa8d9a9",
+      "auditedAt": "2026-10-16T01:36:54.181Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/views/OpencodeV2DebugView.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1789054599792-4avspr98v",
+          "alias": "opencode-v2-debug-view"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790385006118-u0s1dztxn",
+      "modelTitle": "Workspace-package boundary framing — wiring plan",
+      "alias": "package-layers-view",
+      "name": "PackageLayersReposView",
+      "construct": "function",
+      "symbol": "PackageLayersReposView",
+      "file": "packages/subsystems-studio/src/mainview/views/PackageLayersReposView.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/views/PackageLayersReposView.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 19,
+      "endLine": 324,
+      "contentHash": "d95efc6b1b01fed7d42c3576599ff31c",
+      "auditedAt": "2026-10-16T01:31:22.466Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/views/PackageLayersReposView.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1790385006118-u0s1dztxn",
+          "alias": "package-layers-view"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1790021162141-b4sp104x9",
+      "modelTitle": "Drag-to-reorder walkthroughs in the flows panel",
+      "alias": "models-view",
+      "name": "SubsystemModelsView",
+      "construct": "function",
+      "symbol": "SubsystemModelsView",
+      "file": "packages/subsystems-studio/src/mainview/views/SubsystemModelsView.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/views/SubsystemModelsView.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 742,
+      "endLine": 1737,
+      "contentHash": "cc451b1e24874ee665852a364a8140a1",
+      "auditedAt": "2026-10-16T01:37:04.319Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/views/SubsystemModelsView.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788913589907-ieokymqg9",
+          "alias": "studio-list"
+        },
+        {
+          "modelId": "sg-1788974222416-tvd82jthf",
+          "alias": "list-view"
+        },
+        {
+          "modelId": "sg-1789619568543-5uww1cd5z",
+          "alias": "list-view"
+        },
+        {
+          "modelId": "sg-1789677925327-bhekgwkc4",
+          "alias": "list-view"
+        },
+        {
+          "modelId": "sg-1789843250755-90i1sxj0p",
+          "alias": "subsystem-view"
+        },
+        {
+          "modelId": "sg-1789926184470-cohoizhq1",
+          "alias": "list-view"
+        },
+        {
+          "modelId": "sg-1789940541398-3g17kvvag",
+          "alias": "subsystems-view"
+        },
+        {
+          "modelId": "sg-1789941321875-uu7o7raj6",
+          "alias": "subsystems-view"
+        },
+        {
+          "modelId": "sg-1790021162141-b4sp104x9",
+          "alias": "models-view"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1791177727948-7yja754se",
+      "modelTitle": "How the audit reaches the maintainer and the issues list",
+      "alias": "model-view",
+      "name": "SubsystemModelView",
+      "construct": "function",
+      "symbol": "SubsystemModelView",
+      "file": "packages/subsystems-studio/src/mainview/views/SubsystemModelView.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/views/SubsystemModelView.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 77,
+      "endLine": 813,
+      "contentHash": "601016e156937150c2b283f967c2ab6e",
+      "auditedAt": "2026-10-16T01:31:33.107Z",
+      "packageRelativeFile": "packages/subsystems-studio/src/mainview/views/SubsystemModelView.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788913589907-ieokymqg9",
+          "alias": "studio-model-view"
+        },
+        {
+          "modelId": "sg-1788914761888-v0kch2fs1",
+          "alias": "model-tab"
+        },
+        {
+          "modelId": "sg-1788970320680-bcv3xkg96",
+          "alias": "subsystem-model-view"
+        },
+        {
+          "modelId": "sg-1788974222416-tvd82jthf",
+          "alias": "detail-view"
+        },
+        {
+          "modelId": "sg-1789512356216-zbiy5x0wb",
+          "alias": "view"
+        },
+        {
+          "modelId": "sg-1789515244955-up4vbkmuk",
+          "alias": "subsystem-model-view"
+        },
+        {
+          "modelId": "sg-1790021162141-b4sp104x9",
+          "alias": "model-view"
+        },
+        {
+          "modelId": "sg-1790398492016-ve01ziu9k",
+          "alias": "subsystem-model-view"
+        },
+        {
+          "modelId": "sg-1791177727948-7yja754se",
+          "alias": "model-view"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788913589907-ieokymqg9",
+      "modelTitle": "Gist share from Studio (local store + host gist ref)",
+      "alias": "gist-load",
+      "name": "loadSubsystemModelFromGist",
+      "construct": "function",
+      "symbol": "loadSubsystemModelFromGist",
+      "file": "site/src/lib/gist.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#site/src/lib/gist.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 83,
+      "endLine": 158,
+      "contentHash": "73a2f66e740543a002ca653a6e0a507b",
+      "auditedAt": "2026-10-16T01:36:50.253Z",
+      "packageRelativeFile": "site/src/lib/gist.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788913589907-ieokymqg9",
+          "alias": "gist-load"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788913589907-ieokymqg9",
+      "modelTitle": "Gist share from Studio (local store + host gist ref)",
+      "alias": "to-portable",
+      "name": "toPortableDocument",
+      "construct": "function",
+      "symbol": "toPortableDocument",
+      "file": "site/src/lib/gist.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#site/src/lib/gist.ts",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 161,
+      "endLine": 170,
+      "contentHash": "c2988785a56f28feed5e20d6d286e64e",
+      "auditedAt": "2026-10-16T01:36:50.253Z",
+      "packageRelativeFile": "site/src/lib/gist.ts",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788913589907-ieokymqg9",
+          "alias": "to-portable"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788913589907-ieokymqg9",
+      "modelTitle": "Gist share from Studio (local store + host gist ref)",
+      "alias": "site-gist-page",
+      "name": "Gist",
+      "construct": "function",
+      "symbol": "Gist",
+      "file": "site/src/pages/Gist.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#site/src/pages/Gist.tsx",
+      "repoKey": "pkg:github/principal-ai/subsystem-modeling",
+      "startLine": 17,
+      "endLine": 108,
+      "contentHash": "df5baeed3916fe4e28a879d779a31167",
+      "auditedAt": "2026-10-16T01:36:50.253Z",
+      "packageRelativeFile": "site/src/pages/Gist.tsx",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788913589907-ieokymqg9",
+          "alias": "site-gist-page"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788976709785-82b880em2",
+      "modelTitle": "Temporal service architecture",
+      "alias": "frontend-svc",
+      "name": "NewServiceProvider",
+      "construct": "function",
+      "symbol": "NewServiceProvider",
+      "file": "service/frontend/fx.go",
+      "purl": "pkg:github/temporalio/temporal#service/frontend/fx.go",
+      "repoKey": "pkg:github/temporalio/temporal",
+      "startLine": 155,
+      "endLine": 185,
+      "contentHash": "583f1150766a3746babf536277e26af2",
+      "auditedAt": "2026-10-16T01:36:53.404Z",
+      "packageRelativeFile": "service/frontend/fx.go",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788976709785-82b880em2",
+          "alias": "frontend-svc"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788974879360-8c2gttxll",
+      "modelTitle": "Temporal core execution path",
+      "alias": "workflow-starter",
+      "name": "Starter",
+      "construct": "class",
+      "symbol": "Starter",
+      "file": "service/history/api/startworkflow/api.go",
+      "purl": "pkg:github/temporalio/temporal#service/history/api/startworkflow/api.go",
+      "repoKey": "pkg:github/temporalio/temporal",
+      "startLine": 55,
+      "endLine": 68,
+      "contentHash": "4e7369a7f91bd764a42a5ebe687e3444",
+      "auditedAt": "2026-10-16T01:36:52.980Z",
+      "packageRelativeFile": "service/history/api/startworkflow/api.go",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788974879360-8c2gttxll",
+          "alias": "workflow-starter"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788976709785-82b880em2",
+      "modelTitle": "Temporal service architecture",
+      "alias": "history-svc",
+      "name": "HandlerProvider",
+      "construct": "function",
+      "symbol": "HandlerProvider",
+      "file": "service/history/fx.go",
+      "purl": "pkg:github/temporalio/temporal#service/history/fx.go",
+      "repoKey": "pkg:github/temporalio/temporal",
+      "startLine": 147,
+      "endLine": 216,
+      "contentHash": "d5121b273ef3e4b91cb12892372ff30c",
+      "auditedAt": "2026-10-16T01:36:53.404Z",
+      "packageRelativeFile": "service/history/fx.go",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788976709785-82b880em2",
+          "alias": "history-svc"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788974879360-8c2gttxll",
+      "modelTitle": "Temporal core execution path",
+      "alias": "task-matcher",
+      "name": "TaskMatcher",
+      "construct": "class",
+      "symbol": "TaskMatcher",
+      "file": "service/matching/matcher.go",
+      "purl": "pkg:github/temporalio/temporal#service/matching/matcher.go",
+      "repoKey": "pkg:github/temporalio/temporal",
+      "startLine": 23,
+      "endLine": 45,
+      "contentHash": "76146af695c0a482605346004a7ef2df",
+      "auditedAt": "2026-10-16T01:36:52.980Z",
+      "packageRelativeFile": "service/matching/matcher.go",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788974879360-8c2gttxll",
+          "alias": "task-matcher"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788976709785-82b880em2",
+      "modelTitle": "Temporal service architecture",
+      "alias": "matching-svc",
+      "name": "Service",
+      "construct": "class",
+      "symbol": "Service",
+      "file": "service/matching/service.go",
+      "purl": "pkg:github/temporalio/temporal#service/matching/service.go",
+      "repoKey": "pkg:github/temporalio/temporal",
+      "startLine": 21,
+      "endLine": 33,
+      "contentHash": "a75f5b4c76edfc6d261bafdb82d7d0f4",
+      "auditedAt": "2026-10-16T01:36:53.404Z",
+      "packageRelativeFile": "service/matching/service.go",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788976709785-82b880em2",
+          "alias": "matching-svc"
+        }
+      ]
+    },
+    {
+      "modelId": "sg-1788976709785-82b880em2",
+      "modelTitle": "Temporal service architecture",
+      "alias": "worker-svc",
+      "name": "NewService",
+      "construct": "function",
+      "symbol": "NewService",
+      "file": "service/worker/service.go",
+      "purl": "pkg:github/temporalio/temporal#service/worker/service.go",
+      "repoKey": "pkg:github/temporalio/temporal",
+      "startLine": 117,
+      "endLine": 184,
+      "contentHash": "646f4d1b8ecc9908c37a028f68bf1790",
+      "auditedAt": "2026-10-16T01:36:53.404Z",
+      "packageRelativeFile": "service/worker/service.go",
+      "modelClaims": [
+        {
+          "modelId": "sg-1788976709785-82b880em2",
+          "alias": "worker-svc"
+        }
+      ]
+    }
+  ]
+}

@@ -40,6 +40,7 @@ import type {
 } from "../../shared/contract";
 import { electrobun, packageLayersChangeSubscribers, subsystemModelChangeSubscribers } from "../rpc";
 import { CenteredMessage, relativeTime } from "../ui";
+import { ConstructComplexityControl } from "../components/ConstructComplexityControl";
 
 const POLL_MS = 15_000;
 
@@ -291,6 +292,10 @@ function SpanPane({ construct }: { construct: VerifiedConstruct | null }) {
 						{construct.construct}
 					</span>
 					<span style={{ flex: 1 }} />
+					<ConstructComplexityControl
+						construct={construct}
+						enabled={verified}
+					/>
 					<span
 						title={
 							verified
@@ -836,7 +841,13 @@ export function VerifiedConstructsView() {
 			</div>
 
 			{/* Span as its own file */}
-			<SpanPane construct={selected} />
+			<SpanPane
+				key={selected ? JSON.stringify([
+					selected.purl, selected.file, selected.startLine,
+					selected.endLine, selected.contentHash,
+				]) : "none"}
+				construct={selected}
+			/>
 		</div>
 	);
 }

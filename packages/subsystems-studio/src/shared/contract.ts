@@ -1512,6 +1512,16 @@ export interface PackageLayerRepoEntry {
 	} | null;
 }
 
+/** Source-bound experimental Jev complexity estimate. */
+export interface ConstructComplexity {
+	/** Jev estimate from 0 (simple) to 1 (complex), not a static-analysis metric. */
+	score: number;
+	confidence?: number;
+	model: string;
+	contentHash: string;
+	checkedAt: string;
+}
+
 /** One fully verified construct — a construct whose last audit check passed. */
 export interface VerifiedConstruct {
 	/** Owning model. */
@@ -1734,6 +1744,17 @@ export type StudioRequests = {
 			contentHash: string;
 		};
 		response: { ok: boolean; text?: string; verified?: boolean; error?: string };
+	};
+	/** Explicit, source-backed Jev complexity experiment for the Constructs tab. */
+	assessConstructComplexity: {
+		params: {
+			purl: string;
+			file: string;
+			startLine: number;
+			endLine: number;
+			contentHash: string;
+		};
+		response: { ok: boolean; result?: ConstructComplexity; error?: string };
 	};
 	getFileTree: {
 		params: { tabId: string; path?: string };

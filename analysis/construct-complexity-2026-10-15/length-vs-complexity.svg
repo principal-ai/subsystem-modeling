@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="650" viewBox="0 0 1000 650">
+<rect width="100%" height="100%" fill="white"/>
+<g font-family="Arial, sans-serif" fill="#0f172a">
+<text x="80" y="32" font-size="23" font-weight="bold">Does Jev complexity mostly track construct length?</text>
+<text x="80" y="58" font-size="15">129 unique verified spans · Spearman ρ = 0.85 · one score per span</text>
+<line x1="80" y1="530.0" x2="940" y2="530.0" stroke="#e2e8f0"/>
+<text x="68" y="535.0" text-anchor="end" font-size="13">0</text>
+<line x1="80" y1="442.0" x2="940" y2="442.0" stroke="#e2e8f0"/>
+<text x="68" y="447.0" text-anchor="end" font-size="13">20</text>
+<line x1="80" y1="354.0" x2="940" y2="354.0" stroke="#e2e8f0"/>
+<text x="68" y="359.0" text-anchor="end" font-size="13">40</text>
+<line x1="80" y1="266.0" x2="940" y2="266.0" stroke="#e2e8f0"/>
+<text x="68" y="271.0" text-anchor="end" font-size="13">60</text>
+<line x1="80" y1="178.0" x2="940" y2="178.0" stroke="#e2e8f0"/>
+<text x="68" y="183.0" text-anchor="end" font-size="13">80</text>
+<line x1="80" y1="90.0" x2="940" y2="90.0" stroke="#e2e8f0"/>
+<text x="68" y="95.0" text-anchor="end" font-size="13">100</text>
+<line x1="80.0" y1="90" x2="80.0" y2="530" stroke="#f1f5f9"/>
+<text x="80.0" y="554" text-anchor="middle" font-size="13">1</text>
+<line x1="158.1818181818182" y1="90" x2="158.1818181818182" y2="530" stroke="#f1f5f9"/>
+<text x="158.1818181818182" y="554" text-anchor="middle" font-size="13">2</text>
+<line x1="236.36363636363637" y1="90" x2="236.36363636363637" y2="530" stroke="#f1f5f9"/>
+<text x="236.36363636363637" y="554" text-anchor="middle" font-size="13">4</text>
+<line x1="314.5454545454545" y1="90" x2="314.5454545454545" y2="530" stroke="#f1f5f9"/>
+<text x="314.5454545454545" y="554" text-anchor="middle" font-size="13">8</text>
+<line x1="392.72727272727275" y1="90" x2="392.72727272727275" y2="530" stroke="#f1f5f9"/>
+<text x="392.72727272727275" y="554" text-anchor="middle" font-size="13">16</text>
+<line x1="470.9090909090909" y1="90" x2="470.9090909090909" y2="530" stroke="#f1f5f9"/>
+<text x="470.9090909090909" y="554" text-anchor="middle" font-size="13">32</text>
+<line x1="549.090909090909" y1="90" x2="549.090909090909" y2="530" stroke="#f1f5f9"/>
+<text x="549.090909090909" y="554" text-anchor="middle" font-size="13">64</text>
+<line x1="627.2727272727273" y1="90" x2="627.2727272727273" y2="530" stroke="#f1f5f9"/>
+<text x="627.2727272727273" y="554" text-anchor="middle" font-size="13">128</text>
+<line x1="705.4545454545455" y1="90" x2="705.4545454545455" y2="530" stroke="#f1f5f9"/>
+<text x="705.4545454545455" y="554" text-anchor="middle" font-size="13">256</text>
+<line x1="783.6363636363636" y1="90" x2="783.6363636363636" y2="530" stroke="#f1f5f9"/>
+<text x="783.6363636363636" y="554" text-anchor="middle" font-size="13">512</text>
+<line x1="861.8181818181818" y1="90" x2="861.8181818181818" y2="530" stroke="#f1f5f9"/>
+<text x="861.8181818181818" y="554" text-anchor="middle" font-size="13">1024</text>
+<line x1="940.0" y1="90" x2="940.0" y2="530" stroke="#f1f5f9"/>
+<text x="940.0" y="554" text-anchor="middle" font-size="13">2048</text>
+<defs><clipPath id="plot"><rect x="80" y="90" width="860" height="440"/></clipPath></defs>
+<line clip-path="url(#plot)" x1="80.0" y1="580.1280179715188" x2="940.0" y2="80.18663545787531" stroke="#475569" stroke-dasharray="6,5" opacity="0.65"/>
+<circle cx="592.45" cy="240.70" r="4.5" fill="#2563eb" opacity="0.7"><title>_ts_walk_class_members | 94 nonblank lines | 65.8/100 | graphify/extractors/resolution.py:2004</title></circle>
+<circle cx="423.40" cy="401.30" r="4.5" fill="#2563eb" opacity="0.7"><title>_augment_symbol_resolution_edges | 21 nonblank lines | 29.2/100 | graphify/extractors/resolution.py:2760</title></circle>
+<circle cx="673.59" cy="198.90" r="4.5" fill="#2563eb" opacity="0.7"><title>_collect_js_symbol_resolution_facts | 193 nonblank lines | 75.2/100 | graphify/extractors/resolution.py:2113</title></circle>
+<circle cx="282.10" cy="418.90" r="4.5" fill="#2563eb" opacity="0.7"><title>getDocumentNotesPersistence | 6 nonblank lines | 25.2/100 | src/main/document-notes/documentNotesPersistence.ts:270</title></circle>
+<circle cx="642.88" cy="203.30" r="4.5" fill="#ea580c" opacity="0.7"><title>Chdb | 147 nonblank lines | 74.2/100 | apps/cli/src/server/chdb.ts:317</title></circle>
+<circle cx="680.40" cy="201.10" r="4.5" fill="#ea580c" opacity="0.7"><title>DocumentNotesPersistence | 205 nonblank lines | 74.8/100 | src/main/document-notes/documentNotesPersistence.ts:50</title></circle>
+<circle cx="474.38" cy="260.50" r="4.5" fill="#2563eb" opacity="0.7"><title>scanDrawings | 33 nonblank lines | 61.3/100 | src/renderer/drawings-view/drawingsStorage.ts:80</title></circle>
+<circle cx="811.25" cy="201.10" r="4.5" fill="#ea580c" opacity="0.7"><title>AlexandriaRegistryService | 654 nonblank lines | 74.8/100 | src/main/stores/AlexandriaRegistryService.ts:28</title></circle>
+<circle cx="547.31" cy="216.50" r="4.5" fill="#2563eb" opacity="0.7"><title>useDrawingsHost | 63 nonblank lines | 71.2/100 | src/renderer/drawings-view/useDrawingsHost.tsx:31</title></circle>
+<circle cx="861.38" cy="176.90" r="4.5" fill="#ea580c" opacity="0.7"><title>ElectronFileSystemAdapter | 1020 nonblank lines | 80.2/100 | src/main/file-system/fileSystemHandlers.ts:47</title></circle>
+<circle cx="590.02" cy="394.70" r="4.5" fill="#ea580c" opacity="0.7"><title>AlexandriaService | 92 nonblank lines | 30.8/100 | src/renderer/main-process-api/AlexandriaService.ts:15</title></circle>
+<circle cx="691.40" cy="467.30" r="4.5" fill="#ea580c" opacity="0.7"><title>FileSystemService | 226 nonblank lines | 14.2/100 | src/renderer/main-process-api/FileSystemService.ts:3</title></circle>
+<circle cx="774.46" cy="374.90" r="4.5" fill="#ea580c" opacity="0.7"><title>RepositoryMonitoringService | 472 nonblank lines | 35.2/100 | src/renderer/main-process-api/RepositoryMonitoringService.ts:27</title></circle>
+<circle cx="547.31" cy="488.20" r="4.5" fill="#ea580c" opacity="0.7"><title>TopicService | 63 nonblank lines | 9.5/100 | src/renderer/main-process-api/TopicService.ts:21</title></circle>
+<circle cx="766.80" cy="193.40" r="4.5" fill="#ea580c" opacity="0.7"><title>GitCore | 441 nonblank lines | 76.5/100 | src/shared/repository-core/GitCore.ts:50</title></circle>
+<circle cx="654.54" cy="206.60" r="4.5" fill="#ea580c" opacity="0.7"><title>GitStatusCache | 163 nonblank lines | 73.5/100 | src/worker/cache/GitStatusCache.ts:53</title></circle>
+<circle cx="428.65" cy="421.10" r="4.5" fill="#2563eb" opacity="0.7"><title>opencodeRowsToUniversalEvents | 22 nonblank lines | 24.8/100 | packages/subsystems-core/src/opencode/pipeline.ts:36</title></circle>
+<circle cx="339.71" cy="465.10" r="4.5" fill="#2563eb" opacity="0.7"><title>accumulateEvents | 10 nonblank lines | 14.8/100 | packages/subsystems-core/src/opencode/pipeline.ts:85</title></circle>
+<circle cx="597.15" cy="510.20" r="4.5" fill="#0891b2" opacity="0.7"><title>SubsystemComponent | 98 nonblank lines | 4.5/100 | packages/subsystems-core/src/types/subsystem-model.ts:304</title></circle>
+<circle cx="314.55" cy="530.00" r="4.5" fill="#059669" opacity="0.7"><title>SubsystemConstructDeclaration | 8 nonblank lines | 0.0/100 | packages/subsystems-core/src/types/subsystem-model.ts:294</title></circle>
+<circle cx="585.01" cy="278.10" r="4.5" fill="#2563eb" opacity="0.7"><title>validateSubsystemModelCrossField | 88 nonblank lines | 57.2/100 | packages/subsystems-core/src/validation.ts:82</title></circle>
+<circle cx="314.55" cy="530.00" r="4.5" fill="#059669" opacity="0.7"><title>GraphifyComponentDetail | 8 nonblank lines | 0.0/100 | packages/subsystems-react/src/graphify/consolidated.ts:280</title></circle>
+<circle cx="562.38" cy="292.40" r="4.5" fill="#2563eb" opacity="0.7"><title>resolveComponentAnchor | 72 nonblank lines | 54.0/100 | packages/subsystems-react/src/graphify/anchor.ts:84</title></circle>
+<circle cx="523.48" cy="338.60" r="4.5" fill="#2563eb" opacity="0.7"><title>inferConstructFromGraphify | 51 nonblank lines | 43.5/100 | packages/subsystems-react/src/graphify/construct.ts:49</title></circle>
+<circle cx="314.55" cy="414.50" r="4.5" fill="#2563eb" opacity="0.7"><title>constructsMatch | 8 nonblank lines | 26.2/100 | packages/subsystems-react/src/graphify/construct.ts:113</title></circle>
+<circle cx="610.18" cy="229.70" r="4.5" fill="#2563eb" opacity="0.7"><title>compareSignatures | 110 nonblank lines | 68.2/100 | packages/subsystems-react/src/graphify/signature.ts:242</title></circle>
+<circle cx="615.19" cy="207.70" r="4.5" fill="#2563eb" opacity="0.7"><title>PierreFileView | 115 nonblank lines | 73.2/100 | packages/subsystems-react/src/pierre/PierreFileView.tsx:32</title></circle>
+<circle cx="631.59" cy="205.50" r="4.5" fill="#2563eb" opacity="0.7"><title>PierreSnippetView | 133 nonblank lines | 73.8/100 | packages/subsystems-react/src/pierre/PierreSnippetView.tsx:42</title></circle>
+<circle cx="761.56" cy="170.30" r="4.5" fill="#2563eb" opacity="0.7"><title>PierreTrailCodeView | 421 nonblank lines | 81.8/100 | packages/subsystems-react/src/pierre/PierreTrailCodeView.tsx:201</title></circle>
+<circle cx="838.26" cy="164.80" r="4.5" fill="#2563eb" opacity="0.7"><title>ComponentDeclaration | 831 nonblank lines | 83.0/100 | packages/subsystems-react/src/subsystem/ComponentDeclaration.tsx:328</title></circle>
+<circle cx="628.15" cy="317.70" r="4.5" fill="#2563eb" opacity="0.7"><title>SubsystemDiagnosticToggle | 129 nonblank lines | 48.2/100 | packages/subsystems-react/src/subsystem/DiagnosticToggle.tsx:95</title></circle>
+<circle cx="682.58" cy="257.20" r="4.5" fill="#2563eb" opacity="0.7"><title>FileDrawer | 209 nonblank lines | 62.0/100 | packages/subsystems-react/src/subsystem/FileDrawer.tsx:22</title></circle>
+<circle cx="509.36" cy="376.00" r="4.5" fill="#2563eb" opacity="0.7"><title>GraphLayoutCover | 45 nonblank lines | 35.0/100 | packages/subsystems-react/src/subsystem/GraphLayoutCover.tsx:23</title></circle>
+<circle cx="536.03" cy="314.40" r="4.5" fill="#2563eb" opacity="0.7"><title>generateDeclarationString | 57 nonblank lines | 49.0/100 | packages/subsystems-react/src/subsystem/formatDeclaration.ts:52</title></circle>
+<circle cx="676.48" cy="204.40" r="4.5" fill="#2563eb" opacity="0.7"><title>SubsystemIssueList | 198 nonblank lines | 74.0/100 | packages/subsystems-react/src/subsystem/IssueList.tsx:685</title></circle>
+<circle cx="339.71" cy="525.60" r="4.5" fill="#0891b2" opacity="0.7"><title>SubsystemComponent | 10 nonblank lines | 1.0/100 | packages/subsystems-react/src/subsystem/model.ts:121</title></circle>
+<circle cx="470.91" cy="525.60" r="4.5" fill="#0891b2" opacity="0.7"><title>BoundaryFrameOptions | 32 nonblank lines | 1.0/100 | packages/subsystems-react/src/subsystem/model.ts:456</title></circle>
+<circle cx="412.11" cy="526.70" r="4.5" fill="#0891b2" opacity="0.7"><title>SubsystemProcessRegion | 19 nonblank lines | 0.8/100 | packages/subsystems-react/src/subsystem/model.ts:435</title></circle>
+<circle cx="203.92" cy="530.00" r="4.5" fill="#2563eb" opacity="0.7"><title>processGroupNodeId | 3 nonblank lines | 0.0/100 | packages/subsystems-react/src/subsystem/model.ts:490</title></circle>
+<circle cx="203.92" cy="530.00" r="4.5" fill="#2563eb" opacity="0.7"><title>moduleGroupNodeId | 3 nonblank lines | 0.0/100 | packages/subsystems-react/src/subsystem/model.ts:495</title></circle>
+<circle cx="282.10" cy="420.00" r="4.5" fill="#2563eb" opacity="0.7"><title>boundaryGroupNodeId | 6 nonblank lines | 25.0/100 | packages/subsystems-react/src/subsystem/model.ts:589</title></circle>
+<circle cx="314.55" cy="416.70" r="4.5" fill="#2563eb" opacity="0.7"><title>componentPackageKey | 8 nonblank lines | 25.8/100 | packages/subsystems-react/src/subsystem/model.ts:600</title></circle>
+<circle cx="314.55" cy="520.10" r="4.5" fill="#2563eb" opacity="0.7"><title>getSubsystemRegions | 8 nonblank lines | 2.2/100 | packages/subsystems-react/src/subsystem/model.ts:618</title></circle>
+<circle cx="314.55" cy="523.40" r="4.5" fill="#2563eb" opacity="0.7"><title>getSubsystemModuleRegions | 8 nonblank lines | 1.5/100 | packages/subsystems-react/src/subsystem/model.ts:632</title></circle>
+<circle cx="406.01" cy="416.70" r="4.5" fill="#2563eb" opacity="0.7"><title>getSubsystemPackageRegions | 18 nonblank lines | 25.8/100 | packages/subsystems-react/src/subsystem/model.ts:646</title></circle>
+<circle cx="545.51" cy="303.40" r="4.5" fill="#2563eb" opacity="0.7"><title>convertSubsystemToNodes | 62 nonblank lines | 51.5/100 | packages/subsystems-react/src/subsystem/model.ts:1721</title></circle>
+<circle cx="637.38" cy="201.10" r="4.5" fill="#2563eb" opacity="0.7"><title>buildBoundaryLayoutGroups | 140 nonblank lines | 74.8/100 | packages/subsystems-react/src/subsystem/model.ts:692</title></circle>
+<circle cx="392.73" cy="422.20" r="4.5" fill="#2563eb" opacity="0.7"><title>subsystemGraphLayoutKey | 16 nonblank lines | 24.5/100 | packages/subsystems-react/src/subsystem/model.ts:1852</title></circle>
+<circle cx="740.41" cy="247.30" r="4.5" fill="#2563eb" opacity="0.7"><title>SubsystemComponentNode | 349 nonblank lines | 64.2/100 | packages/subsystems-react/src/subsystem/nodes.tsx:205</title></circle>
+<circle cx="674.75" cy="219.80" r="4.5" fill="#2563eb" opacity="0.7"><title>SubsystemGroupNode | 195 nonblank lines | 70.5/100 | packages/subsystems-react/src/subsystem/nodes.tsx:568</title></circle>
+<circle cx="451.75" cy="326.50" r="4.5" fill="#2563eb" opacity="0.7"><title>buildRepoGroups | 27 nonblank lines | 46.2/100 | packages/subsystems-react/src/subsystem/paths.ts:93</title></circle>
+<circle cx="299.48" cy="530.00" r="4.5" fill="#2563eb" opacity="0.7"><title>SubsystemAggregateGraph | 7 nonblank lines | 0.0/100 | packages/subsystems-react/src/subsystem/SubsystemAggregateGraph.tsx:812</title></circle>
+<circle cx="651.02" cy="164.80" r="4.5" fill="#2563eb" opacity="0.7"><title>SubsystemFileTree | 158 nonblank lines | 83.0/100 | packages/subsystems-react/src/subsystem/SubsystemFileTree.tsx:33</title></circle>
+<circle cx="516.64" cy="259.40" r="4.5" fill="#2563eb" opacity="0.7"><title>tokenizeComponent | 48 nonblank lines | 61.5/100 | packages/subsystems-react/src/subsystem/tokenizeComponent.ts:57</title></circle>
+<circle cx="674.18" cy="196.70" r="4.5" fill="#2563eb" opacity="0.7"><title>TrailsPanel | 194 nonblank lines | 75.8/100 | packages/subsystems-react/src/subsystem/TrailsPanel.tsx:540</title></circle>
+<circle cx="261.53" cy="448.60" r="4.5" fill="#2563eb" opacity="0.7"><title>registerProjectInAlexandria | 5 nonblank lines | 18.5/100 | packages/subsystems-studio/src/bun/alexandria.ts:185</title></circle>
+<circle cx="815.97" cy="114.20" r="4.5" fill="#2563eb" opacity="0.7"><title>computeElkLayout | 682 nonblank lines | 94.5/100 | packages/subsystems-react/src/utils/elkLayout.ts:774</title></circle>
+<circle cx="443.07" cy="373.80" r="4.5" fill="#2563eb" opacity="0.7"><title>resolveRepoRootFromAlexandria | 25 nonblank lines | 35.5/100 | packages/subsystems-studio/src/bun/alexandria.ts:191</title></circle>
+<circle cx="314.55" cy="417.80" r="4.5" fill="#2563eb" opacity="0.7"><title>moduleAgreesWithFile | 8 nonblank lines | 25.5/100 | packages/subsystems-studio/src/bun/boundary-audit.ts:81</title></circle>
+<circle cx="677.61" cy="228.60" r="4.5" fill="#2563eb" opacity="0.7"><title>auditBoundaryFields | 200 nonblank lines | 68.5/100 | packages/subsystems-studio/src/bun/boundary-audit.ts:134</title></circle>
+<circle cx="423.40" cy="388.10" r="4.5" fill="#2563eb" opacity="0.7"><title>diffScopedFiles | 21 nonblank lines | 32.2/100 | packages/subsystems-studio/src/bun/git-repo.ts:95</title></circle>
+<circle cx="392.73" cy="382.60" r="4.5" fill="#2563eb" opacity="0.7"><title>filesDirty | 16 nonblank lines | 33.5/100 | packages/subsystems-studio/src/bun/git-repo.ts:65</title></circle>
+<circle cx="428.65" cy="336.40" r="4.5" fill="#2563eb" opacity="0.7"><title>remoteRefSha | 22 nonblank lines | 44.0/100 | packages/subsystems-studio/src/bun/git-repo.ts:233</title></circle>
+<circle cx="203.92" cy="488.20" r="4.5" fill="#2563eb" opacity="0.7"><title>cacheSlotKey | 3 nonblank lines | 9.5/100 | packages/subsystems-studio/src/bun/graphify-store.ts:167</title></circle>
+<circle cx="203.92" cy="520.10" r="4.5" fill="#2563eb" opacity="0.7"><title>dirtyFingerprint | 3 nonblank lines | 2.2/100 | packages/subsystems-studio/src/bun/graphify-store.ts:294</title></circle>
+<circle cx="518.97" cy="263.80" r="4.5" fill="#2563eb" opacity="0.7"><title>assessSubsystemGraphifyReadiness | 49 nonblank lines | 60.5/100 | packages/subsystems-studio/src/bun/graphify-store.ts:928</title></circle>
+<circle cx="377.67" cy="358.40" r="4.5" fill="#2563eb" opacity="0.7"><title>registerSuppliedRoots | 14 nonblank lines | 39.0/100 | packages/subsystems-studio/src/bun/http-server.ts:130</title></circle>
+<circle cx="360.28" cy="385.90" r="4.5" fill="#2563eb" opacity="0.7"><title>resolveRepoRootForPurl | 12 nonblank lines | 32.8/100 | packages/subsystems-studio/src/bun/graphify-store.ts:302</title></circle>
+<circle cx="474.38" cy="249.50" r="4.5" fill="#2563eb" opacity="0.7"><title>autoAcceptProposalIfConfident | 33 nonblank lines | 63.7/100 | packages/subsystems-studio/src/bun/jev-maintenance.ts:419</title></circle>
+<circle cx="498.86" cy="448.60" r="4.5" fill="#2563eb" opacity="0.7"><title>runMaintainAgent | 41 nonblank lines | 18.5/100 | packages/subsystems-studio/src/bun/maintain-model.ts:978</title></circle>
+<circle cx="583.72" cy="282.50" r="4.5" fill="#2563eb" opacity="0.7"><title>selectMaintainRoute | 87 nonblank lines | 56.2/100 | packages/subsystems-studio/src/bun/maintain-model.ts:283</title></circle>
+<circle cx="80.00" cy="528.90" r="4.5" fill="#64748b" opacity="0.7"><title>shared | 1 nonblank lines | 0.2/100 | packages/subsystems-studio/src/bun/maintainer-probe.ts:34</title></circle>
+<circle cx="399.57" cy="330.90" r="4.5" fill="#2563eb" opacity="0.7"><title>resolveOpencode2Bin | 17 nonblank lines | 45.2/100 | packages/subsystems-studio/src/bun/opencode-v2.ts:48</title></circle>
+<circle cx="577.04" cy="222.00" r="4.5" fill="#2563eb" opacity="0.7"><title>mergeSubsystemModels | 82 nonblank lines | 70.0/100 | packages/subsystems-studio/src/bun/merge-submodel-models.ts:240</title></circle>
+<circle cx="299.48" cy="415.60" r="4.5" fill="#2563eb" opacity="0.7"><title>installOpencodeV2 | 7 nonblank lines | 26.0/100 | packages/subsystems-studio/src/bun/opencode-v2.ts:309</title></circle>
+<circle cx="377.67" cy="445.30" r="4.5" fill="#2563eb" opacity="0.7"><title>getOpencodeV2Status | 14 nonblank lines | 19.2/100 | packages/subsystems-studio/src/bun/opencode-v2.ts:165</title></circle>
+<circle cx="496.08" cy="326.50" r="4.5" fill="#2563eb" opacity="0.7"><title>runPackageLayerDiscover | 40 nonblank lines | 46.2/100 | packages/subsystems-studio/src/bun/package-layer-runner.ts:102</title></circle>
+<circle cx="490.29" cy="279.20" r="4.5" fill="#2563eb" opacity="0.7"><title>getCachedPackageLayers | 38 nonblank lines | 57.0/100 | packages/subsystems-studio/src/bun/package-layer-store.ts:429</title></circle>
+<circle cx="203.92" cy="530.00" r="4.5" fill="#2563eb" opacity="0.7"><title>readEnsuredPackageLayers | 3 nonblank lines | 0.0/100 | packages/subsystems-studio/src/bun/package-layer-store.ts:472</title></circle>
+<circle cx="550.84" cy="222.00" r="4.5" fill="#2563eb" opacity="0.7"><title>ensurePackageLayers | 65 nonblank lines | 70.0/100 | packages/subsystems-studio/src/bun/package-layer-store.ts:481</title></circle>
+<circle cx="525.67" cy="291.30" r="4.5" fill="#2563eb" opacity="0.7"><title>ensureCurrentPackageCachesForModel | 52 nonblank lines | 54.2/100 | packages/subsystems-studio/src/bun/package-layer-store.ts:696</title></circle>
+<circle cx="236.36" cy="486.00" r="4.5" fill="#2563eb" opacity="0.7"><title>pendingProposalCount | 4 nonblank lines | 10.0/100 | packages/subsystems-studio/src/bun/proposal-store.ts:971</title></circle>
+<circle cx="498.86" cy="273.70" r="4.5" fill="#2563eb" opacity="0.7"><title>createSubsystemModelProposal | 41 nonblank lines | 58.2/100 | packages/subsystems-studio/src/bun/proposal-store.ts:1015</title></circle>
+<circle cx="529.93" cy="201.10" r="4.5" fill="#2563eb" opacity="0.7"><title>acceptSubsystemModelProposal | 54 nonblank lines | 74.8/100 | packages/subsystems-studio/src/bun/proposal-store.ts:1059</title></circle>
+<circle cx="451.75" cy="330.90" r="4.5" fill="#2563eb" opacity="0.7"><title>referencedFilesByPurl | 27 nonblank lines | 45.2/100 | packages/subsystems-studio/src/bun/purl-commits.ts:125</title></circle>
+<circle cx="577.04" cy="201.10" r="4.5" fill="#2563eb" opacity="0.7"><title>modelProvenance | 82 nonblank lines | 74.8/100 | packages/subsystems-studio/src/bun/purl-commits.ts:262</title></circle>
+<circle cx="484.19" cy="234.10" r="4.5" fill="#2563eb" opacity="0.7"><title>planAutoRePin | 36 nonblank lines | 67.2/100 | packages/subsystems-studio/src/bun/purl-commits.ts:370</title></circle>
+<circle cx="521.25" cy="216.50" r="4.5" fill="#2563eb" opacity="0.7"><title>modelProvenanceDetail | 50 nonblank lines | 71.2/100 | packages/subsystems-studio/src/bun/purl-commits.ts:416</title></circle>
+<circle cx="634.11" cy="197.80" r="4.5" fill="#2563eb" opacity="0.7"><title>createRegularAuditScheduler | 136 nonblank lines | 75.5/100 | packages/subsystems-studio/src/bun/regular-audit.ts:31</title></circle>
+<circle cx="360.28" cy="404.60" r="4.5" fill="#2563eb" opacity="0.7"><title>resolveSandboxed | 12 nonblank lines | 28.5/100 | packages/subsystems-studio/src/bun/sandboxed-path.ts:14</title></circle>
+<circle cx="506.83" cy="295.70" r="4.5" fill="#2563eb" opacity="0.7"><title>resolveOpencodeConnection | 44 nonblank lines | 53.2/100 | packages/subsystems-studio/src/bun/server-sessions.ts:47</title></circle>
+<circle cx="463.63" cy="279.20" r="4.5" fill="#2563eb" opacity="0.7"><title>probeOpencodeServer | 30 nonblank lines | 57.0/100 | packages/subsystems-studio/src/bun/server-sessions.ts:114</title></circle>
+<circle cx="412.11" cy="274.80" r="4.5" fill="#2563eb" opacity="0.7"><title>setServerEventWatch | 19 nonblank lines | 58.0/100 | packages/subsystems-studio/src/bun/server-sessions.ts:169</title></circle>
+<circle cx="575.66" cy="200.00" r="4.5" fill="#2563eb" opacity="0.7"><title>listRecentServerSessions | 81 nonblank lines | 75.0/100 | packages/subsystems-studio/src/bun/server-sessions.ts:191</title></circle>
+<circle cx="754.09" cy="171.40" r="4.5" fill="#2563eb" opacity="0.7"><title>buildSessionIndex | 394 nonblank lines | 81.5/100 | packages/subsystems-studio/src/bun/session-pipeline.ts:924</title></circle>
+<circle cx="702.78" cy="167.00" r="4.5" fill="#2563eb" opacity="0.7"><title>processSessionEvents | 250 nonblank lines | 82.5/100 | packages/subsystems-studio/src/bun/session-pipeline.ts:1329</title></circle>
+<circle cx="327.83" cy="422.20" r="4.5" fill="#2563eb" opacity="0.7"><title>emitSubsystemModelChange | 9 nonblank lines | 24.5/100 | packages/subsystems-studio/src/bun/subsystem-model-store.ts:88</title></circle>
+<circle cx="350.46" cy="416.70" r="4.5" fill="#2563eb" opacity="0.7"><title>findSubsystemModelProblems | 11 nonblank lines | 25.8/100 | packages/subsystems-studio/src/bun/subsystem-model-validation.ts:54</title></circle>
+<circle cx="509.36" cy="345.20" r="4.5" fill="#2563eb" opacity="0.7"><title>patchViewerSettings | 45 nonblank lines | 42.0/100 | packages/subsystems-studio/src/bun/viewer-settings.ts:169</title></circle>
+<circle cx="817.29" cy="109.80" r="4.5" fill="#2563eb" opacity="0.7"><title>auditSubsystemModel | 690 nonblank lines | 95.5/100 | packages/subsystems-studio/src/bun/verify-subsystem-component.ts:1201</title></circle>
+<circle cx="728.13" cy="211.00" r="4.5" fill="#2563eb" opacity="0.7"><title>AppHeader | 313 nonblank lines | 72.5/100 | packages/subsystems-studio/src/mainview/components/AppHeader.tsx:37</title></circle>
+<circle cx="639.77" cy="203.30" r="4.5" fill="#2563eb" opacity="0.7"><title>FilesDrilldown | 143 nonblank lines | 74.2/100 | packages/subsystems-studio/src/mainview/components/FilesDrilldown.tsx:135</title></circle>
+<circle cx="626.39" cy="299.00" r="4.5" fill="#2563eb" opacity="0.7"><title>CommitDots | 127 nonblank lines | 52.5/100 | packages/subsystems-studio/src/mainview/components/ModelProvenance.tsx:1178</title></circle>
+<circle cx="490.29" cy="413.40" r="4.5" fill="#2563eb" opacity="0.7"><title>DirtyBadge | 38 nonblank lines | 26.5/100 | packages/subsystems-studio/src/mainview/components/ModelProvenance.tsx:1323</title></circle>
+<circle cx="724.84" cy="196.70" r="4.5" fill="#2563eb" opacity="0.7"><title>ProposalsModal | 304 nonblank lines | 75.8/100 | packages/subsystems-studio/src/mainview/components/ProposalsModal.tsx:26</title></circle>
+<circle cx="455.85" cy="362.80" r="4.5" fill="#2563eb" opacity="0.7"><title>excalidrawSceneToSubsystemModel | 28 nonblank lines | 38.0/100 | packages/subsystems-studio/src/mainview/excalidraw/excalidrawToSubsystem.ts:140</title></circle>
+<circle cx="864.75" cy="195.60" r="4.5" fill="#2563eb" opacity="0.7"><title>SettingsModal | 1051 nonblank lines | 76.0/100 | packages/subsystems-studio/src/mainview/components/SettingsModal.tsx:227</title></circle>
+<circle cx="399.57" cy="495.90" r="4.5" fill="#2563eb" opacity="0.7"><title>principalMetaForComponent | 17 nonblank lines | 7.8/100 | packages/subsystems-studio/src/mainview/excalidraw/subsystemToExcalidraw.ts:152</title></circle>
+<circle cx="80.00" cy="527.80" r="4.5" fill="#64748b" opacity="0.7"><title>reloadSubscribers | 1 nonblank lines | 0.5/100 | packages/subsystems-studio/src/mainview/rpc.ts:34</title></circle>
+<circle cx="203.92" cy="526.70" r="4.5" fill="#64748b" opacity="0.7"><title>subsystemModelChangeSubscribers | 3 nonblank lines | 0.8/100 | packages/subsystems-studio/src/mainview/rpc.ts:92</title></circle>
+<circle cx="282.10" cy="416.70" r="4.5" fill="#2563eb" opacity="0.7"><title>callReadFile | 6 nonblank lines | 25.8/100 | packages/subsystems-studio/src/mainview/rpc.ts:230</title></circle>
+<circle cx="501.58" cy="446.40" r="4.5" fill="#2563eb" opacity="0.7"><title>CenteredMessage | 42 nonblank lines | 19.0/100 | packages/subsystems-studio/src/mainview/ui.tsx:16</title></circle>
+<circle cx="620.93" cy="217.60" r="4.5" fill="#2563eb" opacity="0.7"><title>ComposedGraphPane | 121 nonblank lines | 71.0/100 | packages/subsystems-studio/src/mainview/views/ComposedGraphPane.tsx:31</title></circle>
+<circle cx="840.68" cy="104.30" r="4.5" fill="#2563eb" opacity="0.7"><title>AgentSessionsOverviewView | 849 nonblank lines | 96.8/100 | packages/subsystems-studio/src/mainview/views/AgentSessions.tsx:298</title></circle>
+<circle cx="696.76" cy="196.70" r="4.5" fill="#2563eb" opacity="0.7"><title>aggregateToFrames | 237 nonblank lines | 75.8/100 | packages/subsystems-studio/src/mainview/views/composedAggregate.ts:104</title></circle>
+<circle cx="762.10" cy="202.20" r="4.5" fill="#2563eb" opacity="0.7"><title>OpencodeV2DebugView | 423 nonblank lines | 74.5/100 | packages/subsystems-studio/src/mainview/views/OpencodeV2DebugView.tsx:28</title></circle>
+<circle cx="721.45" cy="200.00" r="4.5" fill="#2563eb" opacity="0.7"><title>PackageLayersReposView | 295 nonblank lines | 75.0/100 | packages/subsystems-studio/src/mainview/views/PackageLayersReposView.tsx:19</title></circle>
+<circle cx="857.09" cy="124.10" r="4.5" fill="#2563eb" opacity="0.7"><title>MaintenancePanel | 982 nonblank lines | 92.2/100 | packages/subsystems-studio/src/mainview/views/MaintenancePanel.tsx:107</title></circle>
+<circle cx="854.77" cy="131.80" r="4.5" fill="#2563eb" opacity="0.7"><title>SubsystemModelsView | 962 nonblank lines | 90.5/100 | packages/subsystems-studio/src/mainview/views/SubsystemModelsView.tsx:742</title></circle>
+<circle cx="819.88" cy="145.00" r="4.5" fill="#2563eb" opacity="0.7"><title>SubsystemModelView | 706 nonblank lines | 87.5/100 | packages/subsystems-studio/src/mainview/views/SubsystemModelView.tsx:77</title></circle>
+<circle cx="554.26" cy="260.50" r="4.5" fill="#2563eb" opacity="0.7"><title>loadSubsystemModelFromGist | 67 nonblank lines | 61.3/100 | site/src/lib/gist.ts:83</title></circle>
+<circle cx="575.66" cy="239.60" r="4.5" fill="#2563eb" opacity="0.7"><title>Gist | 81 nonblank lines | 66.0/100 | site/src/pages/Gist.tsx:17</title></circle>
+<circle cx="339.71" cy="427.70" r="4.5" fill="#2563eb" opacity="0.7"><title>toPortableDocument | 10 nonblank lines | 23.2/100 | site/src/lib/gist.ts:161</title></circle>
+<circle cx="467.33" cy="530.00" r="4.5" fill="#2563eb" opacity="0.7"><title>NewServiceProvider | 31 nonblank lines | 0.0/100 | service/frontend/fx.go:155</title></circle>
+<circle cx="554.26" cy="246.20" r="4.5" fill="#2563eb" opacity="0.7"><title>HandlerProvider | 67 nonblank lines | 64.5/100 | service/history/fx.go:147</title></circle>
+<circle cx="377.67" cy="480.50" r="4.5" fill="#ea580c" opacity="0.7"><title>Starter | 14 nonblank lines | 11.2/100 | service/history/api/startworkflow/api.go:55</title></circle>
+<circle cx="417.90" cy="339.70" r="4.5" fill="#ea580c" opacity="0.7"><title>TaskMatcher | 20 nonblank lines | 43.2/100 | service/matching/matcher.go:23</title></circle>
+<circle cx="550.84" cy="400.20" r="4.5" fill="#2563eb" opacity="0.7"><title>NewService | 65 nonblank lines | 29.5/100 | service/worker/service.go:117</title></circle>
+<circle cx="360.28" cy="514.60" r="4.5" fill="#ea580c" opacity="0.7"><title>Service | 12 nonblank lines | 3.5/100 | service/matching/service.go:21</title></circle>
+<text x="510" y="585" text-anchor="middle" font-size="15">Nonblank lines (log₂ scale: each step doubles length)</text>
+<text transform="translate(22 310) rotate(-90)" text-anchor="middle" font-size="15">Jev estimated complexity (0–100)</text>
+<circle cx="85" cy="622" r="5" fill="#ea580c"/><text x="97" y="627" font-size="14">class</text>
+<circle cx="230" cy="622" r="5" fill="#2563eb"/><text x="242" y="627" font-size="14">function</text>
+<circle cx="375" cy="622" r="5" fill="#0891b2"/><text x="387" y="627" font-size="14">interface</text>
+<circle cx="520" cy="622" r="5" fill="#64748b"/><text x="532" y="627" font-size="14">store</text>
+<circle cx="665" cy="622" r="5" fill="#059669"/><text x="677" y="627" font-size="14">type_alias</text>
+</g></svg>

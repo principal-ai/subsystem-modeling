@@ -102,6 +102,23 @@ let viewerSettings: ViewerSettings = {
 };
 
 const request: RpcRequest = {
+  assessConstructComplexity: async (params) => {
+    const input = params as { file: string; contentHash: string };
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    if (input.file === "error.ts") {
+      return { ok: false, error: "Missing Jev API key — add your TypeSafe AI key in Settings → Jev." };
+    }
+    return {
+      ok: true,
+      result: {
+        score: input.file === "complex.ts" ? 0.9 : input.file === "moderate.ts" ? 0.5 : 0.1,
+        confidence: 0.85,
+        model: "jev-latest",
+        contentHash: input.contentHash,
+        checkedAt: new Date().toISOString(),
+      },
+    };
+  },
   listSubsystemModelProposals: async () => ({
     ok: true,
     proposals: pending(),
