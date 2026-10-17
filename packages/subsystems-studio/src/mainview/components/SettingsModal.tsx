@@ -13,6 +13,7 @@ import {
 	type ViewerSettings,
 } from "../../shared/contract";
 import { electrobun } from "../rpc";
+import { useEscapeToClose } from "./useEscapeToClose";
 
 const TAB_TOGGLES: Array<{
 	key: keyof DefaultTabFlags;
@@ -298,16 +299,7 @@ export function SettingsModal({
 		};
 	}, []);
 
-	useEffect(() => {
-		const onKeyDown = (e: KeyboardEvent) => {
-			if (e.key === "Escape") {
-				e.preventDefault();
-				onClose();
-			}
-		};
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [onClose]);
+	useEscapeToClose(onClose);
 
 	const toggle = useCallback(async (key: keyof DefaultTabFlags) => {
 		if (!settings) return;

@@ -10,6 +10,7 @@ import { Loader2 } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import type { GraphifyCliStatus, StudioMessages } from "../../shared/contract";
 import { electrobun, graphifyChangeSubscribers } from "../rpc";
+import { useEscapeToClose } from "./useEscapeToClose";
 
 export function GraphifyCliModal({
 	initial,
@@ -32,6 +33,8 @@ export function GraphifyCliModal({
 	const onChangedRef = useRef(onChanged);
 	onChangedRef.current = onChanged;
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
+
+	useEscapeToClose(onClose);
 
 	useEffect(() => {
 		let alive = true;

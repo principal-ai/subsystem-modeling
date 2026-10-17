@@ -33,6 +33,7 @@ import {
 } from "../rpc";
 import { IntegrationLogos } from "./IntegrationTools";
 import { SettingsModal } from "./SettingsModal";
+import { useEscapeToClose } from "./useEscapeToClose";
 
 export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 	const { theme } = useTheme();
@@ -459,6 +460,8 @@ export function IdentityModal({
 	// row shows whenever it resolved — including alongside GitHub.
 	const githubCopy = user.source === "gh" ? GITHUB_SOURCE_COPY["gh"] : null;
 	const githubIcon = Terminal;
+
+	useEscapeToClose(onClose);
 
 	return (
 		<div

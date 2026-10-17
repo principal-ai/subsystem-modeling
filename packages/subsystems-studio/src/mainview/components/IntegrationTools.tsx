@@ -29,6 +29,7 @@ import {
 	graphifyChangeSubscribers,
 	opencodeV2ChangeSubscribers,
 } from "../rpc";
+import { useEscapeToClose } from "./useEscapeToClose";
 
 // The shared shape of GraphifyCliStatus and OpencodeV2Status — enough for the
 // button's status dot and the modal's version/update rows.
@@ -394,6 +395,8 @@ export function IntegrationModal({
 	const [confirmUninstall, setConfirmUninstall] = useState(false);
 	const onStatusRef = useRef(onStatus);
 	onStatusRef.current = onStatus;
+
+	useEscapeToClose(onClose);
 
 	useEffect(() => {
 		let alive = true;

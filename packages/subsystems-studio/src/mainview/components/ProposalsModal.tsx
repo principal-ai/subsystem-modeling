@@ -57,18 +57,6 @@ export function ProposalsModal({
 	const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-	// Escape dismisses the modal.
-	useEffect(() => {
-		const onKeyDown = (e: KeyboardEvent) => {
-			if (e.key === "Escape") {
-				e.preventDefault();
-				onClose();
-			}
-		};
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [onClose]);
-
 	const onCopyForAgent = useCallback(
 		async (p: SubsystemModelProposal) => {
 			try {

@@ -16,6 +16,7 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { useTheme } from "@principal-ade/industry-theme";
 import { Loader2, type LucideIcon } from "lucide-react";
+import { useEscapeToClose } from "./useEscapeToClose";
 
 /** Shared dialog title-row padding. */
 const HEADER_PAD = "14px 20px";
@@ -40,13 +41,20 @@ export function Modal({
 	ariaLabel,
 }: {
 	children: ReactNode;
-	/** Backdrop click handler. Omit to make the dialog modal-only (no dismiss). */
+	/**
+	 * Dismiss handler — fired by backdrop click, the header close button, and
+	 * Escape. Omit to make the dialog modal-only (no dismiss).
+	 */
 	onClose?: () => void;
 	/** Max content width in px. */
 	width?: number;
 	ariaLabel: string;
 }) {
 	const { theme } = useTheme();
+
+	// Escape dismisses whenever the dialog is closable, mirroring the backdrop.
+	useEscapeToClose(onClose);
+
 	return (
 		<div
 			role="dialog"
