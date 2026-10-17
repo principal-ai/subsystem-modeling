@@ -973,7 +973,7 @@ async function openSubsystemModelTab(
 	for (const existing of tabs.values()) {
 		if (existing.kind === "subsystem-model" && existing.graphId === graphId) {
 			// Keep the deep-link target current: reopening from a trail
-			// row selects it; a plain open (row double-click) clears it.
+			// row selects it; a plain open (row click) clears it.
 			existing.focusTrailId = trailId;
 			// The issues focus is sticky-on-open only: a reopen that asks for it
 			// sets it, a reopen that doesn't clears it so stale focus doesn't

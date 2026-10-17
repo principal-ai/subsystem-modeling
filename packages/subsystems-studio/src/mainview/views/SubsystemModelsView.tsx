@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { LayoutDashboard, LayoutGrid, List, Loader2, Trash2 } from "lucide-react";
+import { LayoutDashboard, LayoutGrid, List, Loader2, Share2, Trash2 } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
 	buildRepoGroups,
@@ -755,8 +755,16 @@ export function SubsystemModelsView({
 	const [confirmId, setConfirmId] = useState<string | null>(null);
 	const [copiedId, setCopiedId] = useState<string | null>(null);
 	const [sharingId, setSharingId] = useState<string | null>(null);
+	/** The model whose gist-share confirmation modal is open. */
+	const [shareId, setShareId] = useState<string | null>(null);
+	/** Result of the completed share, shown inside the modal. */
+	const [shareResult, setShareResult] = useState<{
+		url?: string;
+		created: boolean;
+	} | null>(null);
+	/** Share failure, kept inside the modal rather than the list. */
+	const [shareError, setShareError] = useState<string | null>(null);
 	const [editedWindow, setEditedWindow] = useState<EditedWindow>("today");
-	const [message, setMessage] = useState<string | null>(null);
 	/** Selected row highlight (file-tree clicks land here, no new tab). */
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	/** Rows expanded to list all their trails (row click toggles). */
@@ -1023,18 +1031,28 @@ export function SubsystemModelsView({
 		[graphs],
 	);
 
-	/** Row click: expand/collapse its trail list (no new tab). When a
-	 *  file is open and the row is being expanded, focus the first line this
-	 *  graph references in the open file. */
-	const onToggleExpand = useCallback(
+	/** Details toggle: open/close the row's inline body. When closing, clear
+	 *  both the row's own expansion and any file-driven expansion on this row;
+	 *  when opening, reveal the trail list and focus the first line this graph
+	 *  references in the previewed file. */
+	const onToggleDetails = useCallback(
 		(graph: SubsystemModelSummary) => {
 			setSelectedId(graph.id);
-			setSelectedFile((current) =>
-				current?.graphId === graph.id ? null : current,
-			);
 			const isOpen =
 				expandedIds.has(graph.id) || selectedFile?.graphId === graph.id;
-			if (previewFile && !isOpen) {
+			if (isOpen) {
+				setSelectedFile((current) =>
+					current?.graphId === graph.id ? null : current,
+				);
+				setExpandedIds((current) => {
+					if (!current.has(graph.id)) return current;
+					const next = new Set(current);
+					next.delete(graph.id);
+					return next;
+				});
+				return;
+			}
+			if (previewFile) {
 				const line = firstReferencedLine(
 					graph,
 					previewFile.repoKey,
@@ -1047,9 +1065,9 @@ export function SubsystemModelsView({
 				}
 			}
 			setExpandedIds((current) => {
+				if (current.has(graph.id)) return current;
 				const next = new Set(current);
-				if (next.has(graph.id)) next.delete(graph.id);
-				else next.add(graph.id);
+				next.add(graph.id);
 				return next;
 			});
 		},
@@ -1057,20 +1075,11 @@ export function SubsystemModelsView({
 	);
 
 	/**
-	 * Single click expands immediately; a double-click opens the graph in a tab.
-	 * The expand is not deferred: waiting to tell the two apart made every row
-	 * feel laggy. The second click of a double-click (`detail > 1`) is ignored
-	 * so it does not toggle the row back before the tab opens.
+	 * Row click opens the model in its own tab. Expanding the inline details
+	 * (description + trail list) is a dedicated button on the row, wired to
+	 * `onToggleDetails`, so the two actions no longer compete for the click.
 	 */
 	const onRowClick = useCallback(
-		(graph: SubsystemModelSummary, e?: React.MouseEvent) => {
-			if (e && e.detail > 1) return;
-			onToggleExpand(graph);
-		},
-		[onToggleExpand],
-	);
-
-	const onRowDoubleClick = useCallback(
 		(graph: SubsystemModelSummary) => {
 			void onOpen(graph);
 		},
@@ -1151,41 +1160,55 @@ export function SubsystemModelsView({
 		[],
 	);
 
-	const onShareGist = useCallback(
-		async (graph: SubsystemModelSummary) => {
-			setSharingId(graph.id);
-			setMessage(null);
-			setError(null);
-			try {
-				const result = await electrobun.rpc!.request.shareSubsystemModelAsGist({
-					graphId: graph.id,
-				});
-				if (!result.ok) {
-					setError(result.error ?? "Failed to share as gist");
-					return;
-				}
-				const url = result.viewUrl ?? result.gistUrl;
-				if (url) {
-					try {
-						await navigator.clipboard.writeText(url);
-					} catch {
-						// clipboard may be denied
-					}
-				}
-				setMessage(
-					result.created
-						? `Shared as gist — link copied${url ? `: ${url}` : ""}`
-						: `Gist updated — link copied${url ? `: ${url}` : ""}`,
-				);
-				await refresh();
-			} catch (err) {
-				setError(err instanceof Error ? err.message : "Failed to share as gist");
-			} finally {
-				setSharingId(null);
+	/** Open the gist confirmation modal for a model — no network yet. */
+	const requestShareGist = useCallback((graph: SubsystemModelSummary) => {
+		setSelectedId(graph.id);
+		setShareId(graph.id);
+		setShareResult(null);
+		setShareError(null);
+	}, []);
+
+	/** Dismiss the gist modal and clear its transient result / error. */
+	const closeShareModal = useCallback(() => {
+		setShareId(null);
+		setShareResult(null);
+		setShareError(null);
+	}, []);
+
+	/** Share the model the modal is confirming; keep feedback in the modal. */
+	const confirmShareGist = useCallback(async () => {
+		const graph = shareId ? graphs?.find((g) => g.id === shareId) : undefined;
+		if (!graph) {
+			closeShareModal();
+			return;
+		}
+		setSharingId(graph.id);
+		setShareResult(null);
+		setShareError(null);
+		try {
+			const result = await electrobun.rpc!.request.shareSubsystemModelAsGist({
+				graphId: graph.id,
+			});
+			if (!result.ok) {
+				setShareError(result.error ?? "Failed to share as gist");
+				return;
 			}
-		},
-		[refresh],
-	);
+			const url = result.viewUrl ?? result.gistUrl;
+			if (url) {
+				try {
+					await navigator.clipboard.writeText(url);
+				} catch {
+					// clipboard may be denied
+				}
+			}
+			setShareResult({ url, created: result.created === true });
+			await refresh();
+		} catch (err) {
+			setShareError(err instanceof Error ? err.message : "Failed to share as gist");
+		} finally {
+			setSharingId(null);
+		}
+	}, [shareId, graphs, refresh, closeShareModal]);
 
 	/** Arm the delete confirmation modal for a model. */
 	const requestDelete = useCallback((graph: SubsystemModelSummary) => {
@@ -1223,6 +1246,11 @@ export function SubsystemModelsView({
 	/** The model whose deletion is awaiting confirmation. */
 	const pendingDelete = confirmId
 		? (graphs?.find((g) => g.id === confirmId) ?? null)
+		: null;
+
+	/** The model whose gist share is awaiting confirmation. */
+	const pendingShare = shareId
+		? (graphs?.find((g) => g.id === shareId) ?? null)
 		: null;
 
 	if (error && graphs === null) {
@@ -1388,11 +1416,10 @@ windowedGraphs.length === 0 ? (
 							rowExpanded={expandedIds.has(graph.id)}
 							copied={copiedId === graph.id}
 							sharing={sharingId === graph.id}
-							onRowClick={(e) => onRowClick(graph, e)}
-							onRowDoubleClick={() => onRowDoubleClick(graph)}
-							onOpen={() => void onOpen(graph)}
+							onRowClick={() => onRowClick(graph)}
+							onToggleDetails={() => onToggleDetails(graph)}
 							onCopyPath={() => void onCopyPath(graph)}
-							onShareGist={() => void onShareGist(graph)}
+							onShareGist={() => requestShareGist(graph)}
 							onDelete={() => requestDelete(graph)}
 							onOpenTrail={(trailId) => void onOpen(graph, trailId)}
 							onOpenComponent={(m) => {
@@ -1609,17 +1636,6 @@ windowedGraphs.length === 0 ? (
 					</button>
 				</div>
 			)}
-			{message && (
-				<div
-					style={{
-						fontSize: theme.fontSizes[1],
-						color: theme.colors.textSecondary,
-						marginBottom: 10,
-					}}
-				>
-					{message}
-				</div>
-			)}
 			{error && (
 				<div style={{ fontSize: theme.fontSizes[1], color: "#e5534b", marginBottom: 10 }}>
 					{error}
@@ -1729,6 +1745,110 @@ windowedGraphs.length === 0 ? (
 						>
 							Delete
 						</ModalButton>
+					</ModalFooter>
+				</Modal>
+			)}
+			{pendingShare && (
+				<Modal
+					ariaLabel="Share subsystem model as gist"
+					onClose={
+						sharingId === pendingShare.id ? undefined : closeShareModal
+					}
+				>
+					<ModalHeader
+						icon={Share2}
+						title="Share subsystem model"
+					/>
+					<ModalBody>
+						{shareResult ? (
+							<div
+								style={{ display: "flex", flexDirection: "column", gap: 10 }}
+							>
+								<div>
+									{shareResult.created ? (
+										<>
+											Shared <strong>{pendingShare.title}</strong> as a
+											public gist.
+										</>
+									) : (
+										<>
+											Updated the public gist for{" "}
+											<strong>{pendingShare.title}</strong>.
+										</>
+									)}
+								</div>
+								{shareResult.url && (
+									<code
+										style={{
+											fontFamily: theme.fonts.monospace,
+											fontSize: theme.fontSizes[1],
+											overflowWrap: "anywhere",
+											padding: "6px 8px",
+											borderRadius: 6,
+											background:
+												theme.colors.backgroundSecondary ??
+												theme.colors.background,
+											border: `1px solid ${theme.colors.border ?? "#333"}`,
+										}}
+									>
+										{shareResult.url}
+									</code>
+								)}
+								<div style={{ color: muted, fontSize: theme.fontSizes[1] }}>
+									Link copied to your clipboard.
+								</div>
+							</div>
+						) : (
+							<div
+								style={{ display: "flex", flexDirection: "column", gap: 10 }}
+							>
+								<div>
+									{pendingShare.gist ? (
+										<>
+											Updates the public GitHub gist to share{" "}
+											<strong>{pendingShare.title}</strong>.
+										</>
+									) : (
+										<>
+											Creates a public GitHub gist to share{" "}
+											<strong>{pendingShare.title}</strong>.
+										</>
+									)}
+								</div>
+								{shareError && (
+									<div
+										role="alert"
+										style={{ color: theme.colors.error ?? "#e5534b" }}
+									>
+										{shareError}
+									</div>
+								)}
+							</div>
+						)}
+					</ModalBody>
+					<ModalFooter>
+						{shareResult ? (
+							<ModalButton variant="primary" onClick={closeShareModal}>
+								Done
+							</ModalButton>
+						) : (
+							<>
+								<ModalButton
+									onClick={closeShareModal}
+									disabled={sharingId === pendingShare.id}
+								>
+									Cancel
+								</ModalButton>
+								<ModalButton
+									variant="primary"
+									icon={Share2}
+									busy={sharingId === pendingShare.id}
+									onClick={() => void confirmShareGist()}
+								>
+									{pendingShare.gist ? "Update gist" : "Share as gist"}
+								</ModalButton>
+							</>
+						)}
 					</ModalFooter>
 				</Modal>
 			)}

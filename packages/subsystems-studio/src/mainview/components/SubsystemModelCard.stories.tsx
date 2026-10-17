@@ -103,8 +103,7 @@ const meta = {
 		copied: false,
 		sharing: false,
 		onRowClick: () => {},
-		onRowDoubleClick: () => {},
-		onOpen: () => {},
+		onToggleDetails: () => {},
 		onCopyPath: () => {},
 		onShareGist: () => {},
 		onDelete: () => {},
@@ -116,7 +115,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Baseline row, collapsed: title and the copy-path / gist / delete actions. */
+/** Baseline row, collapsed: title and the details / copy-path / gist / delete actions. */
 export const Default: Story = {};
 
 /** Expanded: the description sits on the left, the trail list on the right. */
@@ -171,7 +170,7 @@ export const Copied: Story = { args: { copied: true } };
 /** A gist share is in flight. */
 export const Sharing: Story = { args: { sharing: true } };
 
-/** The model has been shared — the action reads "Update gist". */
+/** The model has already been shared — the Share button opens the update flow. */
 export const SharedGist: Story = {
 	args: { graph: { ...BASE, gist: { id: "abc123", fileName: "payments.json" } } },
 };

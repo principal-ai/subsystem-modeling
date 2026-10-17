@@ -1,9 +1,9 @@
 /**
  * SubsystemModelCard — one stored subsystem model as a row in the Subsystems
- * tab: title, description toggle, copy-path / gist / delete actions, and two
+ * tab: title, a details toggle, copy-path / gist / delete actions, and two
  * collapsible sections — the trails using the open file (when a file is
  * selected) and, failing that, the components declared in it, or the model's
- * full trail list when the row itself is expanded.
+ * full trail list when the details are toggled open.
  *
  * Presentational: it derives the file → trail / component expansion from the
  * `graph` summary and the selected file, and reports every interaction through
@@ -14,8 +14,9 @@
 import { useEffect, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import {
 	Check,
+	ChevronDown,
+	ChevronRight,
 	Copy,
-	ExternalLink,
 	FileText,
 	LayoutDashboard,
 	Route as RouteIcon,
@@ -50,16 +51,16 @@ export interface SubsystemModelCardProps {
 	selectedFile?: { repoKey: string | undefined; displayPath: string } | null;
 	/** The previewed file, used to light up trail step segments (any row). */
 	openFile?: { repoKey: string | undefined; displayPath: string } | null;
-	/** The row's own trail list is expanded (disclosure toggle). */
+	/** The row's own trail list is expanded (details toggle). */
 	rowExpanded?: boolean;
 	/** The copy-path action just landed. */
 	copied?: boolean;
 	/** A gist share is in flight. */
 	sharing?: boolean;
+	/** Row click — opens the model in its own tab. */
 	onRowClick?: (e: ReactMouseEvent) => void;
-	onRowDoubleClick?: () => void;
-	/** Open the model in its own tab. */
-	onOpen?: () => void;
+	/** Toggle the inline details (description + trail list). */
+	onToggleDetails?: () => void;
 	onCopyPath?: () => void;
 	onShareGist?: () => void;
 	onDelete?: () => void;
@@ -157,7 +158,6 @@ function TrailButton({
 function ActionButton({
 	icon,
 	label,
-	title,
 	ariaLabel,
 	accent,
 	active = false,
@@ -167,7 +167,6 @@ function ActionButton({
 }: {
 	icon: ReactNode;
 	label: string;
-	title: string;
 	ariaLabel: string;
 	/** Hover accent, and the color the sticky `active` state uses. */
 	accent: string;
@@ -193,7 +192,6 @@ function ActionButton({
 			onMouseEnter={() => setHover(true)}
 			onMouseLeave={() => setHover(false)}
 			disabled={disabled}
-			title={title}
 			aria-label={ariaLabel}
 			style={{
 				flexShrink: 0,
@@ -227,8 +225,7 @@ export function SubsystemModelCard({
 	copied = false,
 	sharing = false,
 	onRowClick,
-	onRowDoubleClick,
-	onOpen,
+	onToggleDetails,
 	onCopyPath,
 	onShareGist,
 	onDelete,
@@ -266,7 +263,6 @@ export function SubsystemModelCard({
 		<div
 			data-subsystem-row={graph.id}
 			onClick={onRowClick}
-			onDoubleClick={onRowDoubleClick}
 			onMouseEnter={(e) => {
 				e.currentTarget.style.borderColor = theme.colors.textMuted ?? "#555";
 			}}
@@ -322,17 +318,20 @@ export function SubsystemModelCard({
 					</div>
 				</div>
 				<ActionButton
-					icon={<ExternalLink size={12} />}
-					label="Open"
-					title={`Open ${graph.title} in a tab`}
-					ariaLabel={`Open ${graph.title}`}
+					icon={isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+					label={isOpen ? "Hide details" : "Details"}
+					ariaLabel={
+						isOpen
+							? `Hide details for ${graph.title}`
+							: `Show details for ${graph.title}`
+					}
 					accent={theme.colors.primary}
-					onClick={() => onOpen?.()}
+					active={isOpen}
+					onClick={() => onToggleDetails?.()}
 				/>
 				<ActionButton
 					icon={copied ? <Check size={12} /> : <Copy size={12} />}
 					label={copied ? "Copied" : "Copy path"}
-					title={`Copy path: ${graph.path}`}
 					ariaLabel={`Copy path for ${graph.title}`}
 					accent={theme.colors.primary}
 					active={copied}
@@ -341,17 +340,8 @@ export function SubsystemModelCard({
 				/>
 				<ActionButton
 					icon={<Share2 size={12} />}
-					label={sharing ? "Sharing…" : graph.gist ? "Update gist" : "Gist"}
-					title={
-						graph.gist
-							? `Update gist ${graph.gist.id}`
-							: "Share as a public GitHub gist"
-					}
-					ariaLabel={
-						graph.gist
-							? `Update gist for ${graph.title}`
-							: `Share ${graph.title} as gist`
-					}
+					label={sharing ? "Sharing…" : "Share"}
+					ariaLabel={`Share ${graph.title}`}
 					accent={theme.colors.success ?? "#10b981"}
 					disabled={sharing}
 					onClick={() => onShareGist?.()}
@@ -359,7 +349,6 @@ export function SubsystemModelCard({
 				<ActionButton
 					icon={<X size={12} />}
 					label="Delete"
-					title={`Delete ${graph.title}`}
 					ariaLabel={`Delete ${graph.title}`}
 					accent={theme.colors.error ?? "#e5534b"}
 					onClick={() => onDelete?.()}
