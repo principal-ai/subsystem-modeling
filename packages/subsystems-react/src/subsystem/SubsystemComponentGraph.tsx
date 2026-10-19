@@ -247,6 +247,13 @@ export interface SubsystemComponentGraphProps {
    */
   hideLayoutToggle?: boolean;
   /**
+   * Refit the camera to the new layout after a direction flip. On by default:
+   * a vertical layout grows downward and would otherwise leave the graph half
+   * off-screen. Turn off for embeds that own their own camera.
+   * @default true
+   */
+  refocusOnDirectionChange?: boolean;
+  /**
    * Deep-link target: when set, the matching trail is selected on mount
    * — its steps expanded and its flow focused on the canvas. Hosts use this
    * when opening the graph from a trail row in a list. Re-applies on a
@@ -604,7 +611,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, title, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
+function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, refocusOnDirectionChange = true, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, title, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
   const { theme } = useTheme();
   const { fitView, fitBounds, screenToFlowPosition } = useReactFlow();
   const viewport = useViewport();
@@ -642,6 +649,8 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   const flipSawPendingLayoutRef = useRef(false);
   /** Pending fade-out timer; non-null only between request and commit. */
   const flipFadeTimerRef = useRef<number | null>(null);
+  /** Set when a direction change starts; the camera refits once layout lands. */
+  const refitAfterLayoutRef = useRef(false);
 
   const changeLayoutDirection = useCallback(
     (next: SubsystemLayoutDirection) => {
@@ -658,14 +667,18 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     if (requestedDirection === committedDirection) {
       // A host can revert a direction before the fade-out commits. Drop the
       // pending flip instead of leaving the canvas edge-less until the safety
-      // timeout. (After a normal commit this ref is already null.)
+      // timeout. A normal commit also lands here (request now equals
+      // committed), but by then the timer ref is already null — and the
+      // pending refit must survive that pass.
       if (flipFadeTimerRef.current != null) {
         clearTimeout(flipFadeTimerRef.current);
         flipFadeTimerRef.current = null;
         setLayoutFlipping(false);
+        refitAfterLayoutRef.current = false;
       }
       return;
     }
+    refitAfterLayoutRef.current = refocusOnDirectionChange;
     const reduceMotion =
       typeof window !== 'undefined' &&
       typeof window.matchMedia === 'function' &&
@@ -686,7 +699,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         flipFadeTimerRef.current = null;
       }
     };
-  }, [requestedDirection, committedDirection]);
+  }, [requestedDirection, committedDirection, refocusOnDirectionChange]);
 
   // Beat 3: the committed layout has settled → the node slide is over, fade
   // the edges back in. The ref keeps the OLD `layoutReady` (still true until
@@ -701,6 +714,26 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     const t = setTimeout(() => setLayoutFlipping(false), LAYOUT_FLIP_NODE_MS);
     return () => clearTimeout(t);
   }, [layoutFlipping, layoutReady]);
+
+  // Camera: a direction flip moves the whole graph, and a vertical layout grows
+  // downward, so keeping the old viewport would leave most of it off-screen.
+  // Refit once the new layout is final — for both the animated flip and the
+  // reduced-motion instant swap. The edge reveal is separate (beat 3 above).
+  // Keyed on `built` as well as `layoutReady`: whichever of the two passes
+  // lands last is the one that has the final positions.
+  useEffect(() => {
+    if (!layoutReady || !refitAfterLayoutRef.current) return;
+    refitAfterLayoutRef.current = false;
+    requestAnimationFrame(() => {
+      fitView({
+        padding: 0.1,
+        includeHiddenNodes: false,
+        minZoom: 0.05,
+        maxZoom: 2,
+        duration: LAYOUT_FLIP_NODE_MS,
+      });
+    });
+  }, [built, layoutReady, fitView]);
 
   // Persist the choice so a model reopens the way it was left.
   useEffect(() => {

@@ -4,7 +4,9 @@
  *
  * The flip is sequenced: edges fade out, ELK re-lays out while the nodes slide
  * to their new slots, then the edges fade back in. Old routes never cut across
- * the new layout mid-flight.
+ * the new layout mid-flight. The camera refits when the new layout lands
+ * (`refocusOnDirectionChange`, on by default) — a vertical graph grows
+ * downward and would otherwise leave most of itself off-screen.
  */
 import React, { useState } from 'react';
 import '@xyflow/react/dist/style.css';
