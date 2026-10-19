@@ -167,8 +167,8 @@ export interface SubsystemGraphifyRelation {
   refs?: string[];
   /**
    * 1-based source line of the relation site. Optional — available on
-   * `calls`/`references`-style edges; used to order an ego graph's callees by
-   * call site when a host opts into line-ordered layering.
+   * `calls`/`references`-style edges; used to order a symbol-focused view's
+   * callees by call site when a host opts into line-ordered layering.
    */
   line?: number;
   /** graphify's provenance tag (`EXTRACTED` / `INFERRED` / `AMBIGUOUS`). */
@@ -1885,8 +1885,8 @@ export async function buildSubsystemGraph(
      * Order same-layer nodes by `component.line` (ascending) instead of ELK's
      * crossing-minimizer. Only meaningful when components carry a `line` — and
      * callers are expected to stamp `line` with the RELEVANT site for their
-     * graph (e.g. an ego graph stamps each callee with the center's call-site
-     * line, not the callee's declaration line).
+     * graph (e.g. a symbol-focused view stamps each callee with the center's
+     * call-site line, not the callee's declaration line).
      * @default false
      */
     orderByLine?: boolean;
