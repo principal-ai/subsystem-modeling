@@ -247,12 +247,13 @@ export interface SubsystemComponentGraphProps {
    */
   hideLayoutToggle?: boolean;
   /**
-   * Refit the camera to the new layout after a direction flip. On by default:
-   * a vertical layout grows downward and would otherwise leave the graph half
-   * off-screen. Turn off for embeds that own their own camera.
+   * Refit the camera to the new layout after a layout flip — a direction
+   * change or a trail-focus change. On by default: a vertical layout grows
+   * downward and would otherwise leave the graph half off-screen. Turn off for
+   * embeds that own their own camera.
    * @default true
    */
-  refocusOnDirectionChange?: boolean;
+  refocusOnLayoutFlip?: boolean;
   /**
    * Deep-link target: when set, the matching trail is selected on mount
    * — its steps expanded and its flow focused on the canvas. Hosts use this
@@ -611,7 +612,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, refocusOnDirectionChange = true, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, title, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
+function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, refocusOnLayoutFlip = true, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, title, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
   const { theme } = useTheme();
   const { fitView, fitBounds, screenToFlowPosition } = useReactFlow();
   const viewport = useViewport();
@@ -649,8 +650,12 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   const flipSawPendingLayoutRef = useRef(false);
   /** Pending fade-out timer; non-null only between request and commit. */
   const flipFadeTimerRef = useRef<number | null>(null);
-  /** Set when a direction change starts; the camera refits once layout lands. */
+  /** Set when a layout flip starts; the camera refits once layout lands. */
   const refitAfterLayoutRef = useRef(false);
+
+  /** Solo layout: only this trail's components and edges are laid out. */
+  const [layoutTrailId, setLayoutTrailId] = useState<string | null>(null);
+  const [committedTrailId, setCommittedTrailId] = useState<string | null>(null);
 
   const changeLayoutDirection = useCallback(
     (next: SubsystemLayoutDirection) => {
@@ -661,11 +666,26 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     [layoutDirectionProp, onLayoutDirectionChange, requestedDirection],
   );
 
-  // Beat 1: request → fade the edges out, then commit the direction (which
-  // re-runs ELK). Reduced-motion users get the new layout immediately.
+  const toggleLayoutFocus = useCallback((trailId: string) => {
+    setLayoutTrailId((cur) => (cur === trailId ? null : trailId));
+  }, []);
+
+  // A focused trail that disappears (model reload) releases the solo layout
+  // instead of pinning the canvas to a slice that no longer exists.
   useEffect(() => {
-    if (requestedDirection === committedDirection) {
-      // A host can revert a direction before the fade-out commits. Drop the
+    if (layoutTrailId && !(trails ?? []).some((t) => t.id === layoutTrailId)) {
+      setLayoutTrailId(null);
+    }
+  }, [trails, layoutTrailId]);
+
+  const requestedLayoutKey = `${requestedDirection}|${layoutTrailId ?? ''}`;
+  const committedLayoutKey = `${committedDirection}|${committedTrailId ?? ''}`;
+
+  // Beat 1: request → fade the edges out, then commit the direction / focus
+  // (which re-runs ELK). Reduced-motion users get the new layout immediately.
+  useEffect(() => {
+    if (requestedLayoutKey === committedLayoutKey) {
+      // A host can revert a request before the fade-out commits. Drop the
       // pending flip instead of leaving the canvas edge-less until the safety
       // timeout. A normal commit also lands here (request now equals
       // committed), but by then the timer ref is already null — and the
@@ -678,13 +698,14 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       }
       return;
     }
-    refitAfterLayoutRef.current = refocusOnDirectionChange;
+    refitAfterLayoutRef.current = refocusOnLayoutFlip;
     const reduceMotion =
       typeof window !== 'undefined' &&
       typeof window.matchMedia === 'function' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduceMotion) {
       setCommittedDirection(requestedDirection);
+      setCommittedTrailId(layoutTrailId);
       return;
     }
     flipSawPendingLayoutRef.current = false;
@@ -692,6 +713,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     flipFadeTimerRef.current = window.setTimeout(() => {
       flipFadeTimerRef.current = null;
       setCommittedDirection(requestedDirection);
+      setCommittedTrailId(layoutTrailId);
     }, LAYOUT_FLIP_EDGE_MS);
     return () => {
       if (flipFadeTimerRef.current != null) {
@@ -699,7 +721,13 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         flipFadeTimerRef.current = null;
       }
     };
-  }, [requestedDirection, committedDirection, refocusOnDirectionChange]);
+  }, [
+    requestedLayoutKey,
+    committedLayoutKey,
+    refocusOnLayoutFlip,
+    requestedDirection,
+    layoutTrailId,
+  ]);
 
   // Beat 3: the committed layout has settled → the node slide is over, fade
   // the edges back in. The ref keeps the OLD `layoutReady` (still true until
@@ -872,8 +900,11 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   // Trails draws runtime step edges. Without visible tabs (no trails,
   // or a sidebar-less embed) fall back to trail edges.
   const sidebarTabsVisible = !hideSidebar && (trails?.length ?? 0) > 0;
-  const resolvedEdgeView: SubsystemEdgeView =
-    edgeView ??
+  // A solo trail layout only draws that flow's steps, so the trail edge source
+  // is the only one that can render anything.
+  const resolvedEdgeView: SubsystemEdgeView = committedTrailId
+    ? 'trails'
+    : edgeView ??
     (sidebarTabsVisible
       ? (sidebarView === 'trails' ? 'trails' : 'graphify')
       : (trails?.length ?? 0) > 0
@@ -1058,16 +1089,39 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   // Pass 1: build with estimated widths so React Flow can measure the DOM.
   // The pane stays hidden until Pass 2 completes. Key off layout-affecting
   // fields only — declarationSpan updates after verify must not re-run ELK.
+  // Solo layout: a trail focus filters the model down to that flow's endpoints
+  // (and drops graphify relations) before it reaches ELK. Built from the
+  // COMMITTED trail, not the requested one, so the swap happens behind the
+  // edge fade like every other layout flip.
+  const layoutDoc = useMemo(() => {
+    if (!committedTrailId) return { components, trails };
+    const trail = (trails ?? []).find((t) => t.id === committedTrailId);
+    if (!trail) return { components, trails };
+    const aliases = new Set<string>();
+    for (const step of trail.steps) {
+      aliases.add(step.from);
+      aliases.add(step.to);
+    }
+    return {
+      components: components.filter((c) => aliases.has(c.alias)),
+      trails: [trail],
+    };
+  }, [components, trails, committedTrailId]);
+  const layoutRelations = committedTrailId ? undefined : graphifyRelations;
+
   const layoutKey = useMemo(
-    () => subsystemGraphLayoutKey({ components, trails, graphifyRelations }),
-    [components, trails, graphifyRelations],
+    () =>
+      subsystemGraphLayoutKey({
+        components: layoutDoc.components,
+        trails: layoutDoc.trails,
+        graphifyRelations: layoutRelations,
+      }),
+    [layoutDoc, layoutRelations],
   );
-  const componentsRef = useRef(components);
-  const trailsRef = useRef(trails);
-  const graphifyRelationsRef = useRef(graphifyRelations);
-  componentsRef.current = components;
-  trailsRef.current = trails;
-  graphifyRelationsRef.current = graphifyRelations;
+  const layoutDocRef = useRef(layoutDoc);
+  const layoutRelationsRef = useRef(layoutRelations);
+  layoutDocRef.current = layoutDoc;
+  layoutRelationsRef.current = layoutRelations;
 
   // Track measured dimensions from React Flow's dimension changes.
   // These arrive as { type: 'dimensions', id, dimensions } in onNodesChange.
@@ -1084,16 +1138,13 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     prevMeasuredSigRef.current = '';
     // Bump generation so any in-flight Pass 2 from the prior layoutKey is ignored.
     pass2GenRef.current += 1;
-    const doc = {
-      components: componentsRef.current,
-      trails: trailsRef.current,
-    };
+    const doc = layoutDocRef.current;
     void buildSubsystemGraph(doc, {
       maxNodeWidth,
       showEdgeLabels,
       showSingletonFrames,
       moduleNesting,
-      graphifyRelations: graphifyRelationsRef.current,
+      graphifyRelations: layoutRelationsRef.current,
       orderByLine,
       layoutDirection: committedDirection,
       codeProcessKeys,
@@ -1145,8 +1196,8 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     const measuredHeights = new Map(leafNodes.map((n) => [n.id, dims.get(n.id)!.height]));
     const gen = ++pass2GenRef.current;
     void buildSubsystemGraph(
-      { components, trails },
-      { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights, showSingletonFrames, moduleNesting, graphifyRelations, orderByLine, layoutDirection: committedDirection, codeProcessKeys },
+      layoutDoc,
+      { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights, showSingletonFrames, moduleNesting, graphifyRelations: layoutRelations, orderByLine, layoutDirection: committedDirection, codeProcessKeys },
     )
       .then(({ nodes, edges: e, absoluteRects }) => {
         if (gen !== pass2GenRef.current) return;
@@ -1159,7 +1210,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         // Reveal Pass 1 layout rather than leaving the cover up forever.
         setLayoutReady(true);
       });
-  }, [built.nodes, components, trails, graphifyRelations, orderByLine, maxNodeWidth, showEdgeLabels, moduleNesting, committedDirection]);
+  }, [built.nodes, layoutDoc, layoutRelations, orderByLine, maxNodeWidth, showEdgeLabels, moduleNesting, committedDirection]);
 
   // After Pass 1 commits, try Pass 2 immediately with retained measurements.
   // Same-id live updates often get no new React Flow `dimensions` events, so
@@ -1843,6 +1894,9 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   );
 
   useEffect(() => {
+    // A layout flip runs its own camera refit when the new layout lands. This
+    // mount/edit fit would otherwise fire mid-flip and fight it.
+    if (layoutFlipping) return;
     const t = setTimeout(() => {
       fitView({ padding: 0.1, includeHiddenNodes: false, minZoom: 0.05, maxZoom: 2, duration: 200 });
     }, 200);
@@ -2930,7 +2984,13 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       focusedStepIndex={focusedStepIndex}
       hoveredTrailStep={hoveredTrailStep}
       onToggleCollapsed={toggleTrailCollapsed}
-      onFocusFlow={focusTrailEdges}
+      onFocusFlow={(tl) => {
+        // While a solo layout is on, following the selection keeps the canvas
+        // and the highlighted flow in agreement instead of leaving the graph
+        // pinned to a flow the user just navigated away from.
+        if (layoutTrailId != null) setLayoutTrailId(tl.id);
+        focusTrailEdges(tl);
+      }}
       onClearFocus={clearTrailFocus}
       onFocusStep={focusTrailStep}
       onHoverStep={(tl, i) => {
@@ -2947,6 +3007,8 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       }}
       onReorder={onReorderTrails}
       proposedAliases={proposedAliases}
+      layoutFocusedTrailId={layoutTrailId}
+      onFocusLayout={toggleLayoutFocus}
     />
   ) : treeFilePaths.length > 0 ? (
     <>

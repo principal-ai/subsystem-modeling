@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import { useTheme } from '@principal-ade/industry-theme';
-import { Check, ChevronDown, Copy, GripVertical, Pause, Play } from 'lucide-react';
+import { Check, ChevronDown, Copy, Focus, GripVertical, Minimize2, Pause, Play } from 'lucide-react';
 import {
   PROPOSED_COLOR,
   reorderTargetIndex,
@@ -61,6 +61,8 @@ function TrailFlow({
   dragActive,
   isHoverSuppressed,
   proposedAliases,
+  layoutFocused,
+  onToggleLayoutFocus,
 }: {
   trail: SubsystemTrail;
   collapsed: boolean;
@@ -86,6 +88,10 @@ function TrailFlow({
    * (darkgoldenrod, same as the proposed node treatment).
    */
   proposedAliases?: ReadonlySet<string>;
+  /** This flow's components are the only ones laid out right now. */
+  layoutFocused?: boolean;
+  /** Solo this flow's components in the layout, or restore the full model. */
+  onToggleLayoutFocus?: (tl: SubsystemTrail) => void;
 }) {
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -102,6 +108,7 @@ function TrailFlow({
   const [headerHover, setHeaderHover] = useState(false);
   const [collapseHover, setCollapseHover] = useState(false);
   const [playHover, setPlayHover] = useState(false);
+  const [focusHover, setFocusHover] = useState(false);
   const [gripHover, setGripHover] = useState(false);
   const [hoveredStep, setHoveredStep] = useState<number | null>(null);
   const stepButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -276,6 +283,49 @@ function TrailFlow({
             {trail.title}
           </span>
         </button>
+        {onToggleLayoutFocus && trail.steps.length > 0 && (
+          <button
+            type="button"
+            aria-label={
+              layoutFocused
+                ? `Exit focus layout for ${trail.title}`
+                : `Focus layout on ${trail.title}`
+            }
+            aria-pressed={!!layoutFocused}
+            title={
+              layoutFocused
+                ? 'Show the full model again'
+                : 'Lay out only this flow’s components'
+            }
+            onMouseEnter={() => setFocusHover(true)}
+            onMouseLeave={() => setFocusHover(false)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleLayoutFocus(trail);
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              alignSelf: 'stretch',
+              width: TRAIL_CONTROL_SIZE,
+              padding: 0,
+              border: 'none',
+              borderRadius: 0,
+              background: layoutFocused || focusHover ? theme.colors.border : 'transparent',
+              color: layoutFocused || focusHover ? theme.colors.text : muted,
+              cursor: 'pointer',
+              transition: 'background 120ms ease, color 120ms ease',
+            }}
+          >
+            {layoutFocused ? (
+              <Minimize2 size={12} strokeWidth={2} />
+            ) : (
+              <Focus size={13} strokeWidth={2} />
+            )}
+          </button>
+        )}
         {!collapsed && (
           <>
           <button
@@ -530,6 +580,13 @@ export interface TrailsPanelProps {
    * (darkgoldenrod, same as the proposed node treatment).
    */
   proposedAliases?: ReadonlySet<string>;
+  /** Trail whose components are the only ones laid out on the canvas, if any. */
+  layoutFocusedTrailId?: string | null;
+  /**
+   * Toggle the solo layout for a flow: relayout the canvas with just that
+   * flow's components and edges. Omit to hide the per-row focus control.
+   */
+  onFocusLayout?: (trailId: string) => void;
 }
 
 /**
@@ -552,6 +609,8 @@ export function TrailsPanel({
   onLeaveStep,
   onReorder,
   proposedAliases,
+  layoutFocusedTrailId,
+  onFocusLayout,
 }: TrailsPanelProps) {
   const { theme } = useTheme();
   // Reordering is offered only while every row is collapsed: the compact list
@@ -732,6 +791,10 @@ export function TrailsPanel({
               dragActive={dragIndex != null}
               isHoverSuppressed={isHoverSuppressed}
               proposedAliases={proposedAliases}
+              layoutFocused={layoutFocusedTrailId === tl.id}
+              onToggleLayoutFocus={
+                onFocusLayout ? (t) => onFocusLayout(t.id) : undefined
+              }
             />
           </div>
         );
