@@ -283,51 +283,51 @@ function TrailFlow({
             {trail.title}
           </span>
         </button>
-        {onToggleLayoutFocus && trail.steps.length > 0 && (
-          <button
-            type="button"
-            aria-label={
-              layoutFocused
-                ? `Exit focus layout for ${trail.title}`
-                : `Focus layout on ${trail.title}`
-            }
-            aria-pressed={!!layoutFocused}
-            title={
-              layoutFocused
-                ? 'Show the full model again'
-                : 'Lay out only this flow’s components'
-            }
-            onMouseEnter={() => setFocusHover(true)}
-            onMouseLeave={() => setFocusHover(false)}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleLayoutFocus(trail);
-            }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              alignSelf: 'stretch',
-              width: TRAIL_CONTROL_SIZE,
-              padding: 0,
-              border: 'none',
-              borderRadius: 0,
-              background: layoutFocused || focusHover ? theme.colors.border : 'transparent',
-              color: layoutFocused || focusHover ? theme.colors.text : muted,
-              cursor: 'pointer',
-              transition: 'background 120ms ease, color 120ms ease',
-            }}
-          >
-            {layoutFocused ? (
-              <Minimize2 size={12} strokeWidth={2} />
-            ) : (
-              <Focus size={13} strokeWidth={2} />
-            )}
-          </button>
-        )}
         {!collapsed && (
           <>
+          {onToggleLayoutFocus && trail.steps.length > 0 && (
+            <button
+              type="button"
+              aria-label={
+                layoutFocused
+                  ? `Exit focus layout for ${trail.title}`
+                  : `Focus layout on ${trail.title}`
+              }
+              aria-pressed={!!layoutFocused}
+              title={
+                layoutFocused
+                  ? 'Show the full model again'
+                  : 'Lay out only this flow’s components'
+              }
+              onMouseEnter={() => setFocusHover(true)}
+              onMouseLeave={() => setFocusHover(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleLayoutFocus(trail);
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                alignSelf: 'stretch',
+                width: TRAIL_CONTROL_SIZE,
+                padding: 0,
+                border: 'none',
+                borderRadius: 0,
+                background: layoutFocused || focusHover ? theme.colors.border : 'transparent',
+                color: layoutFocused || focusHover ? theme.colors.text : muted,
+                cursor: 'pointer',
+                transition: 'background 120ms ease, color 120ms ease',
+              }}
+            >
+              {layoutFocused ? (
+                <Minimize2 size={12} strokeWidth={2} />
+              ) : (
+                <Focus size={13} strokeWidth={2} />
+              )}
+            </button>
+          )}
           <button
             type="button"
             aria-label={playing ? `Pause ${trail.title} autoplay` : `Play ${trail.title}`}
