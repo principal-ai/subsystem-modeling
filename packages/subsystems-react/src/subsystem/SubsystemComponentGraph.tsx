@@ -3271,6 +3271,11 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         className={GRAPH_CANVAS_CLASS}
+        // The key above remounts ReactFlow when the node/edge SET changes (a
+        // trail-focus layout, a filtered model). A remount otherwise resets the
+        // viewport to identity — a visible jump to scale 1 before the post-flip
+        // refit. Seed the new instance with the viewport the old one had.
+        defaultViewport={viewport}
         {...GRAPH_NAV_PROPS}
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
