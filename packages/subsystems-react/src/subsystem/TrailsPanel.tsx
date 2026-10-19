@@ -27,6 +27,15 @@ import { buildStepBrief } from './trailBrief';
 /** Pause (ms) between steps when a trail autoplays. */
 export const TRAIL_PLAY_PAUSE_MS = 2500;
 
+/**
+ * Dwell time (ms) before a hover preview reaches the canvas.
+ *
+ * The row's own highlight stays immediate; the canvas preview (dimming +
+ * camera frame) waits this long, so sweeping the pointer across steps does not
+ * fire a reframe per step. Leaving hover clears immediately.
+ */
+export const TRAIL_HOVER_PREVIEW_MS = 150;
+
 /** How long a step's copy button flashes its "copied" checkmark (ms). */
 export const STEP_COPY_FEEDBACK_MS = 2000;
 
@@ -111,6 +120,27 @@ function TrailFlow({
   const [focusHover, setFocusHover] = useState(false);
   const [gripHover, setGripHover] = useState(false);
   const [hoveredStep, setHoveredStep] = useState<number | null>(null);
+  // Dwell timer for the canvas preview. The row highlight is immediate; only
+  // the `onHover*` callbacks (dim + camera) are delayed.
+  const hoverPreviewTimerRef = useRef<number | null>(null);
+  const cancelHoverPreview = useCallback(() => {
+    if (hoverPreviewTimerRef.current != null) {
+      window.clearTimeout(hoverPreviewTimerRef.current);
+      hoverPreviewTimerRef.current = null;
+    }
+  }, []);
+  const scheduleHoverPreview = useCallback(
+    (run: () => void) => {
+      cancelHoverPreview();
+      hoverPreviewTimerRef.current = window.setTimeout(() => {
+        hoverPreviewTimerRef.current = null;
+        run();
+      }, TRAIL_HOVER_PREVIEW_MS);
+    },
+    [cancelHoverPreview],
+  );
+  // A pending preview must not fire after the row unmounts or collapses.
+  useEffect(() => () => cancelHoverPreview(), [cancelHoverPreview]);
   const stepButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   // Per-step copy affordance: revealed while a row is hovered or holds focus.
   // `focusedStep` tracks focus-within (button or its copy control) so the icon
@@ -178,6 +208,12 @@ function TrailFlow({
     setHoveredStep(null);
   }, [dragActive]);
 
+  // Expanding / collapsing swaps which preview applies (header flow vs step
+  // list). Drop any pending preview so it cannot fire against the new shape.
+  useEffect(() => {
+    cancelHoverPreview();
+  }, [collapsed, cancelHoverPreview]);
+
   const startPlaying = useCallback(() => {
     if (collapsed) onToggleCollapsed(trail.id);
     if (active === null || active.stepIndex !== null) onFocusFlow(trail);
@@ -220,11 +256,14 @@ function TrailFlow({
         onMouseEnter={() => {
           if (isHoverSuppressed?.()) return;
           setHeaderHover(true);
-          if (collapsed) onHoverFlow(trail);
+          if (collapsed) scheduleHoverPreview(() => onHoverFlow(trail));
         }}
         onMouseLeave={() => {
           setHeaderHover(false);
-          if (collapsed) onLeaveStep();
+          if (collapsed) {
+            cancelHoverPreview();
+            onLeaveStep();
+          }
         }}
         style={{
           display: 'flex',
@@ -420,6 +459,7 @@ function TrailFlow({
         <div
           style={{ display: 'flex', flexDirection: 'column' }}
           onMouseLeave={() => {
+            cancelHoverPreview();
             setHoveredStep(null);
             onLeaveStep();
           }}
@@ -450,7 +490,7 @@ function TrailFlow({
                   title={proposed ? 'Step touches a proposed component' : undefined}
                   onMouseEnter={() => {
                     setHoveredStep(i);
-                    onHoverStep(trail, i);
+                    scheduleHoverPreview(() => onHoverStep(trail, i));
                   }}
                   onClick={() => onFocusStep(trail, i)}
                   style={{
