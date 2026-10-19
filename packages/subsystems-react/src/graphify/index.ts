@@ -78,3 +78,9 @@ export {
   extractGraphifySignature,
   compareSignatures,
 } from './signature';
+export type {
+  SymbolFocusedViewInput,
+  SymbolFocusedViewOptions,
+  SymbolFocusedViewGraph,
+} from './symbolFocus';
+export { toSymbolFocusedView } from './symbolFocus';
