@@ -137,6 +137,17 @@ export interface SubsystemComponent extends CoreSubsystemComponent {
 export type SubsystemEdgeView = 'graphify' | 'trails';
 
 /**
+ * Flow direction of the layered layout.
+ *
+ * - `horizontal`: layers run left-to-right (ELK `RIGHT`)
+ * - `vertical`: layers run top-to-bottom (ELK `DOWN`)
+ *
+ * Edge-less containment graphs (pure module/process frames) keep their
+ * existing DOWN + grid treatment in either mode — there is no flow to orient.
+ */
+export type SubsystemLayoutDirection = 'horizontal' | 'vertical';
+
+/**
  * Where a display edge came from.
  *
  * - `subsystem` (default): a trail step mechanism verb, colored from
@@ -1867,6 +1878,22 @@ export function subsystemGraphLayoutKey(
 }
 
 /**
+ * ELK `elk.direction` for a requested flow direction.
+ *
+ * Edge-less containment graphs have no flow to orient: a RIGHT layout stacks
+ * disconnected top-level frames in one long vertical column, while DOWN places
+ * those sibling frames along the horizontal axis and stacks each frame's
+ * members vertically. That containment treatment wins in both modes.
+ */
+export function elkDirectionFor(
+  layoutDirection: SubsystemLayoutDirection,
+  hasEdges: boolean,
+): 'RIGHT' | 'DOWN' {
+  if (!hasEdges) return 'DOWN';
+  return layoutDirection === 'vertical' ? 'DOWN' : 'RIGHT';
+}
+
+/**
  * Build the full React Flow graph (nodes + edges) using **ELK auto-layout** to
  * position every node (including external stub targets), so the graph is
  * layered with minimized crossings.
@@ -1890,6 +1917,13 @@ export async function buildSubsystemGraph(
      * @default false
      */
     orderByLine?: boolean;
+    /**
+     * Flow direction of the layered layout. `horizontal` (default) lays layers
+     * left-to-right, `vertical` top-to-bottom. Edge-less containment graphs
+     * keep their DOWN + grid treatment either way.
+     * @default 'horizontal'
+     */
+    layoutDirection?: SubsystemLayoutDirection;
   } & BoundaryFrameOptions = {},
 ): Promise<{
   nodes: SubsystemGraphNode[];
@@ -1912,6 +1946,7 @@ export async function buildSubsystemGraph(
     moduleNesting,
     graphifyRelations,
     orderByLine = false,
+    layoutDirection = 'horizontal',
     codeProcessKeys,
   } = opts;
   const frameOpts: BoundaryFrameOptions = {
@@ -2020,12 +2055,14 @@ export async function buildSubsystemGraph(
     try {
       const result = await computeElkLayout(nodes, edges, {
         routingStyle: 'orthogonal',
-        // Edge-driven graphs flow left-to-right. With no edges (pure
-        // containment, e.g. the static-topology layer) a RIGHT layout stacks
-        // disconnected top-level frames in one vertical column; DOWN makes the
-        // layered pass place those sibling frames along the horizontal axis
-        // while each frame's members stack vertically.
-        direction: edges.length > 0 ? 'RIGHT' : 'DOWN',
+        // Edge-driven graphs flow left-to-right (or top-to-bottom when the
+        // host asks for a vertical layout). With no edges (pure containment,
+        // e.g. the static-topology layer) a RIGHT layout stacks disconnected
+        // top-level frames in one vertical column; DOWN makes the layered pass
+        // place those sibling frames along the horizontal axis while each
+        // frame's members stack vertically. There is no flow to orient there,
+        // so the containment treatment wins in both modes.
+        direction: elkDirectionFor(layoutDirection, edges.length > 0),
         // Edge-less containment: fold the root frames into a column-major grid
         // so the shape reads closer to square than one long strip.
         reflowGrid: edges.length === 0,

@@ -43,7 +43,28 @@ export const GRAPH_NAV_PROPS = {
  */
 export const GRAPH_CANVAS_CLASS = 'subsystem-graph-canvas';
 
-export const GRAPH_LAYER_CSS = `.${GRAPH_CANVAS_CLASS} .react-flow__nodes { z-index: 1; }`;
+/**
+ * Applied to the canvas box while a layout-direction flip is in progress.
+ *
+ * The flip is sequenced in three beats: edges fade out (`LAYOUT_FLIP_EDGE_MS`),
+ * the graph re-lays out with nodes sliding to their new slots
+ * (`LAYOUT_FLIP_NODE_MS`), then edges fade back in. Hiding the edges first
+ * keeps the old routes from cutting across the new layout mid-flight.
+ */
+export const LAYOUT_FLIP_CLASS = 'subsystem-layout-flipping';
+
+/** Edge fade-out/in duration around a layout flip, ms. */
+export const LAYOUT_FLIP_EDGE_MS = 180;
+
+/** Node slide duration to the new layout, ms. */
+export const LAYOUT_FLIP_NODE_MS = 320;
+
+export const GRAPH_LAYER_CSS = `
+.${GRAPH_CANVAS_CLASS} .react-flow__nodes { z-index: 1; }
+.${GRAPH_CANVAS_CLASS} .react-flow__edges { transition: opacity ${LAYOUT_FLIP_EDGE_MS}ms ease; }
+.${LAYOUT_FLIP_CLASS} .react-flow__edges { opacity: 0; }
+.${LAYOUT_FLIP_CLASS} .react-flow__node { transition: transform ${LAYOUT_FLIP_NODE_MS}ms cubic-bezier(0.4, 0, 0.2, 1); }
+`;
 
 /** Scoped style tag for `GRAPH_LAYER_CSS`; render once beside `<ReactFlow>`. */
 export function GraphLayerStyle() {

@@ -241,6 +241,7 @@ export type {
   SubsystemEdgeMechanism,
   SubsystemEdgeView,
   SubsystemEdgeProvenance,
+  SubsystemLayoutDirection,
   SubsystemGraphifyRelation,
   SubsystemConstructDeclaration,
   SubsystemDeclarationProvenance,

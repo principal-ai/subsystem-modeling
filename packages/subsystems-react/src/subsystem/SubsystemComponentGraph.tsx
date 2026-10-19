@@ -32,7 +32,7 @@ import {
   applyNodeChanges,
 } from '@xyflow/react';
 import { useTheme } from '@principal-ade/industry-theme';
-import { FileText, Unlink, X } from 'lucide-react';
+import { FileText, ArrowDown, ArrowRight, Unlink, X } from 'lucide-react';
 import { IndustryMarkdownSlide } from 'themed-markdown';
 import {
   buildSubsystemGraph,
@@ -50,6 +50,7 @@ import {
   type SubsystemComponent,
   type SubsystemEdgeProvenance,
   type SubsystemEdgeView,
+  type SubsystemLayoutDirection,
   type SubsystemGraphifyRelation,
   type SubsystemNodeIssue,
   type SubsystemRegionIssue,
@@ -81,7 +82,7 @@ import {
 } from './IssueList';
 import { SubsystemFileTree } from './SubsystemFileTree';
 import { GraphLayoutCover } from './GraphLayoutCover';
-import { GRAPH_CANVAS_CLASS, GRAPH_NAV_PROPS, GraphChrome, GraphLayerStyle } from './graphChrome';
+import { GRAPH_CANVAS_CLASS, GRAPH_NAV_PROPS, GraphChrome, GraphLayerStyle, LAYOUT_FLIP_CLASS, LAYOUT_FLIP_EDGE_MS, LAYOUT_FLIP_NODE_MS } from './graphChrome';
 import { ComponentDeclaration } from './ComponentDeclaration';
 import type { ComponentVerificationState } from './ComponentDeclaration';
 import type { DeclarationSymbolRef, SymbolInspection } from './symbolRefs';
@@ -161,6 +162,8 @@ interface PersistedViewState {
   sidebarWidth?: number;
   sidebarView?: 'files' | 'trails';
   diagnosticsTab?: 'issues' | 'agents';
+  /** Flow direction chosen with the canvas toggle, restored on the next visit. */
+  layoutDirection?: SubsystemLayoutDirection;
 }
 
 const VIEW_STATE_PREFIX = 'principal.subsystems.viewState.';
@@ -217,6 +220,32 @@ export interface SubsystemComponentGraphProps {
    * `line` for this to have any effect. @default false
    */
   orderByLine?: boolean;
+  /**
+   * Flow direction of the layered layout. `horizontal` (default) runs layers
+   * left-to-right; `vertical` runs them top-to-bottom. Edge-less containment
+   * graphs keep their DOWN + grid treatment either way.
+   *
+   * Pass this to control the direction from the host; leave it unset to let
+   * the graph own it (seeded by `defaultLayoutDirection`, updated by the
+   * built-in toggle, and persisted under `persistKey`).
+   */
+  layoutDirection?: SubsystemLayoutDirection;
+  /**
+   * Initial flow direction when uncontrolled. Ignored when `layoutDirection`
+   * is provided. @default 'horizontal'
+   */
+  defaultLayoutDirection?: SubsystemLayoutDirection;
+  /**
+   * Fired when the built-in toggle (or a host control) requests a different
+   * direction. Hosts that pass `layoutDirection` must update it here; hosts
+   * that don't can use it to observe the change.
+   */
+  onLayoutDirectionChange?: (direction: SubsystemLayoutDirection) => void;
+  /**
+   * Hide the built-in horizontal/vertical toggle in the canvas corner.
+   * @default false
+   */
+  hideLayoutToggle?: boolean;
   /**
    * Deep-link target: when set, the matching trail is selected on mount
    * — its steps expanded and its flow focused on the canvas. Hosts use this
@@ -575,7 +604,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, trails, graphifyRelations, orderByLine, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, title, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
+function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, title, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
   const { theme } = useTheme();
   const { fitView, fitBounds, screenToFlowPosition } = useReactFlow();
   const viewport = useViewport();
@@ -596,6 +625,98 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
     absoluteRects: new Map(),
   });
   const [layoutReady, setLayoutReady] = useState(false);
+
+  // --- Layout direction -----------------------------------------------------
+  // The graph owns direction unless the host passes `layoutDirection`. A change
+  // is sequenced so old edge routes never cut across the new layout: edges fade
+  // out, ELK re-lays out while the nodes slide to their new slots, then the
+  // edges fade back in. Two values keep that honest: `requestedDirection` is
+  // what the toggle shows, `committedDirection` is what ELK last ran with.
+  const [ownDirection, setOwnDirection] = useState<SubsystemLayoutDirection>(
+    () => persisted.layoutDirection ?? defaultLayoutDirection,
+  );
+  const requestedDirection = layoutDirectionProp ?? ownDirection;
+  const [committedDirection, setCommittedDirection] =
+    useState<SubsystemLayoutDirection>(requestedDirection);
+  const [layoutFlipping, setLayoutFlipping] = useState(false);
+  const flipSawPendingLayoutRef = useRef(false);
+  /** Pending fade-out timer; non-null only between request and commit. */
+  const flipFadeTimerRef = useRef<number | null>(null);
+
+  const changeLayoutDirection = useCallback(
+    (next: SubsystemLayoutDirection) => {
+      if (next === requestedDirection) return;
+      if (layoutDirectionProp == null) setOwnDirection(next);
+      onLayoutDirectionChange?.(next);
+    },
+    [layoutDirectionProp, onLayoutDirectionChange, requestedDirection],
+  );
+
+  // Beat 1: request → fade the edges out, then commit the direction (which
+  // re-runs ELK). Reduced-motion users get the new layout immediately.
+  useEffect(() => {
+    if (requestedDirection === committedDirection) {
+      // A host can revert a direction before the fade-out commits. Drop the
+      // pending flip instead of leaving the canvas edge-less until the safety
+      // timeout. (After a normal commit this ref is already null.)
+      if (flipFadeTimerRef.current != null) {
+        clearTimeout(flipFadeTimerRef.current);
+        flipFadeTimerRef.current = null;
+        setLayoutFlipping(false);
+      }
+      return;
+    }
+    const reduceMotion =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) {
+      setCommittedDirection(requestedDirection);
+      return;
+    }
+    flipSawPendingLayoutRef.current = false;
+    setLayoutFlipping(true);
+    flipFadeTimerRef.current = window.setTimeout(() => {
+      flipFadeTimerRef.current = null;
+      setCommittedDirection(requestedDirection);
+    }, LAYOUT_FLIP_EDGE_MS);
+    return () => {
+      if (flipFadeTimerRef.current != null) {
+        clearTimeout(flipFadeTimerRef.current);
+        flipFadeTimerRef.current = null;
+      }
+    };
+  }, [requestedDirection, committedDirection]);
+
+  // Beat 3: the committed layout has settled → the node slide is over, fade
+  // the edges back in. The ref keeps the OLD `layoutReady` (still true until
+  // the new pass 1 commits) from ending the flip before the layout swaps.
+  useEffect(() => {
+    if (!layoutFlipping) return;
+    if (!layoutReady) {
+      flipSawPendingLayoutRef.current = true;
+      return;
+    }
+    if (!flipSawPendingLayoutRef.current) return;
+    const t = setTimeout(() => setLayoutFlipping(false), LAYOUT_FLIP_NODE_MS);
+    return () => clearTimeout(t);
+  }, [layoutFlipping, layoutReady]);
+
+  // Persist the choice so a model reopens the way it was left.
+  useEffect(() => {
+    if (!persistKey) return;
+    writeViewState(persistKey, { layoutDirection: requestedDirection });
+  }, [persistKey, requestedDirection]);
+
+  // Safety net: never leave the canvas edge-less if a layout pass stalls
+  // (measurement never lands, ELK hangs). The edges come back; the layout
+  // stays wherever it got to.
+  useEffect(() => {
+    if (!layoutFlipping) return;
+    const t = setTimeout(() => setLayoutFlipping(false), 5000);
+    return () => clearTimeout(t);
+  }, [layoutFlipping]);
+
   const [selected, setSelected] = useState<SubsystemComponent | null>(null);
   /** Bottom drawer: single file or trail multi-snippet mode. */
   const [drawerTarget, setDrawerTarget] = useState<DrawerTarget | null>(null);
@@ -941,6 +1062,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
       moduleNesting,
       graphifyRelations: graphifyRelationsRef.current,
       orderByLine,
+      layoutDirection: committedDirection,
       codeProcessKeys,
     })
       .then(({ nodes, edges: e, absoluteRects }) => {
@@ -964,7 +1086,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
         setLayoutReady(true);
       });
     return () => { alive = false; };
-  }, [layoutKey, maxNodeWidth, showEdgeLabels, moduleNesting]);
+  }, [layoutKey, maxNodeWidth, showEdgeLabels, moduleNesting, committedDirection]);
 
   // Pass 2: once every leaf node has a measured dimension, re-run ELK.
   // Group parents are sized by ELK, not measured — exclude them or pass 2
@@ -991,7 +1113,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
     const gen = ++pass2GenRef.current;
     void buildSubsystemGraph(
       { components, trails },
-      { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights, showSingletonFrames, moduleNesting, graphifyRelations, orderByLine, codeProcessKeys },
+      { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights, showSingletonFrames, moduleNesting, graphifyRelations, orderByLine, layoutDirection: committedDirection, codeProcessKeys },
     )
       .then(({ nodes, edges: e, absoluteRects }) => {
         if (gen !== pass2GenRef.current) return;
@@ -1004,7 +1126,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
         // Reveal Pass 1 layout rather than leaving the cover up forever.
         setLayoutReady(true);
       });
-  }, [built.nodes, components, trails, graphifyRelations, orderByLine, maxNodeWidth, showEdgeLabels, moduleNesting]);
+  }, [built.nodes, components, trails, graphifyRelations, orderByLine, maxNodeWidth, showEdgeLabels, moduleNesting, committedDirection]);
 
   // After Pass 1 commits, try Pass 2 immediately with retained measurements.
   // Same-id live updates often get no new React Flow `dimensions` events, so
@@ -2858,6 +2980,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
             overlays shift with the canvas, not the labels. Collapses when the
             file drawer fills the column (whole-file reading). */}
         <div
+          className={layoutFlipping ? LAYOUT_FLIP_CLASS : undefined}
           style={{
             position: 'relative',
             flex: collapseCanvas ? 0 : 1,
@@ -2877,6 +3000,8 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
             overflow: 'hidden',
             pointerEvents: 'none',
             zIndex: 5,
+            opacity: layoutFlipping ? 0 : 1,
+            transition: `opacity ${LAYOUT_FLIP_EDGE_MS}ms ease`,
           }}
         >
           {edgeLabels.map((lbl) => {
@@ -3069,6 +3194,52 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
       >
         <GraphChrome />
       </ReactFlow>
+      {!hideLayoutToggle && (
+        <button
+          type="button"
+          onClick={() =>
+            changeLayoutDirection(
+              requestedDirection === 'horizontal' ? 'vertical' : 'horizontal',
+            )
+          }
+          disabled={layoutFlipping}
+          title={
+            requestedDirection === 'horizontal'
+              ? 'Switch to a vertical layout (top-to-bottom)'
+              : 'Switch to a horizontal layout (left-to-right)'
+          }
+          aria-label={
+            requestedDirection === 'horizontal'
+              ? 'Switch to vertical layout'
+              : 'Switch to horizontal layout'
+          }
+          style={{
+            position: 'absolute',
+            top: 10,
+            right: 10,
+            zIndex: 6,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
+            padding: '4px 9px',
+            border: `1px solid ${theme.colors.border}`,
+            borderRadius: 6,
+            background: theme.colors.backgroundSecondary ?? theme.colors.background,
+            color: theme.colors.textSecondary,
+            fontFamily: theme.fonts.monospace,
+            fontSize: theme.fontSizes[0],
+            cursor: layoutFlipping ? 'default' : 'pointer',
+            opacity: layoutFlipping ? 0.55 : 1,
+          }}
+        >
+          {requestedDirection === 'horizontal' ? (
+            <ArrowDown size={13} aria-hidden="true" />
+          ) : (
+            <ArrowRight size={13} aria-hidden="true" />
+          )}
+          {requestedDirection === 'horizontal' ? 'Vertical' : 'Horizontal'}
+        </button>
+      )}
       {unroutedIds.length > 0 && (
         <div
           role="status"
@@ -3355,8 +3526,10 @@ function Inner({ components, trails, graphifyRelations, orderByLine, initialTrai
           </div>
         </div>
       )}
-      {/* Startup cover — hides measurement, layout swap, and camera settle. */}
-      <GraphLayoutCover revealed={layoutReady} />
+      {/* Startup cover — hides measurement, layout swap, and camera settle.
+          Kept away during a direction flip: the flip is meant to be watched,
+          and the cover would swallow the node slide. */}
+      <GraphLayoutCover revealed={layoutReady || layoutFlipping} />
       {canvasOverlay}
       {liveEvents ? <MaintainLivePanel {...liveEvents} /> : null}
       </div>
