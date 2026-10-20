@@ -13,7 +13,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import { useTheme } from '@principal-ade/industry-theme';
-import { Check, ChevronDown, Copy, Focus, GripVertical, Minimize2, Pause, Play } from 'lucide-react';
+import { Check, ChevronDown, Copy, Focus, GripVertical, Minimize2, Pause, Play, Star } from 'lucide-react';
+import { IndustryMarkdownSlide } from 'themed-markdown';
 import {
   PROPOSED_COLOR,
   reorderTargetIndex,
@@ -23,9 +24,18 @@ import {
   type SubsystemTrailStep,
 } from './model';
 import { buildStepBrief } from './trailBrief';
+import { emphasisKey, type StepEmphasisMap } from './stepEmphasis';
+import {
+  trailStepDisplay,
+  type TrailComponentLabels,
+} from './trailStepDisplay';
+import { buildTrailStack } from './trailStack';
 
 /** Pause (ms) between steps when a trail autoplays. */
 export const TRAIL_PLAY_PAUSE_MS = 2500;
+
+/** Single accent for a key step (no kind vocabulary — the mark is a star). */
+const EMPHASIS_COLOR = '#f5a524';
 
 /**
  * Dwell time (ms) before a hover preview reaches the canvas.
@@ -59,6 +69,7 @@ function TrailFlow({
   trail,
   collapsed,
   active,
+  focusedStepIndex,
   onToggleCollapsed,
   onFocusFlow,
   onClearFocus,
@@ -72,11 +83,19 @@ function TrailFlow({
   proposedAliases,
   layoutFocused,
   onToggleLayoutFocus,
+  stepEmphasis,
+  onRemoveStepEmphasis,
+  componentByAlias,
 }: {
   trail: SubsystemTrail;
   collapsed: boolean;
   /** `{ stepIndex: null }` = whole flow focused; `{ stepIndex }` = one step. */
   active: { stepIndex: number | null } | null;
+  /**
+   * The step currently focused by the host (not merely hovered). The guidance
+   * body follows this, so sweeping the pointer does not expand every step.
+   */
+  focusedStepIndex: number | null;
   onToggleCollapsed: (tlId: string) => void;
   onFocusFlow: (tl: SubsystemTrail) => void;
   onClearFocus: () => void;
@@ -101,6 +120,16 @@ function TrailFlow({
   layoutFocused?: boolean;
   /** Solo this flow's components in the layout, or restore the full model. */
   onToggleLayoutFocus?: (tl: SubsystemTrail) => void;
+  /**
+   * Host-owned emphasis augmentations for this model. Absent = no marks. The
+   * map is keyed by `emphasisKey` (trail + claim fingerprint), so reordering
+   * steps keeps marks attached.
+   */
+  stepEmphasis?: StepEmphasisMap;
+  /** Toggle a step's guidance off. Omit to hide the remove action. */
+  onRemoveStepEmphasis?: (tl: SubsystemTrail, stepIndex: number) => void;
+  /** Alias → component, for turning hops into human display names. */
+  componentByAlias?: TrailComponentLabels;
 }) {
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -114,6 +143,14 @@ function TrailFlow({
     (proposedAliases != null &&
       (proposedAliases.has(step.from) || proposedAliases.has(step.to)));
   const touchesProposed = trail.steps.some((s) => stepProposed(s));
+  // Emphasis is keyed by trail + claim fingerprint, so the count follows the
+  // steps through a reorder.
+  const emphasisCount = stepEmphasis
+    ? trail.steps.reduce(
+        (count, step) => count + (stepEmphasis.has(emphasisKey(trail.id, step)) ? 1 : 0),
+        0,
+      )
+    : 0;
   const [headerHover, setHeaderHover] = useState(false);
   const [collapseHover, setCollapseHover] = useState(false);
   const [playHover, setPlayHover] = useState(false);
@@ -322,6 +359,24 @@ function TrailFlow({
             {trail.title}
           </span>
         </button>
+        {emphasisCount > 0 && (
+          <span
+            title={`${emphasisCount} emphasized step${emphasisCount === 1 ? '' : 's'}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 2,
+              flexShrink: 0,
+              marginRight: 4,
+              fontSize: theme.fontSizes[0],
+              fontFamily: theme.fonts.monospace,
+              color: theme.colors.accent ?? theme.colors.primary ?? muted,
+            }}
+          >
+            <Star size={11} strokeWidth={2} fill="currentColor" />
+            {emphasisCount}
+          </span>
+        )}
         {!collapsed && (
           <>
           {onToggleLayoutFocus && trail.steps.length > 0 && (
@@ -471,6 +526,18 @@ function TrailFlow({
               stepActive || hoveredStep === i || focusedStep === i || copiedStep === i;
             const copied = copiedStep === i;
             const copyHovered = copyHoverStep === i;
+            const record = stepEmphasis?.get(emphasisKey(trail.id, step));
+            const display = trailStepDisplay(step, componentByAlias);
+            // Calls nest; uses/data steps sit at their anchor frame's depth.
+            const stackDepth = buildTrailStack(
+              trail,
+              i,
+              componentByAlias,
+            ).frames.length;
+            // The guidance body follows step focus: clicking a step opens it,
+            // clicking the focused step again returns to the flow. Hover is
+            // deliberately not enough — the list would flutter on sweep.
+            const guidanceVisible = focusedStepIndex === i && !!record?.guidance;
             return (
               <div
                 key={`${trailStepGraphEdgeId(step)}-${i}`}
@@ -482,12 +549,16 @@ function TrailFlow({
                   }
                 }}
               >
+                {/* The row's absolute affordances (star, copy) are scoped to
+                    this wrapper so the guidance body below cannot stretch
+                    them — `top:0;bottom:0` on the outer row would grow their
+                    hit area with the markdown block. */}
+                <div style={{ position: 'relative' }}>
                 <button
                   ref={(el) => {
                     stepButtonRefs.current[i] = el;
                   }}
                   type="button"
-                  title={proposed ? 'Step touches a proposed component' : undefined}
                   onMouseEnter={() => {
                     setHoveredStep(i);
                     scheduleHoverPreview(() => onHoverStep(trail, i));
@@ -495,11 +566,13 @@ function TrailFlow({
                   onClick={() => onFocusStep(trail, i)}
                   style={{
                     display: 'flex',
-                    alignItems: 'center',
+                    alignItems: 'flex-start',
                     gap: 8,
                     minWidth: 0,
                     width: '100%',
-                    padding: '8px 36px 8px 17px',
+                    padding: `8px 70px 8px ${
+                      17 + Math.max(0, stackDepth - 1) * 10
+                    }px`,
                     textAlign: 'left',
                     borderRadius: 0,
                     border: 'none',
@@ -513,14 +586,17 @@ function TrailFlow({
                     style={{
                       flexShrink: 0,
                       width: 14,
+                      paddingTop: 1,
                       fontSize: theme.fontSizes[0],
                       fontFamily: theme.fonts.monospace,
-                      fontWeight: proposed ? 700 : undefined,
-                      color: proposed
-                        ? PROPOSED_COLOR
-                        : stepActive
-                          ? theme.colors.text
-                          : muted,
+                      fontWeight: record || proposed ? 700 : undefined,
+                      color: record
+                        ? EMPHASIS_COLOR
+                        : proposed
+                          ? PROPOSED_COLOR
+                          : stepActive
+                            ? theme.colors.text
+                            : muted,
                     }}
                   >
                     {i + 1}
@@ -529,17 +605,41 @@ function TrailFlow({
                     style={{
                       flex: 1,
                       minWidth: 0,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
+                      overflowWrap: 'anywhere',
+                      whiteSpace: 'normal',
                       fontSize: theme.fontSizes[1],
                       fontFamily: theme.fonts.monospace,
-                      color: proposed ? PROPOSED_COLOR : theme.colors.text,
+                      color: record
+                        ? EMPHASIS_COLOR
+                        : proposed
+                          ? PROPOSED_COLOR
+                          : theme.colors.text,
                     }}
                   >
-                    {step.symbol}
+                    {display.primary}
                   </span>
                 </button>
+                {record && (
+                  <span
+                    aria-hidden
+                    title="Key step"
+                    style={{
+                      position: 'absolute',
+                      right: 34,
+                      top: 0,
+                      bottom: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 'auto',
+                      aspectRatio: '1 / 1',
+                      pointerEvents: 'none',
+                      color: EMPHASIS_COLOR,
+                    }}
+                  >
+                    <Star size={12} strokeWidth={2} fill={EMPHASIS_COLOR} />
+                  </span>
+                )}
                 {revealed && (
                   <button
                     type="button"
@@ -580,6 +680,49 @@ function TrailFlow({
                       <Copy size={12} strokeWidth={2} />
                     )}
                   </button>
+                )}
+                </div>
+                {guidanceVisible && record?.guidance && (
+                  <div
+                    style={{
+                      // Align with the step text: 17px row inset + 14px number
+                      // column + 8px gap.
+                      padding: '2px 12px 10px 39px',
+                      fontSize: theme.fontSizes[0],
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <IndustryMarkdownSlide
+                      content={record.guidance}
+                      slideIdPrefix={`step-guidance-${trail.id}-${i}`}
+                      slideIndex={0}
+                      isVisible={true}
+                      theme={theme}
+                      disableScroll={true}
+                      disableBasePadding
+                      enableKeyboardScrolling={false}
+                      autoFocusOnVisible={false}
+                    />
+                    {onRemoveStepEmphasis && (
+                      <button
+                        type="button"
+                        onClick={() => onRemoveStepEmphasis(trail, i)}
+                        style={{
+                          marginTop: 6,
+                          padding: 0,
+                          border: 'none',
+                          background: 'transparent',
+                          color: muted,
+                          fontFamily: theme.fonts.monospace,
+                          fontSize: theme.fontSizes[0],
+                          textDecoration: 'underline',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Remove guidance
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             );
@@ -627,6 +770,12 @@ export interface TrailsPanelProps {
    * flow's components and edges. Omit to hide the per-row focus control.
    */
   onFocusLayout?: (trailId: string) => void;
+  /** Host-owned step emphasis augmentations, keyed by trail + claim fingerprint. */
+  stepEmphasis?: StepEmphasisMap;
+  /** Toggle a step's guidance off. Omit to hide the remove action. */
+  onRemoveStepEmphasis?: (tl: SubsystemTrail, stepIndex: number) => void;
+  /** Alias → component, for turning hops into human display names. */
+  componentByAlias?: TrailComponentLabels;
 }
 
 /**
@@ -651,6 +800,9 @@ export function TrailsPanel({
   proposedAliases,
   layoutFocusedTrailId,
   onFocusLayout,
+  stepEmphasis,
+  onRemoveStepEmphasis,
+  componentByAlias,
 }: TrailsPanelProps) {
   const { theme } = useTheme();
   // Reordering is offered only while every row is collapsed: the compact list
@@ -811,6 +963,7 @@ export function TrailsPanel({
                     ? { stepIndex: hoveredTrailStep.stepIndex }
                     : null
               }
+              focusedStepIndex={focusedTrailId === tl.id ? focusedStepIndex : null}
               onToggleCollapsed={onToggleCollapsed}
               onFocusFlow={onFocusFlow}
               onClearFocus={onClearFocus}
@@ -831,10 +984,13 @@ export function TrailsPanel({
               dragActive={dragIndex != null}
               isHoverSuppressed={isHoverSuppressed}
               proposedAliases={proposedAliases}
+              componentByAlias={componentByAlias}
               layoutFocused={layoutFocusedTrailId === tl.id}
               onToggleLayoutFocus={
                 onFocusLayout ? (t) => onFocusLayout(t.id) : undefined
               }
+              stepEmphasis={stepEmphasis}
+              onRemoveStepEmphasis={onRemoveStepEmphasis}
             />
           </div>
         );

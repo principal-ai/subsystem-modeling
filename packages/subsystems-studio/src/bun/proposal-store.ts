@@ -15,6 +15,8 @@ import type {
 	SubsystemModelProposalPreviewRow,
 	SubsystemModelSecondOpinion,
 	SubsystemSignatureClaim,
+	SubsystemSiteConstruct,
+	SubsystemTargetConstruct,
 } from "../shared/contract";
 import { 
 	upsertAcceptedConstructAugmentation, 
@@ -27,6 +29,10 @@ import {
 import { hashContentRange } from "./declaration-ref";
 import { upsertAcceptedC4Elements, readC4ElementSet } from "./c4-element-store";
 import { resolveRepoRootForPurl } from "./graphify-store";
+import {
+	declarationForSymbol,
+	enclosingDeclaration,
+} from "./graph-constructs";
 import { deriveProposalLane } from "./proposal-lane";
 import {
 	getSubsystemModel,
@@ -819,6 +825,44 @@ async function applyAugmentationChanges(	graph: StoredSubsystemModel,
 			// time; an explicitly provided hash (tests, backfills) wins.
 			const callSite = await withCallSiteContentHash(callSiteCh);
 			if (typeof callSite === "string") return callSite;
+			const step = graph.trails
+				?.find((t) => t.id === callSiteCh.trailId)
+				?.steps[callSiteCh.stepIndex];
+
+			// Resolve the enclosing caller/via construct. A callsite is a line
+			// range; the frame the UI wants is the declaration that contains it.
+			// Pin it onto the step so the claim is portable and auditable.
+			let siteClaim: SubsystemSiteConstruct | undefined;
+			const siteRepoRoot = resolveRepoRootForPurl(callSiteCh.purl);
+			if (siteRepoRoot) {
+				try {
+					const resolved = await enclosingDeclaration({
+						repoRoot: siteRepoRoot,
+						file: callSiteCh.file,
+						line: callSite.lines.start,
+					});
+					if (resolved) {
+						siteClaim = {
+							symbol: resolved.symbol,
+							span: {
+								startLine: resolved.startLine,
+								endLine: resolved.endLine,
+								contentHash: resolved.contentHash,
+							},
+						};
+					}
+				} catch {
+					// Leave the site unconfirmed; the audit reports the claim hole.
+				}
+			}
+
+			// `calls` requires the site construct in the portable schema. Do not
+			// accept a call-site augmentation that cannot produce one: the
+			// resulting step would be invalid and unauditable.
+			if (step?.mechanism === "calls" && !siteClaim) {
+				return `callSite accepted, but the enclosing site construct could not be resolved for ${callSiteCh.file}:${callSite.lines.start}; add the site construct or change the mechanism.`;
+			}
+
 			const written = await upsertAcceptedCallSiteAugmentation({
 				purl: callSiteCh.purl,
 				file: callSiteCh.file,
@@ -832,8 +876,44 @@ async function applyAugmentationChanges(	graph: StoredSubsystemModel,
 				],
 			});
 			if (!written.ok) return written.error;
-			// Pin the step span onto the step so the model carries it inline
-			// (portable), rather than only in the host-local augmentation store.
+
+			// Resolve the callee construct from the `to` component's repo. The
+			// target is independent of the caller file/repo.
+			let targetClaim: SubsystemTargetConstruct | undefined;
+			const toComponent = step
+				? graph.components.find((c) => c.alias === step.to)
+				: undefined;
+			const targetPurl = toComponent?.purl?.trim();
+			const targetRoot = targetPurl
+				? resolveRepoRootForPurl(targetPurl)
+				: null;
+			if (targetRoot && targetPurl) {
+				try {
+					const resolved = await declarationForSymbol({
+						repoRoot: targetRoot,
+						file: callSite.target.file,
+						symbol: callSite.target.symbol,
+					});
+					if (resolved) {
+						targetClaim = {
+							purl: targetPurl,
+							file: callSite.target.file,
+							symbol: resolved.symbol,
+							span: {
+								startLine: resolved.startLine,
+								endLine: resolved.endLine,
+								contentHash: resolved.contentHash,
+							},
+						};
+					}
+				} catch {
+					// Leave the target unconfirmed.
+				}
+			}
+
+			// Pin the step span + resolved site/target onto the step so the
+			// model carries them inline (portable), rather than only in the
+			// host-local augmentation store.
 			const trails = (graph.trails ?? []).map((t) =>
 				t.id !== callSiteCh.trailId
 					? t
@@ -848,6 +928,8 @@ async function applyAugmentationChanges(	graph: StoredSubsystemModel,
 												endLine: callSite.lines.end,
 												contentHash: callSite.contentHash,
 											},
+											...(siteClaim ? { site: siteClaim } : {}),
+											...(targetClaim ? { target: targetClaim } : {}),
 										}
 									: s,
 							),

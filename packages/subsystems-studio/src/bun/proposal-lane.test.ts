@@ -70,6 +70,14 @@ describe("laneForFindingKind", () => {
 		expect(laneForFindingKind("construct_span_stale")).toBe("construct");
 		expect(laneForFindingKind("step_span_unconfirmed")).toBe("trail");
 		expect(laneForFindingKind("step_span_stale")).toBe("trail");
+		// A calls step whose site is outside `from` is trail work too — the
+		// mechanism or the caller model needs correcting.
+		expect(laneForFindingKind("step_site_outside_from")).toBe("trail");
+		expect(laneForFindingKind("step_site_unconfirmed")).toBe("trail");
+		expect(laneForFindingKind("step_site_mismatch")).toBe("trail");
+		expect(laneForFindingKind("step_site_stale")).toBe("trail");
+		expect(laneForFindingKind("step_target_mismatch")).toBe("trail");
+		expect(laneForFindingKind("step_target_stale")).toBe("trail");
 	});
 	test("maps boundary findings onto their lanes", () => {
 		expect(laneForFindingKind("boundary_module_file_mismatch")).toBe(

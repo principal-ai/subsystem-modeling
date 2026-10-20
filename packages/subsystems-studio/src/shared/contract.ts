@@ -27,6 +27,8 @@ import type {
 	SubsystemTrail,
 	SubsystemTrailMechanism,
 	SubsystemTrailStep,
+	SubsystemSiteConstruct,
+	SubsystemTargetConstruct,
 	SymbolInspection,
 } from "@principal-ai/subsystems-react";
 import type { SubsystemComponentRemoval } from "@principal-ai/subsystems-core";
@@ -41,6 +43,8 @@ export type {
 	SubsystemTrail,
 	SubsystemTrailMechanism,
 	SubsystemTrailStep,
+	SubsystemSiteConstruct,
+	SubsystemTargetConstruct,
 };
 
 export type ViewerMode = "local" | "remote";
@@ -671,6 +675,23 @@ export type SubsystemModelAuditFindingKind =
 	| "signature_unconfirmed"
 	| "step_span_unconfirmed"
 	| "step_span_stale"
+	/**
+	 * A `calls` step whose site is not housed by its `from` component. The
+	 * code may be in a helper or child component that the story elides; the
+	 * honest label is `uses`, or the caller must be modeled and `from` changed.
+	 * Informational during the migration — reclassify, then promote to error.
+	 */
+	| "step_site_outside_from"
+	/** A `calls` step with no site construct. Required by the portable schema. */
+	| "step_site_unconfirmed"
+	/** The step's resolved site construct does not match its declared span/symbol. */
+	| "step_site_mismatch"
+	/** The step's resolved site construct content changed since it was captured. */
+	| "step_site_stale"
+	/** The step's target construct does not resolve to the declared span/symbol. */
+	| "step_target_mismatch"
+	/** The step's target construct content changed since it was captured. */
+	| "step_target_stale"
 	| "repo_unresolved"
 	| "graphify_unavailable"
 	| "third_party_path"
@@ -1579,6 +1600,31 @@ export interface VerifiedConstructRepo {
 	isMonorepo: boolean;
 	/** Divider groups (repo root first). One group when no package info. */
 	packages: VerifiedConstructPackage[];
+}
+
+/** Graph discovery is not a subsystem-model audit. Only verified spans can be traced. */
+export interface SourceConstruct {
+	id: string;
+	name: string;
+	symbol: string;
+	construct: string;
+	file: string;
+	purl: string;
+	repoKey: string;
+	packageRelativeFile: string;
+	graphNodeIds: string[];
+	graphStartLine?: number;
+	/** Rejects possible declaration renames; never establishes identity. */
+	declarationShapeHash?: string;
+	verification: {
+		status: "verified" | "unresolved" | "unsupported" | "error";
+		evidence: string;
+		checkedAt: string;
+	};
+	span?: { startLine: number; endLine: number; contentHash: string };
+	/** Saved historical span, read from the managed clone rather than the working tree. */
+	snapshot?: { runId: string; commit: string };
+	models: Array<{ modelId: string; modelTitle: string; alias: string }>;
 }
 
 export interface TabSummary {

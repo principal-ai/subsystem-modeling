@@ -165,6 +165,56 @@ export function validateSubsystemModelCrossField(
         `trail ${JSON.stringify(w.id)}: step ${si}`,
       );
       if (spanProblem) problems.push(spanProblem);
+
+      // The site construct is the enclosing frame; the seam line must live
+      // inside it. The schema can enforce each range but not containment.
+      const siteSpanProblem = spanRangeProblem(
+        step.site?.span,
+        `/trails/${ti}/steps/${si}/site/span`,
+        `trail ${JSON.stringify(w.id)}: step ${si} site`,
+      );
+      if (siteSpanProblem) problems.push(siteSpanProblem);
+      if (
+        step.span &&
+        step.site?.span &&
+        !(
+          step.site.span.startLine <= step.span.startLine &&
+          step.span.endLine <= step.site.span.endLine
+        )
+      ) {
+        problems.push({
+          path: `/trails/${ti}/steps/${si}/site/span`,
+          message: `trail ${JSON.stringify(w.id)}: step ${si} site span ${step.site.span.startLine}-${step.site.span.endLine} does not contain the seam span ${step.span.startLine}-${step.span.endLine}.`,
+        });
+      }
+
+      // The target is a construct in its own file, so its span and purl
+      // fragment are checked independently of the step's site file.
+      const targetSpanProblem = spanRangeProblem(
+        step.target?.span,
+        `/trails/${ti}/steps/${si}/target/span`,
+        `trail ${JSON.stringify(w.id)}: step ${si} target`,
+      );
+      if (targetSpanProblem) problems.push(targetSpanProblem);
+      if (
+        step.target &&
+        typeof step.target.purl === 'string' &&
+        step.target.purl.includes('#')
+      ) {
+        const fragment = step.target.purl.split('#').slice(1).join('#');
+        if (fragment !== step.target.file) {
+          problems.push({
+            path: `/trails/${ti}/steps/${si}/target/purl`,
+            message: `trail ${JSON.stringify(w.id)}: step ${si} target purl fragment ${JSON.stringify(fragment)} does not match target file ${JSON.stringify(step.target.file)}`,
+          });
+        }
+      }
+      if (step.target && mentionsNodeModules(step.target.file)) {
+        problems.push({
+          path: `/trails/${ti}/steps/${si}/target/file`,
+          message: `trail ${JSON.stringify(w.id)}: step ${si} target file ${JSON.stringify(step.target.file)} points into node_modules — model the dependency as an external instead.`,
+        });
+      }
     });
   });
 

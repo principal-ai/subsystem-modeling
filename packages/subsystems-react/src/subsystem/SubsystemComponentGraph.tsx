@@ -91,6 +91,8 @@ import { GraphWithSidebar } from './GraphWithSidebar';
 import type { GraphSidebarTab } from './GraphSidebar';
 import { buildRepoGroups, repoAvatarUrl, type RepoGroup } from './paths';
 import { TrailsPanel, TRAIL_PLAY_PAUSE_MS } from './TrailsPanel';
+import { TrailStackBreadcrumb } from './TrailStackBreadcrumb';
+import type { StepEmphasisMap } from './stepEmphasis';
 import {
   EDGE_LABEL_WIDTH,
   EDGE_LABEL_HEIGHT,
@@ -287,6 +289,14 @@ export interface SubsystemComponentGraphProps {
    * and never reorders its own prop).
    */
   onReorderTrails?: (next: SubsystemTrail[]) => void;
+  /**
+   * PROTOTYPE: host-owned step emphasis augmentations, keyed by trail + claim
+   * fingerprint. Kept out of the model document; the host reads a separate
+   * augmentation store. A mark is a star plus optional markdown guidance.
+   */
+  stepEmphasis?: StepEmphasisMap;
+  /** Toggle a step's guidance off. Omit to hide the remove action. */
+  onRemoveStepEmphasis?: (trail: SubsystemTrail, stepIndex: number) => void;
   onSelect?: (componentAlias: string) => void;
   /** Called when an edge is clicked (relationship / mechanism + refs seam). */
   onEdgeSelect?: (edge: SubsystemComponentEdge) => void;
@@ -612,7 +622,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
 }
 
-function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, refocusOnLayoutFlip = true, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, title, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
+function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, refocusOnLayoutFlip = true, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, stepEmphasis, onRemoveStepEmphasis, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, title, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
   const { theme } = useTheme();
   const { fitView, fitBounds, screenToFlowPosition } = useReactFlow();
   const viewport = useViewport();
@@ -1431,24 +1441,42 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
 
   // Per-edge step verification badge: maps edge IDs to step verification status.
   // Keyed by the React Flow edge id (from → mechanism → to). An edge can have
-  // multiple steps with issues; we show the worst status (stale > unconfirmed).
+  // multiple steps with issues; we show the worst status.
   const stepIssueBadgeByEdgeId = useMemo(() => {
-    const map = new Map<string, { kind: 'step_span_unconfirmed' | 'step_span_stale'; severity: 'info' | 'error'; count: number }>();
+    type StepIssueKind =
+      | 'step_span_unconfirmed'
+      | 'step_span_stale'
+      | 'step_site_outside_from';
+    // Unconfirmed is the hard failure; a miscategorized `calls` edge is the
+    // next most actionable (it changes what the edge means); drift is last.
+    const rank: Record<StepIssueKind, number> = {
+      step_span_unconfirmed: 3,
+      step_site_outside_from: 2,
+      step_span_stale: 1,
+    };
+    const map = new Map<string, { kind: StepIssueKind; severity: 'info' | 'error'; count: number }>();
     if (!issues?.length || !trails?.length) {
       return map;
     }
     for (const issue of issues) {
-      if (issue.kind !== 'step_span_unconfirmed' && issue.kind !== 'step_span_stale') continue;
+      if (
+        issue.kind !== 'step_span_unconfirmed' &&
+        issue.kind !== 'step_span_stale' &&
+        issue.kind !== 'step_site_outside_from'
+      ) {
+        continue;
+      }
       const stepInfo = issueStep(issue);
       if (!stepInfo) continue;
       const step = stepInfo.trail.steps[stepInfo.stepIndex];
       if (!step) continue;
       const edgeId = trailStepGraphEdgeId(step);
+      const kind = issue.kind as StepIssueKind;
       const prev = map.get(edgeId);
-      // step_span_stale is worse than step_span_unconfirmed
-      const isWorse = issue.kind === 'step_span_stale' && prev?.kind !== 'step_span_stale';
+      const isWorse = !prev || rank[kind] > rank[prev.kind];
+      const nextKind = isWorse ? kind : prev!.kind;
       map.set(edgeId, {
-        kind: isWorse || !prev ? issue.kind as 'step_span_unconfirmed' | 'step_span_stale' : prev.kind,
+        kind: nextKind,
         severity: prev?.severity === 'error' || issue.severity === 'error' ? 'error' : 'info',
         count: (prev?.count ?? 0) + 1,
       });
@@ -1951,6 +1979,12 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   // (and steps) that touch one.
   const proposedAliases = useMemo(
     () => new Set(components.filter((c) => c.proposed).map((c) => c.alias)),
+    [components],
+  );
+  // Alias → component, so the Trails panel can show human hop names instead
+  // of model-local aliases (and the site/`via` distinction can read).
+  const componentByAlias = useMemo(
+    () => new Map(components.map((c) => [c.alias, c])),
     [components],
   );
   // Diagnostics view in the sidebar. Uncontrolled unless the host pins
@@ -3007,6 +3041,9 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       }}
       onReorder={onReorderTrails}
       proposedAliases={proposedAliases}
+      componentByAlias={componentByAlias}
+      stepEmphasis={stepEmphasis}
+      onRemoveStepEmphasis={onRemoveStepEmphasis}
       layoutFocusedTrailId={layoutTrailId}
       onFocusLayout={toggleLayoutFocus}
     />
@@ -3221,9 +3258,13 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
                 return (
                   <span
                     aria-hidden
-                    title={lbl.stepIssue.kind === 'step_span_stale'
-                      ? 'Call site changed since verification'
-                      : 'Call site not yet verified'}
+                    title={
+                      lbl.stepIssue.kind === 'step_span_stale'
+                        ? 'Call site changed since verification'
+                        : lbl.stepIssue.kind === 'step_site_outside_from'
+                          ? 'Calls site is outside its source component'
+                          : 'Call site not yet verified'
+                    }
                     style={{
                       position: 'absolute',
                       right: -7,
@@ -3553,6 +3594,18 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         suppressEscape={fileOverlayOpen}
         hidden={hideDrawer}
         progress={drawerProgress}
+        subheader={
+          drawerTarget?.kind === 'trail' &&
+          focusedTrail &&
+          drawerTarget.stepIndex != null ? (
+            <TrailStackBreadcrumb
+              trail={focusedTrail}
+              stepIndex={drawerTarget.stepIndex}
+              componentByAlias={componentByAlias}
+              onFocusStep={(index) => focusTrailStep(focusedTrail, index)}
+            />
+          ) : null
+        }
       >
         {drawerTarget?.kind === 'trail' &&
         focusedTrail &&

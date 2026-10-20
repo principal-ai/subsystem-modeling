@@ -155,6 +155,41 @@ describe('TrailStepsNav', () => {
     expect(cleared).toBe(true);
   });
 
+  test('uses rows show the logical hop and the via site', () => {
+    const usesTrail: SubsystemTrail = {
+      id: 'uses',
+      title: 'Uses flow',
+      steps: [
+        {
+          from: 'panel',
+          to: 'merge',
+          mechanism: 'uses',
+          file: 'src/list.tsx',
+          span: { startLine: 10, endLine: 12, contentHash: 'h' },
+          purl: 'pkg:github/x#src/list.tsx',
+          symbol: 'ModelList',
+        },
+      ],
+    };
+    const { getByText } = renderNav({
+      trails: [usesTrail],
+      focusedTrailId: 'uses',
+      focusedStepIndex: null,
+      hoveredTrailStep: null,
+      componentByAlias: new Map([
+        ['panel', { alias: 'panel', name: 'MaintenancePanel' }],
+        ['merge', { alias: 'merge', name: 'mergeProvenance' }],
+      ]),
+      onFocusFlow: () => {},
+      onClearFocus: () => {},
+      onFocusStep: () => {},
+      onHoverStep: () => {},
+      onHoverFlow: () => {},
+      onLeaveStep: () => {},
+    });
+    expect(getByText('MaintenancePanel uses mergeProvenance')).toBeTruthy();
+  });
+
   test('clicking the step-pane header title also goes back', () => {
     let cleared = false;
     const { getByRole } = renderNav({

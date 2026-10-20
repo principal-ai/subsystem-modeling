@@ -60,6 +60,11 @@ describe("subsystem-model schema", () => {
 		expect(schema.$defs.trailStep?.properties?.line).toBeUndefined();
 	});
 
+	test("trail steps can carry verifiable site and target constructs", () => {
+		expect(schema.$defs.trailStep?.properties?.site).toBeDefined();
+		expect(schema.$defs.trailStep?.properties?.target).toBeDefined();
+	});
+
 	test("a store declares its own value type", () => {
 		// `additionalProperties: false` on the store declaration, so the field
 		// has to be declared here or every typed store would be rejected.

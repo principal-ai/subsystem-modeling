@@ -3,6 +3,10 @@ import type { CSSProperties } from 'react';
 import { ChevronRight, Route, X } from 'lucide-react';
 import { useTheme } from '@principal-ade/industry-theme';
 import type { SubsystemTrail } from './model';
+import {
+  trailStepDisplay,
+  type TrailComponentLabels,
+} from './trailStepDisplay';
 
 /**
  * TrailStepsNav — the trails side panel as a two-step slide: a list of trails,
@@ -43,6 +47,8 @@ export interface TrailStepsNavProps {
   onLeaveStep: () => void;
   /** Aliases of components marked `proposed` — a row whose steps touch one tints. */
   proposedAliases?: ReadonlySet<string>;
+  /** Alias → component, for turning hops into human display names. */
+  componentByAlias?: TrailComponentLabels;
   /** Slide duration in ms. @default 340 */
   transitionMs?: number;
 }
@@ -75,6 +81,7 @@ export function TrailStepsNav({
   onHoverFlow,
   onLeaveStep,
   proposedAliases,
+  componentByAlias,
   transitionMs = 340,
 }: TrailStepsNavProps) {
   const { theme } = useTheme();
@@ -291,6 +298,7 @@ export function TrailStepsNav({
                 const hovered =
                   hoveredTrailStep?.trailId === displayedTrail.id &&
                   hoveredTrailStep.stepIndex === i;
+                const display = trailStepDisplay(step, componentByAlias);
                 return (
                   <button
                     key={`${step.from}->${step.to}-${i}`}
@@ -342,8 +350,9 @@ export function TrailStepsNav({
                             minWidth: 0,
                             overflowWrap: 'anywhere',
                             fontSize: theme.fontSizes[1],
-                            fontFamily: theme.fonts.monospace,
+                            fontFamily: theme.fonts.body,
                             color: theme.colors.text,
+                            lineHeight: 1.35,
                           }}
                         >
                           {step.annotation}
@@ -351,13 +360,14 @@ export function TrailStepsNav({
                       )}
                       <span
                         style={{
-                          fontSize: theme.fontSizes[0],
-                          fontFamily: theme.fonts.body,
-                          color: muted,
-                          lineHeight: 1.35,
+                          minWidth: 0,
+                          overflowWrap: 'anywhere',
+                          fontSize: theme.fontSizes[1],
+                          fontFamily: theme.fonts.monospace,
+                          color: theme.colors.text,
                         }}
                       >
-                        {step.symbol ?? step.from}
+                        {display.primary}
                       </span>
                     </span>
                   </button>

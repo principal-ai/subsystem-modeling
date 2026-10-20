@@ -354,9 +354,20 @@ export function PierreTrailCodeView({
         );
       }
       const contents = load.byPath.get(key) ?? '';
-      const start = step.span?.startLine ?? 1;
-      const end = step.span?.endLine ?? start;
-      return sliceSnippetWindow(contents, start, end, contextLines, start);
+      // A resolved site construct is the frame the reader wants: show its
+      // whole declaration and focus the seam line inside it. Older models
+      // fall back to a context window around the seam.
+      const site = step.site?.span;
+      const start = site?.startLine ?? step.span?.startLine ?? 1;
+      const end = site?.endLine ?? step.span?.endLine ?? start;
+      const focus = step.span?.startLine ?? start;
+      return sliceSnippetWindow(
+        contents,
+        start,
+        end,
+        site ? 0 : contextLines,
+        focus,
+      );
     });
   }, [load, trail.steps, contextLines, isProposedStep]);
 
@@ -392,7 +403,7 @@ export function PierreTrailCodeView({
           name: step.file,
           contents: slice.contents,
           lang: pierreLangForPath(step.file),
-          cacheKey: `${trail.id}:${index}:${step.file}:${step.span?.startLine ?? ''}:${slice.sliceStart}-${slice.sliceEnd}${failure != null ? ':unavailable' : ''}`,
+          cacheKey: `${trail.id}:${index}:${step.file}:${step.span?.startLine ?? ''}:${step.site?.span?.startLine ?? ''}-${step.site?.span?.endLine ?? ''}:${slice.sliceStart}-${slice.sliceEnd}${failure != null ? ':unavailable' : ''}`,
         },
       };
     });
@@ -468,7 +479,9 @@ export function PierreTrailCodeView({
             </span>
           ) : (
             <>
-              L{step.span?.startLine ?? '?'}
+              {step.site?.span
+                ? `L${step.site.span.startLine}-${step.site.span.endLine}`
+                : `L${step.span?.startLine ?? '?'}`}
               {onOpenFile && (
                 <OpenFileHeaderButton
                   file={step.file}

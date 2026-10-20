@@ -218,6 +218,14 @@ export {
 export type { TrailsPanelProps } from './subsystem/TrailsPanel';
 export { TrailStepsNav } from './subsystem/TrailStepsNav';
 export type { TrailStepsNavProps } from './subsystem/TrailStepsNav';
+export { TrailStackBreadcrumb } from './subsystem/TrailStackBreadcrumb';
+export type { TrailStackBreadcrumbProps } from './subsystem/TrailStackBreadcrumb';
+export { buildTrailStack } from './subsystem/trailStack';
+export type {
+  TrailStackAnnotation,
+  TrailStackFrame,
+  TrailStackView,
+} from './subsystem/trailStack';
 export { buildStepBrief } from './subsystem/trailBrief';
 export { GraphLayoutCover } from './subsystem/GraphLayoutCover';
 export type { GraphLayoutCoverProps } from './subsystem/GraphLayoutCover';
@@ -232,6 +240,8 @@ export type {
   SubsystemComponentEdge,
   SubsystemTrail,
   SubsystemTrailStep,
+  SubsystemSiteConstruct,
+  SubsystemTargetConstruct,
   SubsystemTrailMechanism,
   SubsystemModelDocument,
   SubsystemComponentConstruct,

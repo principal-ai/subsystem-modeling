@@ -30,7 +30,17 @@ export function MaintainerTrail() {
         <p className="maintainer-lede">
           Closed vocabulary on each trail step. The step’s{' '}
           <em>file:line</em> should be the concrete site of that runtime seam
-          for this flow.
+          for this flow. <em>calls</em> means the <em>from</em> component houses
+          that site; when the evidence lives in a helper or child component, the
+          honest mechanism is <em>uses</em> (a logical dependency) and the site
+          symbol reads as <em>via</em>, not as the caller. A <em>calls</em> step
+          must carry a resolved <em>site</em> construct (the enclosing caller
+          declaration) with its full span — the schema enforces this. A step may
+          also carry a <em>target</em> construct (the callee), with its own
+          span; those are the verifiable frames the code view expands to. The
+          code drawer shows the call stack at the selected step — <em>calls</em>
+          steps are frames, while <em>uses</em> and data/event seams are
+          annotations on the nearest frame, never frames of their own.
         </p>
         <LabelCatalog entries={TRAIL_MECHANISM_CATALOG} />
 

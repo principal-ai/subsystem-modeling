@@ -272,6 +272,59 @@
           "$ref": "#/$defs/sourceSpan",
           "description": "The seam's source span — the call-site range and its content hash. The trail-step counterpart of a component's declarationSpan; captured by verify tooling. `file` + `symbol` locate the frame."
         },
+        "site": {
+          "type": "object",
+          "description": "The construct containing the seam site, with its full declaration range. Required for `calls` (unless `proposed`): the caller frame must be housed by the `from` component. For `uses` and data/event seams it is the via-site evidence and is optional. Same file/repo as the step.",
+          "additionalProperties": false,
+          "required": ["symbol", "span"],
+          "properties": {
+            "symbol": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Caller/via construct symbol (e.g. `MaintenanceModelList`, `Registry.start`)."
+            },
+            "span": {
+              "$ref": "#/$defs/sourceSpan",
+              "description": "Full declaration range of the site construct, not just the seam line."
+            },
+            "construct": {
+              "$ref": "#/$defs/construct",
+              "description": "Declaration shape of the site construct, when known."
+            }
+          }
+        },
+        "target": {
+          "type": "object",
+          "description": "The construct the seam reaches. Distinct from `to` (a component alias): the target can be a method on a modeled component, or a construct that is not a node at all.",
+          "additionalProperties": false,
+          "required": ["purl", "file", "symbol"],
+          "properties": {
+            "purl": {
+              "type": "string",
+              "minLength": 1,
+              "description": "File-anchored purl of the target repo/file."
+            },
+            "file": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^(?!.*(^|/)node_modules(/|$)).*$",
+              "description": "Repo-root-relative target file."
+            },
+            "symbol": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Callee construct symbol (e.g. `mergeProvenance`, `Store.add`)."
+            },
+            "span": {
+              "$ref": "#/$defs/sourceSpan",
+              "description": "Full declaration range of the target construct, when resolvable."
+            },
+            "construct": {
+              "$ref": "#/$defs/construct",
+              "description": "Declaration shape of the target, when known."
+            }
+          }
+        },
         "purl": {
           "type": "string",
           "minLength": 1,
@@ -291,7 +344,22 @@
           "minLength": 1,
           "description": "Free-text note anchored to this step's site line. Optional, informative only, never verified against source; viewers surface it in the codeview's annotation column."
         }
-      }
+      },
+      "allOf": [
+        {
+          "description": "A calls step claims the site is the caller frame, so it must carry the enclosing site construct. Other mechanisms may use site as evidence but are not required to.",
+          "if": {
+            "required": ["mechanism"],
+            "properties": {
+              "mechanism": { "const": "calls" },
+              "proposed": { "not": { "const": true } }
+            }
+          },
+          "then": {
+            "required": ["site"]
+          }
+        }
+      ]
     },
     "trail": {
       "type": "object",

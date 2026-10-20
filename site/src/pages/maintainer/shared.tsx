@@ -751,6 +751,48 @@ export const TRAIL_STEP_CASES: AuditCase[] = [
     outcome: 'gap',
     remediation: 'trail-verifier',
   },
+  {
+    example: 'site construct not captured',
+    meaning:
+      'A calls step has no site construct (step_site_unconfirmed). The portable schema requires one because calls claims the seam is housed by the caller. Run `subsystem-model backfill-sites <id> --apply` to pin every derivable site; steps without a seam span need the span captured first.',
+    outcome: 'gap',
+    remediation: 'trail-verifier',
+  },
+  {
+    example: 'site construct mismatch',
+    meaning:
+      'The step carries a resolved site construct (site.symbol + span), but the span no longer resolves to that declaration or does not contain the seam line (step_site_mismatch). The frame is wrong; re-read the caller and re-propose the call site.',
+    outcome: 'gap',
+    remediation: 'trail-verifier',
+  },
+  {
+    example: 'site construct changed',
+    meaning:
+      'The resolved site construct’s content changed since it was captured (step_site_stale). The enclosing declaration moved or was edited; re-pin the site from the current source.',
+    outcome: 'gap',
+    remediation: 'trail-verifier',
+  },
+  {
+    example: 'target construct mismatch / changed',
+    meaning:
+      'The resolved target construct does not resolve to the claimed declaration or its content changed (step_target_mismatch / step_target_stale). Re-read the target file and re-propose the call site; accept re-pins the target span.',
+    outcome: 'gap',
+    remediation: 'trail-verifier',
+  },
+  {
+    example: 'calls site outside source',
+    meaning:
+      'A calls step’s site lives in a helper or child component, not the from component (step_site_outside_from). A calls edge means the source houses the call site; when it does not, the honest mechanism is uses (a logical dependency), or the caller must be modeled and from changed.',
+    outcome: 'gap',
+    remediation: 'none',
+    snippet: `{
+  "from": "maintenance-panel",   // ← logical source
+  "to": "merge-provenance",
+  "mechanism": "calls",          // ← but the call is in MaintenanceModelList
+  "file": "…/MaintenanceModelList.tsx",
+  "symbol": "MaintenanceModelList"
+}`,
+  },
 ]
 
 export const TRAIL_AGENTS: MaintenanceAgent[] = [

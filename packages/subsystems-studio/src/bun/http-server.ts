@@ -406,6 +406,23 @@ export async function handleSubsystemModelRequest(
 		});
 	}
 
+	// Backfill missing `site` constructs on calls steps. Dry-run unless
+	// `{ apply: true }`; one model by id, or every model with the id-less path.
+	const backfillOneMatch = path.match(
+		/^\/api\/subsystem-model\/([^/]+)\/backfill-sites$/,
+	);
+	const backfillAll = path === "/api/subsystem-model/backfill-sites";
+	if ((backfillOneMatch || backfillAll) && method === "POST") {
+		const body = (await parseBody(req)) as { apply?: boolean } | null;
+		const { backfillTrailSites } = await import("./backfill-trail-sites");
+		const result = await backfillTrailSites(
+			backfillOneMatch?.[1],
+			{ dryRun: body?.apply !== true },
+		);
+		if (!result.ok) return error(result.error ?? "backfill failed", 404);
+		return json(result);
+	}
+
 	// List / create proposals
 	const proposalsMatch = path.match(/^\/api\/subsystem-model\/([^/]+)\/proposals$/);
 	if (proposalsMatch) {

@@ -26,6 +26,7 @@ export function FileDrawer({
   suppressEscape = false,
   hidden = false,
   progress = null,
+  subheader = null,
   children,
 }: {
   /** Drawer chrome title; `null` closes the drawer. */
@@ -43,6 +44,8 @@ export function FileDrawer({
    * content with no position (a single file).
    */
   progress?: { index: number; total: number } | null;
+  /** Optional chrome row below the title (e.g. the trail call stack). */
+  subheader?: ReactNode;
   children?: ReactNode;
 }) {
   const { theme } = useTheme();
@@ -223,6 +226,9 @@ export function FileDrawer({
             </button>
           </div>
         </div>
+        {subheader != null && open && (
+          <div style={{ flexShrink: 0, minHeight: 0 }}>{subheader}</div>
+        )}
         <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
           {children}
         </div>

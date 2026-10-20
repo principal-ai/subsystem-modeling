@@ -70,6 +70,11 @@ import {
 	capturePurlCommits,
 	referencedFilesClean,
 } from "./purl-commits";
+import { callsSiteOutsideFrom } from "./trail-site";
+import {
+	declarationForSymbol,
+	enclosingDeclaration,
+} from "./graph-constructs";
 import {
 	getSubsystemModel,
 	isRepoPurl,
@@ -1760,6 +1765,7 @@ export async function auditSubsystemModel(
 		for (let stepIndex = 0; stepIndex < trail.steps.length; stepIndex++) {
 			const step = trail.steps[stepIndex]!;
 			const toComponent = componentByAlias.get(step.to);
+			const fromComponent = componentByAlias.get(step.from);
 
 			// A proposed step — or one whose endpoints are proposed components —
 			// describes planned behavior through code that may not exist yet.
@@ -1768,9 +1774,22 @@ export async function auditSubsystemModel(
 			if (
 				step.proposed ||
 				toComponent?.proposed ||
-				componentByAlias.get(step.from)?.proposed
+				fromComponent?.proposed
 			) {
 				continue;
+			}
+
+			// A calls step's site is the caller frame, so the portable schema
+			// requires it. Surface stored models from before that requirement
+			// as a hard gap so the UI can drive the fix.
+			if (step.mechanism === "calls" && !step.site) {
+				findings.push({
+					kind: "step_site_unconfirmed",
+					severity: "error",
+					trailId: trail.id,
+					step: stepIndex,
+					message: `Trail "${trail.title}" step ${stepIndex + 1}: calls step has no site construct (${step.from} → ${step.to}); add the enclosing caller declaration.`,
+				});
 			}
 
 			// The step's site purl determines the repo.
@@ -1815,6 +1834,22 @@ export async function auditSubsystemModel(
 				continue;
 			}
 
+			// `calls` claims the site lives in the source construct. When the
+			// code is actually in a helper/child component, the honest label is
+			// `uses` (a logical dependency) or the caller must be modeled and
+			// `from` changed. Informational for now so existing models can be
+			// reclassified without failing their audits.
+			if (callsSiteOutsideFrom(step, fromComponent)) {
+				const fromFile = fromComponent?.file?.trim();
+				findings.push({
+					kind: "step_site_outside_from",
+					severity: "info",
+					trailId: trail.id,
+					step: stepIndex,
+					message: `Trail "${trail.title}" step ${stepIndex + 1}: calls site is in ${step.file}${step.symbol ? ` (${step.symbol})` : ""}, outside ${step.from}${fromFile ? ` (${fromFile})` : ""}; use mechanism "uses" or model the caller and change "from".`,
+				});
+			}
+
 			const filePath = join(repoRoot, step.file);
 			try {
 				const content = await fs.readFile(filePath, "utf8");
@@ -1834,6 +1869,124 @@ export async function auditSubsystemModel(
 						step: stepIndex,
 						message: `Trail "${trail.title}" step ${stepIndex + 1}: step span changed since verification (lines ${span.startLine}-${span.endLine} in ${step.file})`,
 					});
+				}
+
+				// The resolved site construct is the caller/via frame. Verify it
+				// independently: the range must be a real declaration, the hash
+				// fresh, and the seam line inside it.
+				if (step.site) {
+					const site = step.site;
+					const siteHash = hashContentRange(
+						content,
+						site.span.startLine,
+						site.span.endLine,
+					);
+					if (siteHash !== site.span.contentHash) {
+						findings.push({
+							kind: "step_site_stale",
+							severity: "info",
+							trailId: trail.id,
+							step: stepIndex,
+							message: `Trail "${trail.title}" step ${stepIndex + 1}: site construct ${site.symbol} changed since it was captured (lines ${site.span.startLine}-${site.span.endLine} in ${step.file}).`,
+						});
+					}
+					const resolvedSite = await enclosingDeclaration({
+						repoRoot,
+						file: step.file,
+						line: site.span.startLine,
+					}).catch(() => null);
+					if (
+						!resolvedSite ||
+						resolvedSite.symbol !== site.symbol ||
+						resolvedSite.startLine !== site.span.startLine ||
+						resolvedSite.endLine !== site.span.endLine
+					) {
+						findings.push({
+							kind: "step_site_mismatch",
+							severity: "info",
+							trailId: trail.id,
+							step: stepIndex,
+							message: `Trail "${trail.title}" step ${stepIndex + 1}: site construct ${site.symbol} does not resolve to ${step.file}:${site.span.startLine}-${site.span.endLine}${resolvedSite ? ` (found ${resolvedSite.symbol} at ${resolvedSite.startLine}-${resolvedSite.endLine})` : ""}.`,
+						});
+					}
+					if (
+						step.span &&
+						!(
+							site.span.startLine <= step.span.startLine &&
+							step.span.endLine <= site.span.endLine
+						)
+					) {
+						findings.push({
+							kind: "step_site_mismatch",
+							severity: "info",
+							trailId: trail.id,
+							step: stepIndex,
+							message: `Trail "${trail.title}" step ${stepIndex + 1}: site construct ${site.symbol} (${site.span.startLine}-${site.span.endLine}) does not contain the seam (${step.span.startLine}-${step.span.endLine}).`,
+						});
+					}
+				}
+
+				// The target construct lives in its own repo/file. Verify its
+				// declaration and hash when the target was resolved.
+				if (step.target) {
+					const target = step.target;
+					const targetRoot = target.purl?.trim()
+						? resolveRepoRootForPurl(target.purl)
+						: null;
+					if (targetRoot) {
+						try {
+							const targetContent = await fs.readFile(
+								join(targetRoot, target.file),
+								"utf8",
+							);
+							if (target.span) {
+								const targetHash = hashContentRange(
+									targetContent,
+									target.span.startLine,
+									target.span.endLine,
+								);
+								if (targetHash !== target.span.contentHash) {
+									findings.push({
+										kind: "step_target_stale",
+										severity: "info",
+										trailId: trail.id,
+										step: stepIndex,
+										message: `Trail "${trail.title}" step ${stepIndex + 1}: target construct ${target.symbol} changed since it was captured (lines ${target.span.startLine}-${target.span.endLine} in ${target.file}).`,
+									});
+								}
+							}
+							const resolvedTarget = await declarationForSymbol({
+								repoRoot: targetRoot,
+								file: target.file,
+								symbol: target.symbol,
+							});
+							if (!resolvedTarget) {
+								findings.push({
+									kind: "step_target_mismatch",
+									severity: "info",
+									trailId: trail.id,
+									step: stepIndex,
+									message: `Trail "${trail.title}" step ${stepIndex + 1}: target construct ${target.symbol} does not resolve in ${target.file}.`,
+								});
+							} else if (
+								target.span &&
+								(resolvedTarget.startLine !== target.span.startLine ||
+									resolvedTarget.endLine !== target.span.endLine)
+							) {
+								findings.push({
+									kind: "step_target_mismatch",
+									severity: "info",
+									trailId: trail.id,
+									step: stepIndex,
+									message: `Trail "${trail.title}" step ${stepIndex + 1}: target construct ${target.symbol} resolves to ${resolvedTarget.startLine}-${resolvedTarget.endLine}, but the step claims ${target.span.startLine}-${target.span.endLine}.`,
+								});
+							}
+						} catch {
+							// Target checkout/file unreadable — reported by the repo/file
+							// lanes (or simply not available locally). Do not invent a
+							// mismatch from a missing checkpoint.
+						}
+					}
 				}
 			} catch {
 				// File doesn't exist or can't be read — already covered by mechanical checks

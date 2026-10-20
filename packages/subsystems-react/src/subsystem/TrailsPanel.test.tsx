@@ -9,6 +9,11 @@ import {
 } from './TrailsPanel';
 import type { SubsystemTrail } from './model';
 import { buildStepBrief } from './trailBrief';
+import {
+  buildStepEmphasisMap,
+  stepClaimKey,
+  type StepEmphasisRecord,
+} from './stepEmphasis';
 
 // Bun's happy-dom test environment needs `@happy-dom/global-registrator`, which
 // isn't installed here, so wire the DOM primitives React DOM + Testing Library
@@ -31,6 +36,12 @@ globals.cancelAnimationFrame = dom.cancelAnimationFrame.bind(dom);
 globals.localStorage = dom.localStorage;
 globals.sessionStorage = dom.sessionStorage;
 globals.matchMedia = dom.matchMedia.bind(dom);
+// themed-markdown measures its slide container; happy-dom has no ResizeObserver.
+globals.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 
 
 const trails: SubsystemTrail[] = [
@@ -50,6 +61,22 @@ const trails: SubsystemTrail[] = [
     ],
   },
 ];
+
+const usesTrail: SubsystemTrail = {
+  id: 'uses-flow',
+  title: 'Uses flow',
+  steps: [
+    {
+      from: 'panel',
+      to: 'merge',
+      mechanism: 'uses',
+      file: 'src/list.tsx',
+      span: { startLine: 10, endLine: 12, contentHash: 'h' },
+      purl: 'pkg:github/acme/app#src/list.tsx',
+      symbol: 'ModelList',
+    },
+  ],
+};
 
 const writeText = mock(() => Promise.resolve());
 
@@ -142,5 +169,127 @@ describe('TrailsPanel step copy', () => {
     fireEvent.click(copy);
     await new Promise((r) => setTimeout(r, 10));
     expect(copy.getAttribute('title')).toBe('Copy this step for an agent');
+  });
+});
+
+describe('TrailsPanel step semantics', () => {
+  test('calls leads with the caller frame', () => {
+    const { getByText, queryByText } = renderPanel();
+    expect(getByText('Login.submit')).toBeTruthy();
+    expect(queryByText(/calls →/)).toBeNull();
+  });
+
+  test('uses leads with the logical hop and shows the via site', () => {
+    const { getByText } = renderPanel({
+      trails: [usesTrail],
+      expandedTrails: new Set(['uses-flow']),
+      componentByAlias: new Map([
+        ['panel', { alias: 'panel', name: 'MaintenancePanel' }],
+        ['merge', { alias: 'merge', name: 'mergeProvenance' }],
+      ]),
+    });
+    expect(getByText('MaintenancePanel uses mergeProvenance')).toBeTruthy();
+  });
+
+  test('falls back to aliases when no component map is supplied', () => {
+    const { getByText } = renderPanel({
+      trails: [usesTrail],
+      expandedTrails: new Set(['uses-flow']),
+    });
+    expect(getByText('panel uses merge')).toBeTruthy();
+  });
+
+  test('uses the resolved target symbol as the callee', () => {
+    const withTarget: SubsystemTrail = {
+      ...usesTrail,
+      steps: [
+        {
+          ...usesTrail.steps[0]!,
+          target: {
+            purl: 'pkg:github/acme/app#src/store.ts',
+            file: 'src/store.ts',
+            symbol: 'Store.add',
+            span: { startLine: 3, endLine: 5, contentHash: 'h' },
+          },
+        },
+      ],
+    };
+    const { getByText } = renderPanel({
+      trails: [withTarget],
+      expandedTrails: new Set(['uses-flow']),
+      componentByAlias: new Map([
+        ['panel', { alias: 'panel', name: 'MaintenancePanel' }],
+        ['merge', { alias: 'merge', name: 'Store' }],
+      ]),
+    });
+    expect(getByText('MaintenancePanel uses Store.add')).toBeTruthy();
+  });
+
+});
+
+function emphasisRecord(
+  trailId: string,
+  stepIndex: number,
+  guidance?: string,
+): StepEmphasisRecord {
+  return {
+    trailId,
+    stepKey: stepClaimKey(trails[0]!.steps[stepIndex]!),
+    guidance,
+    provenance: { source: 'author', at: '2026-10-19T00:00:00.000Z' },
+  };
+}
+
+describe('TrailsPanel step emphasis', () => {
+  test('renders a marked star and the trail emphasis count', () => {
+    const emphasis = buildStepEmphasisMap([
+      emphasisRecord('auth-flow', 0, 'Why this step matters.'),
+    ]);
+    const { getByTitle } = renderPanel({ stepEmphasis: emphasis });
+    expect(getByTitle('1 emphasized step')).not.toBeNull();
+    expect(getByTitle('Key step')).not.toBeNull();
+  });
+
+  test('shows markdown guidance when the marked step is focused', () => {
+    const emphasis = buildStepEmphasisMap([
+      emphasisRecord('auth-flow', 0, '**Start here** because this row matters.'),
+    ]);
+    const { container } = renderPanel({
+      focusedTrailId: 'auth-flow',
+      focusedStepIndex: 0,
+      stepEmphasis: emphasis,
+    });
+    expect(container.textContent).toContain('Start here');
+    expect(container.textContent).toContain('because this row matters.');
+  });
+
+  test('Remove guidance toggles the mark off', () => {
+    const onRemoveStepEmphasis = mock(() => {});
+    const emphasis = buildStepEmphasisMap([
+      emphasisRecord('auth-flow', 0, 'Why this step matters.'),
+    ]);
+    const { getByText } = renderPanel({
+      focusedTrailId: 'auth-flow',
+      focusedStepIndex: 0,
+      stepEmphasis: emphasis,
+      onRemoveStepEmphasis,
+    });
+    fireEvent.click(getByText('Remove guidance'));
+    expect(onRemoveStepEmphasis).toHaveBeenCalledWith(trails[0], 0);
+  });
+
+  test('does not render guidance while the step is not focused', () => {
+    const emphasis = buildStepEmphasisMap([
+      emphasisRecord('auth-flow', 0, '**Start here** because this row matters.'),
+    ]);
+    const { container } = renderPanel({ stepEmphasis: emphasis });
+    expect(container.textContent).not.toContain('because this row matters.');
+  });
+
+  test('does not render a star for an unmarked step', () => {
+    const { queryByTitle } = renderPanel({
+      stepEmphasis: buildStepEmphasisMap([]),
+    });
+    expect(queryByTitle('Key step')).toBeNull();
   });
 });

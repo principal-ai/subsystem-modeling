@@ -411,6 +411,37 @@ export interface SubsystemComponentEdge {
   mechanism: SubsystemEdgeMechanism;
 }
 
+/**
+ * The construct that contains a seam site. The site is always in the step's
+ * own file/repo (`step.file` / `step.purl`), so it carries only the construct
+ * identity and its full declaration range.
+ */
+export interface SubsystemSiteConstruct {
+  /** Caller construct symbol (e.g. `MaintenanceModelList`, `Registry.start`). */
+  symbol: string;
+  /** Full declaration range of the construct, not just the seam line. */
+  span: SubsystemSourceSpan;
+  /** Declaration shape, when known (function, method, class, …). */
+  construct?: SubsystemConstruct;
+}
+
+/**
+ * The construct a seam reaches. Unlike `site`, the target can live in another
+ * repo, so it carries its own purl + file. `span` is the target declaration
+ * range when it resolves; it can be absent for externals or unresolved targets.
+ */
+export interface SubsystemTargetConstruct {
+  /** File-anchored purl of the target repo/file. */
+  purl: string;
+  file: string;
+  /** Callee construct symbol (e.g. `mergeProvenance`, `Store.add`). */
+  symbol: string;
+  /** Full declaration range of the target, when resolvable. */
+  span?: SubsystemSourceSpan;
+  /** Declaration shape, when known. */
+  construct?: SubsystemConstruct;
+}
+
 export interface SubsystemTrailStep {
   /** Source component alias. */
   from: string;
@@ -428,6 +459,19 @@ export interface SubsystemTrailStep {
    * unverified and the Trails view has no line to highlight.
    */
   span?: SubsystemSourceSpan;
+  /**
+   * The construct containing the seam site, with its full declaration range.
+   * Required when `mechanism` is `calls` (and the step is not `proposed`): the
+   * caller frame must be housed by the `from` component. For `uses` and
+   * data/event seams it is the via-site evidence and remains optional.
+   */
+  site?: SubsystemSiteConstruct;
+  /**
+   * The construct the seam reaches. Distinct from `to` (a component alias):
+   * the target can be a method on a modeled component, or a construct that is
+   * not a node at all. Optional; populated from accepted call-site evidence.
+   */
+  target?: SubsystemTargetConstruct;
   /**
    * File-anchored purl of the seam site (e.g.
    * `pkg:github/owner/name#path/to/file.ts`), mirroring component `purl`.

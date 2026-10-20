@@ -31,12 +31,32 @@ export function buildStepBrief(
   lines.push(`- to: \`${step.to}\``);
   lines.push(`- mechanism: \`${step.mechanism}\``);
   lines.push(`- symbol: \`${step.symbol}\``);
+  // `calls` means the site is the caller frame. Every other mechanism is a
+  // logical hop whose evidence can live in another construct; say so, so an
+  // agent does not treat the site symbol as the source component.
+  if (step.mechanism !== 'calls') {
+    lines.push(`- site role: \`via\``);
+  }
   const site = step.span
     ? step.span.startLine === step.span.endLine
       ? `${step.file}:${step.span.startLine}`
       : `${step.file}:${step.span.startLine}-${step.span.endLine}`
     : step.file;
   lines.push(`- site: \`${site}\``);
+  if (step.site) {
+    const frame = step.site.span.startLine === step.site.span.endLine
+      ? `${step.file}:${step.site.span.startLine}`
+      : `${step.file}:${step.site.span.startLine}-${step.site.span.endLine}`;
+    lines.push(`- site construct: \`${step.site.symbol}\` (${frame})`);
+  }
+  if (step.target) {
+    const targetSpan = step.target.span
+      ? step.target.span.startLine === step.target.span.endLine
+        ? `:${step.target.span.startLine}`
+        : `:${step.target.span.startLine}-${step.target.span.endLine}`
+      : '';
+    lines.push(`- target: \`${step.target.symbol}\` (${step.target.file}${targetSpan})`);
+  }
   lines.push(`- purl: \`${step.purl}\``);
   if (step.annotation != null && step.annotation.length > 0) {
     lines.push(`- note: ${step.annotation}`);

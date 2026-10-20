@@ -76,6 +76,12 @@ export function laneForFindingKind(
 		case "trail":
 		case "step_span_unconfirmed":
 		case "step_span_stale":
+		case "step_site_outside_from":
+		case "step_site_unconfirmed":
+		case "step_site_mismatch":
+		case "step_site_stale":
+		case "step_target_mismatch":
+		case "step_target_stale":
 			return "trail";
 		default:
 			return null;

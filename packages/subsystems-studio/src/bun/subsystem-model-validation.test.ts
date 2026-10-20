@@ -23,6 +23,93 @@ describe("findSubsystemModelProblems", () => {
     ).toEqual([]);
   });
 
+  test("requires a site construct on calls steps", () => {
+    const problems = findSubsystemModelProblems(
+      payload({
+        components: [
+          { alias: "a", name: "A", construct: "function", file: "src/a.ts", purl: "pkg:github/a/b" },
+          { alias: "b", name: "B", construct: "function", file: "src/b.ts", purl: "pkg:github/a/b" },
+        ],
+        trails: [
+          {
+            id: "t",
+            title: "call",
+            steps: [
+              {
+                from: "a",
+                to: "b",
+                mechanism: "calls",
+                file: "src/a.ts",
+                purl: "pkg:github/a/b#src/a.ts",
+                symbol: "a",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(problems.some((p) => p.includes("site"))).toBe(true);
+  });
+
+  test("allows a proposed calls step without a site construct", () => {
+    expect(
+      findSubsystemModelProblems(
+        payload({
+          components: [
+            { alias: "a", name: "A", construct: "function", file: "src/a.ts", purl: "pkg:github/a/b" },
+            { alias: "b", name: "B", construct: "function", file: "src/b.ts", purl: "pkg:github/a/b" },
+          ],
+          trails: [
+            {
+              id: "t",
+              title: "planned",
+              steps: [
+                {
+                  from: "a",
+                  to: "b",
+                  mechanism: "calls",
+                  proposed: true,
+                  file: "src/a.ts",
+                  purl: "pkg:github/a/b#src/a.ts",
+                  symbol: "a",
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  test("allows uses steps without a site construct", () => {
+    expect(
+      findSubsystemModelProblems(
+        payload({
+          components: [
+            { alias: "a", name: "A", construct: "function", file: "src/a.ts", purl: "pkg:github/a/b" },
+            { alias: "b", name: "B", construct: "function", file: "src/b.ts", purl: "pkg:github/a/b" },
+          ],
+          trails: [
+            {
+              id: "t",
+              title: "use",
+              steps: [
+                {
+                  from: "a",
+                  to: "b",
+                  mechanism: "uses",
+                  file: "src/a.ts",
+                  purl: "pkg:github/a/b#src/a.ts",
+                  symbol: "a",
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
   test("rejects an off-vocabulary construct (schema)", () => {
     const problems = findSubsystemModelProblems(
       payload({

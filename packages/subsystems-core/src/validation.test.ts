@@ -81,6 +81,69 @@ describe('validateSubsystemModelCrossField', () => {
     expect(problems[0]!.path).toBe('/trails/0/steps/0/purl');
   });
 
+  test('flags a site construct that does not contain the seam span', () => {
+    const problems = validateSubsystemModelCrossField(
+      doc({
+        components: [comp('a'), comp('b')],
+        trails: [
+          {
+            id: 'w1',
+            title: 'flow',
+            steps: [
+              {
+                from: 'a',
+                to: 'b',
+                mechanism: 'calls',
+                file: 'src/a.ts',
+                purl: 'pkg:github/acme/app#src/a.ts',
+                symbol: 'a',
+                span: { startLine: 20, endLine: 20, contentHash: 'h' },
+                site: {
+                  symbol: 'a',
+                  span: { startLine: 1, endLine: 10, contentHash: 'h' },
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(problems.some((p) => p.path === '/trails/0/steps/0/site/span')).toBe(true);
+    expect(problems.find((p) => p.path === '/trails/0/steps/0/site/span')!.message).toContain(
+      'does not contain the seam span',
+    );
+  });
+
+  test('flags a target purl fragment that mismatches the target file', () => {
+    const problems = validateSubsystemModelCrossField(
+      doc({
+        components: [comp('a'), comp('b')],
+        trails: [
+          {
+            id: 'w1',
+            title: 'flow',
+            steps: [
+              {
+                from: 'a',
+                to: 'b',
+                mechanism: 'calls',
+                file: 'src/a.ts',
+                purl: 'pkg:github/acme/app#src/a.ts',
+                symbol: 'a',
+                target: {
+                  purl: 'pkg:github/acme/app#src/b-other.ts',
+                  file: 'src/b.ts',
+                  symbol: 'b',
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(problems.some((p) => p.path === '/trails/0/steps/0/target/purl')).toBe(true);
+  });
+
   test('module implies file, exempting external/proposed', () => {
     const bad = validateSubsystemModelCrossField(
       doc({ components: [comp('a', { module: 'src/host', file: '' })] }),

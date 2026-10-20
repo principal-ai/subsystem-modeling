@@ -101,6 +101,8 @@ export type {
   SubsystemModelDocument,
   SubsystemTrail,
   SubsystemTrailStep,
+  SubsystemSiteConstruct,
+  SubsystemTargetConstruct,
   SubsystemComponentRole,
   SubsystemFramework,
   SubsystemStereotype,

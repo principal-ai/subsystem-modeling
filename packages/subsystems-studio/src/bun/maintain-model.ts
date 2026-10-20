@@ -226,11 +226,20 @@ function isContainerVerificationFinding(
 	);
 }
 
-/** Trail step call site verification — unconfirmed or stale. */
+/** Trail step call site verification — unconfirmed, stale, or mislabeled. */
 function isTrailStepGapFinding(
 	f: SubsystemModelAuditReport["findings"][number],
 ): boolean {
-	return f.kind === "step_span_unconfirmed" || f.kind === "step_span_stale";
+	return (
+		f.kind === "step_span_unconfirmed" ||
+		f.kind === "step_span_stale" ||
+		f.kind === "step_site_outside_from" ||
+		f.kind === "step_site_unconfirmed" ||
+		f.kind === "step_site_mismatch" ||
+		f.kind === "step_site_stale" ||
+		f.kind === "step_target_mismatch" ||
+		f.kind === "step_target_stale"
+	);
 }
 
 function isConstructIssueFinding(

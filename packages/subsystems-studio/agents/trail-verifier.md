@@ -88,8 +88,11 @@ Notes on the change shape:
 - `mechanism` must match the step's mechanism (the finding message shows it).
 - `value.lines` is the 1-based inclusive span of the **call site** you read.
 - Omit `contentHash` — Studio computes it from the span at accept time.
-- On accept the step span is also pinned onto the step (`step.span`), so the
-  model carries the range inline rather than only in the augmentation store.
+- On accept the step span is also pinned onto the step (`step.span`), along
+  with the resolved `site` construct (the enclosing caller declaration) and
+  `target` construct (the callee declaration), so the model carries the frames
+  inline rather than only in the augmentation store. A `calls` step **requires**
+  `site`; if the enclosing declaration cannot be resolved, accept is refused.
 - A stale step uses the same shape with the **current** line span; the new
   augmentation replaces the stale one.
 
@@ -104,6 +107,13 @@ Notes on the change shape:
 - If the trail step's claim is wrong in a way a callSite augmentation cannot
   express (wrong target component, wrong mechanism, step shouldn't exist),
   skip and say so — do not force an augmentation onto a broken step.
+- `step_site_unconfirmed` means a `calls` step has no `site` construct yet.
+  Propose the callSite augmentation; accept resolves and pins the enclosing
+  caller declaration. If it cannot be resolved, skip and say so.
+- `step_site_outside_from` means the site is not housed by the `from`
+  component. If the step is a logical dependency, propose a `trail-step`
+  `mechanism: "uses"` change; otherwise skip and say the caller must be
+  modeled and `from` changed. Never label it `calls`.
 - Never edit `~/.principal/subsystem-models/*.json` directly.
 - Never enable or rely on auto-accept; humans confirm in Studio.
 

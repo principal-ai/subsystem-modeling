@@ -189,7 +189,18 @@ never author an `edges` array.
 | `span` | no | Seam source span (`startLine`, `endLine`, `contentHash`) — the call-site range and its content hash. Captured by verify tooling, not hand-authored; `file` + `symbol` locate the frame. |
 | `purl` | yes | File-anchored purl of the seam site (repo key + `#` + `file`, mirroring component `purl`). Readers resolve the checkout from this — the step must not rely on its endpoints' repos. The fragment after `#` must equal `file`. |
 | `symbol` | yes | Frame name shown in the Trails list — the function/method on the stack at the site. Required; there is no mechanism + filename fallback. |
+| `site` | yes for `calls` | The enclosing construct (`symbol` + full declaration `span`, optional `construct`) containing the seam site. For `calls` it is the caller frame and is **required** by the schema; for `uses`/data seams it is the via-site evidence and is optional. Hosts resolve/pin it; it makes the frame verifiable. |
+| `target` | no | The construct the seam reaches (`purl`, `file`, `symbol`, optional `span`/`construct`). Distinct from `to` (a component alias) — the target can be a method or a construct that is not a node. Hosts resolve/pin it from accepted call-site evidence. |
 | `annotation` | no | Free-text note for this step. Viewers show it in the codeview annotation column next to the highlighted line. Informative only — never verified against source. Prefer one short verb-first sentence (same voice as `purpose`). |
+
+**`calls` vs `uses` (containment rule).** A `calls` step promises that the seam
+site is housed by its `from` component — the same file, inside the component's
+declaration span. If the call actually lives in a helper or child component that
+the story elides, label the edge `uses` (a logical dependency) and keep the real
+site in `file` + `symbol` + `span`; the symbol is then the **via** construct,
+not the caller. Do not turn an architectural dependency into a `calls` edge.
+Modeling the caller as its own component (and changing `from`) is the other
+honest fix when the hop belongs in the call graph.
 
 Do **not** anchor the step at a random nearby site: `file` + `symbol` should
 name the frame where the seam actually fires (a reviewer checks the step against
@@ -400,7 +411,15 @@ registers them into Alexandria (idempotent) and never stores them:
 ```bash
 npx -y @principal-ai/principal-studio-cli subsystem-model list
 npx -y @principal-ai/principal-studio-cli subsystem-model get <id>
+# Pin derivable site constructs on legacy calls steps (dry run by default):
+npx -y @principal-ai/principal-studio-cli subsystem-model backfill-sites <id>
+npx -y @principal-ai/principal-studio-cli subsystem-model backfill-sites --all --apply
 ```
+
+`site` is required on `calls` steps. `backfill-sites` resolves the enclosing
+declaration for each missing site from the seam span; steps with no seam span
+(or no parsable declaration) are reported and left for the trail lane. It
+needs Studio's HTTP bridge because the resolver lives host-side.
 
 ### Re-creating is idempotent
 

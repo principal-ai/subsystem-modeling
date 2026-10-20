@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -51,10 +51,10 @@ beforeAll(() => {
 		runGit(["add", "-A"]);
 		runGit(["commit", "-m", "init"]);
 	}
-	registerProjectInAlexandria(repoA, "https://github.com/a/repo-a.git");
 	process.env["PRINCIPAL_ALEXANDRIA_HOME"] = join(tmp, "alexandria");
 	process.env["PRINCIPAL_SUBSYSTEM_MODELS_HOME"] = tmp;
 	process.env["PRINCIPAL_C4_ELEMENTS_HOME"] = tmp;
+	registerProjectInAlexandria(repoA, "https://github.com/a/repo-a.git");
 });
 
 afterAll(() => {
@@ -519,5 +519,96 @@ describe("container-first: component process claims need a verified key", () => 
 		const accepted = await acceptSubsystemModelProposal(graphId, claim.proposal.id);
 		expect(accepted.ok).toBe(false);
 		if (!accepted.ok) expect(accepted.error).toContain("no accepted container");
+	});
+});
+
+describe("callSite proposal change", () => {
+	test("accept pins the seam, the enclosing site construct, and the target construct", async () => {
+		writeFileSync(
+			join(tmp, "repo-a", "src", "call.ts"),
+			[
+				"export function main() {", // 1
+				"  target();", // 2
+				"}", // 3
+				"", // 4
+				"export function target() {}", // 5
+			].join("\n"),
+			"utf8",
+		);
+		const created = await createSubsystemModel({
+			title: `callsite-${Math.random().toString(36).slice(2)}`,
+			components: [
+				{
+					alias: "a",
+					name: "a",
+					construct: "function",
+					file: "src/call.ts",
+					purl: `${KEY}#src/call.ts`,
+				},
+				{
+					alias: "b",
+					name: "target",
+					construct: "function",
+					file: "src/call.ts",
+					purl: `${KEY}#src/call.ts`,
+				},
+			],
+			trails: [
+				{
+					id: "t",
+					title: "call",
+					steps: [
+						{
+							from: "a",
+							to: "b",
+							mechanism: "calls",
+							file: "src/call.ts",
+							purl: `${KEY}#src/call.ts`,
+							symbol: "main",
+						},
+					],
+				},
+			],
+		});
+		const proposal = await createSubsystemModelProposal({
+			graphId: created.id,
+			rationale: "main calls target at line 2",
+			changes: [
+				{
+					target: "augmentation",
+					field: "callSite",
+					trailId: "t",
+					stepIndex: 0,
+					file: "src/call.ts",
+					symbol: "main",
+					purl: `${KEY}#src/call.ts`,
+					// The agent omits `contentHash`; accept hashes the live file.
+					value: {
+						lines: { start: 2, end: 2 },
+						target: { file: "src/call.ts", symbol: "target" },
+						mechanism: "calls",
+					} as never,
+				},
+			],
+		});
+		expect(proposal.ok).toBe(true);
+		if (!proposal.ok) return;
+		const accepted = await acceptSubsystemModelProposal(
+			created.id,
+			proposal.proposal.id,
+		);
+		expect(accepted.ok).toBe(true);
+		const graph = await getSubsystemModel(created.id);
+		const step = graph?.trails?.[0]?.steps[0];
+		expect(step?.span).toMatchObject({ startLine: 2, endLine: 2 });
+		expect(step?.site).toMatchObject({
+			symbol: "main",
+			span: { startLine: 1, endLine: 3 },
+		});
+		expect(step?.target).toMatchObject({
+			file: "src/call.ts",
+			symbol: "target",
+			span: { startLine: 5, endLine: 5 },
+		});
 	});
 });

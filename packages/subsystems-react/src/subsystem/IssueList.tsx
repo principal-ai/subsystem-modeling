@@ -123,6 +123,12 @@ const KIND_CATEGORY: Record<string, SubsystemIssueCategory> = {
   trail: 'trail',
   step_span_unconfirmed: 'trail',
   step_span_stale: 'trail',
+  step_site_outside_from: 'trail',
+  step_site_unconfirmed: 'trail',
+  step_site_mismatch: 'trail',
+  step_site_stale: 'trail',
+  step_target_mismatch: 'trail',
+  step_target_stale: 'trail',
 };
 
 /**
@@ -198,6 +204,14 @@ export const ISSUE_KIND_ICON: Record<string, LucideIcon> = {
   construct_span_stale: FileCodeCorner,
   step_span_unconfirmed: FileCodeCorner,
   step_span_stale: FileCodeCorner,
+  // A `calls` edge whose site does not live in the source component — the
+  // mechanism and the code are disagreeing, so a broken-link glyph.
+  step_site_outside_from: Link2Off,
+  step_site_unconfirmed: FileCodeCorner,
+  step_site_mismatch: Link2Off,
+  step_site_stale: FileCodeCorner,
+  step_target_mismatch: Link2Off,
+  step_target_stale: FileCodeCorner,
 };
 
 /**
@@ -288,6 +302,12 @@ const KIND_LABEL: Record<string, string> = {
   trail: 'Step issue',
   step_span_unconfirmed: 'Step span not captured',
   step_span_stale: 'Step span changed',
+  step_site_outside_from: 'Calls site outside source',
+  step_site_unconfirmed: 'Site construct not captured',
+  step_site_mismatch: 'Site construct mismatch',
+  step_site_stale: 'Site construct changed',
+  step_target_mismatch: 'Target construct mismatch',
+  step_target_stale: 'Target construct changed',
 };
 
 /** Label for an issue's kind. Explicit `kindLabel` wins; unknown kinds humanize. */
@@ -329,6 +349,12 @@ const KIND_ORDER: Record<string, number> = {
   trail: 40,
   step_span_unconfirmed: 41,
   step_span_stale: 42,
+  step_site_outside_from: 43,
+  step_site_unconfirmed: 44,
+  step_site_mismatch: 45,
+  step_site_stale: 46,
+  step_target_mismatch: 47,
+  step_target_stale: 48,
 };
 
 const KIND_ORDER_FALLBACK = 100;

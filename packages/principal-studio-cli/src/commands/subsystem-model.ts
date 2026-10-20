@@ -363,6 +363,29 @@ async function auditAction(id: string | undefined): Promise<void> {
   if (!ok) process.exit(2);
 }
 
+async function backfillSitesAction(
+  id: string | undefined,
+  opts: { all?: boolean; apply?: boolean },
+): Promise<void> {
+  if (!id && !opts.all) {
+    process.stderr.write('Pass a model id or --all.\n');
+    process.exit(2);
+  }
+  if (id && opts.all) {
+    process.stderr.write('Pass either a model id or --all, not both.\n');
+    process.exit(2);
+  }
+  const path = opts.all
+    ? '/api/subsystem-model/backfill-sites'
+    : `/api/subsystem-model/${encodeURIComponent(id!)}/backfill-sites`;
+  const { ok, json } = await studioFetch(path, {
+    method: 'POST',
+    body: JSON.stringify({ apply: opts.apply === true }),
+  });
+  process.stdout.write(JSON.stringify(json, null, 2) + '\n');
+  if (!ok) process.exit(2);
+}
+
 async function proposalsListAction(
   id: string | undefined,
   opts: { includeResolved?: boolean },
@@ -530,6 +553,18 @@ export function createSubsystemModelCommand(): Command {
     )
     .argument('<id>', 'Model id (sg-…)')
     .action(auditAction);
+
+  cmd
+    .command('backfill-sites')
+    .description(
+      'Resolve and pin missing site constructs on calls steps (requires Studio HTTP)',
+    )
+    .argument('[id]', 'Model id (sg-…)')
+    .option('--all', 'Backfill every stored model')
+    .option('--apply', 'Write the changes (default: dry run)')
+    .action((id: string | undefined, opts: { all?: boolean; apply?: boolean }) =>
+      backfillSitesAction(id, opts),
+    );
 
   cmd
     .command('proposals')

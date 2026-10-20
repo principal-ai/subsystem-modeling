@@ -38,6 +38,11 @@ describe('buildStepBrief', () => {
     expect(brief).toContain('- symbol: `Login.submit`');
     expect(brief).toContain('- site: `src/ui/login.tsx:42`');
     expect(brief).toContain('- purl: `pkg:github/acme/app`');
+    expect(brief).not.toContain('- site role:');
+  });
+
+  test('marks a non-call site as via evidence', () => {
+    expect(buildStepBrief(trail, 1)).toContain('- site role: `via`');
   });
 
   test('omits the note when the step has no annotation', () => {
@@ -48,6 +53,30 @@ describe('buildStepBrief', () => {
     const brief = buildStepBrief(trail, 1);
     expect(brief).toContain('Trail: Auth flow (auth-flow) — step 2/2');
     expect(brief).toContain('- note: session row is written here');
+  });
+
+  test('includes resolved site and target constructs when present', () => {
+    const resolved: SubsystemTrail = {
+      ...trail,
+      steps: [
+        {
+          ...trail.steps[0]!,
+          site: {
+            symbol: 'Login.submit',
+            span: { startLine: 30, endLine: 60, contentHash: 'h' },
+          },
+          target: {
+            purl: 'pkg:github/acme/app#src/api/session.ts',
+            file: 'src/api/session.ts',
+            symbol: 'Session.create',
+            span: { startLine: 7, endLine: 7, contentHash: 'h' },
+          },
+        },
+      ],
+    };
+    const brief = buildStepBrief(resolved, 0);
+    expect(brief).toContain('- site construct: `Login.submit` (src/ui/login.tsx:30-60)');
+    expect(brief).toContain('- target: `Session.create` (src/api/session.ts:7)');
   });
 
   test('returns an empty string for an out-of-range index', () => {
