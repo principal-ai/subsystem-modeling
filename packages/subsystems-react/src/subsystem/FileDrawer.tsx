@@ -1,27 +1,25 @@
 /**
- * FileDrawer — bottom panel that slides up from the bottom of the graph area
- * to show file / trail code. Opened by sidebar file-tree clicks,
+ * FileDrawer — bottom or left panel in the graph area
+ * showing file / trail code. Opened by sidebar file-tree clicks,
  * declaration links, and trail step focus; content is injected as
  * children by the graph component.
  */
 
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useTheme } from "@principal-ade/industry-theme";
 import { Minimize2, Maximize2, X } from "lucide-react";
 
-/** Matches `transition: height …` below — callers that fitView after open
- *  should wait at least this long so the canvas has its reduced height. */
+/** Matches the drawer's size transition; wait this long before fitting the canvas. */
 export const FILE_DRAWER_HEIGHT_MS = 200;
 
-/** Bottom panel that slides up from the bottom of the graph area.
- *  Bottom-anchored with an animated height; an in-flow spacer reserves its
- *  footprint so the canvas shrinks while open (nothing covered). Stays mounted
- *  so open/close/maximize animate. The header's maximize button (or a
- *  double-click) grows it over the whole graph column for whole-file reading. */
+/** An in-flow spacer reserves the panel's footprint so it never covers the
+ *  canvas. Stays mounted across open/close, maximize, and docking changes. */
 export function FileDrawer({
   title,
   onClose,
+  placement = "bottom",
+  onResizeEnd,
   fillHeight = false,
   suppressEscape = false,
   hidden = false,
@@ -32,7 +30,11 @@ export function FileDrawer({
   /** Drawer chrome title; `null` closes the drawer. */
   title: string | null;
   onClose: () => void;
-  /** When true and open, fill the graph column instead of ~45% height. */
+  /** Left docking requires a row container; bottom docking requires a column. */
+  placement?: "bottom" | "left";
+  /** Fired when the user finishes dragging the side-docked code view's width. */
+  onResizeEnd?: () => void;
+  /** When true and open, fill the graph area instead of ~45% of its dock axis. */
   fillHeight?: boolean;
   /** Skip Escape handling (e.g. while a full-file overlay is on top). */
   suppressEscape?: boolean;
@@ -54,18 +56,72 @@ export function FileDrawer({
   const showProgress = progress != null && progress.total > 1;
   const [closeHover, setCloseHover] = useState(false);
   const [maxHover, setMaxHover] = useState(false);
-  // Full-height mode: the maximize button or double-clicking the header.
-  // The panel is always bottom-anchored with an animated height, and a spacer
-  // in normal flow reserves its footprint, so maximizing grows it upward over
-  // the still-mounted graph instead of snapping to full.
+  // Maximize grows over the still-mounted graph along the current dock axis.
   const [maximized, setMaximized] = useState(false);
-  // A closed drawer reopens at the default height, not maximized.
+  // A closed drawer reopens at the default size, not maximized.
   useEffect(() => {
     if (!open) setMaximized(false);
   }, [open]);
-  const fullHeight = open && (maximized || fillHeight);
+  const fullSize = open && (maximized || fillHeight);
+  const sideDocked = placement === "left";
+  const sizeAxis = sideDocked ? "width" : "height";
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [widthPercent, setWidthPercent] = useState(45);
+  const [resizing, setResizing] = useState(false);
+  const dragStart = useRef({ x: 0, width: 0, containerWidth: 0 });
+  const canResize = open && sideDocked && !fullSize;
+  const dockSize = sideDocked ? `${widthPercent}%` : "45%";
   // Space the panel takes out of the canvas's flow (0 when it overlays fully).
-  const reservedHeight = fullHeight ? 0 : open ? "45%" : 0;
+  const reservedSize = fullSize ? 0 : open ? dockSize : 0;
+  const sizeTransition = resizing ? "none" : `${sizeAxis} ${FILE_DRAWER_HEIGHT_MS}ms ease`;
+
+  const onResizeStart = (event: ReactMouseEvent) => {
+    if (!canResize || event.button !== 0) return;
+    const panel = panelRef.current;
+    const containerWidth = panel?.parentElement?.getBoundingClientRect().width ?? 0;
+    if (panel == null || containerWidth <= 0) return;
+    event.preventDefault();
+    dragStart.current = {
+      x: event.clientX,
+      width: panel.getBoundingClientRect().width,
+      containerWidth,
+    };
+    setResizing(true);
+  };
+
+  useEffect(() => {
+    if (!canResize) setResizing(false);
+  }, [canResize]);
+
+  useEffect(() => {
+    if (!resizing || !canResize) return;
+    const { x, width, containerWidth } = dragStart.current;
+    // Keep 240px for both code and graph when space permits; split narrow
+    // containers evenly rather than giving either pane a negative width.
+    const minWidth = Math.min(240, containerWidth / 2);
+    const maxWidth = containerWidth - minWidth;
+    const onMove = (event: MouseEvent) => {
+      const next = Math.min(Math.max(width + event.clientX - x, minWidth), maxWidth);
+      setWidthPercent(next / containerWidth * 100);
+    };
+    const onUp = () => {
+      setResizing(false);
+      onResizeEnd?.();
+    };
+    const { userSelect, cursor } = document.body.style;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    window.addEventListener("blur", onUp);
+    return () => {
+      document.body.style.userSelect = userSelect;
+      document.body.style.cursor = cursor;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      window.removeEventListener("blur", onUp);
+    };
+  }, [resizing, canResize, onResizeEnd]);
 
   useEffect(() => {
     if (!open || suppressEscape) return;
@@ -78,36 +134,39 @@ export function FileDrawer({
 
   return (
     <>
-      {/* Reserves the drawer's footprint in the column so the canvas shrinks
-          while the drawer is open. Animates with the panel, so the boundary
-          between graph and code slides smoothly. */}
+      {/* Reserve the same size along the parent's matching flex axis. */}
       <div
         aria-hidden="true"
         style={{
           flexShrink: 0,
-          height: reservedHeight,
-          transition: `height ${FILE_DRAWER_HEIGHT_MS}ms ease`,
+          order: sideDocked ? -1 : undefined,
+          [sizeAxis]: reservedSize,
+          transition: sizeTransition,
         }}
       />
-      {/* The panel — bottom-anchored and grown via `height`, so maximize/fill
-          reads as dragging up over the diagram. */}
       <div
+        ref={panelRef}
         style={{
           position: "absolute",
           left: 0,
-          right: 0,
+          top: sideDocked ? 0 : undefined,
+          right: sideDocked ? undefined : 0,
           bottom: 0,
           // Above the edge-label overlay (zIndex 5), React Flow, and overlays
           // (zIndex 6–8); 30 lifts it over the whole graph area when maximized.
           zIndex: maximized ? 30 : 6,
-          height: open ? (fullHeight ? "100%" : "45%") : 0,
+          width: sideDocked ? (open ? (fullSize ? "100%" : dockSize) : 0) : undefined,
+          height: sideDocked ? "100%" : open ? (fullSize ? "100%" : "45%") : 0,
+          minWidth: 0,
           minHeight: 0,
+          boxSizing: "border-box",
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
           background: theme.colors.background,
-          borderTop: open ? `1px solid ${theme.colors.border}` : "none",
-          transition: `height ${FILE_DRAWER_HEIGHT_MS}ms ease`,
+          borderTop: open && !sideDocked ? `1px solid ${theme.colors.border}` : "none",
+          borderRight: open && sideDocked ? `1px solid ${theme.colors.border}` : "none",
+          transition: sizeTransition,
         }}
       >
         <div
@@ -232,6 +291,25 @@ export function FileDrawer({
         <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
           {children}
         </div>
+        {canResize && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize code view"
+            title="Drag to resize code view"
+            onMouseDown={onResizeStart}
+            style={{
+              position: "absolute",
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: 5,
+              cursor: "col-resize",
+              background: theme.colors.border,
+              zIndex: 2,
+            }}
+          />
+        )}
       </div>
     </>
   );

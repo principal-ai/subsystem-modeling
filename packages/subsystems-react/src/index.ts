@@ -227,6 +227,43 @@ export type {
   TrailStackView,
 } from './subsystem/trailStack';
 export { buildStepBrief } from './subsystem/trailBrief';
+export {
+  buildStepEmphasisMap,
+  emphasisForTrail,
+  emphasisKey,
+  findStepEmphasis,
+  orphanedEmphasis,
+  stepClaimKey,
+} from './subsystem/stepEmphasis';
+export type {
+  StepEmphasisDocument,
+  StepEmphasisMap,
+  StepEmphasisProvenance,
+  StepEmphasisRecord,
+} from './subsystem/stepEmphasis';
+export {
+  decorationModelIds,
+  decorationTrailId,
+  decorationTrailKey,
+  findDecorationTrail,
+  groupDecorationTrailsByModel,
+} from './subsystem/decoration';
+export type {
+  DecorationBaseTrailRef,
+  DecorationDraft,
+  DecorationDraftComponent,
+  DecorationDraftEdge,
+  DecorationDraftTrailRef,
+  DecorationProvenance,
+  DecorationStepAnchor,
+  DecorationTrailRef,
+  SubsystemDecoration,
+} from './subsystem/decoration';
+export { DecorationPanel } from './subsystem/DecorationPanel';
+export type {
+  DecorationPanelProps,
+  DecorationPanelTrailMeta,
+} from './subsystem/DecorationPanel';
 export { GraphLayoutCover } from './subsystem/GraphLayoutCover';
 export type { GraphLayoutCoverProps } from './subsystem/GraphLayoutCover';
 export {

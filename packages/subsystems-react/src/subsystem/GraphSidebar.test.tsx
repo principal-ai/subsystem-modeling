@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { createElement } from 'react';
+import { createElement, useState } from 'react';
 import { Window } from 'happy-dom';
 import { cleanup, fireEvent, render } from '@testing-library/react/pure';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
@@ -125,6 +125,59 @@ describe('GraphSidebar chrome', () => {
     expect(sidebarColumn(container).style.width).toBe('400px');
   });
 
+  test('multiple moves track displacement from drag start without accumulating', () => {
+    const { container, getByLabelText } = renderSidebar({});
+    const handle = getByLabelText('Resize sidebar');
+    fireEvent.mouseDown(handle, { clientX: 100 });
+    fireEvent.mouseMove(document, { clientX: 120 });
+    expect(sidebarColumn(container).style.width).toBe('340px');
+    fireEvent.mouseMove(document, { clientX: 140 });
+    expect(sidebarColumn(container).style.width).toBe('360px');
+    fireEvent.mouseMove(document, { clientX: 110 });
+    expect(sidebarColumn(container).style.width).toBe('330px');
+    fireEvent.mouseUp(document);
+
+    // Each new gesture starts from the width the previous gesture left.
+    fireEvent.mouseDown(handle, { clientX: 110 });
+    fireEvent.mouseMove(document, { clientX: 130 });
+    fireEvent.mouseUp(document);
+    expect(sidebarColumn(container).style.width).toBe('350px');
+  });
+
+  test('clamps at both limits and follows the pointer back from them', () => {
+    const { container, getByLabelText } = renderSidebar({});
+    fireEvent.mouseDown(getByLabelText('Resize sidebar'), { clientX: 100 });
+    fireEvent.mouseMove(document, { clientX: 500 });
+    expect(sidebarColumn(container).style.width).toBe('600px');
+    fireEvent.mouseMove(document, { clientX: 150 });
+    expect(sidebarColumn(container).style.width).toBe('370px');
+    fireEvent.mouseMove(document, { clientX: -100 });
+    expect(sidebarColumn(container).style.width).toBe('240px');
+    fireEvent.mouseMove(document, { clientX: 100 });
+    expect(sidebarColumn(container).style.width).toBe('320px');
+    fireEvent.mouseUp(document);
+  });
+
+  test('controlled host updates do not change the drag baseline', () => {
+    function ControlledSidebar() {
+      const [width, setWidth] = useState(400);
+      return createElement(
+        ThemeProvider,
+        { theme: defaultEditorTheme },
+        createElement(GraphSidebar, { width, onWidthChange: setWidth }),
+      );
+    }
+    const { container, getByLabelText } = render(createElement(ControlledSidebar));
+    fireEvent.mouseDown(getByLabelText('Resize sidebar'), { clientX: 100 });
+    fireEvent.mouseMove(document, { clientX: 140 });
+    expect(sidebarColumn(container).style.width).toBe('440px');
+    fireEvent.mouseMove(document, { clientX: 160 });
+    expect(sidebarColumn(container).style.width).toBe('460px');
+    fireEvent.mouseMove(document, { clientX: 100 });
+    expect(sidebarColumn(container).style.width).toBe('400px');
+    fireEvent.mouseUp(document);
+  });
+
   test('a drag ends by persisting the width under persistKey', () => {
     const { getByLabelText } = renderSidebar({
       persistKey: 'gs-test',
@@ -132,6 +185,8 @@ describe('GraphSidebar chrome', () => {
     });
     const handle = getByLabelText('Resize sidebar');
     fireEvent.mouseDown(handle, { clientX: 100 });
+    fireEvent.mouseMove(document, { clientX: 140 });
+    fireEvent.mouseMove(document, { clientX: 180 });
     fireEvent.mouseMove(document, { clientX: 200 });
     fireEvent.mouseUp(document);
     expect(window.localStorage.getItem('principal.subsystems.sidebarWidth.gs-test')).toBe('420');

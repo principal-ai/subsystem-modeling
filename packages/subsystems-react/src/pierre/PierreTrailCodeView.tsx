@@ -2,8 +2,8 @@
  * PierreTrailCodeView — multi-file step snippets via `@pierre/diffs` CodeView.
  *
  * Renders one sliced window per trail step in a single virtualized
- * scroll; when `stepIndex` changes, scrolls that step's site line into view
- * and highlights it via CodeView `selectedLines` (same mechanism as
+ * scroll; when `stepIndex` changes, scrolls that step's call into view
+ * and highlights its full range via CodeView `selectedLines` (same mechanism as
  * `PierreSnippetView`).
  */
 
@@ -46,9 +46,9 @@ import { resolveVisibleStepIndex, type VisibleStepRect } from './visibleStep';
 import { fileUnavailableNotice, isFileUnavailableError } from './fileAvailability';
 import {
   remapSnippetLineNumbers,
-  sliceSnippetWindow,
   type SnippetSlice,
 } from './sliceSnippet';
+import { sliceTrailStep, trailCallSelection } from './trailSnippet';
 
 /**
  * A token the user clicked or hovered inside a step's snippet. `stepIndex` is
@@ -88,7 +88,7 @@ export interface PierreTrailCodeViewProps {
   stepIndex: number | null;
   /** Read a step site; `purl` names the seam site's repo for checkout resolution. */
   readFile: (path: string, purl?: string) => Promise<string>;
-  /** Context lines above/below each step site; defaults to 8. */
+  /** Fallback context when a step has no caller construct span; defaults to 8. */
   contextLines?: number;
   /** Override Pierre's container background. */
   background?: string;
@@ -338,20 +338,7 @@ export function PierreTrailCodeView({
         );
       }
       const contents = load.byPath.get(key) ?? '';
-      // A resolved site construct is the frame the reader wants: show its
-      // whole declaration and focus the seam line inside it. Older models
-      // fall back to a context window around the seam.
-      const site = step.site?.span;
-      const start = site?.startLine ?? step.span?.startLine ?? 1;
-      const end = site?.endLine ?? step.span?.endLine ?? start;
-      const focus = step.span?.startLine ?? start;
-      return sliceSnippetWindow(
-        contents,
-        start,
-        end,
-        site ? 0 : contextLines,
-        focus,
-      );
+      return sliceTrailStep(contents, step, contextLines);
     });
   }, [load, trail.steps, contextLines]);
 
@@ -397,13 +384,17 @@ export function PierreTrailCodeView({
     if (stepIndex == null || stepIndex < 0 || stepIndex >= slices.length) {
       return null;
     }
-    const focus = slices[stepIndex]?.focusOffset;
-    if (focus == null) return null;
+    const step = trail.steps[stepIndex];
+    const slice = slices[stepIndex];
+    if (step == null || slice == null || load.status !== 'ready') return null;
+    if (load.unavailable.has(siteKey(step))) return null;
+    const range = trailCallSelection(step, slice);
+    if (range == null) return null;
     return {
       id: stepItemId(trail.id, stepIndex),
-      range: { start: focus, end: focus },
+      range,
     };
-  }, [stepIndex, slices, trail.id]);
+  }, [stepIndex, slices, trail.id, trail.steps, load]);
 
   const sliceStartByItemId = useMemo(() => {
     const map = new Map<string, number>();
@@ -464,7 +455,7 @@ export function PierreTrailCodeView({
           ) : (
             <>
               {step.site?.span
-                ? `L${step.site.span.startLine}-${step.site.span.endLine}`
+                ? `${step.site.symbol} · L${step.site.span.startLine}-${step.site.span.endLine}`
                 : `L${step.span?.startLine ?? '?'}`}
               {onOpenFile && (
                 <OpenFileHeaderButton

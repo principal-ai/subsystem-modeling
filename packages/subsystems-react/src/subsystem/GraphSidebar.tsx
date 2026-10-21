@@ -130,6 +130,7 @@ export function GraphSidebar({
   // persisting only then — not on every mousemove.
   const [dragging, setDragging] = useState(false);
   const dragStartX = useRef(0);
+  const dragStartWidth = useRef(0);
   // Mirror of the current width for the mouseup handler (a closure over the
   // drag-start render would persist the stale start width).
   const currentWidthRef = useRef(effectiveWidth);
@@ -139,6 +140,7 @@ export function GraphSidebar({
     (e: ReactMouseEvent) => {
       e.preventDefault();
       dragStartX.current = e.clientX;
+      dragStartWidth.current = effectiveWidth;
       currentWidthRef.current = effectiveWidth;
       setDragging(true);
       onDraggingChange?.(true);
@@ -150,7 +152,7 @@ export function GraphSidebar({
     if (!dragging) return;
     const onMove = (e: MouseEvent) => {
       const next = Math.min(
-        Math.max(currentWidthRef.current + (e.clientX - dragStartX.current), minWidth),
+        Math.max(dragStartWidth.current + (e.clientX - dragStartX.current), minWidth),
         maxWidth,
       );
       if (controlled) {

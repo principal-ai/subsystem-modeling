@@ -199,7 +199,7 @@ export interface SubsystemComponentGraphProps {
    * sidebar's bottom half offers a Files/Trails toggle:
    * the flows panel lists each trail's steps (`symbol` or `file:line`);
    * clicking a flow row toggles its steps; clicking a step focuses that
-   * step's edge and (when `renderTrailViewer` is set) opens the bottom
+   * step's edge and (when `renderTrailViewer` is set) opens the code
    * drawer on that flow's snippets. Opened flows stay on the canvas
    * (unselected ones dimmed); everything else is hidden.
    */
@@ -450,8 +450,9 @@ export interface SubsystemComponentGraphProps {
   renderFileViewer?: (file: string, opts?: SubsystemOpenFileOptions) => ReactNode;
   /**
    * Host-injected multi-snippet viewer for a focused trail. When set,
-   * clicking a flow step opens the bottom drawer with this content and
-   * updates it as the focused step changes.
+   * clicking a flow step opens the code drawer with this content and
+   * updates it as the focused step changes. Docks left for vertical layouts,
+   * below the canvas for horizontal layouts.
    */
   renderTrailViewer?: (ctx: TrailViewerContext) => ReactNode;
   /**
@@ -928,10 +929,10 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   const showDesc = !!description && descriptionVisible;
   // Sidebar width lives in the shared GraphWithSidebar chrome — draggable and
   // persisted under `principal.subsystems.sidebarWidth.<persistKey>`. The graph
-  // only bounds how wide the panel may get so the canvas keeps room to breathe;
+  // caps it at half the view width so the canvas keeps room to breathe;
   // a width saved under the old view-state key still seeds the panel once.
   const sidebarMaxWidth = useMemo(
-    () => Math.max(Math.min((_measured?.w ?? 680) * 0.5, 600), 240),
+    () => Math.max((_measured?.w ?? 680) * 0.5, 240),
     [_measured?.w],
   );
   // Persist the trail working set per model. Each write merges into the
@@ -2080,7 +2081,8 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   const drawerFillHeight =
     drawerTarget?.kind === 'file' && drawerTarget.startLine == null;
   const fileOverlayOpen = fileOverlay != null;
-  const collapseCanvas = drawerFillHeight || fileOverlayOpen;
+  const collapseCanvas =
+    drawerFillHeight || (fileOverlayOpen && committedDirection !== 'vertical');
 
   // Drop the full-file overlay when the underlying trail drawer changes
   // or closes — open-file keeps the same drawerTarget so the snippets stay mounted.
@@ -3041,6 +3043,57 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       })}
     </>
   ) : null;
+  const fileOverlayView = fileOverlay && (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: 8,
+        display: 'flex',
+        flexDirection: 'column',
+        background: theme.colors.background,
+        borderLeft: `1px solid ${theme.colors.border}`,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '6px 10px',
+          borderBottom: `1px solid ${theme.colors.border}`,
+          flexShrink: 0,
+        }}
+      >
+        <span
+          title={fileOverlay.file}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            fontFamily: theme.fonts.monospace,
+            fontSize: theme.fontSizes[0],
+            color: theme.colors.textMuted ?? theme.colors.textSecondary,
+          }}
+        >
+          {fileOverlay.file}
+        </span>
+        <FileOverlayCloseButton onClose={closeFileOverlay} />
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        <FileDrawerContent
+          render={renderDrawerContent}
+          file={fileOverlay.file}
+          startLine={fileOverlay.startLine}
+          endLine={fileOverlay.endLine}
+          fullFile
+        />
+      </div>
+    </div>
+  );
+
   return (
     <GraphWithSidebar
       hidden={!sidebarVisible}
@@ -3063,7 +3116,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       onResizeEnd={() => requestAnimationFrame(() => fitView())}
     >
       {/* Graph area */}
-      <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: committedDirection === 'vertical' ? 'row' : 'column', minHeight: 0, minWidth: 0 }}>
         {/* Canvas box — the edge-label overlay and legend anchor here, so
             overlays shift with the canvas, not the labels. Collapses when the
             file drawer fills the column (whole-file reading). */}
@@ -3073,6 +3126,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
             position: 'relative',
             flex: collapseCanvas ? 0 : 1,
             minHeight: 0,
+            minWidth: 0,
             height: collapseCanvas ? 0 : undefined,
             overflow: 'hidden',
             display: 'flex',
@@ -3537,10 +3591,14 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
             />
           </div>
         )}
+        {/* Vertical full-file reading replaces only the graph, not either left column. */}
+        {committedDirection === 'vertical' && fileOverlayView}
         </div>
       <FileDrawer
         title={drawerTitle}
         onClose={closeDrawer}
+        placement={committedDirection === 'vertical' ? 'left' : 'bottom'}
+        onResizeEnd={() => requestAnimationFrame(() => fitView())}
         fillHeight={drawerFillHeight}
         suppressEscape={fileOverlayOpen}
         hidden={hideDrawer}
@@ -3579,56 +3637,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
           />
         ) : null}
       </FileDrawer>
-      {fileOverlay && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 8,
-            display: 'flex',
-            flexDirection: 'column',
-            background: theme.colors.background,
-            borderLeft: `1px solid ${theme.colors.border}`,
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '6px 10px',
-              borderBottom: `1px solid ${theme.colors.border}`,
-              flexShrink: 0,
-            }}
-          >
-            <span
-              title={fileOverlay.file}
-              style={{
-                flex: 1,
-                minWidth: 0,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                fontFamily: theme.fonts.monospace,
-                fontSize: theme.fontSizes[0],
-                color: theme.colors.textMuted ?? theme.colors.textSecondary,
-              }}
-            >
-              {fileOverlay.file}
-            </span>
-            <FileOverlayCloseButton onClose={closeFileOverlay} />
-          </div>
-          <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-            <FileDrawerContent
-              render={renderDrawerContent}
-              file={fileOverlay.file}
-              startLine={fileOverlay.startLine}
-              endLine={fileOverlay.endLine}
-              fullFile
-            />
-          </div>
-        </div>
-      )}
+      {committedDirection !== 'vertical' && fileOverlayView}
       {/* Startup cover — hides measurement, layout swap, and camera settle.
           Kept away during a direction flip: the flip is meant to be watched,
           and the cover would swallow the node slide. */}

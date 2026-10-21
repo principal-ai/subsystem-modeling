@@ -12,8 +12,11 @@ import React, { useState } from 'react';
 import '@xyflow/react/dist/style.css';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
-import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
+import { SubsystemComponentGraph, type TrailViewerContext } from '../../../subsystem/SubsystemComponentGraph';
+import { PierreTrailCodeView } from '../../../pierre/PierreTrailCodeView';
+import { PierreFileView } from '../../../pierre/PierreFileView';
 import type { SubsystemLayoutDirection } from '../../../subsystem/model';
+import type { SubsystemOpenFileOptions } from '../../../subsystem/sourceSpan';
 import { components, graphSpecFromSteps } from './fixtures';
 
 const meta = {
@@ -50,13 +53,57 @@ const layoutSpec = graphSpecFromSteps([
   ['svc', 'event', 'produces', 'src/session/SessionService.ts', 95],
 ]);
 
-function DirectionDemo({ initial }: { initial: SubsystemLayoutDirection }) {
+const codeTrails = layoutSpec.trails.map((trail) => ({
+  ...trail,
+  steps: trail.steps.map((step) => ({
+    ...step,
+    site: {
+      symbol: step.symbol,
+      span: { startLine: 1, endLine: 110, contentHash: 'fixture' },
+    },
+  })),
+}));
+
+const codeSource = Array.from({ length: 110 }, (_, i) => {
+  if (i === 0) return 'export async function handleSession(request: Request) {';
+  if (i === 109) return '}';
+  if ([18, 42, 88, 95].includes(i + 1)) return '  await sessionService.save(request);';
+  return `  // Session processing, line ${i + 1}`;
+}).join('\n');
+const readCodeSource = async () => codeSource;
+
+function renderTrailCode({ trail, stepIndex, onOpenFile, onVisibleStepChange }: TrailViewerContext) {
+  return (
+    <PierreTrailCodeView
+      trail={trail}
+      stepIndex={stepIndex}
+      readFile={readCodeSource}
+      onOpenFile={onOpenFile}
+      onVisibleStepChange={onVisibleStepChange}
+    />
+  );
+}
+
+function renderCodeFile(file: string, opts?: SubsystemOpenFileOptions) {
+  return (
+    <PierreFileView
+      filePath={file}
+      fileName={file.split('/').pop() ?? file}
+      readFile={readCodeSource}
+      focusLine={opts?.startLine}
+    />
+  );
+}
+
+function DirectionDemo({ initial, withCode = false }: { initial: SubsystemLayoutDirection; withCode?: boolean }) {
   return (
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         components={layoutComponents}
-        trails={layoutSpec.trails}
+        trails={withCode ? codeTrails : layoutSpec.trails}
         defaultLayoutDirection={initial}
+        renderTrailViewer={withCode ? renderTrailCode : undefined}
+        renderFileViewer={withCode ? renderCodeFile : undefined}
         showEdgeLabels
       />
     </div>
@@ -71,6 +118,11 @@ export const Horizontal: Story = {
 /** Seeded top-to-bottom. The toggle restores the remembered choice per `persistKey`. */
 export const Vertical: Story = {
   render: () => <DirectionDemo initial="vertical" />,
+};
+
+/** Select a trail step, then flip the layout: code docks left vertically and bottom horizontally. */
+export const WithCodeView: Story = {
+  render: () => <DirectionDemo initial="vertical" withCode />,
 };
 
 /**
