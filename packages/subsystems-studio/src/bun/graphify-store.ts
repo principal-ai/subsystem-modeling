@@ -763,6 +763,8 @@ function repoEntryScore(entry: GraphifyRepoEntry): number {
 export async function listGraphifyRepos(
 	storeRoot?: string,
 	buildingPurls?: ReadonlySet<string>,
+	/** Optional selected repo; avoid Git work in unrelated checkouts. */
+	onlyPurl?: string,
 ): Promise<GraphifyRepoEntry[]> {
 	const root = graphifyStoreRoot(storeRoot);
 	const index = await readIndex(root);
@@ -783,6 +785,7 @@ export async function listGraphifyRepos(
 
 		const purlKey = purlRepoKey(`pkg:github/${owner}/${name}`);
 		if (!purlKey) continue;
+		if (onlyPurl && purlKey.toLowerCase() !== onlyPurl.toLowerCase()) continue;
 
 		const headSha = await gitHeadSha(info.root);
 		if (!headSha) continue; // not a usable git checkout

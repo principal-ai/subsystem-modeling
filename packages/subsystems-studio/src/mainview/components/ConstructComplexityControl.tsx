@@ -40,7 +40,7 @@ export function ConstructComplexityControl({
 	construct,
 	enabled,
 }: {
-	construct: VerifiedConstruct;
+	construct: Pick<VerifiedConstruct, "purl" | "file" | "startLine" | "endLine" | "contentHash">;
 	enabled: boolean;
 }) {
 	const { theme } = useTheme();

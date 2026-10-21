@@ -1,5 +1,6 @@
 /**
- * verified-constructs — host data for the "Constructs" tab.
+ * Legacy persisted model-audit inventory, plus shared package/span helpers.
+ * The Constructs tab now uses the independent graph-backed construct inventory.
  *
  * Joins stored subsystem models with their *persisted* audit reports and
  * returns every construct whose construct-layer check is fully verified, keyed
@@ -78,7 +79,7 @@ function normalizePackagePath(raw: string | undefined): string {
  * Read the *cached* package slice for a repo (never discovers). Null when no
  * cache exists for the current checkout — the caller then shows full paths.
  */
-async function loadRepoPackages(purl: string): Promise<RepoPackages | null> {
+export async function loadRepoPackages(purl: string): Promise<RepoPackages | null> {
 	try {
 		const cached = await getCachedPackageLayers(purl);
 		if (!cached) return null;
@@ -103,7 +104,7 @@ async function loadRepoPackages(purl: string): Promise<RepoPackages | null> {
 }
 
 /** Deepest package whose root contains `file`, or null (owned by no package). */
-function packageForFile(
+export function packageForFile(
 	file: string,
 	packages: RepoPackage[],
 ): RepoPackage | null {
@@ -118,7 +119,7 @@ function packageForFile(
 }
 
 /** Path shown in the list: relative to the package root when there is one. */
-function packageRelativeFile(
+export function packageRelativeFile(
 	file: string,
 	pkg: RepoPackage | null,
 ): string {

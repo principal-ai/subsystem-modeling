@@ -10,6 +10,7 @@ import {
 	filesDirty,
 	headSha,
 	remoteRefSha,
+	repoHistoryBounds,
 	revDistance,
 } from "./git-repo";
 
@@ -214,5 +215,18 @@ describe("headSha", () => {
 		const dir = initRepo();
 		expect(await headSha(dir)).toBe(sha(dir));
 		expect(await headSha(join(tmpdir(), "gitrepo-nope"))).toBeNull();
+	});
+});
+
+describe("repoHistoryBounds", () => {
+	test("counts commits and dates the root, and is null outside a repo", async () => {
+		const dir = initRepo();
+		writeFileSync(join(dir, "a.ts"), "two\n");
+		commit(dir, "second");
+		const bounds = await repoHistoryBounds(dir);
+		expect(bounds?.commits).toBe(2);
+		expect(bounds?.firstCommitAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+		expect(bounds?.ageDays).toBeGreaterThanOrEqual(0);
+		expect(await repoHistoryBounds(join(tmpdir(), "gitrepo-nope"))).toBeNull();
 	});
 });

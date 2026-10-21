@@ -16,9 +16,12 @@ import type {
 	SubsystemComponent,
 	SubsystemModelProposal,
 	ViewerSettings,
+  ConstructInventoryRepo,
 } from "../../src/shared/contract";
+import type { ConstructTimelineMeta, ConstructTimelineSummary } from "../../src/shared/construct-timeline";
 
 type RpcRequest = Record<string, (params?: unknown) => Promise<unknown>>;
+export const constructLoadCalls = { graphInventory: 0, graphify: 0, packages: 0, timelineExtensions: 0 };
 
 /** Minimal model components so a construct proposal can render its node. */
 const MODEL_COMPONENTS: SubsystemComponent[] = [
@@ -102,6 +105,32 @@ let viewerSettings: ViewerSettings = {
 };
 
 const request: RpcRequest = {
+  listVerifiedConstructs: async () => ({ ok: true, repos: [] }),
+  listConstructInventory: async () => ({ ok: true, repos: inventoryRepo ? [inventoryRepo] : [] }),
+  getConstructInventory: async () => (constructLoadCalls.graphInventory++, inventoryLoadingResponses-- > 0
+    ? { ok: true, loading: true }
+    : { ok: true, loading: false, repo: inventoryRepo }),
+  ensureGraphifyGraph: async () => (constructLoadCalls.graphify++, { ok: false, error: "Graphify extraction is not run by this Storybook fixture." }),
+  ensurePackageLayers: async () => (constructLoadCalls.packages++, { ok: true }),
+  readSubsystemSpan: async () => ({ ok: true, text: "export function calculate() {\n  return 2;\n}", verified: true }),
+  getConstructRepositoryInfo: async () => ({ ok: true, commits: 128, firstCommitAt: "2026-02-01T00:00:00Z", ageDays: 258 }),
+  getConstructTimeline: async () => ({ ok: true, meta: timelineMeta, summary: timelineSummary }),
+  extendConstructTimeline: async (params) => {
+    constructLoadCalls.timelineExtensions++;
+    const { purl } = params as { purl: string };
+    timelineMeta = {
+      ...timelineMeta,
+      version: 1, analyzerVersion: "construct-timeline-v1", purl,
+      status: "running", updatedAt: new Date().toISOString(),
+      events: timelineMeta?.events ?? 0, constructs: timelineMeta?.constructs ?? 0,
+      elapsedMs: timelineMeta?.elapsedMs ?? 0, retainedBytes: timelineMeta?.retainedBytes ?? 0,
+    };
+    return { ok: true, meta: timelineMeta };
+  },
+  cancelConstructTimeline: async () => {
+    if (timelineMeta) timelineMeta = { ...timelineMeta, status: "interrupted" };
+    return { ok: true };
+  },
   assessConstructComplexity: async (params) => {
     const input = params as { file: string; contentHash: string };
     await new Promise((resolve) => setTimeout(resolve, 750));
@@ -243,6 +272,20 @@ const request: RpcRequest = {
 
 let mockOverview: unknown = null;
 let mockRuns: unknown[] = [];
+let inventoryRepo: ConstructInventoryRepo | undefined;
+let inventoryLoadingResponses = 0;
+
+let timelineMeta: ConstructTimelineMeta | undefined;
+let timelineSummary: ConstructTimelineSummary | undefined;
+
+export function mockConstructTimeline(meta?: ConstructTimelineMeta, summary?: ConstructTimelineSummary): void {
+  timelineMeta = meta ? structuredClone(meta) : undefined;
+  timelineSummary = summary ? structuredClone(summary) : undefined;
+}
+export function mockConstructInventory(repo: ConstructInventoryRepo, loadingResponses = 0): void {
+  inventoryRepo = structuredClone(repo);
+  inventoryLoadingResponses = loadingResponses;
+}
 
 /** Seed the MaintenancePanel overview + run history for whole-tab stories. */
 export function mockMaintenanceOverview(

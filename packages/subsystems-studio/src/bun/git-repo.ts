@@ -53,6 +53,33 @@ export async function headSha(repoRoot: string): Promise<string | null> {
 	return sha;
 }
 
+/** Whole-repo history bounds: total commits and the root commit's age. */
+export interface RepoHistoryBounds {
+	/** First-parent commits reachable from HEAD (what a history run walks). */
+	commits: number;
+	/** Committer date (ISO 8601) of the oldest root commit. */
+	firstCommitAt: string;
+	/** Whole days between the root commit and now. */
+	ageDays: number;
+}
+
+/** Read-only: a count and the root commit date, or null when git cannot answer. */
+export async function repoHistoryBounds(repoRoot: string): Promise<RepoHistoryBounds | null> {
+	// Counted along the first-parent chain, matching what history analysis walks.
+	const count = await gitStdout(repoRoot, ["rev-list", "--count", "--first-parent", "HEAD"]);
+	const commits = Number(count?.trim());
+	if (!Number.isFinite(commits) || commits <= 0) return null;
+	// `--max-parents=0` lists root commits; take the last as the oldest.
+	const roots = await gitStdout(repoRoot, ["rev-list", "--max-parents=0", "HEAD"]);
+	const firstSha = roots?.split("\n").map((line) => line.trim()).filter(Boolean).at(-1);
+	if (!firstSha) return null;
+	const iso = await gitStdout(repoRoot, ["show", "-s", "--format=%cI", firstSha, "--"]);
+	const firstCommitAt = iso?.trim();
+	const parsed = firstCommitAt ? Date.parse(firstCommitAt) : Number.NaN;
+	if (!firstCommitAt || !Number.isFinite(parsed)) return null;
+	return { commits, firstCommitAt, ageDays: Math.max(0, Math.floor((Date.now() - parsed) / 86_400_000)) };
+}
+
 /**
  * Repo-root-relative paths among `relPaths` that git reports as modified,
  * untracked, staged or conflicted — everything short of committed-and-clean.

@@ -32,6 +32,11 @@ import type {
 	SymbolInspection,
 } from "@principal-ai/subsystems-react";
 import type { SubsystemComponentRemoval } from "@principal-ai/subsystems-core";
+import type {
+	ConstructTimelineMeta,
+	ConstructTimelineOptions,
+	ConstructTimelineSummary,
+} from "./construct-timeline";
 
 /** Canonical subsystem-model types, re-shared with both processes. */
 export type { MergeSidecar } from "../bun/merge-submodel-models";
@@ -1602,7 +1607,7 @@ export interface VerifiedConstructRepo {
 	packages: VerifiedConstructPackage[];
 }
 
-/** Graph discovery is not a subsystem-model audit. Only verified spans can be traced. */
+/** Graph discovery is not a subsystem-model audit. */
 export interface SourceConstruct {
 	id: string;
 	name: string;
@@ -1614,17 +1619,29 @@ export interface SourceConstruct {
 	packageRelativeFile: string;
 	graphNodeIds: string[];
 	graphStartLine?: number;
-	/** Rejects possible declaration renames; never establishes identity. */
-	declarationShapeHash?: string;
 	verification: {
 		status: "verified" | "unresolved" | "unsupported" | "error";
 		evidence: string;
 		checkedAt: string;
 	};
 	span?: { startLine: number; endLine: number; contentHash: string };
-	/** Saved historical span, read from the managed clone rather than the working tree. */
-	snapshot?: { runId: string; commit: string };
 	models: Array<{ modelId: string; modelTitle: string; alias: string }>;
+}
+
+export interface ConstructInventoryPackage extends Omit<VerifiedConstructPackage, "constructs"> {
+	constructs: SourceConstruct[];
+}
+
+export interface ConstructInventoryRepo extends Omit<VerifiedConstructRepo, "packages"> {
+	packages: ConstructInventoryPackage[];
+	graphStatus: "unknown" | "ready" | "missing" | "building";
+	/** Directory hint only; does not assert freshness or verification. */
+	hasCachedGraph?: boolean;
+	modelCount?: number;
+	inventorySource?: "model-audits";
+	/** Counts candidates, not graph nodes or all declarations in the source tree. */
+	coverage: Record<SourceConstruct["verification"]["status"], number>;
+	error?: string;
 }
 
 export interface TabSummary {
@@ -1951,12 +1968,48 @@ export type StudioRequests = {
 	 * Every fully verified construct across all stored models, grouped by repo.
 	 * Derived from *persisted* audits (no audit is run) — a construct appears
 	 * when its saved check is `verified` (exact graphify anchor, construct
-	 * classified, signature confirmed, declaration span fresh). Backs the
-	 * Constructs tab.
+	 * classified, signature confirmed, declaration span fresh). Retained for
+	 * legacy model-audit consumers; the Constructs tab uses listConstructInventory.
 	 */
 	listVerifiedConstructs: {
 		params: Record<string, never>;
 		response: { ok: boolean; error?: string; repos: VerifiedConstructRepo[] };
+	};
+	listConstructInventory: {
+		params: Record<string, never>;
+		response: { ok: boolean; error?: string; repos: ConstructInventoryRepo[] };
+	};
+	getConstructInventory: {
+		params: { purl: string };
+		response: { ok: boolean; loading: boolean; error?: string; repo?: ConstructInventoryRepo };
+	};
+	/**
+	 * Whole-repo history bounds for a registered checkout: total commits and the
+	 * root commit's age. Read-only; never starts an analysis. Backs the
+	 * repository-age line in the Constructs tab.
+	 */
+	getConstructRepositoryInfo: {
+		params: { purl: string };
+		response: { ok: boolean; error?: string; commits?: number; firstCommitAt?: string; ageDays?: number };
+	};
+	/**
+	 * Cumulative, repo-level construct timeline: a forward walk from an epoch
+	 * with a durable cursor. `extend` processes the oldest not-yet-analyzed
+	 * commits after the cursor and appends compact events; `get` reads the
+	 * checkpoint (meta + summary) without starting work. Extending a
+	 * long history is resumable — each call is capped by commits and minutes.
+	 */
+	getConstructTimeline: {
+		params: { purl: string };
+		response: { ok: boolean; error?: string; meta?: ConstructTimelineMeta; summary?: ConstructTimelineSummary };
+	};
+	extendConstructTimeline: {
+		params: { purl: string; options?: ConstructTimelineOptions };
+		response: { ok: boolean; error?: string; meta?: ConstructTimelineMeta };
+	};
+	cancelConstructTimeline: {
+		params: { purl: string };
+		response: { ok: boolean; error?: string };
 	};
 	/**
 	 * Aggregate Maintain overview: per-model verification progress, pending

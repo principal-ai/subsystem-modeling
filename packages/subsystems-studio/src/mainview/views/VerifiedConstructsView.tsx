@@ -1,18 +1,10 @@
 /**
  * VerifiedConstructsView — the "Constructs" tab.
  *
- * Left rail: repos holding at least one fully verified construct. Click a repo
- * to list its verified constructs — the claims the last audit confirmed (exact
- * graphify anchor, classified construct, confirmed signature, fresh span) —
- * grouped under per-package dividers, with package-relative paths. Click a
- * construct to read *just its declaration span*, rendered as if it were its own
- * file.
- *
- * Verification state comes from persisted audits: this view never runs one. A
- * span is re-read and re-hashed on open; if it no longer matches the stored
- * hash it is shown as drifted, never as verified. Package grouping comes from
- * the cached codebase-composition slice; when there is none the list is flat
- * and paths stay repo-relative.
+ * Repositories are scoped to stored subsystem models. Tab load reads saved
+ * model audits and the cumulative timeline only; it never runs Graphify or
+ * parses the current graph. Timeline analysis starts only on an explicit action.
+ * Spans are read and checked on demand from the working tree.
  *
  * Font scale is the theme's `fontSizes` (12/14/16/18/…): secondary text uses
  * `[1]` (14), row/repo names `[2]` (16), and the span-pane title `[3]` (18).
@@ -35,30 +27,34 @@ import {
 import { File } from "@pierre/diffs/react";
 import { Loader2, Search } from "lucide-react";
 import type {
-	VerifiedConstruct,
-	VerifiedConstructRepo,
+	SourceConstruct,
+	ConstructInventoryRepo,
 } from "../../shared/contract";
 import { electrobun, packageLayersChangeSubscribers, subsystemModelChangeSubscribers } from "../rpc";
 import { CenteredMessage, relativeTime } from "../ui";
 import { ConstructComplexityControl } from "../components/ConstructComplexityControl";
+import { ConstructsDrilldown } from "../components/ConstructsDrilldown";
+import { ConstructTimelinePanel, ConstructTimelineTrigger, useConstructTimeline } from "../components/ConstructTimelineControl";
 
 const POLL_MS = 15_000;
 
 /** Total verified constructs in a repo (sum across its package groups). */
-function countRepo(repo: VerifiedConstructRepo): number {
+function countRepo(repo: ConstructInventoryRepo): number {
 	return repo.packages.reduce((n, p) => n + p.constructs.length, 0);
 }
 
 /** Same verified claim? Used to keep the open construct stable across polls. */
-function sameConstruct(a: VerifiedConstruct, b: VerifiedConstruct): boolean {
+function sameConstruct(a: SourceConstruct, b: SourceConstruct): boolean {
 	return (
-		a.modelId === b.modelId &&
-		a.alias === b.alias &&
+		a.id === b.id &&
 		a.file === b.file &&
 		a.purl === b.purl &&
-		a.startLine === b.startLine &&
-		a.endLine === b.endLine &&
-		a.contentHash === b.contentHash
+		a.span?.startLine === b.span?.startLine &&
+		a.span?.endLine === b.span?.endLine &&
+		a.span?.contentHash === b.span?.contentHash &&
+		a.verification.status === b.verification.status &&
+		a.verification.evidence === b.verification.evidence &&
+		JSON.stringify(a.models) === JSON.stringify(b.models)
 	);
 }
 
@@ -164,7 +160,7 @@ function SpanCodeView({
 
 	if (!ready) {
 		return (
-			<div style={{ padding: 16, color: "inherit", opacity: 0.5 }}>
+			<div style={{ padding: 16, color: "inherit" }}>
 				Loading…
 			</div>
 		);
@@ -173,7 +169,7 @@ function SpanCodeView({
 }
 
 /** Render one construct's pinned span as a standalone file. */
-function SpanPane({ construct }: { construct: VerifiedConstruct | null }) {
+function SpanPane({ construct }: { construct: SourceConstruct | null }) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 	const [state, setState] = useState<
@@ -184,20 +180,17 @@ function SpanPane({ construct }: { construct: VerifiedConstruct | null }) {
 	>({ kind: "idle" });
 
 	useEffect(() => {
-		if (!construct) {
+		if (!construct?.span) {
 			setState({ kind: "idle" });
 			return;
 		}
+		const span = construct.span;
 		let cancelled = false;
 		setState({ kind: "loading" });
 		(async () => {
 			try {
 				const res = await electrobun.rpc!.request.readSubsystemSpan({
-					purl: construct.purl,
-					file: construct.file,
-					startLine: construct.startLine,
-					endLine: construct.endLine,
-					contentHash: construct.contentHash,
+					purl: construct.purl, file: construct.file, ...span,
 				});
 				if (cancelled) return;
 				if (!res.ok || res.text == null) {
@@ -246,29 +239,39 @@ function SpanPane({ construct }: { construct: VerifiedConstruct | null }) {
 		);
 	}
 
+	if (!construct.span) {
+		return <CenteredMessage title={construct.name}
+			detail={`${construct.file}:${construct.graphStartLine ?? "?"} · ${construct.verification.status}: ${construct.verification.evidence}`} />;
+	}
+	const span = construct.span;
 	const ext = fileExtension(construct.file);
 	const fileName = `${construct.symbol ?? construct.name}${ext}`;
 	const verified = state.kind === "ready" && state.verified;
-	const badgeColor = verified ? "#3d9a5f" : "#e5534b";
+	const badgeColor = verified ? (theme.colors.success ?? theme.colors.primary) : (theme.colors.error ?? theme.colors.text);
 	const badgeLabel = verified
-		? "Verified"
+		? "Source verified"
 		: state.kind === "ready"
 			? "Drifted"
-			: "Reading…";
+			: state.kind === "error" ? "Read failed" : "Reading…";
 
 	return (
 		<div
 			style={{
 				flex: 1,
 				minWidth: 0,
+				minHeight: 0,
 				display: "flex",
 				flexDirection: "column",
 				background: theme.colors.background,
 			}}
 		>
 			<div
+				role="group"
+				aria-label="Construct information"
 				style={{
 					flexShrink: 0,
+					maxHeight: "70%",
+					overflowY: "auto",
 					display: "flex",
 					flexDirection: "column",
 					gap: 6,
@@ -293,13 +296,13 @@ function SpanPane({ construct }: { construct: VerifiedConstruct | null }) {
 					</span>
 					<span style={{ flex: 1 }} />
 					<ConstructComplexityControl
-						construct={construct}
+						construct={{ ...construct, ...span }}
 						enabled={verified}
 					/>
 					<span
 						title={
 							verified
-								? "Span content hash matches the verified claim"
+								? "Parsed source declaration; content hash matches. This is not a subsystem-model audit."
 								: "Span no longer matches the stored content hash"
 						}
 						style={{
@@ -310,9 +313,9 @@ function SpanPane({ construct }: { construct: VerifiedConstruct | null }) {
 							textTransform: "uppercase",
 							padding: "3px 9px",
 							borderRadius: 999,
-							color: badgeColor,
-							background: `${badgeColor}22`,
-							border: `1px solid ${badgeColor}55`,
+							color: theme.colors.text,
+							background: theme.colors.backgroundSecondary ?? theme.colors.background,
+							border: `1px solid ${badgeColor}`,
 						}}
 					>
 						{badgeLabel}
@@ -332,11 +335,16 @@ function SpanPane({ construct }: { construct: VerifiedConstruct | null }) {
 					}}
 				>
 					<span title={construct.file}>
-						{construct.file}:{construct.startLine}–{construct.endLine}
+						{construct.file}:{span.startLine}–{span.endLine}
 					</span>
 					<span>·</span>
-					<span>audited {relativeTime(Date.parse(construct.auditedAt))}</span>
+					<span>source checked {relativeTime(Date.parse(construct.verification.checkedAt))}</span>
 				</div>
+				{construct.models.length > 0 && (
+					<div style={{ fontSize: theme.fontSizes[1], color: muted }}>
+						Models: {construct.models.map((model) => `${model.modelTitle} (${model.alias})`).join(", ")}
+					</div>
+				)}
 			</div>
 
 			<div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
@@ -371,10 +379,10 @@ function SpanPane({ construct }: { construct: VerifiedConstruct | null }) {
 				)}
 				{state.kind === "ready" && (
 					<SpanCodeView
-						key={`${construct.modelId}\0${construct.alias}\0${construct.contentHash}`}
+						key={`${construct.id}\0${span.contentHash}`}
 						text={state.text}
 						fileName={fileName}
-						startLine={construct.startLine}
+						startLine={span.startLine}
 						background={theme.colors.background}
 					/>
 				)}
@@ -386,22 +394,78 @@ function SpanPane({ construct }: { construct: VerifiedConstruct | null }) {
 export function VerifiedConstructsView() {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
-	const [repos, setRepos] = useState<VerifiedConstructRepo[] | null>(null);
+	const [repos, setRepos] = useState<ConstructInventoryRepo[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
-	const [selectedRepoKey, setSelectedRepoKey] = useState<string | null>(null);
-	const [selected, setSelected] = useState<VerifiedConstruct | null>(null);
+	const [focusedRepoKey, setFocusedRepoKey] = useState<string | null>(null);
+	const timeline = useConstructTimeline(focusedRepoKey);
+	const [selected, setSelected] = useState<SourceConstruct | null>(null);
+	const refreshPending = useRef(false);
 	/** Filter over the selected repo's constructs. */
 	const [query, setQuery] = useState("");
-	/** Repos we've already kicked discovery for this session (avoid storms). */
-	const autoEnsuredRef = useRef<Set<string>>(new Set());
+	/** Right-hand timeline panel is showing instead of the span pane. */
+	const [timelineOpen, setTimelineOpen] = useState(false);
+	/** Whole-repo bounds for the focused repo (commits + age), read-only. */
+	const [repoInfo, setRepoInfo] = useState<{ commits: number; ageDays: number; firstCommitAt: string } | null>(null);
+	/** Single sidebar width (px), draggable at its right edge. */
+	const [panelWidth, setPanelWidth] = useState(350);
+	const [panelDrag, setPanelDrag] = useState(false);
+	const panelDragStartX = useRef(0);
+	const panelDragStartWidth = useRef(350);
+	const panelDragMaxWidth = useRef(600);
+	const PANEL_MIN_WIDTH = 200;
 
+	const focusRepo = useCallback((repoKey: string) => {
+		setFocusedRepoKey((current) => (current === repoKey ? null : repoKey));
+	}, []);
+
+	const onPanelResizeStart = useCallback(
+		(event: React.MouseEvent) => {
+			event.preventDefault();
+			panelDragStartX.current = event.clientX;
+			panelDragStartWidth.current = panelWidth;
+			panelDragMaxWidth.current = Math.max(
+				window.innerWidth * 0.6,
+				PANEL_MIN_WIDTH,
+			);
+			setPanelDrag(true);
+		},
+		[panelWidth],
+	);
+
+	useEffect(() => {
+		if (!panelDrag) return;
+		const onMove = (event: MouseEvent) => {
+			const delta = event.clientX - panelDragStartX.current;
+			setPanelWidth(
+				Math.min(
+					Math.max(panelDragStartWidth.current + delta, PANEL_MIN_WIDTH),
+					panelDragMaxWidth.current,
+				),
+			);
+		};
+		const onUp = () => setPanelDrag(false);
+		document.addEventListener("mousemove", onMove);
+		document.addEventListener("mouseup", onUp);
+		return () => {
+			document.removeEventListener("mousemove", onMove);
+			document.removeEventListener("mouseup", onUp);
+		};
+	}, [panelDrag]);
 	const refresh = useCallback(async () => {
+		if (refreshPending.current) return;
+		refreshPending.current = true;
 		try {
-			const res = await electrobun.rpc!.request.listVerifiedConstructs({});
+			const res = await electrobun.rpc!.request.listConstructInventory({});
+			if (!res.ok) {
+				setError(res.error ?? "Failed to load construct inventory.");
+				return;
+			}
 			setRepos(res.repos);
-			setError(res.ok ? null : (res.error ?? "Failed to load"));
+			setError(null);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			refreshPending.current = false;
 		}
 	}, []);
 
@@ -419,10 +483,8 @@ export function VerifiedConstructsView() {
 		};
 	}, [refresh]);
 
-	// Package discovery runs by itself: any repo still lacking a
-	// codebase-composition slice kicks an ensure, which the host runs in the
-	// background and finishes via `packageLayersChanged`. A repo is asked for
-	// at most once per session so a failing repo cannot storm the host.
+	// Existing package metadata may change elsewhere. Reading it must not
+	// trigger discovery, extraction, or source verification from this tab.
 	useEffect(() => {
 		const onPush = () => void refresh();
 		packageLayersChangeSubscribers.add(onPush);
@@ -431,57 +493,47 @@ export function VerifiedConstructsView() {
 		};
 	}, [refresh]);
 
-	useEffect(() => {
-		if (!repos) return;
-		for (const repo of repos) {
-			if (repo.hasPackageInfo) continue;
-			if (autoEnsuredRef.current.has(repo.repoKey)) continue;
-			autoEnsuredRef.current.add(repo.repoKey);
-			void electrobun.rpc!.request
-				.ensurePackageLayers({ purl: repo.repoKey })
-				.then(() => void refresh())
-				.catch(() => {
-					/* leave it in the session set; a remount retries */
-				});
-		}
-	}, [repos, refresh]);
-
-	// Keep a repo selected (the first, until the user picks one).
-	useEffect(() => {
-		if (!repos) return;
-		setSelectedRepoKey((current) =>
-			current && repos.some((r) => r.repoKey === current)
-				? current
-				: (repos[0]?.repoKey ?? null),
-		);
-	}, [repos]);
-
-	// Switching repos drops the construct selection and the search.
+	// Switching repos drops the construct selection, the search, and the panel.
 	useEffect(() => {
 		setSelected(null);
 		setQuery("");
-	}, [selectedRepoKey]);
+		setTimelineOpen(false);
+	}, [focusedRepoKey]);
 
-	// Reconcile the open construct against refreshed data; drop it if the
-	// construct is no longer verified (or its model is gone).
+	// Whole-repo bounds: read-only, independent of any saved analysis.
 	useEffect(() => {
-		if (!repos) return;
+		if (!focusedRepoKey) {
+			setRepoInfo(null);
+			return;
+		}
+		let cancelled = false;
+		void (async () => {
+			try {
+				const res = await electrobun.rpc!.request.getConstructRepositoryInfo({ purl: focusedRepoKey });
+				if (cancelled) return;
+				setRepoInfo(res.ok && res.commits != null
+					? { commits: res.commits, ageDays: res.ageDays ?? 0, firstCommitAt: res.firstCommitAt ?? "" }
+					: null);
+			} catch {
+				if (!cancelled) setRepoInfo(null);
+			}
+		})();
+		return () => { cancelled = true; };
+	}, [focusedRepoKey]);
+
+	const repo = useMemo(() => repos?.find((entry) => entry.repoKey === focusedRepoKey) ?? null,
+		[repos, focusedRepoKey]);
+
+	// Keep the selected saved audit row current across metadata refreshes.
+	useEffect(() => {
 		setSelected((current) => {
 			if (!current) return current;
-			const match = repos
-				.flatMap((r) => r.packages.flatMap((p) => p.constructs))
-				.find(
-					(c) => c.modelId === current.modelId && c.alias === current.alias,
-				);
+			const match = repo?.repoKey === current.repoKey
+				? repo.packages.flatMap((pkg) => pkg.constructs).find((row) => row.id === current.id) : undefined;
 			if (!match) return null;
 			return sameConstruct(current, match) ? current : match;
 		});
-	}, [repos]);
-
-	const repo = useMemo(
-		() => repos?.find((r) => r.repoKey === selectedRepoKey) ?? null,
-		[repos, selectedRepoKey],
-	);
+	}, [repo]);
 
 	// The selected repo's packages, narrowed by the search box.
 	const q = query.trim().toLowerCase();
@@ -492,51 +544,36 @@ export function VerifiedConstructsView() {
 			.map((pkg) => ({
 				...pkg,
 				constructs: pkg.constructs.filter((c) =>
-					(c.symbol ?? "").toLowerCase().includes(q),
+					`${c.symbol} ${c.file} ${c.construct} ${c.verification.status} ${c.models.map((m) => m.modelTitle).join(" ")}`.toLowerCase().includes(q),
 				),
 			}))
 			.filter((pkg) => pkg.constructs.length > 0);
 	}, [repo, q]);
 	const shownCount = packages.reduce((n, p) => n + p.constructs.length, 0);
+	const emptyMessage = "No saved constructs for this repository. Audit a subsystem model to populate the list. The timeline can be analyzed independently.";
 
 	if (error && repos === null) {
 		return (
 			<CenteredMessage
-				title="Could not load verified constructs"
+				title="Could not load constructs"
 				detail={error}
 			/>
 		);
 	}
 	if (repos === null) {
-		return <CenteredMessage title="Loading verified constructs…" />;
+		return <CenteredMessage title="Loading saved constructs…" />;
 	}
 	if (repos.length === 0) {
 		return (
 			<CenteredMessage
-				title="No verified constructs yet"
-				detail="A construct appears here once an audit fully verifies it — an exact graphify anchor, a classified construct, a confirmed signature, and a fresh declaration span. Run an audit from the Maintainer tab."
+				title="No repositories with subsystem models"
+				detail="Add a subsystem model for a repository to show it here. Opening this tab does not run Graphify."
 			/>
 		);
 	}
 
-	const railButton = (active: boolean): CSSProperties => ({
-		display: "flex",
-		flexDirection: "column",
-		gap: 3,
-		alignItems: "flex-start",
-		textAlign: "left",
-		width: "100%",
-		border: "none",
-		borderLeft: `2px solid ${active ? theme.colors.primary : "transparent"}`,
-		background: active ? `${theme.colors.primary}14` : "transparent",
-		color: active ? theme.colors.text : theme.colors.textSecondary,
-		padding: "9px 12px",
-		cursor: "pointer",
-		fontFamily: theme.fonts.body,
-	});
-
 	return (
-		<div
+		<main aria-label="Constructs"
 			style={{
 				flex: 1,
 				minHeight: 0,
@@ -547,307 +584,310 @@ export function VerifiedConstructsView() {
 				fontFamily: theme.fonts.body,
 			}}
 		>
-			{/* Repo rail */}
+			{/* One drill-down sidebar: repos → this repo's constructs */}
 			<div
 				style={{
-					width: 260,
-					minWidth: 200,
+					width: panelWidth,
+					minWidth: panelWidth,
 					borderRight: `1px solid ${theme.colors.border ?? "#333"}`,
 					background: theme.colors.backgroundSecondary ?? theme.colors.background,
 					display: "flex",
 					flexDirection: "column",
 					minHeight: 0,
+					userSelect: panelDrag ? "none" : undefined,
 				}}
 			>
-				<div
-					style={{
-						flexShrink: 0,
-						padding: "8px 12px",
-						fontSize: theme.fontSizes[1],
-						fontWeight: 600,
-						letterSpacing: 0.4,
-						textTransform: "uppercase",
-						color: muted,
-					}}
-				>
-					Repos
-				</div>
-				<div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-					{repos.map((r) => {
-						const active = r.repoKey === selectedRepoKey;
-						return (
-							<button
-								key={r.repoKey}
-								type="button"
-								onClick={() => setSelectedRepoKey(r.repoKey)}
-								style={railButton(active)}
-								title={r.repoKey}
-							>
-								<span
-									style={{
-										fontSize: theme.fontSizes[2],
-										fontWeight: 500,
-										whiteSpace: "nowrap",
-										overflow: "hidden",
-										textOverflow: "ellipsis",
-										maxWidth: "100%",
-									}}
-								>
-									{r.owner}/{r.name}
-								</span>
-								<span style={{ fontSize: theme.fontSizes[1], color: muted }}>
-									{countRepo(r)} verified
-								</span>
-							</button>
-						);
-					})}
-				</div>
-			</div>
-
-			{/* Construct list, grouped by package */}
-			<div
-				style={{
-					width: 400,
-					minWidth: 300,
-					borderRight: `1px solid ${theme.colors.border ?? "#333"}`,
-					display: "flex",
-					flexDirection: "column",
-					minHeight: 0,
-				}}
-			>
-				{repo && (
-					<div
-						style={{
-							flexShrink: 0,
-							display: "flex",
-							alignItems: "center",
-							gap: 8,
-							padding: "7px 12px",
-							borderBottom: `1px solid ${theme.colors.border ?? "#333"}`,
-							fontSize: theme.fontSizes[2],
-							fontWeight: 600,
-						}}
-					>
-						<label
-							style={{
-								flex: 1,
-								minWidth: 0,
-								display: "flex",
-								alignItems: "center",
-								gap: 6,
-								padding: "4px 9px",
-								borderRadius: 6,
-								border: `1px solid ${theme.colors.border ?? "#333"}`,
-								background:
-									theme.colors.backgroundSecondary ?? "transparent",
-							}}
-						>
-							<Search size={14} color={muted} aria-hidden="true" />
-							<input
-								type="text"
-								value={query}
-								onChange={(e) => setQuery(e.target.value)}
-								onKeyDown={(e) => {
-									if (e.key === "Escape") setQuery("");
-								}}
-								placeholder={`Search ${countRepo(repo)} constructs`}
-								aria-label="Search constructs"
-								autoComplete="off"
-								autoCorrect="off"
-								autoCapitalize="off"
-								spellCheck={false}
-								style={{
-									flex: 1,
-									minWidth: 0,
-									border: "none",
-									outline: "none",
-									background: "transparent",
-									color: theme.colors.text,
-									fontSize: theme.fontSizes[1],
-									fontWeight: 400,
-									fontFamily: theme.fonts.body,
-								}}
-							/>
-							{query && (
-								<button
-									type="button"
-									onClick={() => setQuery("")}
-									title="Clear search"
-									aria-label="Clear search"
-									style={{
-										flexShrink: 0,
-										border: "none",
-										background: "transparent",
-										color: muted,
-										cursor: "pointer",
-										fontSize: theme.fontSizes[1],
-										lineHeight: 1,
-										padding: 0,
-									}}
-								>
-									✕
-								</button>
-							)}
-						</label>
+				{error && (
+					<div role="alert" style={{ flexShrink: 0, padding: "8px 12px", color: "#e5534b", fontSize: theme.fontSizes[1] }}>
+						{error}
 					</div>
 				)}
-				<div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-					{q && shownCount === 0 && (
-						<div
-							style={{
-								padding: "16px 14px",
-								color: muted,
-								fontSize: theme.fontSizes[1],
-							}}
-						>
-							No constructs match “{query.trim()}”.
-						</div>
-					)}
-					{packages.map((pkg) => (
-						<div key={pkg.path || "::root"}>
-							{repo?.hasPackageInfo && (
+				<ConstructsDrilldown
+					repos={repos}
+					focusedRepoKey={focusedRepoKey}
+					onFocusRepo={focusRepo}
+					renderFocused={() => repo && (
+						<>
+							{repoInfo && (
 								<div
+									title={repoInfo.firstCommitAt ? `First commit ${repoInfo.firstCommitAt.slice(0, 10)}` : undefined}
 									style={{
-										position: "sticky",
-										top: 0,
-										zIndex: 1,
-										display: "flex",
-										alignItems: "center",
-										gap: 8,
-										padding: "6px 14px",
-										background:
-											theme.colors.backgroundSecondary ?? theme.colors.background,
+										flexShrink: 0, padding: "5px 12px", color: muted, fontSize: theme.fontSizes[0],
 										borderBottom: `1px solid ${theme.colors.border ?? "#333"}`,
-										fontSize: theme.fontSizes[1],
 									}}
-									title={pkg.manifestPath}
 								>
-									<span
-										style={{
-											fontWeight: 600,
-											whiteSpace: "nowrap",
-											overflow: "hidden",
-											textOverflow: "ellipsis",
-										}}
-									>
-										{pkg.name || "repo root"}
-									</span>
-									{pkg.isMonorepoRoot && (
-										<span
-											style={{
-												flexShrink: 0,
-												fontSize: theme.fontSizes[0],
-												fontWeight: 600,
-												textTransform: "uppercase",
-												letterSpacing: 0.3,
-												color: theme.colors.primary,
-												border: `1px solid ${theme.colors.primary}55`,
-												borderRadius: 999,
-												padding: "0 6px",
-											}}
-										>
-											root
-										</span>
-									)}
-									<span style={{ flex: 1 }} />
-									{pkg.packageManager && (
-										<span
-											style={{ color: muted, fontSize: theme.fontSizes[0] }}
-										>
-											{pkg.packageManager}
-										</span>
-									)}
-									{pkg.version && (
-										<span
-											style={{ color: muted, fontSize: theme.fontSizes[0] }}
-										>
-											v{pkg.version}
-										</span>
-									)}
-									<span style={{ color: muted, fontSize: theme.fontSizes[0] }}>
-										{pkg.constructs.length}
-									</span>
+									{repoInfo.commits.toLocaleString()} commits · {repoInfo.ageDays} days old
 								</div>
 							)}
-							{pkg.constructs.map((c) => {
-								const active =
-									selected?.modelId === c.modelId &&
-									selected?.alias === c.alias;
-								return (
-									<button
-										key={`${c.modelId}\0${c.alias}`}
-										type="button"
-										onClick={() => setSelected(c)}
+							<div
+								style={{
+									flexShrink: 0,
+									display: "flex",
+									alignItems: "center",
+									gap: 8,
+									padding: "7px 12px",
+									borderBottom: `1px solid ${theme.colors.border ?? "#333"}`,
+									fontSize: theme.fontSizes[2],
+									fontWeight: 600,
+								}}
+							>
+								<label
+									style={{
+										flex: 1,
+										minWidth: 0,
+										display: "flex",
+										alignItems: "center",
+										gap: 6,
+										padding: "4px 9px",
+										borderRadius: 6,
+										border: `1px solid ${theme.colors.border ?? "#333"}`,
+										background:
+											theme.colors.backgroundSecondary ?? "transparent",
+									}}
+								>
+									<Search size={14} color={muted} aria-hidden="true" />
+									<input
+										type="text"
+										value={query}
+										onChange={(e) => setQuery(e.target.value)}
+										onKeyDown={(e) => {
+											if (e.key === "Escape") setQuery("");
+										}}
+										placeholder={`Search ${countRepo(repo)} saved constructs`}
+										aria-label="Search constructs"
+										autoComplete="off"
+										autoCorrect="off"
+										autoCapitalize="off"
+										spellCheck={false}
 										style={{
-											display: "flex",
-											flexDirection: "column",
-											gap: 4,
-											alignItems: "flex-start",
-											textAlign: "left",
-											width: "100%",
+											flex: 1,
+											minWidth: 0,
 											border: "none",
-											borderBottom: `1px solid ${theme.colors.border ?? "#333"}22`,
-											background: active
-												? `${theme.colors.primary}14`
-												: "transparent",
+											outline: "none",
+											background: "transparent",
 											color: theme.colors.text,
-											padding: "9px 14px",
-											cursor: "pointer",
+											fontSize: theme.fontSizes[1],
+											fontWeight: 400,
 											fontFamily: theme.fonts.body,
 										}}
-									>
-										<div
+									/>
+									{query && (
+										<button
+											type="button"
+											onClick={() => setQuery("")}
+											title="Clear search"
+											aria-label="Clear search"
 											style={{
-												display: "flex",
-												alignItems: "center",
-												gap: 8,
-												width: "100%",
-											}}
-										>
-											<span
-												style={{
-													flex: 1,
-													minWidth: 0,
-													fontSize: theme.fontSizes[2],
-													fontWeight: 500,
-													whiteSpace: "nowrap",
-													overflow: "hidden",
-													textOverflow: "ellipsis",
-												}}
-											>
-												{c.name}
-											</span>
-										</div>
-										<span
-											style={{
-												fontSize: theme.fontSizes[1],
-												fontFamily: theme.fonts.monospace,
+												flexShrink: 0,
+												border: "none",
+												background: "transparent",
 												color: muted,
-												whiteSpace: "nowrap",
-												overflow: "hidden",
-												textOverflow: "ellipsis",
-												maxWidth: "100%",
+												cursor: "pointer",
+												fontSize: theme.fontSizes[1],
+												lineHeight: 1,
+												padding: 0,
 											}}
-											title={`${c.file}:${c.startLine}–${c.endLine}`}
 										>
-											{c.packageRelativeFile}:{c.startLine}–{c.endLine}
-										</span>
-									</button>
-								);
-							})}
-						</div>
-					))}
-				</div>
+											✕
+										</button>
+									)}
+								</label>
+							</div>
+							<ConstructTimelineTrigger
+								timeline={timeline}
+								open={timelineOpen}
+								onToggle={() => setTimelineOpen((open) => !open)}
+							/>
+							<div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+								{error && <div role="alert" style={{ padding: 12, color: "#e5534b" }}>{error}</div>}
+								{repo?.error && (
+									<div role="alert" style={{ padding: "10px 14px", color: "#e5534b", fontSize: theme.fontSizes[1] }}>
+										{repo.error}
+									</div>
+								)}
+								{!q && shownCount === 0 && emptyMessage && (
+									<div style={{ padding: "16px 14px", color: muted, fontSize: theme.fontSizes[1] }}>
+										{emptyMessage}
+									</div>
+								)}
+								{q && shownCount === 0 && (
+									<div
+										style={{
+											padding: "16px 14px",
+											color: muted,
+											fontSize: theme.fontSizes[1],
+										}}
+									>
+										No saved constructs match “{query.trim()}”.
+									</div>
+								)}
+								{packages.map((pkg) => (
+									<div key={pkg.path || "::root"}>
+										{repo?.hasPackageInfo && (
+											<div
+												style={{
+													position: "sticky",
+													top: 0,
+													zIndex: 1,
+													display: "flex",
+													alignItems: "center",
+													gap: 8,
+													padding: "6px 14px",
+													background:
+														theme.colors.backgroundSecondary ?? theme.colors.background,
+													borderBottom: `1px solid ${theme.colors.border ?? "#333"}`,
+													fontSize: theme.fontSizes[1],
+												}}
+												title={pkg.manifestPath}
+											>
+												<span
+													style={{
+														fontWeight: 600,
+														whiteSpace: "nowrap",
+														overflow: "hidden",
+														textOverflow: "ellipsis",
+													}}
+												>
+													{pkg.name || "repo root"}
+												</span>
+												{pkg.isMonorepoRoot && (
+													<span
+														style={{
+															flexShrink: 0,
+															fontSize: theme.fontSizes[0],
+															fontWeight: 600,
+															textTransform: "uppercase",
+															letterSpacing: 0.3,
+															color: theme.colors.primary,
+															border: `1px solid ${theme.colors.primary}55`,
+															borderRadius: 999,
+															padding: "0 6px",
+														}}
+													>
+														root
+													</span>
+												)}
+												<span style={{ flex: 1 }} />
+												{pkg.packageManager && (
+													<span
+														style={{ color: muted, fontSize: theme.fontSizes[0] }}
+													>
+														{pkg.packageManager}
+													</span>
+												)}
+												{pkg.version && (
+													<span
+														style={{ color: muted, fontSize: theme.fontSizes[0] }}
+													>
+														v{pkg.version}
+													</span>
+												)}
+												<span style={{ color: muted, fontSize: theme.fontSizes[0] }}>
+													{pkg.constructs.length}
+												</span>
+											</div>
+										)}
+										{pkg.constructs.map((c) => {
+											const active = selected?.repoKey === c.repoKey && selected?.id === c.id;
+											return (
+												<button
+													key={c.id}
+													type="button"
+													onClick={() => { setSelected(c); setTimelineOpen(false); }}
+													style={{
+														display: "flex",
+														flexDirection: "column",
+														gap: 4,
+														alignItems: "flex-start",
+														textAlign: "left",
+														width: "100%",
+														border: "none",
+														borderBottom: `1px solid ${theme.colors.border ?? "#333"}22`,
+														background: active
+															? `${theme.colors.primary}14`
+															: "transparent",
+														color: theme.colors.text,
+														padding: "9px 14px",
+														cursor: "pointer",
+														fontFamily: theme.fonts.body,
+													}}
+												>
+													<div
+														style={{
+															display: "flex",
+															alignItems: "center",
+															gap: 8,
+															width: "100%",
+														}}
+													>
+														<span
+															style={{
+																flex: 1,
+																minWidth: 0,
+																fontSize: theme.fontSizes[2],
+																fontWeight: 500,
+																whiteSpace: "nowrap",
+																overflow: "hidden",
+																textOverflow: "ellipsis",
+															}}
+														>
+															{c.name}
+														</span>
+													</div>
+													<span
+														style={{
+															fontSize: theme.fontSizes[1],
+															fontFamily: theme.fonts.monospace,
+															color: muted,
+															whiteSpace: "nowrap",
+															overflow: "hidden",
+															textOverflow: "ellipsis",
+															maxWidth: "100%",
+														}}
+														title={c.verification.evidence}
+													>
+														{c.packageRelativeFile}:{c.span ? `${c.span.startLine}–${c.span.endLine}` : c.graphStartLine}
+													</span>
+													<span style={{ fontSize: theme.fontSizes[0], color: muted }}>
+														{c.verification.status === "verified" ? "Source verified" : c.verification.status}
+														{c.models.length ? ` · ${c.models.length} model association${c.models.length === 1 ? "" : "s"}` : ""}
+													</span>
+												</button>
+											);
+										})}
+									</div>
+								))}
+							</div>
+						</>
+					)}
+				/>
 			</div>
 
-			{/* Span as its own file */}
-			<SpanPane
-				key={selected ? JSON.stringify([
-					selected.purl, selected.file, selected.startLine,
-					selected.endLine, selected.contentHash,
-				]) : "none"}
-				construct={selected}
+			<div
+				onMouseDown={onPanelResizeStart}
+				aria-label="Resize constructs sidebar"
+				title="Drag to resize"
+				style={{
+					width: 3,
+					flexShrink: 0,
+					cursor: "col-resize",
+					background: theme.colors.border,
+					transition: "background 120ms ease",
+					zIndex: 1,
+				}}
 			/>
-		</div>
+
+			{/* Right pane: the cumulative timeline, or the selected construct's span */}
+			{timelineOpen ? (
+				<ConstructTimelinePanel timeline={timeline} onClose={() => setTimelineOpen(false)} />
+			) : (
+				<SpanPane
+					key={selected ? JSON.stringify([
+						selected.purl, selected.id, selected.span, selected.verification,
+					]) : "none"}
+					construct={selected}
+				/>
+			)}
+		</main>
 	);
 }

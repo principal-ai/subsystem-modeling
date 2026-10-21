@@ -83,6 +83,8 @@ import {
 import { auditSubsystemModel, applyDeterministicSpanFixes, applySubsystemModelAuditFix, promoteAcceptedDeclarationSpans, verifySubsystemComponent } from "./verify-subsystem-component";
 import { inspectSubsystemSymbol } from "./inspect-symbol";
 import { listVerifiedConstructs, readSubsystemSpan } from "./verified-constructs";
+import { constructInventory, listConstructRepositories } from "./construct-inventory";
+import { constructTimeline } from "./construct-timeline-proxy";
 import { assessConstructComplexity } from "./jev-complexity";
 import {
 	getGraphifyStatus,
@@ -116,7 +118,8 @@ import {
 	getOpencodeLiveFeedByGraphId,
 	subscribeOpencodeLiveFeeds,
 } from "./opencode-v2-live";
-import { ensureGraphifyGraph, listGraphifyGraphs, listGraphifyRepos, assessSubsystemGraphifyReadiness } from "./graphify-store";
+import { ensureGraphifyGraph, listGraphifyGraphs, listGraphifyRepos, assessSubsystemGraphifyReadiness, resolveRepoRootForPurl } from "./graphify-store";
+import { repoHistoryBounds } from "./git-repo";
 import { buildMaintenanceOverview } from "./maintenance-overview";
 import { ensurePackageLayers, listPackageLayers, listPackageLayerRepos } from "./package-layer-store";
 import {
@@ -1952,12 +1955,63 @@ const requests: RequestHandlers = {
 				);
 				return { graphs };
 			},
+			listConstructInventory: async () => {
+				try {
+					return { ok: true, repos: await listConstructRepositories() };
+				} catch {
+					return { ok: false, error: "Could not load the graph construct inventory.", repos: [] };
+				}
+			},
+			getConstructInventory: async ({ purl }) => {
+				try {
+					const result = constructInventory.peek(purl);
+					return { ...result, ok: !result.error };
+				} catch {
+					return { ok: false, loading: false, error: "Could not load the selected construct inventory." };
+				}
+			},
 			listVerifiedConstructs: async () => {
 				try {
 					const repos = await listVerifiedConstructs();
 					return { ok: true as const, repos };
 				} catch (err) {
 					return { ok: false as const, error: (err as Error).message, repos: [] };
+				}
+			},
+			getConstructRepositoryInfo: async ({ purl }) => {
+				try {
+					const root = resolveRepoRootForPurl(purl);
+					if (!root) return { ok: false, error: "No local checkout is registered for this repository." };
+					const bounds = await repoHistoryBounds(root);
+					return bounds
+						? { ok: true, ...bounds }
+						: { ok: false, error: "Could not read this repository's history." };
+				} catch {
+					return { ok: false, error: "Could not read this repository's history." };
+				}
+			},
+			getConstructTimeline: async ({ purl }) => {
+				try {
+					const readout = await constructTimeline.get(purl);
+					if (!readout) return { ok: true };
+					return { ok: true, meta: readout.meta, summary: readout.summary };
+				} catch (error) {
+					return { ok: false, error: error instanceof Error ? error.message : "Could not read the timeline checkpoint." };
+				}
+			},
+			extendConstructTimeline: async ({ purl, options }) => {
+				try {
+					return { ok: true, meta: await constructTimeline.extend(purl, options ?? {}) };
+				} catch (error) {
+					return { ok: false, error: error instanceof Error ? error.message : "Could not extend the timeline." };
+				}
+			},
+			cancelConstructTimeline: async ({ purl }) => {
+				try {
+					constructTimeline.cancel(purl);
+					return { ok: true };
+				} catch {
+					return { ok: false, error: "Could not cancel the timeline extension." };
 				}
 			},
 			getMaintenanceOverview: async () => {
@@ -2840,6 +2894,7 @@ function withOpencodeV2CliBusy(status: OpencodeV2Status): OpencodeV2Status {
 function broadcastGraphifyChanged(
 	payload: StudioMessages["graphifyChanged"],
 ): void {
+	constructInventory.invalidate(payload.purl);
 	try {
 		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
 			"graphifyChanged"
@@ -2854,6 +2909,7 @@ function broadcastGraphifyChanged(
 function broadcastPackageLayersChanged(
 	payload: StudioMessages["packageLayersChanged"],
 ): void {
+	constructInventory.invalidate(payload.purl);
 	try {
 		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
 			"packageLayersChanged"
@@ -2868,6 +2924,7 @@ function broadcastPackageLayersChanged(
 function broadcastSubsystemModelChanged(
 	payload: StudioMessages["subsystemModelChanged"],
 ): void {
+	constructInventory.invalidate();
 	try {
 		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
 			"subsystemModelChanged"

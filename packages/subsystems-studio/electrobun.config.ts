@@ -24,6 +24,9 @@ export default {
 		copy: {
 			// Runtime + language grammars are not included by JS bundling.
 			...TREE_SITTER_ASSET_COPIES,
+			// The parse-heavy analysis worker is a second bundle (see
+			// scripts/build-analysis-worker.ts) loaded at runtime by path.
+			"artifacts/analysis-worker/construct-timeline-worker.js": "bun/construct-timeline-worker.js",
 			"src/mainview/index.html": "views/mainview/index.html",
 			"src/mainview/index.css": "views/mainview/index.css",
 			"src/mainview/agent-logos": "views/mainview/agent-logos",

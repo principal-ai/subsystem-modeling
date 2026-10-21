@@ -38,6 +38,10 @@ export interface RunGraphifyExtractOptions {
 	extraArgs?: string[];
 	/** When true, delete a temp outDir we created on failure (default true). */
 	cleanupTempOnFailure?: boolean;
+	/** Stop the CLI (and its process group) when a background job is cancelled. */
+	signal?: AbortSignal;
+	/** Ignore ambient GRAPHIFY_OUT and confine artifacts to the supplied outDir. */
+	isolatedOutput?: boolean;
 }
 
 export interface RunGraphifyExtractResult {
@@ -132,6 +136,9 @@ export async function runGraphifyExtract(
 	opts: RunGraphifyExtractOptions,
 ): Promise<GraphifyExtractOutcome> {
 	const started = performance.now();
+	if (opts.signal?.aborted) {
+		return { ok: false, error: "Extraction cancelled", durationMs: performance.now() - started };
+	}
 	const repoRoot = resolve(opts.repoRoot);
 	if (!existsSync(repoRoot)) {
 		return {
@@ -171,16 +178,38 @@ export async function runGraphifyExtract(
 		cmd: [bin, ...args],
 		cwd: repoRoot,
 		stdio: ["ignore", "pipe", "pipe"],
-		env: { ...process.env },
+		detached: !!opts.signal,
+		env: {
+			...process.env,
+			...(opts.isolatedOutput ? { GRAPHIFY_OUT: join(outDir, "graphify-out") } : {}),
+		},
 	});
+	let killTimer: ReturnType<typeof setTimeout> | undefined;
+	const terminate = (signal: NodeJS.Signals) => {
+		try {
+			if (opts.signal && process.platform !== "win32") process.kill(-proc.pid, signal);
+			else proc.kill(signal);
+		} catch { /* The process may already have exited. */ }
+	};
+	const abort = () => {
+		terminate("SIGTERM");
+		killTimer = setTimeout(() => terminate("SIGKILL"), 1000);
+	};
+	opts.signal?.addEventListener("abort", abort, { once: true });
+	if (opts.signal?.aborted) abort();
 
 	const [stdout, stderr] = await Promise.all([
 		new Response(proc.stdout).text(),
 		new Response(proc.stderr).text(),
 	]);
 	const exitCode = await proc.exited;
+	opts.signal?.removeEventListener("abort", abort);
+	if (opts.signal?.aborted) terminate("SIGKILL");
+	if (killTimer) clearTimeout(killTimer);
 	const durationMs = performance.now() - started;
-	const graphPath = graphJsonPathForOut(outDir);
+	const graphPath = opts.isolatedOutput
+		? join(outDir, "graphify-out", "graph.json")
+		: graphJsonPathForOut(outDir);
 
 	const failCleanup = () => {
 		if (usedTempOut && opts.cleanupTempOnFailure !== false) {
@@ -192,6 +221,10 @@ export async function runGraphifyExtract(
 		}
 	};
 
+	if (opts.signal?.aborted) {
+		failCleanup();
+		return { ok: false, error: "Extraction cancelled", durationMs };
+	}
 	if (exitCode !== 0) {
 		failCleanup();
 		return {
@@ -223,7 +256,7 @@ export async function runGraphifyExtract(
 			ok: true,
 			repoRoot,
 			outDir,
-			graphifyOut: graphifyOutDir(outDir),
+			graphifyOut: opts.isolatedOutput ? join(outDir, "graphify-out") : graphifyOutDir(outDir),
 			graphJsonPath: graphPath,
 			graph,
 			nodeCount: graph.nodes.length,

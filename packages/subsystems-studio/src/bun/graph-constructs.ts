@@ -9,7 +9,6 @@ import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import type { Node as SyntaxNode } from "web-tree-sitter";
 import type { GraphifyNode } from "../../../subsystems-react/src/graphify/types";
 import type { SourceConstruct } from "../shared/contract";
-import type { ConstructHistoryObservation, ConstructHistoryTarget, ConstructHistoryTransition } from "../shared/construct-history";
 import { normalizeDeclarationLine, parseSourceLocation } from "./declaration-ref";
 import { sharedParserFor, parseWith } from "./tree-sitter-parser";
 import { grammarFile } from "./tree-sitter-assets";
@@ -24,7 +23,6 @@ interface Declaration {
 	anchorEnd: number;
 	hasError: boolean;
 	contentHash: string;
-	shapeHash: string;
 }
 
 const kinds: Record<string, string> = {
@@ -119,15 +117,12 @@ async function declarationsFor(file: string, content: string): Promise<ParsedDec
 				const symbol = [...qualifiedScopes, name].join(".");
 				const startLine = start.startPosition.row + 1;
 				const endLine = start.endPosition.row + 1;
-				const nameNode = node.childForFieldName("name")!;
-				const shape = `${node.text.slice(0, nameNode.startIndex - node.startIndex)}<name>${node.text.slice(nameNode.endIndex - node.startIndex)}`;
 				declarations.push({
 					name, symbol,
 					construct,
 					startLine, endLine, anchorEnd: node.startPosition.row + 1,
 					hasError: start.hasError,
 					contentHash: createHash("sha256").update(lines.slice(startLine - 1, endLine).join("\n")).digest("hex").slice(0, 32),
-					shapeHash: createHash("sha256").update(`${construct}\0${shape.replace(/\s+/g, " ")}`).digest("hex").slice(0, 32),
 				});
 				if (["class", "function", "method", "module", "type"].includes(construct)) innerScopes = [...qualifiedScopes, name];
 			}
@@ -252,10 +247,6 @@ export async function verifyGraphConstructs(input: {
 	purl: string;
 	nodes: readonly GraphifyNode[];
 	signal?: AbortSignal;
-	/** History must stop on operational faults, not manufacture historical gaps. */
-	strict?: boolean;
-	/** Historical matching only needs the files containing active targets. */
-	files?: ReadonlySet<string>;
 }): Promise<GraphConstructInventory> {
 	const root = await fs.realpath(input.repoRoot);
 	const checkedAt = new Date().toISOString();
@@ -266,7 +257,6 @@ export async function verifyGraphConstructs(input: {
 		// Parsing is synchronous CPU; hop off the event loop periodically so the
 		// host keeps answering RPC (including the analysis progress poll).
 		if (++scanned % 25 === 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
-		if (input.files && !input.files.has(file)) continue;
 		let declarations: Declaration[] | null = null;
 		let content = "";
 		let error: string | undefined;
@@ -328,7 +318,6 @@ export async function verifyGraphConstructs(input: {
 				id, name: symbol, symbol, construct: declaration?.construct ?? "unknown",
 				file, purl: input.purl, repoKey: input.purl, packageRelativeFile: file,
 				graphNodeIds: [node.id], graphStartLine: anchor, models: [],
-				declarationShapeHash: status === "verified" ? declaration?.shapeHash : undefined,
 				verification: { status, evidence, checkedAt },
 				span: status === "verified" && declaration ? {
 					startLine: declaration.startLine, endLine: declaration.endLine, contentHash: declaration.contentHash,
@@ -341,177 +330,4 @@ export async function verifyGraphConstructs(input: {
 	const coverage = { verified: 0, unresolved: 0, unsupported: 0, error: 0 };
 	for (const row of constructs) coverage[row.verification.status]++;
 	return { constructs, coverage };
-}
-
-export function graphHistoryTargets(inventory: GraphConstructInventory): ConstructHistoryTarget[] {
-	return inventory.constructs.filter((row) => row.verification.status === "verified" && row.span).map((row) => ({
-		id: row.id, name: row.name, file: row.file, symbol: row.symbol, construct: row.construct,
-	}));
-}
-
-/**
- * Identity set of a graph's code candidates, before source verification. This
- * is the cheap census the death/creation diff runs on: "Graphify succeeded and
- * the identity is not here" is enough. File/module containers and import stubs
- * are already excluded by `candidates`.
- */
-export function graphCandidateIdentities(nodes: readonly GraphifyNode[]): Map<string, { file: string; symbol: string }> {
-	const identities = new Map<string, { file: string; symbol: string }>();
-	for (const [file, group] of candidates(nodes)) {
-		// Only source languages with a bundled parser: manifest/dependency nodes
-		// (e.g. package.json entries) are not constructs.
-		if (!grammarFile(file)) continue;
-		for (const node of group) {
-			const symbol = graphSymbol(node.label!);
-			if (!symbol) continue;
-			const key = `${file}\0${symbol}`;
-			if (!identities.has(key)) identities.set(key, { file, symbol });
-		}
-	}
-	return identities;
-}
-
-/**
- * Identity changes between an older and a newer adjacent snapshot. Only exact
- * file/qualified-symbol identity: no rename, move or split reconciliation, so
- * those surface as one removal plus one introduction.
- */
-export function diffConstructIdentities(
-	older: ReadonlyMap<string, { file: string; symbol: string }>,
-	newer: ReadonlyMap<string, { file: string; symbol: string }>,
-): ConstructHistoryTransition[] {
-	const transitions: ConstructHistoryTransition[] = [];
-	for (const [key, value] of older) {
-		if (!newer.has(key)) transitions.push({ kind: "removed", file: value.file, symbol: value.symbol });
-	}
-	for (const [key, value] of newer) {
-		if (!older.has(key)) transitions.push({ kind: "introduced", file: value.file, symbol: value.symbol });
-	}
-	return transitions.sort((a, b) => a.kind.localeCompare(b.kind) || a.file.localeCompare(b.file) || a.symbol.localeCompare(b.symbol));
-}
-
-/** Preserve the existing conservative no-gap, exact-identity/rename policy. */
-export async function matchGraphHistoryConstructs(input: {
-	repoRoot: string;
-	purl: string;
-	nodes: readonly GraphifyNode[];
-	targets: ConstructHistoryTarget[];
-	newer?: ConstructHistoryObservation[];
-	renames: Map<string, string>;
-	signal?: AbortSignal;
-	detectIntroductions?: boolean;
-	/** The newer snapshot's actual first parent, not merely the next selected date. */
-	adjacent?: boolean;
-	/** Complete Git tree. Symlinks/submodules cannot prove source absence. */
-	sourceTree?: ReadonlyMap<string, "file" | "other">;
-	/** Full-inventory coverage at this snapshot; introduction-detection runs only. */
-	onInventory?: (coverage: GraphConstructInventory["coverage"]) => void;
-}): Promise<ConstructHistoryObservation[]> {
-	const newer = new Map(input.newer?.map((observation) => [observation.targetId, observation]));
-	const locations = new Map<string, string>();
-	for (const target of input.targets) {
-		const previous = newer.get(target.id);
-		if (input.newer && previous?.status !== "matched") continue;
-		const file = previous?.file ?? target.file;
-		locations.set(target.id, input.renames.get(file) ?? file);
-	}
-	if (!locations.size) return input.targets.map((target) => {
-		const previous = newer.get(target.id);
-		return input.detectIntroductions && (previous?.status === "absent" || previous?.status === "not-traced")
-			? { targetId: target.id, status: "not-traced", evidence: "Earlier than the confirmed introduction boundary; earlier incarnations are not traced." }
-			: { targetId: target.id, status: "unresolved", evidence: `Trace already unresolved at a newer snapshot: ${previous?.evidence ?? "unknown"}` };
-	});
-	const inventory = await verifyGraphConstructs({
-		...input, strict: true,
-		files: input.detectIntroductions ? undefined : new Set(locations.values()),
-	});
-	// A full inventory is only built when introduction detection verifies every
-	// candidate file; a target-file subset is not a coverage measurement.
-	if (input.detectIntroductions) input.onInventory?.(inventory.coverage);
-	const byIdentity = new Map(inventory.constructs.map((row) => [`${row.file}\0${row.symbol}`, row]));
-	const olderNames = new Set([...candidates(input.nodes).values()].flat()
-		.map((node) => graphSymbol(node.label).split(".").at(-1)));
-	const olderShapes = new Set(inventory.constructs.map((row) => row.declarationShapeHash).filter(Boolean));
-	const expectedIdentities = new Set(input.targets.flatMap((target) => {
-		const file = locations.get(target.id);
-		return file ? [`${file}\0${newer.get(target.id)?.symbol ?? target.symbol}`] : [];
-	}));
-	const unclaimedKinds = new Set(inventory.constructs.filter((row) => row.verification.status === "verified" &&
-		!expectedIdentities.has(`${row.file}\0${row.symbol}`)).map((row) => row.construct));
-	const root = await fs.realpath(input.repoRoot);
-	const observations: ConstructHistoryObservation[] = [];
-	for (const target of input.targets) {
-		input.signal?.throwIfAborted();
-		// Some targets trigger source reads/parses below; yield so RPC stays live.
-		if (observations.length % 100 === 0 && observations.length) await new Promise<void>((resolve) => setTimeout(resolve, 0));
-		const previous = newer.get(target.id);
-		const file = locations.get(target.id);
-		if (input.detectIntroductions && (previous?.status === "absent" || previous?.status === "not-traced")) {
-			observations.push({ targetId: target.id, status: "not-traced", evidence: "Earlier than the confirmed introduction boundary; earlier incarnations are not traced." });
-			continue;
-		}
-		if (!file) {
-			observations.push({ targetId: target.id, status: "unresolved", evidence: `Trace already unresolved at a newer snapshot: ${previous?.evidence ?? "unknown"}` });
-			continue;
-		}
-		const row = byIdentity.get(`${file}\0${previous?.symbol ?? target.symbol}`);
-		if (!row?.span || row.verification.status !== "verified") {
-			let evidence = row?.verification.evidence ?? "No exact source-verified graph declaration at this snapshot.";
-			let absent = false;
-			if (input.detectIntroductions && input.adjacent && input.sourceTree && previous?.status === "matched") {
-				const name = (previous.symbol ?? target.symbol).split(".").at(-1)!;
-				if (!previous.declarationShapeHash) evidence = "No saved declaration fingerprint for checking possible renames.";
-				else if (olderNames.has(name) || olderShapes.has(previous.declarationShapeHash) ||
-					(target.construct && unclaimedKinds.has(target.construct))) {
-					evidence = "An older same-named, same-shaped, or unclaimed same-kind declaration could explain a move or rename; introduction is unknown.";
-				} else if (!input.sourceTree.has(file)) {
-					absent = true;
-					evidence = "Git confirms this file is absent in the immediate first parent; no file rename or declaration move/rename candidate explains it.";
-				} else if (input.sourceTree.get(file) !== "file") {
-					evidence = "A symlink or submodule cannot establish source absence.";
-				} else {
-					// Graph absence is not source absence. Parse even files with no
-					// graph nodes, and reject errors or unindexed name occurrences.
-					let content: string | undefined;
-					let parsed: ParsedDeclarations | null = null;
-					let parseFailed = false;
-					try {
-						content = await safeSource(root, file);
-						parsed = await declarationsFor(file, content);
-					} catch {
-						input.signal?.throwIfAborted();
-						// One unreadable/unparseable file must not abort a whole run;
-						// a failed parse can never prove absence, so stay unknown.
-						parseFailed = true;
-					}
-					if (parseFailed) {
-						evidence = "Source parsing failed for this file; introduction is unknown.";
-					} else {
-						const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-						const mentioned = new RegExp(`(?<![$\\p{ID_Continue}])${escaped}(?![$\\p{ID_Continue}])`, "u").test(content ?? "");
-						const possibleRename = parsed?.declarations.some((declaration) => declaration.construct === target.construct &&
-							!expectedIdentities.has(`${file}\0${declaration.symbol}`));
-						absent = !!parsed && !parsed.hasError && !mentioned && !possibleRename &&
-							!parsed.declarations.some((declaration) => declaration.symbol === (previous.symbol ?? target.symbol));
-						evidence = absent
-							? "Successfully parsed the immediate first parent's source: declaration and name absent, with no move/rename candidate."
-							: "Source parsing, an existing name, or unsupported syntax prevents confirming absence; introduction is unknown.";
-					}
-				}
-			}
-			observations.push({ targetId: target.id, status: absent ? "absent" : "unresolved",
-				...(absent ? { absence: "confirmed" as const, file, symbol: previous?.symbol ?? target.symbol } : {}), evidence });
-			continue;
-		}
-		if (target.construct && target.construct !== row.construct) {
-			observations.push({ targetId: target.id, status: "unresolved", evidence: "The parsed declaration kind no longer matches the target." });
-			continue;
-		}
-		observations.push({
-			targetId: target.id, status: "matched", file, symbol: row.symbol,
-			declarationShapeHash: row.declarationShapeHash,
-			...row.span, evidence: `${file === (previous?.file ?? target.file) ? "Exact file/symbol" : "Git file rename"}; ${row.verification.evidence}`,
-		});
-	}
-	return observations;
 }
