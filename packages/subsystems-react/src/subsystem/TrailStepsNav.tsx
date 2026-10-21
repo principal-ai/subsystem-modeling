@@ -45,15 +45,11 @@ export interface TrailStepsNavProps {
   onHoverStep: (trail: SubsystemTrail, stepIndex: number) => void;
   onHoverFlow: (trail: SubsystemTrail) => void;
   onLeaveStep: () => void;
-  /** Aliases of components marked `proposed` — a row whose steps touch one tints. */
-  proposedAliases?: ReadonlySet<string>;
   /** Alias → component, for turning hops into human display names. */
   componentByAlias?: TrailComponentLabels;
   /** Slide duration in ms. @default 340 */
   transitionMs?: number;
 }
-
-const PROPOSED_COLOR = 'darkgoldenrod';
 
 const PANE: CSSProperties = {
   position: 'absolute',
@@ -63,11 +59,6 @@ const PANE: CSSProperties = {
   minHeight: 0,
   willChange: 'transform',
 };
-
-function touchesProposed(trail: SubsystemTrail, proposed?: ReadonlySet<string>): boolean {
-  if (!proposed) return false;
-  return trail.steps.some((s) => proposed.has(s.from) || proposed.has(s.to));
-}
 
 export function TrailStepsNav({
   trails,
@@ -80,7 +71,6 @@ export function TrailStepsNav({
   onHoverStep,
   onHoverFlow,
   onLeaveStep,
-  proposedAliases,
   componentByAlias,
   transitionMs = 340,
 }: TrailStepsNavProps) {
@@ -138,7 +128,6 @@ export function TrailStepsNav({
       >
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 0 12px' }}>
           {trails.map((trail) => {
-            const proposed = touchesProposed(trail, proposedAliases);
             const focusedRow = trail.id === focusedTrailId;
             const hovered = hoveredRow === trail.id;
             return (
@@ -184,7 +173,7 @@ export function TrailStepsNav({
                     fontSize: theme.fontSizes[1],
                     fontFamily: theme.fonts.monospace,
                     fontWeight: 600,
-                    color: proposed ? PROPOSED_COLOR : theme.colors.text,
+                    color: theme.colors.text,
                   }}
                 >
                   {trail.title}
@@ -258,7 +247,7 @@ export function TrailStepsNav({
                   fontSize: theme.fontSizes[1],
                   fontFamily: theme.fonts.monospace,
                   fontWeight: 600,
-                  color: touchesProposed(displayedTrail, proposedAliases) ? PROPOSED_COLOR : theme.colors.text,
+                  color: theme.colors.text,
                 }}
               >
                 {displayedTrail.title}

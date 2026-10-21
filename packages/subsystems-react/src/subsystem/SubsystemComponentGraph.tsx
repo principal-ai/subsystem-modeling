@@ -109,11 +109,6 @@ export interface TrailViewerContext {
   /** Open a step's full source file over the trail drawer (keeps snippets mounted). */
   onOpenFile: (path: string, opts?: SubsystemOpenFileOptions) => void;
   /**
-   * Aliases of components marked `proposed`. A step whose file can't be read
-   * but whose endpoint is proposed can be labelled as planned, not missing.
-   */
-  proposedAliases: ReadonlySet<string>;
-  /**
    * Resolve a token in a step's snippet to a construct the step touches (its
    * `from`/`to` component), returning that component's alias. `null` when the
    * token names no touched construct. Forward to the code view so constructs
@@ -589,7 +584,6 @@ const TrailDrawerContent = memo(function TrailDrawerContent({
   trail,
   stepIndex,
   onOpenFile,
-  proposedAliases,
   resolveSymbol,
   onSymbolClick,
   onVisibleStepChange,
@@ -598,7 +592,6 @@ const TrailDrawerContent = memo(function TrailDrawerContent({
   trail: SubsystemTrail;
   stepIndex: number | null;
   onOpenFile: (path: string, opts?: SubsystemOpenFileOptions) => void;
-  proposedAliases: ReadonlySet<string>;
   resolveSymbol?: (query: TrailSymbolQuery) => string | null;
   onSymbolClick?: (symbol: string, query: TrailSymbolQuery) => void;
   onVisibleStepChange?: (index: number) => void;
@@ -609,7 +602,6 @@ const TrailDrawerContent = memo(function TrailDrawerContent({
         trail,
         stepIndex,
         onOpenFile,
-        proposedAliases,
         resolveSymbol,
         onSymbolClick,
         onVisibleStepChange,
@@ -1484,22 +1476,6 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     return map;
   }, [issues, trails, issueStep]);
 
-  // Edges backed by a step that ITSELF declares `proposed` — a planned seam
-  // between otherwise-real components. Distinct from a proposed ENDPOINT
-  // (the node is the placeholder there, and draws its own dashed border):
-  // here the seam is the claim that is not real yet, so the edge label draws
-  // dashed. Proposed steps are never verified, so this never competes with
-  // the step-issue badge.
-  const proposedEdgeIds = useMemo(() => {
-    const set = new Set<string>();
-    for (const trail of trails ?? []) {
-      for (const step of trail.steps) {
-        if (step.proposed) set.add(trailStepGraphEdgeId(step));
-      }
-    }
-    return set;
-  }, [trails]);
-
   // Expanded verification layers in the diagnostics list. When any layer with
   // findings is expanded, the canvas dims everything that layer does not
   // implicate (see `issueFocus`). The list publishes this through
@@ -1826,17 +1802,6 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     () => convertedEdges.map((e) => e.id).sort().join(','),
     [convertedEdges],
   );
-  // Stamp `proposedStep` onto edge data so the SVG edge itself (not just its
-  // label) draws dashed when a backing trail step declares itself proposed.
-  const proposedStampedEdges = useMemo(
-    () =>
-      baseEdges.map((e) =>
-        proposedEdgeIds.has(e.id)
-          ? { ...e, data: { ...(e.data as object), proposedStep: true } }
-          : e,
-      ),
-    [baseEdges, proposedEdgeIds],
-  );
 
   const dispEdges = useMemo(() => {
     const paint = (e: Edge, dimmed: boolean): Edge => {
@@ -1865,7 +1830,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       return isTrailMechanism(mechanism);
     };
     if (openedEdgeIds || focusEdgeIds || previewEdgeIds || issueFocusEdgeIds) {
-      return proposedStampedEdges.map((e) => {
+      return baseEdges.map((e) => {
         const vis = flowElementVisibility({
           inOpened: openedEdgeIds?.has(e.id) === true,
           inSelected: focusEdgeIds?.has(e.id) === true,
@@ -1879,13 +1844,13 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       });
     }
     if (selectedEdgeId) {
-      return proposedStampedEdges.map((e) => ({
+      return baseEdges.map((e) => ({
         ...paint(e, e.id !== selectedEdgeId),
         hidden: !edgeInView(e),
       }));
     }
-    return proposedStampedEdges.map((e) => ({ ...e, hidden: !edgeInView(e) }));
-  }, [proposedStampedEdges, selectedEdgeId, openedEdgeIds, focusEdgeIds, previewEdgeIds, issueFocusEdgeIds, resolvedEdgeView]);
+    return baseEdges.map((e) => ({ ...e, hidden: !edgeInView(e) }));
+  }, [baseEdges, selectedEdgeId, openedEdgeIds, focusEdgeIds, previewEdgeIds, issueFocusEdgeIds, resolvedEdgeView]);
 
   // Gated on layoutReady so the pre-reveal Pass 1 swap never flashes a count.
   const unroutedIds = useMemo(
@@ -1975,12 +1940,6 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   // own owner-avatar header. Clicking a header collapses that repo's tree.
   const repoGroups = useMemo(() => buildRepoGroups(components), [components]);
   const hasTrails = useMemo(() => (trails?.length ?? 0) > 0, [trails]);
-  // Aliases of proposed components — the flows panel tints trail titles
-  // (and steps) that touch one.
-  const proposedAliases = useMemo(
-    () => new Set(components.filter((c) => c.proposed).map((c) => c.alias)),
-    [components],
-  );
   // Alias → component, so the Trails panel can show human hop names instead
   // of model-local aliases (and the site/`via` distinction can read).
   const componentByAlias = useMemo(
@@ -2834,7 +2793,6 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
           pathLength?: number;
         } | undefined;
         const stepIssue = stepIssueBadgeByEdgeId.get(e.id);
-        const proposed = proposedEdgeIds.has(e.id);
         return {
           id: e.id,
           mechanism: d?.mechanism ?? 'uses',
@@ -2845,11 +2803,10 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
           pathLength: d?.pathLength ?? 0,
           stepNos: selectedFlowStepNos?.get(e.id),
           stepIssue,
-          proposed,
         };
       });
     return labels;
-  }, [dispEdges, selectedFlowStepNos, stepIssueBadgeByEdgeId, proposedEdgeIds]);
+  }, [dispEdges, selectedFlowStepNos, stepIssueBadgeByEdgeId]);
 
   // Unique source files across components → sidebar file trees.
   const treeFilePaths = treeFiles;
@@ -3040,7 +2997,6 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         onTrailStepHover?.(null);
       }}
       onReorder={onReorderTrails}
-      proposedAliases={proposedAliases}
       componentByAlias={componentByAlias}
       stepEmphasis={stepEmphasis}
       onRemoveStepEmphasis={onRemoveStepEmphasis}
@@ -3190,9 +3146,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
                   crisp rounded box; soft / ambiguous ones (uses, feeds,
                   watches …) get a real lobed cloud silhouette — ambiguous, not
                   a dashed proposal (or a pill, which border-radius can only
-                  ever make). A step that ITSELF declares `proposed` dashes the
-                  silhouette — the seam is planned, distinct from a proposed
-                  ENDPOINT, which dashes the node instead. */}
+                  ever make). */}
               {verifiable ? (
                 <span
                   aria-hidden
@@ -3200,9 +3154,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
                     position: 'absolute',
                     inset: 0,
                     borderRadius: 4,
-                    border: lbl.proposed
-                      ? `1.5px dashed ${color}`
-                      : `0.5px solid ${color}`,
+                    border: `0.5px solid ${color}`,
                     background:
                       theme.colors.backgroundSecondary ?? theme.colors.background,
                     pointerEvents: 'none',
@@ -3227,7 +3179,6 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
                     stroke={hexWithAlpha(color, 0.75)}
                     strokeWidth={1.2}
                     strokeLinejoin="round"
-                    strokeDasharray={lbl.proposed ? '4 3' : undefined}
                   />
                 </svg>
               )}
@@ -3615,7 +3566,6 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
             trail={focusedTrail}
             stepIndex={drawerTarget.stepIndex}
             onOpenFile={onOpenFileFromTrail}
-            proposedAliases={proposedAliases}
             resolveSymbol={resolveTrailSymbol}
             onSymbolClick={openConstructDeclaration}
             onVisibleStepChange={setVisibleStepIndex}

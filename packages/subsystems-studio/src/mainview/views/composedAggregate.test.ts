@@ -86,7 +86,7 @@ describe("aggregateToFrames", () => {
 			doc({
 				components: [
 					comp("a", { file: "src/a.ts", process: "app/host" }),
-					comp("plan", { file: "src/plan.ts", process: "app/host", proposed: true }),
+					comp("plan", { file: "src/plan.ts", process: "app/host" }),
 				],
 			}),
 		);

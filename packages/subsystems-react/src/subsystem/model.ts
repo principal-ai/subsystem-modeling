@@ -1158,7 +1158,7 @@ export type SubsystemIssueRung =
   | 'signature';
 
 /**
- * Per-node diagnostics badge — the proposed issue overlay (severity ring +
+ * Per-node diagnostics badge — the issue overlay (severity ring +
  * earliest-rung corner chip). The graph derives one per component from the
  * audit issues whose component target resolves to that node. Absent when the
  * node has no rung-mapped findings.
@@ -1228,12 +1228,6 @@ export interface SubsystemGraphEdgeData extends Record<string, unknown> {
   /** True while another edge is selected — render this edge (and its label)
    *  dimmed to focus the selected relationship. */
   dimmed?: boolean;
-  /**
-   * A backing trail step declares itself `proposed` — a planned seam between
-   * otherwise-real components. The SVG edge and its label draw dashed;
-   * distinct from a proposed ENDPOINT, which dashes the node instead.
-   */
-  proposedStep?: boolean;
   /** ELK-computed label midpoint (from the actual edge path, not node centers). */
   labelX?: number;
   labelY?: number;
@@ -1524,9 +1518,6 @@ export const ROLE_LABEL: Record<SubsystemComponentRole, string> = {
   service: 'service',
 };
 
-/** Right-badge accent for `proposed: true` (no role, or combined with role). */
-export const PROPOSED_COLOR = '#b8860b'; // darkgoldenrod — not-yet-in-source
-
 /**
  * Border accent for `deprecated: true` — the claim was real, its source is gone.
  * A desaturated slate rather than true silver: role badges already own silver
@@ -1547,25 +1538,19 @@ export function deprecatedBadgeColor(component: {
 }
 
 /**
- * Top-right badge label: proposed wins over role when both are set
- * (proposed is the temporary exception to scan for; role stays on the model).
- * Returns null when neither applies.
+ * Top-right badge label: the role, when set. Returns null otherwise.
  */
 export function rightBadgeLabel(component: {
   role?: SubsystemComponentRole;
-  proposed?: boolean;
 }): string | null {
-  if (component.proposed) return 'proposed';
   if (component.role != null) return ROLE_LABEL[component.role];
   return null;
 }
 
-/** Color for the top-right badge (role and/or proposed). */
+/** Color for the top-right role badge. */
 export function rightBadgeColor(component: {
   role?: SubsystemComponentRole;
-  proposed?: boolean;
 }): string | null {
-  if (component.proposed) return PROPOSED_COLOR;
   if (component.role != null) return ROLE_COLOR[component.role];
   return null;
 }
@@ -1595,7 +1580,7 @@ function storeStorage(component: {
 
 /** Top-right storage badge for `construct: 'store'` nodes with an authored
  *  `storage` declaration — how the retained state is backed. Sits beside the
- *  role/proposed badge (storage is orthogonal to topology). Null otherwise. */
+ *  role badge (storage is orthogonal to topology). Null otherwise. */
 export function storageBadgeLabel(component: {
   construct: SubsystemComponentConstruct;
   declaration?: AnyComponentDetail;
@@ -1690,7 +1675,6 @@ export function nodeMinWidthForBadges(component: {
   framework?: string;
   stereotype?: string;
   role?: SubsystemComponentRole;
-  proposed?: boolean;
   deprecated?: boolean;
   entityKind?: string;
   declaration?: AnyComponentDetail;

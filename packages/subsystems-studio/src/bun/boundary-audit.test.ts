@@ -274,19 +274,6 @@ describe("auditBoundaryFields", () => {
 			expect(r.findings).toEqual([]);
 		});
 
-		test("proposed components are exempt", () => {
-			const r = auditBoundaryFields([
-				comp({
-					alias: "later",
-					name: "later",
-					construct: "function",
-					file: "src/x.ts",
-					proposed: true,
-				}),
-			]);
-			expect(r.summary.processRequired).toBe(0);
-			expect(r.findings).toEqual([]);
-		});
 	});
 });
 

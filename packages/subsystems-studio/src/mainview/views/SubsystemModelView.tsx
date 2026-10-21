@@ -447,7 +447,6 @@ export function SubsystemModelView({
 			trail,
 			stepIndex,
 			onOpenFile,
-			proposedAliases,
 			resolveSymbol,
 			onSymbolClick,
 			onVisibleStepChange,
@@ -459,7 +458,6 @@ export function SubsystemModelView({
 				contextLines={8}
 				background={theme.colors.background}
 				onOpenFile={onOpenFile}
-				proposedAliases={proposedAliases}
 				resolveSymbol={resolveSymbol}
 				onSymbolClick={onSymbolClick}
 				onVisibleStepChange={onVisibleStepChange}
@@ -819,7 +817,6 @@ const INSPECTOR_KEYS = [
 	"purl",
 	"purpose",
 	"role",
-	"proposed",
 	"layer",
 	"mechanism",
 	"from",

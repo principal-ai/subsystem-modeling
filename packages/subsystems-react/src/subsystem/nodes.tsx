@@ -20,7 +20,6 @@ import {
   edgeColor,
   edgeStrokeStyle,
   DEPRECATED_COLOR,
-  PROPOSED_COLOR,
   deprecatedBadgeColor,
   deprecatedBadgeLabel,
   constructBadgeColor,
@@ -221,7 +220,7 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
   // `symbol` is the source of truth; `name` is derived from it consistently.
   const displayName = deriveNameFromSymbol(c.symbol, c.construct, c.name, c.file, c.stereotype);
   // Top badges are absolutely positioned — widen the node so they nowrap
-  // instead of wrapping, including when construct + role/proposed share the top.
+  // instead of wrapping, including when construct + role share the top.
   const badgeMinWidth = nodeMinWidthForBadges(c);
   const topRightLabel = rightBadgeLabel(c);
   const topRightColor = rightBadgeColor(c);
@@ -243,17 +242,14 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
   const nodeBg = theme.colors.backgroundSecondary ?? theme.colors.background;
   const hoverBg =
     theme.colors.backgroundHover ?? theme.colors.backgroundTertiary ?? nodeBg;
-  // Border: proposed uses the goldenrod accent (dashed), deprecated the slate
-  // accent (dotted, same family as issue) since both mean "not a live claim";
-  // construct color stays on the left badge. File-open spotlight still wins
-  // with primary.
+  // Border: deprecated uses the slate accent (dotted, same family as issue)
+  // since it means "not a live claim"; construct color stays on the left
+  // badge. File-open spotlight still wins with primary.
   const borderColor = fileMatch
     ? theme.colors.primary
-    : c.proposed
-      ? PROPOSED_COLOR
-      : c.deprecated
-        ? DEPRECATED_COLOR
-        : color;
+    : c.deprecated
+      ? DEPRECATED_COLOR
+      : color;
   // Selection is stamped into data by the graph component — React Flow's own
   // `selected` never updates because the node stops click propagation.
   const isSelected = selected || (data.isSelected as boolean | undefined) === true;
@@ -269,21 +265,19 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
   const borderW = isSelected || fileMatch ? 4 : 2;
   const badgeTop = -9 - borderW;
   const badgeEdge = -borderW;
-  // A node with diagnostics turns its border dotted — a "something's off"
-  // sibling of `proposed`'s dashed, but distinct so the two don't read alike.
-  // The border keeps its construct color; the severity rides on the chip.
-  // Verification skips `proposed` nodes, so the two rarely stack — issue wins.
+  // A node with diagnostics turns its border dotted — an "something's off"
+  // signal. The border keeps its construct color; the severity rides on the
+  // chip. Deprecated is also dotted, but slate rather than construct-colored:
+  // "this claim was retired" is closer to a diagnostic than to a placeholder.
   const hasIssue = data.issue != null;
   // Deprecated is dotted like issue but slate rather than construct-colored:
   // "this claim was retired" is closer to a diagnostic than to a placeholder,
   // and verification skips deprecated nodes so the two never stack in practice.
   const borderStyle = hasIssue
     ? 'dotted'
-    : c.proposed
-      ? 'dashed'
-      : c.deprecated
-        ? 'dotted'
-        : 'solid';
+    : c.deprecated
+      ? 'dotted'
+      : 'solid';
 
   return (
     <div
@@ -352,9 +346,9 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
         {constructBadgeLabel(c)}
       </div>
 
-      {/* Secondary badge cluster — proposed wins over role when both are set;
-          store storage (retention backing) sits beside, since it is
-          orthogonal to topology. Persistent; pointer-events pass through.
+      {/* Secondary badge cluster — the role badge, with store storage
+          (retention backing) beside it since it is orthogonal to topology.
+          Persistent; pointer-events pass through.
           Sits astride the bottom edge, centered (mirroring the top construct
           badge's straddle), so the top edge stays free for the construct tag. */}
       {(topRightLabel != null || storageLabel != null || deprecatedLabel != null) && (
@@ -869,11 +863,8 @@ export function SubsystemEdge({
   const edgeRef = { mechanism, provenance: data?.provenance };
   const color = edgeColor(edgeRef);
   // Dash style encodes provenance (graphify) and relationship kind (dashed =
-  // inverted-control or observational: hierarchy, registration, watches). A
-  // step-proposed edge also dashes — the seam itself is planned — matching
-  // the dashed edge label and a proposed node's dashed border.
-  const isDashed =
-    edgeStrokeStyle(edgeRef) === 'dashed' || data?.proposedStep === true;
+  // inverted-control or observational: hierarchy, registration, watches).
+  const isDashed = edgeStrokeStyle(edgeRef) === 'dashed';
   const dimmed = data?.dimmed === true;
   // Dim the stroke by color, never via path `opacity`. SVG markers are shared
   // by id; opacity on the referencing path paints every arrowhead that uses

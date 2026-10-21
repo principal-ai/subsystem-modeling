@@ -2711,7 +2711,6 @@ function Inner({ model, onSelectNode, onSelectEdge, onTrailClick, onToggleContai
           >
             {selectedConstruct.component.alias}
             {selectedConstruct.role ? ` · ${selectedConstruct.role}` : ''}
-            {selectedConstruct.component.proposed ? ' · proposed' : ''}
           </div>
         </div>
       )}

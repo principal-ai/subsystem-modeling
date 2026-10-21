@@ -144,8 +144,8 @@ export function aggregateToFrames(
 				}
 				votes.set(process, (votes.get(process) ?? 0) + 1);
 			}
-		} else if (file === "" && c.proposed !== true) {
-			// File-less, non-placeholder = not code in the repo (external
+		} else if (file === "") {
+			// File-less = not code in the repo (external
 			// systems, stores, actors). These get their own boundary rather
 			// than masquerading as a process's unframed remainder. One frame
 			// per system (the process names it); no process = `unassigned`.
@@ -153,8 +153,8 @@ export function aggregateToFrames(
 			frame = getFrame(`external:${system}`, "external", system);
 		} else if (process !== "") {
 			if (!processes.includes(process)) processes.push(process);
-			// Grounded code with no module (or a proposed placeholder):
-			// the process boundary holds it as unframed.
+			// Grounded code with no module: the process boundary holds it as
+			// unframed.
 			frame = getFrame(`process:${process}`, "process", process);
 		} else {
 			frame = getFrame("ungrouped", "ungrouped", "");

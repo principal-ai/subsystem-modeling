@@ -1,7 +1,7 @@
 /**
  * Compose every subsystem model touching one repo-key into a single graph.
  *
- * Identity, not aliasing: code (+ proposed-with-intent) joins on
+ * Identity, not aliasing: code joins on
  * (purlRepoKey, file, symbol-or-None); external/custom_entity joins on exact
  * (purl, normalized name) with purl != 'external' (bare externals stay
  * model-scoped). Alias-text / name-only matching is rejected — the stored
@@ -141,8 +141,8 @@ function recordConflict(
 /**
  * Merge one identity group into a single component. Deterministic: members
  * arrive in stable model order and every pick is first-non-empty-wins, with
- * two principled overrides (grounded beats proposed; declaration from a
- * verified model beats unverified). Real divergences are recorded, not resolved.
+ * one principled override (declaration from a verified model beats unverified).
+ * Real divergences are recorded, not resolved.
  */
 function mergeGroup(
 	members: GroupMember[],
@@ -201,12 +201,6 @@ function mergeGroup(
 		);
 		return verified?.component.declaration;
 	});
-
-	// Grounded beats proposed: a placeholder disappears once any model
-	// grounds the declaration.
-	if (!members.every((m) => m.component.proposed === true)) {
-		delete merged.proposed;
-	}
 
 	return merged;
 }

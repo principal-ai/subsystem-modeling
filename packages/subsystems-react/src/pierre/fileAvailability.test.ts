@@ -23,12 +23,6 @@ describe('isFileUnavailableError', () => {
 });
 
 describe('fileUnavailableNotice', () => {
-  test('names proposed work as planned, not missing', () => {
-    expect(
-      fileUnavailableNotice('src/a.ts', true),
-    ).toBe("Proposed — src/a.ts isn't in the local checkout yet.");
-  });
-
   test('falls back to a plain not-in-checkout notice', () => {
     expect(fileUnavailableNotice('src/a.ts')).toBe(
       'Not in the local checkout: src/a.ts',

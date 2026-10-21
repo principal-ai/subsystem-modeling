@@ -376,7 +376,7 @@ describe("summarizeVerification", () => {
 		expect(v.coverage).toBe(1 / 3);
 	});
 
-	test("externals and proposed components are n/a and excluded", () => {
+	test("externals are n/a and excluded", () => {
 		const v = summarizeVerification(
 			report({
 				checks: [

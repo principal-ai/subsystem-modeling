@@ -75,7 +75,6 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
       "name": "SessionService",
       "construct": "function",                     // see construct list below
       "role": "entry",                             // optional: entry | service
-      "proposed": false,                           // optional: true = not in source yet
       "framework": "bun",                          // optional: framework owning the stereotype
       "stereotype": "controller",                  // optional: framework pattern the construct plays
       "file": "packages/subsystems-studio/src/bun/server-sessions.ts",  // repo-relative
@@ -329,15 +328,6 @@ Pair them when the unit plays a framework pattern that isn't a language
 construct. Examples: `framework: "react"` + `stereotype: "component"` on a
 `construct: function`; `framework: "nestjs"` + `stereotype: "controller"`.
 Empty when the node is language-only.
-
-**Component `proposed`** (optional boolean):
-
-Set `proposed: true` for design / migration nodes that do not exist in
-source yet. Keep a real `construct` for the intended shape (`function`,
-`class`, …). Verification skips source checks until you promote the node
-(clear `proposed`, fill `file` + `symbol`). Do **not** misuse
-`construct: "external"` for planned in-repo code — that is for real outside
-systems.
 
 **Component `process` / `module`** (optional boundary frames):
 

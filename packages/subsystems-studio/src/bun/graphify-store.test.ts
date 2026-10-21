@@ -201,7 +201,7 @@ describe("assessSubsystemGraphifyReadiness", () => {
 		const r = await assessSubsystemGraphifyReadiness({
 			components: [
 				{ purl: "external:file:~/.principal/subsystem-models" },
-				{ purl: "external:proposed" },
+				{ purl: "external:internal" },
 			],
 		});
 		expect(r.purls).toEqual([]);
@@ -382,7 +382,7 @@ describe("ensureCurrentGraphifyCachesForModel", () => {
 			{
 				components: [
 					{ purl: "external:file:~/.principal/subsystem-models", construct: "store" },
-					{ purl: "external:proposed", construct: "store" },
+					{ purl: "external:internal", construct: "store" },
 				],
 			},
 			{ storeRoot },

@@ -105,14 +105,14 @@ export function PierreFileView({
   );
 
   if (error) {
-    // A file with no local checkout is usually a proposed seam that isn't
-    // implemented yet — explain that instead of echoing the host error.
+    // A file with no local checkout is usually a seam that isn't implemented
+    // yet — explain that instead of echoing the host error.
     if (isFileUnavailableError(error)) {
       return (
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ color: theme.colors.text }}>
             This file isn't in the local checkout for this repo — it may be
-            proposed or not yet implemented.
+            missing or not yet implemented.
           </span>
           <span
             style={{

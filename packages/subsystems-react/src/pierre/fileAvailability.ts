@@ -1,8 +1,7 @@
 /**
  * Host file reads fail with a small, stable set of messages when a path can't
- * be served from any local checkout — most often a *proposed* seam whose file
- * isn't implemented yet. These helpers detect that class of failure so the
- * Pierre views can show a proposed / not-yet-available notice instead of a raw
+ * be served from any local checkout. These helpers detect that class of failure
+ * so the Pierre views can show a not-yet-available notice instead of a raw
  * host error.
  */
 
@@ -23,15 +22,8 @@ export function isFileUnavailableError(
 }
 
 /**
- * One-line notice shown in place of a snippet whose file can't be read. When
- * the step touches a proposed component the wording names that, so a proposed
- * seam reads as "planned" rather than "missing".
+ * One-line notice shown in place of a snippet whose file can't be read.
  */
-export function fileUnavailableNotice(
-  path: string,
-  proposed?: boolean,
-): string {
-  return proposed
-    ? `Proposed — ${path} isn't in the local checkout yet.`
-    : `Not in the local checkout: ${path}`;
+export function fileUnavailableNotice(path: string): string {
+  return `Not in the local checkout: ${path}`;
 }

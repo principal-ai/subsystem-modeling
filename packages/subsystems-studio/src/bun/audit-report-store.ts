@@ -203,7 +203,7 @@ export function isVerifiedConstructCheck(
 /**
  * Bucket one construct-layer component check.
  *
- * `graphify: "skipped"` marks external / custom-entity / proposed components —
+ * `graphify: "skipped"` marks external / custom-entity components —
  * no source claim to verify, so n/a. A missing repo root or an unbuilt cache is
  * `blocked` (environment fix, not a proposal). Everything that is neither
  * confirmed nor environment-blocked is `open`, i.e. the agent's work queue.

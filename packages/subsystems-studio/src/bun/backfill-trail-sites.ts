@@ -28,7 +28,6 @@ export type BackfillSiteStatus =
 	| "would-backfill"
 	| "already"
 	| "not-calls"
-	| "proposed"
 	| "no-span"
 	| "no-repo"
 	| "no-declaration"
@@ -110,11 +109,6 @@ export async function backfillTrailSitesForModel(
 
 			if (step.mechanism !== "calls") {
 				reports.push({ ...base, status: "not-calls" });
-				steps.push(step);
-				continue;
-			}
-			if (step.proposed) {
-				reports.push({ ...base, status: "proposed" });
 				steps.push(step);
 				continue;
 			}

@@ -88,7 +88,7 @@ export function moduleAgreesWithFile(module: string, file: string): boolean {
 }
 
 function isUngrounded(c: SubsystemComponent): boolean {
-	return c.construct === "external" || c.proposed === true;
+	return c.construct === "external";
 }
 
 /**
@@ -206,7 +206,7 @@ export function auditBoundaryFields(
 
 		if (!fileRaw) {
 			// A grounded component with a module but no file is rejected at
-			// input (findModuleFileProblems). Externals/proposed carry no file
+			// input (findModuleFileProblems). Externals carry no file
 			// by design, so they are skipped rather than flagged.
 			if (isUngrounded(c)) {
 				checks.push({
@@ -217,7 +217,7 @@ export function auditBoundaryFields(
 					file: "",
 					process: processRaw || undefined,
 					verdict: "skipped",
-					note: "module on external/proposed — no file required",
+					note: "module on external — no file required",
 				});
 			}
 			continue;

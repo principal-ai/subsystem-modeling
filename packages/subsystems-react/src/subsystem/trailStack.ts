@@ -76,7 +76,7 @@ function calleeLabel(
 }
 
 function isCallStep(step: SubsystemTrailStep | undefined): boolean {
-  return step?.mechanism === 'calls' && step.proposed !== true;
+  return step?.mechanism === 'calls';
 }
 
 /** Does call `a` lead into the caller of call `b`? */

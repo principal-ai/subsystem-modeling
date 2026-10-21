@@ -25,14 +25,10 @@ export interface SubsystemValidationProblem {
 }
 
 function isUngrounded(c: SubsystemComponent): boolean {
-  // Deprecated components are exempt for the same reason proposed ones are: the
-  // file is a historical pointer to source that is gone, so it cannot resolve
-  // and its absence is not an inconsistency.
-  return (
-    c.construct === 'external' ||
-    c.proposed === true ||
-    c.deprecated === true
-  );
+  // Deprecated components are exempt: the file is a historical pointer to
+  // source that is gone, so it cannot resolve and its absence is not an
+  // inconsistency.
+  return c.construct === 'external' || c.deprecated === true;
 }
 
 /**
@@ -44,8 +40,7 @@ function isUngrounded(c: SubsystemComponent): boolean {
  * Such a component is a third-party dependency: model it as `construct:
  * 'external'` with `purl: 'pkg:npm/<package>'` and no file. Applies to externals
  * too — they carry no file by design, so an install path there is dead weight
- * that draws a link nothing can open. `proposed` is exempt like every other
- * grounding rule: its file is a placeholder for something not placed yet.
+ * that draws a link nothing can open.
  *
  * The same rule covers trail step files — a seam into an external belongs
  * at the call site in the caller, which *is* in the repo.
@@ -99,18 +94,17 @@ export function validateSubsystemModelCrossField(
       ids.add(c.alias);
     }
     // A grounded component that claims a `module` needs a `file` to ground the
-    // frame. Externals / proposed carry no file by design.
+    // frame. Externals carry no file by design.
     const module = typeof c.module === 'string' ? c.module.trim() : '';
     const file = typeof c.file === 'string' ? c.file.trim() : '';
     if (module && !file && !isUngrounded(c)) {
       problems.push({
         path: `/components/${i}/module`,
-        message: `component ${JSON.stringify(c.alias)}: module ${JSON.stringify(module)} is set but file is empty — a module frame needs a file to ground it (mark the component proposed if it is not placed yet).`,
+        message: `component ${JSON.stringify(c.alias)}: module ${JSON.stringify(module)} is set but file is empty — a module frame needs a file to ground it.`,
       });
     }
     if (
       file &&
-      c.proposed !== true &&
       c.deprecated !== true &&
       mentionsNodeModules(file)
     ) {

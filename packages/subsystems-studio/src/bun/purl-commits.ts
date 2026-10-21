@@ -89,7 +89,7 @@ export interface ProvenanceProbes extends CommitOptions {
 /**
  * Unique *repo* keys referenced by the given purls, in first-seen order.
  *
- * Pseudo-purls (`external:opencode2-service`, `external:proposed`, …) are
+ * Pseudo-purls (`external:opencode2-service`, `external:internal`, …) are
  * dropped, and the filter is `isRepoPurl` rather than a scheme test so it stays
  * the single definition of "is this a repo we can resolve". `purlRepoKey` does
  * no validation of its own — it only strips the fragment — so without this gate

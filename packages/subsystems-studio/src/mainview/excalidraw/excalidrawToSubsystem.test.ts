@@ -48,7 +48,7 @@ describe("excalidrawSceneToSubsystemModel", () => {
 							id: "e0",
 							from: "src",
 							to: "dst",
-							mechanism: "references",
+							mechanism: "uses",
 							refs: ["parser.ts"],
 							points: [],
 						}),
@@ -72,7 +72,7 @@ describe("excalidrawSceneToSubsystemModel", () => {
 			layer: 1,
 		});
 		expect(graph.edges).toEqual([
-			{ id: "e0", from: "src", to: "dst", mechanism: "references", refs: ["parser.ts"] },
+			{ id: "e0", from: "src", to: "dst", mechanism: "uses", refs: ["parser.ts"] },
 		]);
 	});
 

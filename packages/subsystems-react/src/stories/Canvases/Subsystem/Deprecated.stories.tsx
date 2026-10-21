@@ -12,9 +12,8 @@ import type {
 import { trailFromSteps } from './fixtures';
 
 /**
- * `deprecated` is the inverse of `proposed`: the claim was real, its source is
- * gone upstream. Mirrors Proposed.stories.tsx so the two temporary states read
- * as siblings — proposed = not built yet, deprecated = built once, removed since.
+ * `deprecated` marks a claim whose source is gone upstream. The node keeps a
+ * transitional marker until a cleanup pass removes it.
  */
 const meta = {
   title: 'Canvases/Subsystem/Deprecated',
@@ -154,22 +153,9 @@ const spotlightRows: Array<{ label: string; component: SubsystemComponent }> = [
       role: 'entry',
     },
   },
-  {
-    label: 'proposed (the sibling temporary state)',
-    component: {
-      alias: 'prop-fn',
-      name: 'OpenCodeV2Lifecycle',
-      construct: 'function',
-      file: '',
-      purl: PURL,
-      symbol: 'OpenCodeV2Lifecycle',
-      purpose: 'Proposed Studio host lifecycle',
-      proposed: true,
-    },
-  },
 ];
 
-/** Spotlights: slate deprecated badge + border vs live, proposed, and entry. */
+/** Spotlights: slate deprecated badge + border vs live and entry. */
 export const Spotlights: Story = {
   render: () => (
     <div

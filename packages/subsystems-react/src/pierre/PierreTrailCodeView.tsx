@@ -101,11 +101,6 @@ export interface PierreTrailCodeViewProps {
    */
   onVisibleStepChange?: (index: number) => void;
   /**
-   * Aliases of components marked `proposed`. A step whose file can't be read
-   * but whose endpoint is proposed reads as "planned" rather than "missing".
-   */
-  proposedAliases?: ReadonlySet<string>;
-  /**
    * Resolve a token to a model construct key (e.g. a component alias) for the
    * step its snippet belongs to. Return `null` when the token doesn't name a
    * construct this flow touches. When both this and `onSymbolClick` are set,
@@ -138,10 +133,9 @@ function siteKey(step: Pick<SubsystemTrailStep, 'purl' | 'file'>): string {
 function unavailableNotice(
   step: SubsystemTrailStep,
   error: string,
-  proposed: boolean,
 ): string {
   return isFileUnavailableError(error)
-    ? fileUnavailableNotice(step.file, proposed)
+    ? fileUnavailableNotice(step.file)
     : `Couldn't load ${step.file}: ${error}`;
 }
 
@@ -206,7 +200,6 @@ export function PierreTrailCodeView({
   background: backgroundProp,
   onOpenFile,
   onVisibleStepChange,
-  proposedAliases,
   resolveSymbol,
   onSymbolClick,
 }: PierreTrailCodeViewProps) {
@@ -292,24 +285,15 @@ export function PierreTrailCodeView({
     scheduleVisibleStepReport();
   }, [scheduleVisibleStepReport]);
 
-  // A step onto a proposed component is planned work; label its missing file
-  // accordingly instead of showing a bare "not found".
-  const isProposedStep = useCallback(
-    (step: SubsystemTrailStep): boolean =>
-      proposedAliases != null &&
-      (proposedAliases.has(step.from) || proposedAliases.has(step.to)),
-    [proposedAliases],
-  );
-
   const pathsKey = useMemo(() => {
     const keys = [...new Set(trail.steps.map((s) => siteKey(s)))];
     keys.sort();
     return keys.join('\0');
   }, [trail.steps]);
 
-  // Load each site independently: one unreadable step (a proposed seam whose
-  // file isn't implemented yet) must not blank the whole trail. Failures
-  // are kept per-path and rendered as inline placeholders below.
+  // Load each site independently: one unreadable step must not blank the
+  // whole trail. Failures are kept per-path and rendered as inline
+  // placeholders below.
   useEffect(() => {
     let cancelled = false;
     setLoad({ status: 'loading' });
@@ -350,7 +334,7 @@ export function PierreTrailCodeView({
       const failure = load.unavailable.get(key);
       if (failure != null) {
         return unavailableSlice(
-          unavailableNotice(step, failure, isProposedStep(step)),
+          unavailableNotice(step, failure),
         );
       }
       const contents = load.byPath.get(key) ?? '';
@@ -369,7 +353,7 @@ export function PierreTrailCodeView({
         focus,
       );
     });
-  }, [load, trail.steps, contextLines, isProposedStep]);
+  }, [load, trail.steps, contextLines]);
 
   const items = useMemo((): CodeViewItem<TrailStepAnnotation>[] => {
     if (load.status !== 'ready' || slices.length === 0) return [];
@@ -407,7 +391,7 @@ export function PierreTrailCodeView({
         },
       };
     });
-  }, [load, slices, trail.id, trail.steps, isProposedStep]);
+  }, [load, slices, trail.id, trail.steps]);
 
   const selectedLines = useMemo((): CodeViewLineSelection | null => {
     if (stepIndex == null || stepIndex < 0 || stepIndex >= slices.length) {

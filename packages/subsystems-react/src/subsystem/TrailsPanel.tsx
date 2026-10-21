@@ -16,12 +16,10 @@ import { useTheme } from '@principal-ade/industry-theme';
 import { Check, ChevronDown, Copy, Focus, GripVertical, Minimize2, Pause, Play, Star } from 'lucide-react';
 import { IndustryMarkdownSlide } from 'themed-markdown';
 import {
-  PROPOSED_COLOR,
   reorderTargetIndex,
   reorderTrails,
   trailStepGraphEdgeId,
   type SubsystemTrail,
-  type SubsystemTrailStep,
 } from './model';
 import { buildStepBrief } from './trailBrief';
 import { emphasisKey, type StepEmphasisMap } from './stepEmphasis';
@@ -80,7 +78,6 @@ function TrailFlow({
   reorder,
   dragActive,
   isHoverSuppressed,
-  proposedAliases,
   layoutFocused,
   onToggleLayoutFocus,
   stepEmphasis,
@@ -110,12 +107,6 @@ function TrailFlow({
   dragActive?: boolean;
   /** True just after a drop; ignores the browser's synthetic hover until the pointer moves. */
   isHoverSuppressed?: () => boolean;
-  /**
-   * Aliases of components marked `proposed`. A row whose steps touch one gets
-   * its title tinted, and each such step (index and title) is tinted too
-   * (darkgoldenrod, same as the proposed node treatment).
-   */
-  proposedAliases?: ReadonlySet<string>;
   /** This flow's components are the only ones laid out right now. */
   layoutFocused?: boolean;
   /** Solo this flow's components in the layout, or restore the full model. */
@@ -135,14 +126,6 @@ function TrailFlow({
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
   const hoverBg = theme.colors.background;
   const wholeFlowActive = active !== null && active.stepIndex === null;
-  // A step is "proposed" when it says so itself OR either endpoint component
-  // is proposed — the step flag covers planned seams whose endpoints already
-  // exist as real components.
-  const stepProposed = (step: SubsystemTrailStep) =>
-    step.proposed === true ||
-    (proposedAliases != null &&
-      (proposedAliases.has(step.from) || proposedAliases.has(step.to)));
-  const touchesProposed = trail.steps.some((s) => stepProposed(s));
   // Emphasis is keyed by trail + claim fingerprint, so the count follows the
   // steps through a reorder.
   const emphasisCount = stepEmphasis
@@ -353,7 +336,7 @@ function TrailFlow({
               fontSize: theme.fontSizes[1],
               fontFamily: theme.fonts.monospace,
               fontWeight: 600,
-              color: touchesProposed ? PROPOSED_COLOR : theme.colors.text,
+              color: theme.colors.text,
             }}
           >
             {trail.title}
@@ -521,7 +504,6 @@ function TrailFlow({
         >
           {trail.steps.map((step, i) => {
             const stepActive = active !== null && active.stepIndex === i;
-            const proposed = stepProposed(step);
             const revealed =
               stepActive || hoveredStep === i || focusedStep === i || copiedStep === i;
             const copied = copiedStep === i;
@@ -589,14 +571,12 @@ function TrailFlow({
                       paddingTop: 1,
                       fontSize: theme.fontSizes[0],
                       fontFamily: theme.fonts.monospace,
-                      fontWeight: record || proposed ? 700 : undefined,
+                      fontWeight: record ? 700 : undefined,
                       color: record
                         ? EMPHASIS_COLOR
-                        : proposed
-                          ? PROPOSED_COLOR
-                          : stepActive
-                            ? theme.colors.text
-                            : muted,
+                        : stepActive
+                          ? theme.colors.text
+                          : muted,
                     }}
                   >
                     {i + 1}
@@ -611,9 +591,7 @@ function TrailFlow({
                       fontFamily: theme.fonts.monospace,
                       color: record
                         ? EMPHASIS_COLOR
-                        : proposed
-                          ? PROPOSED_COLOR
-                          : theme.colors.text,
+                        : theme.colors.text,
                     }}
                   >
                     {display.primary}
@@ -757,12 +735,6 @@ export interface TrailsPanelProps {
    * for a read-only panel.
    */
   onReorder?: (next: SubsystemTrail[]) => void;
-  /**
-   * Aliases of components marked `proposed`. A row whose steps touch one gets
-   * its title tinted, and each such step (index and title) is tinted too
-   * (darkgoldenrod, same as the proposed node treatment).
-   */
-  proposedAliases?: ReadonlySet<string>;
   /** Trail whose components are the only ones laid out on the canvas, if any. */
   layoutFocusedTrailId?: string | null;
   /**
@@ -797,7 +769,6 @@ export function TrailsPanel({
   onHoverFlow,
   onLeaveStep,
   onReorder,
-  proposedAliases,
   layoutFocusedTrailId,
   onFocusLayout,
   stepEmphasis,
@@ -983,7 +954,6 @@ export function TrailsPanel({
               }
               dragActive={dragIndex != null}
               isHoverSuppressed={isHoverSuppressed}
-              proposedAliases={proposedAliases}
               componentByAlias={componentByAlias}
               layoutFocused={layoutFocusedTrailId === tl.id}
               onToggleLayoutFocus={

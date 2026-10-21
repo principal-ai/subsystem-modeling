@@ -111,15 +111,10 @@ describe("promoteAcceptedDeclarationSpans", () => {
 		expect(graph?.components[0]?.declarationSpan?.contentHash).toBe("new");
 	});
 
-	test("skips proposed and identity-less components", async () => {
+	test("skips identity-less components", async () => {
 		const id = await createModel([
-			component({ alias: "proposed", symbol: "p", proposed: true }),
 			component({ alias: "no-symbol", symbol: undefined }),
 		]);
-		await acceptSpan({
-			symbol: "p",
-			span: { startLine: 1, endLine: 2, contentHash: "x" },
-		});
 
 		expect(await promoteAcceptedDeclarationSpans(id, { storeRoot: augRoot })).toBe(0);
 	});

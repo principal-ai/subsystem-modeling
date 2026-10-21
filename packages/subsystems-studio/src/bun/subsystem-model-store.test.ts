@@ -144,7 +144,7 @@ describe("resolveRepoRootForComponent", () => {
 		expect(
 			resolveRepoRootForComponent("external:file:~/.principal/subsystem-models"),
 		).toBeUndefined();
-		expect(resolveRepoRootForComponent("external:proposed")).toBeUndefined();
+		expect(resolveRepoRootForComponent("external:internal")).toBeUndefined();
 	});
 });
 
@@ -156,7 +156,7 @@ describe("isRepoPurl", () => {
 
 	test("is false for internal / pseudo purls", () => {
 		expect(isRepoPurl("external:file:~/.principal/subsystem-models")).toBe(false);
-		expect(isRepoPurl("external:proposed")).toBe(false);
+		expect(isRepoPurl("external:internal")).toBe(false);
 		expect(isRepoPurl("pkg:npm/lodash")).toBe(false);
 		expect(isRepoPurl(undefined)).toBe(false);
 	});
@@ -305,7 +305,7 @@ describe("trail verify pass", () => {
 		expect(reasons.some((r) => r.includes("blank"))).toBe(true);
 	});
 
-	test("counts authored vs missing step spans (proposed steps excluded)", async () => {
+	test("counts authored vs missing step spans", async () => {
 		// Step spans are hand-authored, not derived — create surfaces how many
 		// the model carries so an unauthored span is an expected-to-fill gap.
 		const components: SubsystemComponent[] = [
@@ -321,14 +321,14 @@ describe("trail verify pass", () => {
 					steps: [
 						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", span: { startLine: 1, endLine: 1, contentHash: "h" }, purl: "pkg:github/a/repo-a#src/seam.ts", symbol: "a" },
 						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", purl: "pkg:github/a/repo-a#src/seam.ts", symbol: "a" },
-						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", purl: "pkg:github/a/repo-a#src/seam.ts", symbol: "a", proposed: true },
+						{ from: "a", to: "store", mechanism: "calls", file: "src/seam.ts", purl: "pkg:github/a/repo-a#src/seam.ts", symbol: "a" },
 					],
 				},
 			],
 		});
 
 		expect(result.stepsWithSpan).toBe(1);
-		expect(result.stepsMissingSpan).toBe(1);
+		expect(result.stepsMissingSpan).toBe(2);
 	});
 });
 
@@ -414,8 +414,8 @@ describe("model identity dedup", () => {
 	});
 
 	test("identity key is null only when no purl is referenced", () => {
-		expect(modelIdentityKey("x", [{ purl: "external:proposed" }])).toBe(
-			`x\u0000external:proposed`,
+		expect(modelIdentityKey("x", [{ purl: "external:internal" }])).toBe(
+			`x\u0000external:internal`,
 		);
 		expect(modelIdentityKey("x", [{}])).toBeNull();
 	});

@@ -111,7 +111,7 @@ Required on `function`, `class`, and `custom_entity`. **Not** required, and
 never worth proposing for: `interface` and `type_alias` (erased at compile
 time, and a shared type is often legitimately reachable from several
 processes), `external` (third-party, no owner in this repo), and `store` (a
-state container, not a deployment unit). A proposed component is exempt too.
+state container, not a deployment unit).
 
 Allowed changes:
 

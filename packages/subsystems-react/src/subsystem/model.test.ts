@@ -98,7 +98,7 @@ describe('subsystem graph model', () => {
     const withExternal: SubsystemComponent[] = [
       ...comps,
       {
-        alias: "proposed-watcher",
+        alias: "external-watcher",
         name: "watchDir",
         construct: "external",
         // Intentionally omit file/purl — agents often leave these off for externals.
@@ -111,10 +111,10 @@ describe('subsystem graph model', () => {
       trails: [{
         id: 'w1',
         title: 'feed',
-        steps: [{ from: 'reader', to: 'proposed-watcher', mechanism: 'feeds', file: 'x.ts' }],
+        steps: [{ from: 'reader', to: 'external-watcher', mechanism: 'feeds', file: 'x.ts' }],
       }],
     });
-    expect(nodes.find((n) => n.id === 'proposed-watcher')).toBeDefined();
+    expect(nodes.find((n) => n.id === 'external-watcher')).toBeDefined();
   });
 
   test('buildSubsystemGraph creates external stub nodes for non-component targets', async () => {
@@ -223,33 +223,18 @@ describe('subsystem graph model', () => {
     });
     expect(withRole).toBeGreaterThan(stereotype);
 
-    const withProposed = nodeMinWidthForBadges({
-      construct: 'function',
-      proposed: true,
-    });
-    expect(withProposed).toBeGreaterThan(plain);
-
-    const withBoth = nodeMinWidthForBadges({
-      construct: 'function',
-      role: 'entry',
-      proposed: true,
-    });
-    // proposed-only label is shorter than entry · proposed; still wider than plain
-    expect(withBoth).toBe(withProposed);
-
     // The pair floor must leave a real gap between the left and right badge,
     // over and above both insets — regression: the node border was omitted from
     // the floor, and the char width was underestimated, so the two badges met.
     const left = estimateBadgeLabelWidth(constructBadgeLabel({ construct: 'function' }));
-    const right = estimateBadgeLabelWidth(rightBadgeLabel({ proposed: true })!);
-    expect(withBoth).toBeGreaterThan(left + right + 2 * BADGE_EDGE_INSET);
+    const right = estimateBadgeLabelWidth(rightBadgeLabel({ role: 'entry' })!);
+    expect(withRole).toBeGreaterThan(left + right + 2 * BADGE_EDGE_INSET);
   });
 
-  test('rightBadgeLabel prefers proposed over role', () => {
+  test('rightBadgeLabel reports the role', () => {
     expect(rightBadgeLabel({})).toBeNull();
-    expect(rightBadgeLabel({ proposed: true })).toBe('proposed');
     expect(rightBadgeLabel({ role: 'entry' })).toBe('entry');
-    expect(rightBadgeLabel({ role: 'service', proposed: true })).toBe('proposed');
+    expect(rightBadgeLabel({ role: 'service' })).toBe('service');
   });
 
   test('deriveNameFromSymbol falls back to existing name when no symbol', () => {

@@ -74,7 +74,7 @@ describe("referencedPurlKeys", () => {
 		expect(
 			referencedPurlKeys([
 				"external:opencode2-service",
-				"external:proposed",
+				"external:internal",
 				"external:file:~/.principal/subsystem-models",
 				KEY_A,
 			]),

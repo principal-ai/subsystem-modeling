@@ -143,33 +143,6 @@ const CHANNELS: Channel[] = [
     },
   },
   {
-    label: 'proposed',
-    note: 'dashed goldenrod border + right badge; fileless.',
-    component: {
-      alias: 'prop',
-      name: 'OpenCodeV2Lifecycle',
-      construct: 'function',
-      file: '',
-      purl: PURL,
-      symbol: 'OpenCodeV2Lifecycle',
-      proposed: true,
-    },
-  },
-  {
-    label: 'proposed + role',
-    note: 'proposed wins the right badge; role stays on the model.',
-    component: {
-      alias: 'prop-role',
-      name: 'startMaintainFlow',
-      construct: 'function',
-      file: '',
-      purl: PURL,
-      symbol: 'startMaintainFlow',
-      proposed: true,
-      role: 'service',
-    },
-  },
-  {
     label: 'framework stereotype',
     note: 'left badge prefers "framework · stereotype"; border stays construct.',
     component: {
@@ -230,11 +203,11 @@ function ChannelCell({ channel }: { channel: Channel }) {
 
 const LEGEND: Array<[string, string]> = [
   ['border color', 'construct kind (Pierre palette) — or primary when a file is open (spotlight)'],
-  ['border style', 'solid normally; dashed goldenrod when `proposed`; dotted when the node has findings'],
+  ['border style', 'solid normally; dotted when the node has findings'],
   ['border width', '2px; 4px when selected or file-matched'],
   ['corners', '8px rounded; square for `external`'],
   ['left badge (top edge)', 'construct / framework stereotype / entityKind'],
-  ['right badge (top edge)', 'role, or `proposed` (wins); storage sits beside it'],
+  ['right badge (top edge)', 'role; storage sits beside it'],
   ['bottom strip (bottom edge)', 'filename — hover only, or while that file is open'],
   ['fill', 'backgroundSecondary; opacity 0.18 when dimmed'],
   ['OCCUPIED', 'top-left · top-right · bottom-center · border · fill'],
@@ -439,8 +412,7 @@ export const IssueOverlayProposal: Story = {
           </div>
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.7, color: '#b0b0b0' }}>
             <li>
-              <b>Dotted border</b> (keeps the construct color) = the node has findings — a sibling of
-              <b> proposed</b>&apos;s dashed, kept distinct so the two don&apos;t read alike.
+              <b>Dotted border</b> (keeps the construct color) = the node has findings.
             </li>
             <li>
               <b>Corner chip</b> carries severity (<b>red</b> = error / contradicts source,{' '}

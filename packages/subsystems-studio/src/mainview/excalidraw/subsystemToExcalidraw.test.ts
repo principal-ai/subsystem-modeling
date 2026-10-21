@@ -34,7 +34,7 @@ const components: SubsystemComponent[] = [
 ];
 
 const edges: SubsystemComponentEdge[] = [
-	{ id: "e0", from: "src", to: "dst", mechanism: "references" },
+	{ id: "e0", from: "src", to: "dst", mechanism: "uses" },
 ];
 
 describe("layoutSubsystemForExcalidraw", () => {
@@ -78,7 +78,7 @@ describe("layoutSubsystemForExcalidraw", () => {
 		expect("role" in meta).toBe(false);
 	});
 
-	test("principalMetaForComponent round-trips proposed and role", () => {
+	test("principalMetaForComponent round-trips role and construct", () => {
 		const meta = principalMetaForComponent({
 			alias: "lifecycle",
 			name: "OpenCodeV2Lifecycle",
@@ -86,10 +86,9 @@ describe("layoutSubsystemForExcalidraw", () => {
 			file: "",
 			purl: "pkg:github/example/repo",
 			symbol: "OpenCodeV2Lifecycle",
-			proposed: true,
 			role: "entry",
 		});
-		expect(meta.proposed).toBe(true);
+		expect("proposed" in meta).toBe(false);
 		expect(meta.role).toBe("entry");
 		expect(meta.construct).toBe("function");
 	});
@@ -100,7 +99,7 @@ describe("layoutSubsystemForExcalidraw", () => {
 				id: "e0",
 				from: "src",
 				to: "dst",
-				mechanism: "references",
+				mechanism: "uses",
 				refs: ["parser.ts"],
 				points: [],
 			}),
@@ -109,7 +108,7 @@ describe("layoutSubsystemForExcalidraw", () => {
 			id: "e0",
 			from: "src",
 			to: "dst",
-			mechanism: "references",
+			mechanism: "uses",
 			refs: ["parser.ts"],
 		});
 	});

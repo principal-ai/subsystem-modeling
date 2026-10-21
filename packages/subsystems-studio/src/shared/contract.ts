@@ -356,7 +356,7 @@ export interface ModelProvenanceDetail {
  * old pin would return the same verdict. The refusals are conditions on *now*,
  * not on whether the model is sound — the trust-shaped guards are already
  * implied by `verifiedAtCommits` existing, since a stale `file` cannot reach
- * `fully_verified` and a file-less component is `external`/`proposed` by design.
+ * `fully_verified` and a file-less component is `external` by design.
  */
 export interface AutoRePinOutcome {
 	/** `applied` — pin advanced. `blocked` — a guard stopped it. */
@@ -912,7 +912,7 @@ export interface SubsystemModelVerificationLayer {
  * - `verified` — evidence confirms the claim
  * - `open`     — claim is wrong (`blocking`) or unconfirmed (gap) → agent work
  * - `blocked`  — cannot check yet (repo/cache unavailable) → environment fix
- * - `na`       — external / proposed / skipped-by-design (excluded)
+ * - `na`       — external / skipped-by-design (excluded)
  *
  * `coverage` only counts adjudicable claims (verified + open); `blocked` and
  * `na` are excluded from the ratio but still reported so a model can't read
@@ -1124,7 +1124,7 @@ export type SubsystemModelProposalChange =
 			 * Lifecycle correction: the claim's source is gone. The agent reads
 			 * source and git history and decides absence means removal, not a
 			 * rename or relocate. Accept sets `component.deprecated`; verification
-			 * then skips source checks exactly as it does for `proposed`.
+			 * then skips source checks.
 			 *
 			 * Deprecation is a transitional marker, not a resting state — a
 			 * separate pass later removes the node and repairs the trails that

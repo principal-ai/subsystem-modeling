@@ -697,7 +697,6 @@ export async function ensureCurrentPackageCachesForModel(
 	graph: {
 		components: Array<{
 			purl?: string;
-			proposed?: boolean;
 			construct?: string;
 		}>;
 	},
@@ -709,7 +708,6 @@ export async function ensureCurrentPackageCachesForModel(
 	const byPurl = new Map<string, { purl: string; repoRoot?: string }>();
 	for (const c of graph.components) {
 		if (
-			c.proposed ||
 			c.construct === "external" ||
 			c.construct === "custom_entity"
 		) {

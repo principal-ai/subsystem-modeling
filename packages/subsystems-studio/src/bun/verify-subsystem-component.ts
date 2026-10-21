@@ -553,14 +553,6 @@ export async function verifySubsystemComponent(
 		return { ok: false, error: `unknown component: ${componentAlias}`, componentAlias };
 	}
 
-	if (component.proposed) {
-		return {
-			ok: true,
-			componentAlias,
-			file: { exists: false, symbolDeclared: null },
-		};
-	}
-
 	const purlKey = purlRepoKey(component.purl);
 	const repoRoot = purlKey ? resolveRepoRootForPurl(purlKey) : null;
 
@@ -1081,7 +1073,7 @@ export async function verifySubsystemModel(
  *
  * Anchor-independent by design: copying a stored
  * `[startLine, endLine, contentHash]` needs neither Graphify nor a parse, so a
- * component promotes even when Graphify cannot anchor it. Skips proposed,
+ * component promotes even when Graphify cannot anchor it. Skips
  * external, custom-entity, and identity-less components, and components whose
  * stored span already matches. Returns the number of spans written.
  */
@@ -1094,7 +1086,6 @@ export async function promoteAcceptedDeclarationSpans(
 
 	const updates = new Map<string, SubsystemSourceSpan>();
 	for (const component of graph.components) {
-		if (component.proposed) continue;
 		if (component.construct === "external") continue;
 		if (component.construct === "custom_entity") continue;
 		if (!component.purl || !component.file || !component.symbol) continue;
@@ -1260,28 +1251,6 @@ export async function auditSubsystemModel(
 	const cacheUnavailablePurls = new Set<string>();
 
 	for (const c of graph.components) {
-		if (c.proposed) {
-			externalsSkipped++;
-			okComponents++;
-			checks.push({
-				componentAlias: c.alias,
-				componentName: c.name,
-				construct: c.construct,
-				symbol: c.symbol,
-				file: c.file || undefined,
-				fileExists: null,
-				symbolDeclared: null,
-				declarationFreshness: "n/a",
-				constructMatch: null,
-				signature: "n/a",
-				anchor: "n/a",
-				graphify: "skipped",
-				verdict: "skipped",
-				note: "proposed — no source declaration check until promoted",
-			});
-			continue;
-		}
-
 		// A deprecated claim's source is gone upstream — deliberately, with a
 		// commit recorded. Verifying it would only re-derive the deletion the
 		// deprecation already states, as an unfixable `missing_file`. Skip it so
@@ -1766,18 +1735,6 @@ export async function auditSubsystemModel(
 			const step = trail.steps[stepIndex]!;
 			const toComponent = componentByAlias.get(step.to);
 			const fromComponent = componentByAlias.get(step.from);
-
-			// A proposed step — or one whose endpoints are proposed components —
-			// describes planned behavior through code that may not exist yet.
-			// Same rule the component lane applies: verification skips source
-			// checks until promoted. Not counted as unconfirmed.
-			if (
-				step.proposed ||
-				toComponent?.proposed ||
-				fromComponent?.proposed
-			) {
-				continue;
-			}
 
 			// A calls step's site is the caller frame, so the portable schema
 			// requires it. Surface stored models from before that requirement

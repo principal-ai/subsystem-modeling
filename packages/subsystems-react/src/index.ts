@@ -325,7 +325,6 @@ export {
   ROLE_COLOR,
   ROLE_LABEL,
   FRAMEWORK_BADGE_COLOR,
-  PROPOSED_COLOR,
 } from './subsystem/model';
 export type {
   SubsystemSourceSpan,

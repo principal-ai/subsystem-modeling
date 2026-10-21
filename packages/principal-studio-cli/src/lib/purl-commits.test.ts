@@ -62,7 +62,7 @@ describe('capturePurlCommits (injected)', () => {
   test('ignores internal / non-repo purls by default', () => {
     const out = capturePurlCommits([
       { alias: 'store', purl: 'external:file:~/.principal/subsystem-models' },
-      { alias: 'proposed', purl: 'external:proposed' },
+      { alias: 'internal', purl: 'external:internal' },
     ]);
     expect(out).toEqual({});
   });
@@ -107,8 +107,8 @@ describe('upsertSubsystemModel (identity dedup)', () => {
   test('normalizes title and keys on purl set', () => {
     expect(normalizeModelTitle('  Same   Model ')).toBe('same model');
     expect(modelIdentityKey('same model', components)).toBe(`same model\u0000${KEY}`);
-    expect(modelIdentityKey('x', [{ purl: 'external:proposed' }])).toBe(
-      `x\u0000external:proposed`,
+    expect(modelIdentityKey('x', [{ purl: 'external:internal' }])).toBe(
+      `x\u0000external:internal`,
     );
     expect(modelIdentityKey('x', [{}])).toBeNull();
   });

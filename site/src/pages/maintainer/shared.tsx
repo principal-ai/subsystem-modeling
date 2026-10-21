@@ -286,7 +286,7 @@ export const PACKAGE_LAYER_CASES: AuditCase[] = [
   {
     example: 'skipped',
     meaning:
-      'External / custom entity / proposed — no package-layer identity check. Workspace-package frames inside a single-repo monorepo are out of scope for framing (cache still useful for agents).',
+      'External / custom entity — no package-layer identity check. Workspace-package frames inside a single-repo monorepo are out of scope for framing (cache still useful for agents).',
     outcome: 'neutral',
     remediation: 'none',
   },
@@ -473,7 +473,7 @@ export const MODULE_MEMBERSHIP_CASES: AuditCase[] = [
   {
     example: 'module without file',
     meaning:
-      'module is set but file is empty on a non-external, non-proposed node — a hard containment failure (boundary_module_file_mismatch at error severity). package-module-fixer proposes file and/or clears module.',
+      'module is set but file is empty on a non-external node — a hard containment failure (boundary_module_file_mismatch at error severity). package-module-fixer proposes file and/or clears module.',
     outcome: 'issue',
     remediation: 'package-module-fixer',
     snippet: `{
@@ -528,7 +528,7 @@ export const PROCESS_BOUNDARY_CASES: AuditCase[] = [
   {
     example: 'process missing',
     meaning:
-      'A function / class / custom entity states no process, and an accepted C4 container exists to assign one from. Unconfirmed (boundary_process_missing). runtime-topology-verifier proposes the process — but only to a container-verified key. Types (interface, type_alias), externals, stores and proposed components are exempt.',
+      'A function / class / custom entity states no process, and an accepted C4 container exists to assign one from. Unconfirmed (boundary_process_missing). runtime-topology-verifier proposes the process — but only to a container-verified key. Types (interface, type_alias), externals and stores are exempt.',
     outcome: 'gap',
     remediation: 'runtime-topology-verifier',
     snippet: `{ "alias": "boot", "file": "src/host/main.ts" }

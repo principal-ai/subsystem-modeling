@@ -419,7 +419,7 @@ export function purlRepoKey(purl: string | undefined): string | undefined {
  * True when a purl identifies a code repo checkout we can resolve locally.
  *
  * Only `pkg:github/…` qualifies. Pseudo-purls describing internal surfaces
- * (`external:file:~/.principal/subsystem-models`, `external:proposed`,
+ * (`external:file:~/.principal/subsystem-models`, `external:internal`,
  * `external:…`) are stable identities, not repos — resolving or graphifying
  * them would invent a checkout (see the stale
  * `graphify-graphs/external-file-*` cache).
@@ -516,7 +516,6 @@ export async function verifyModelFiles(
 		if (c.declaration) {
 			declarationsAuthored++;
 		}
-		if (c.proposed) continue;
 		if (!c.file) continue;
 		const root = resolveRepoRootForComponent(c.purl);
 		if (!root) {
@@ -547,12 +546,9 @@ export async function verifyModelFiles(
 			for (let i = 0; i < tl.steps.length; i++) {
 				const step = tl.steps[i];
 				// Step spans are authored, not derived: count what the model
-				// carries so create surfaces the expected-to-fill gap. Proposed
-				// steps describe code that may not exist yet — not counted.
-				if (!step.proposed) {
-					if (step.span) stepsWithSpan++;
-					else stepsMissingSpan++;
-				}
+				// carries so create surfaces the expected-to-fill gap.
+				if (step.span) stepsWithSpan++;
+				else stepsMissingSpan++;
 				const fail = (reason: string) =>
 					trailsFailed.push({
 						trailId: tl.id,

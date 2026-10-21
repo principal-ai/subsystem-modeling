@@ -44,7 +44,6 @@ function asString(v: unknown, fallback = ""): string {
 function componentFromMeta(meta: Record<string, unknown>): SubsystemComponent {
 	const layer = meta["layer"];
 	const role = meta["role"];
-	const proposed = meta["proposed"];
 	const process = meta["process"];
 	const module = meta["module"];
 	return {
@@ -56,7 +55,6 @@ function componentFromMeta(meta: Record<string, unknown>): SubsystemComponent {
 		symbol: typeof meta["symbol"] === "string" ? meta["symbol"] : undefined,
 		purpose: typeof meta["purpose"] === "string" ? meta["purpose"] : undefined,
 		role: role === "entry" || role === "service" ? role : undefined,
-		proposed: proposed === true ? true : undefined,
 		process: typeof process === "string" && process.trim() ? process : undefined,
 		module: typeof module === "string" && module.trim() ? module : undefined,
 		layer: typeof layer === "number" ? layer : undefined,

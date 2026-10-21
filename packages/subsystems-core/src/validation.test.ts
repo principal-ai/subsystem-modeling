@@ -144,7 +144,7 @@ describe('validateSubsystemModelCrossField', () => {
     expect(problems.some((p) => p.path === '/trails/0/steps/0/target/purl')).toBe(true);
   });
 
-  test('module implies file, exempting external/proposed', () => {
+  test('module implies file, exempting external', () => {
     const bad = validateSubsystemModelCrossField(
       doc({ components: [comp('a', { module: 'src/host', file: '' })] }),
     );
@@ -156,7 +156,6 @@ describe('validateSubsystemModelCrossField', () => {
         doc({
           components: [
             comp('ext', { module: 'pkg:npm/x', construct: 'external', file: '' }),
-            comp('plan', { module: 'src/host', file: '', proposed: true }),
             comp('ok', { module: 'src/host', file: 'src/host/main.ts' }),
           ],
         }),
@@ -189,7 +188,7 @@ describe('validateSubsystemModelCrossField', () => {
     expect(problems[2]!.path).toBe('/components/2/file');
   });
 
-  test('accepts node_modules only as an external/proposed component identity', () => {
+  test('accepts an external identity and a node_modulesx directory', () => {
     expect(
       validateSubsystemModelCrossField(
         doc({
@@ -200,8 +199,6 @@ describe('validateSubsystemModelCrossField', () => {
               file: '',
               purl: 'pkg:npm/@pierre/diffs',
             }),
-            // A planned in-repo component may sit where it will live.
-            comp('plan', { file: 'packages/x/node_modules/y/z.ts', proposed: true }),
             // `node_modulesx` is an ordinary directory, not the install root.
             comp('ok', { file: 'packages/node_modulesx/z.ts' }),
           ],

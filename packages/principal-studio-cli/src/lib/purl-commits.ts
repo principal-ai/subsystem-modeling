@@ -182,7 +182,7 @@ export function registerProjectInAlexandria(
 
 /**
  * Resolve a purl repo key (`pkg:github/owner/name`) to a local checkout.
- * Non-repo / internal pseudo-purls (`external:file:…`, `external:proposed`, …)
+ * Non-repo / internal pseudo-purls (`external:file:…`, `external:internal`, …)
  * are not checkouts and resolve to undefined rather than a fabricated owner/name.
  */
 export function resolveRepoRootForPurlKey(key: string): string | undefined {

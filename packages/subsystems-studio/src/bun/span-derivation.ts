@@ -516,7 +516,7 @@ function unknownResult(failed: string, language: string | null): SpanDerivation 
 	};
 }
 
-/** Not a code component — externals, proposed placeholders, missing identity. */
+/** Not a code component — externals, missing identity. */
 function skippedResult(language: string | null): SpanDerivation {
 	return {
 		class: "skipped",
@@ -559,7 +559,6 @@ async function classifyComponent(
 	const language = contextLanguage(component.file);
 
 	if (
-		component.proposed ||
 		component.construct === "external" ||
 		component.construct === "custom_entity" ||
 		!component.file ||

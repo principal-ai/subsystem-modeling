@@ -13,8 +13,7 @@
  *
  * Ontology: construct = what a node is, framework + stereotype = which
  * framework pattern it plays, role = where it sits, process = where it runs,
- * module = which source file/module the export belongs to,
- * proposed = not yet in source (design / migration placeholder).
+ * module = which source file/module the export belongs to.
  * Package (repo) frames are derived from component `purl` when a graph spans
  * multiple repos — there is no separate `package` field.
  * `symbol` is the code identity; `name` is the display label.
@@ -326,18 +325,9 @@ export interface SubsystemComponent {
   purpose?: string;
   role?: SubsystemComponentRole;
   /**
-   * Design / migration placeholder — participates in edges and flows but is
-   * not a live source declaration yet. Verification skips source checks until
-   * promoted (`proposed` cleared, `file` + `symbol` filled). Orthogonal to
-   * `construct` (intended shape) and `role` (topology).
-   */
-  proposed?: boolean;
-  /**
    * The claim was real but its source is gone — deleted or renamed upstream.
-   * The inverse of `proposed`: instead of "not built yet", this is "built once,
-   * removed since". Verification skips source checks exactly as it does for
-   * `proposed`, so a model carrying deprecations is no longer wedged on
-   * unfixable `missing_file` findings.
+   * Verification skips source checks so a model carrying deprecations is no
+   * longer wedged on unfixable `missing_file` findings.
    *
    * This is a transitional marker, not a resting state. A cleanup pass removes
    * the component and repairs the trails that referenced it; the field exists so
@@ -461,9 +451,9 @@ export interface SubsystemTrailStep {
   span?: SubsystemSourceSpan;
   /**
    * The construct containing the seam site, with its full declaration range.
-   * Required when `mechanism` is `calls` (and the step is not `proposed`): the
-   * caller frame must be housed by the `from` component. For `uses` and
-   * data/event seams it is the via-site evidence and remains optional.
+   * Required when `mechanism` is `calls`: the caller frame must be housed by
+   * the `from` component. For `uses` and data/event seams it is the via-site
+   * evidence and remains optional.
    */
   site?: SubsystemSiteConstruct;
   /**
@@ -485,14 +475,6 @@ export interface SubsystemTrailStep {
    * mechanism + filename fallback.
    */
   symbol: string;
-  /**
-   * Planned seam — the step describes intended behavior through code that is
-   * not written yet. Orthogonal to (and redundant with) the endpoints' own
-   * `proposed` flags: a step is proposed when it says so OR either endpoint
-   * is proposed. Verification skips source checks either way, and viewers
-   * tint it exactly like a proposed node.
-   */
-  proposed?: boolean;
   /**
    * Free-text note anchored to this step's site line. Optional — informative
    * only, never verified against source; viewers surface it via the codeview's

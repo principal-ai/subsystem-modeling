@@ -76,13 +76,9 @@
         "service"
       ]
     },
-    "proposed": {
-      "type": "boolean",
-      "description": "Design / migration placeholder — not a live source declaration yet. Verification skips source checks until promoted. Keep a real construct for the intended shape."
-    },
     "deprecated": {
       "type": "boolean",
-      "description": "The claim was real but its source is gone upstream — deleted or renamed. The inverse of `proposed`; verification skips source checks the same way, so the component stops blocking verification. Transitional: a cleanup pass removes it and repairs the trails that referenced it."
+      "description": "The claim was real but its source is gone upstream — deleted or renamed. Verification skips source checks, so the component stops blocking verification. Transitional: a cleanup pass removes it and repairs the trails that referenced it."
     },
     "removedIn": {
       "type": "object",
@@ -189,9 +185,6 @@
         "role": {
           "$ref": "#/$defs/role"
         },
-        "proposed": {
-          "$ref": "#/$defs/proposed"
-        },
         "deprecated": {
           "$ref": "#/$defs/deprecated"
         },
@@ -274,7 +267,7 @@
         },
         "site": {
           "type": "object",
-          "description": "The construct containing the seam site, with its full declaration range. Required for `calls` (unless `proposed`): the caller frame must be housed by the `from` component. For `uses` and data/event seams it is the via-site evidence and is optional. Same file/repo as the step.",
+          "description": "The construct containing the seam site, with its full declaration range. Required for `calls`: the caller frame must be housed by the `from` component. For `uses` and data/event seams it is the via-site evidence and is optional. Same file/repo as the step.",
           "additionalProperties": false,
           "required": ["symbol", "span"],
           "properties": {
@@ -335,10 +328,6 @@
           "minLength": 1,
           "description": "Frame name for this step — the function/method on the stack at the site. Required; the Trails list shows this instead of a bare mechanism + filename fallback."
         },
-        "proposed": {
-          "type": "boolean",
-          "description": "Planned seam — the step describes intended behavior through code that is not written yet. Verification skips source checks; viewers tint it like a proposed node. A step is proposed when it says so OR either endpoint component is proposed."
-        },
         "annotation": {
           "type": "string",
           "minLength": 1,
@@ -351,8 +340,7 @@
           "if": {
             "required": ["mechanism"],
             "properties": {
-              "mechanism": { "const": "calls" },
-              "proposed": { "not": { "const": true } }
+              "mechanism": { "const": "calls" }
             }
           },
           "then": {

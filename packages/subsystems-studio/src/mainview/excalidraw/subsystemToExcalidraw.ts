@@ -124,7 +124,6 @@ export type PrincipalComponentMeta = {
 	symbol?: string;
 	purpose?: string;
 	role?: SubsystemComponentRole;
-	proposed?: boolean;
 	process?: string;
 	module?: string;
 	layer?: number;
@@ -160,7 +159,6 @@ export function principalMetaForComponent(c: SubsystemComponent): PrincipalCompo
 		symbol: c.symbol,
 		purpose: c.purpose,
 		role: c.role,
-		proposed: c.proposed === true ? true : undefined,
 		process: c.process,
 		module: c.module,
 		layer: c.layer,

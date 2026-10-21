@@ -178,34 +178,6 @@ describe("mergeSubsystemModels", () => {
 		});
 	});
 
-	test("proposed-with-intent unifies like code and grounded wins", () => {
-		const r = mergeSubsystemModels([
-			{
-				id: "sg-1",
-				document: doc({
-					components: [
-						code("resolve-kind", {
-							proposed: true,
-							purpose: "Planned resolver.",
-							symbol: "resolveKind",
-						}),
-					],
-				}),
-			},
-			{
-				id: "sg-2",
-				document: doc({
-					components: [
-						code("resolve-kind-live", { purpose: "Resolves the kind.", symbol: "resolveKind" }),
-					],
-				}),
-			},
-		]);
-		expect(r.document.components).toHaveLength(1);
-		expect(r.document.components[0]!.alias).toBe("resolve-kind");
-		expect(r.document.components[0]!.proposed).toBeUndefined();
-	});
-
 	test("layer is dropped (per-model pipeline hints are incomparable)", () => {
 		const r = mergeSubsystemModels([
 			{

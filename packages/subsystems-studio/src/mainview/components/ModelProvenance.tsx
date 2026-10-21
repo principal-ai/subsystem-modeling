@@ -345,10 +345,10 @@ export type { AnchorChanges } from "../../shared/contract";
  *   `resolveComponentAnchor` would not return `exact`, so `symbolDeclared`
  *   is false. A `verifiedAtCommits` entry already certifies every grounded
  *   component's file.
- * - A component with no `file` is `external` or `proposed`
+ * - A component with no `file` is `external`
  *   (`isUngrounded`, `boundary-audit.ts:74`), and those are skipped rather
- *   than flagged — their claims ("this is a dependency", "this is proposed")
- *   do not rest on repo file content, so there is nothing for them to lose.
+ *   than flagged — their claim ("this is a dependency") does not rest on repo
+ *   file content, so there is nothing for it to lose.
  *
  * What remains are conditions on *now*, not on whether the model is sound:
  * - `dirty-tree` — the stamp only fires when `referencedFilesClean` passes
