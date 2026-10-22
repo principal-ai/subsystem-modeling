@@ -167,6 +167,7 @@ describe('index rebuild', () => {
     const legacy = {
       ...JSON.parse(readFileSync(topicPath, 'utf8')),
       trailIds: ['old-trail'],
+      status: { state: 'working', label: 'in flight' },
       description: 'Keep this description',
     };
     writeFileSync(topicPath, JSON.stringify(legacy), 'utf8');
@@ -180,6 +181,9 @@ describe('index rebuild', () => {
       repos: ['pkg:github/a/b'],
     });
     expect(loaded).toHaveProperty('trailIds', ['old-trail']);
+    // `status` was removed from the contract; legacy files still load and are
+    // read back verbatim until the desktop cleans them up.
+    expect(loaded).toHaveProperty('status', { state: 'working', label: 'in flight' });
     expect(JSON.parse(readFileSync(topicPath, 'utf8'))).toHaveProperty('trailIds', ['old-trail']);
   });
 });

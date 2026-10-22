@@ -24,7 +24,6 @@ export type {
 } from './storage/topicStore';
 export type {
   DraftTopic,
-  TopicStatus,
   TopicAsset,
   TopicCreator,
   TopicSubsystemModelRef,

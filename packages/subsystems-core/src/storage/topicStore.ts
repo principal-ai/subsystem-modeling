@@ -27,7 +27,7 @@
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { mkdir, readFile, writeFile, unlink, readdir, rename, access } from 'node:fs/promises';
-import type { DraftTopic, TopicStatus } from './topic-types';
+import type { DraftTopic } from './topic-types';
 
 /** Root of the global, cross-repo principal narration store. */
 export const PRINCIPAL_DIR = join(homedir(), '.principal');
@@ -48,8 +48,6 @@ export interface TopicIndexEntry {
   id: string;
   title: string;
   descriptionPreview: string;
-  /** `status.state` lifted out for filtering/sorting without a file read. */
-  state?: TopicStatus['state'];
   createdAt: string;
   updatedAt: string;
   createdBy?: { githubId: number; githubLogin: string };
@@ -85,7 +83,6 @@ const buildEntry = (topic: DraftTopic, sizeBytes: number): TopicIndexEntry => ({
   id: topic.id,
   title: topic.title || 'Untitled topic',
   descriptionPreview: descriptionPreview(topic.description),
-  state: topic.status?.state,
   createdAt: topic.createdAt,
   updatedAt: topic.updatedAt,
   createdBy: topic.createdBy,
@@ -118,7 +115,7 @@ export interface MigrationResult {
 export type TopicUpdate = Partial<
   Pick<
     DraftTopic,
-    'title' | 'description' | 'status' | 'createdBy' | 'assets' | 'repos' | 'subsystemModels'
+    'title' | 'description' | 'createdBy' | 'assets' | 'repos' | 'subsystemModels'
   >
 >;
 

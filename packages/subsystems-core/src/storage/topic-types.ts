@@ -6,48 +6,8 @@
  * A **topic** is a locally authored subject brief. {@link DraftTopic} is the
  * shape desktop persists to `~/.principal/topics/<id>.json` and edits.
  *
- * All timestamps are ISO 8601 strings because this contract crosses the
- * desktop/web boundary.
+ * All timestamps are ISO 8601 strings.
  */
-
-/**
- * Status of a topic — a small structured axis plus optional human nuance.
- *
- * `state` is the machine-meaningful signal (drives badge color, sorting, and
- * filtering). `label` is free-form text shown in place of the default per-state
- * label. `waitingOn` describes an external blocker and is meaningful when
- * `state` is `waiting`.
- *
- * The structured shape is deliberate: it lets automations check and resolve a
- * blocker without parsing prose — e.g. flip `waiting` -> `paused` once `until`
- * passes, or once a referenced PR merges.
- */
-export interface TopicStatus {
-  /**
-   * Structured lifecycle axis, ordered by a feature's "aliveness" from nascent
-   * to retired. Readers treat an absent OR unrecognized `state` as
-   * `new-thought`, so legacy topics and renamed values need no migration.
-   */
-  state:
-    'new-thought' | 'working' | 'paused' | 'waiting' | 'done-for-now' | 'deprecated' | 'abandoned';
-  /** Free-form text shown in place of the default label for the state. */
-  label?: string;
-  /** External blocker description. Meaningful when `state` is `waiting`. */
-  waitingOn?: {
-    /** Human description of the blocker, e.g. "design sign-off". */
-    note?: string;
-    /** ISO 8601 — when the hold is expected to lift. */
-    until?: string;
-    /** Structured pointer to the thing being waited on, for automations. */
-    ref?: {
-      kind: 'url' | 'pr' | 'issue' | 'topic';
-      /** The address/id of the referenced thing. */
-      value: string;
-      /** Optional human label for display. */
-      title?: string;
-    };
-  };
-}
 
 /**
  * An image attached to a topic — primarily a screenshot dragged into the
@@ -125,8 +85,6 @@ export interface DraftTopic {
   updatedAt: string;
   /** Creator identity; undefined for topics authored before sign-in. */
   createdBy?: TopicCreator;
-  /** Optional workflow status. Absent reads as `new-thought`. */
-  status?: TopicStatus;
   /** Local image attachments, referenced from the description via `asset://<id>`. */
   assets?: TopicAsset[];
   /**
