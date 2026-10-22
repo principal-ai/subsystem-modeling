@@ -7,7 +7,7 @@ import { ConstructTimelineService } from "./construct-timeline";
 import { summarizeConstructTimeline, type ConstructTimelineOptions } from "../shared/construct-timeline";
 
 interface WorkerRequest {
-	type: "timelineExtend" | "timelineGet" | "timelineCancel";
+	type: "timelineExtend" | "timelineGet" | "timelineCancel" | "timelineReset";
 	requestId?: number;
 	purl: string;
 	timelineOptions?: ConstructTimelineOptions;
@@ -38,6 +38,11 @@ scope.onmessage = (event) => {
 						requestId, type: "timeline",
 						timeline: stored ? { meta: stored.meta, summary: summarizeConstructTimeline(stored.events) } : undefined,
 					});
+					break;
+				}
+				case "timelineReset": {
+					await timeline.reset(message.purl);
+					scope.postMessage({ requestId, type: "reset" });
 					break;
 				}
 				case "timelineCancel": {

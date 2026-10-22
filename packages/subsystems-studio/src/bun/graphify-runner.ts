@@ -42,6 +42,14 @@ export interface RunGraphifyExtractOptions {
 	signal?: AbortSignal;
 	/** Ignore ambient GRAPHIFY_OUT and confine artifacts to the supplied outDir. */
 	isolatedOutput?: boolean;
+	/** Timeline-only: accept Graphify's confirmed zero-code empty-corpus exit. */
+	allowEmptyCode?: boolean;
+}
+
+export interface GraphifyEmptyCode {
+	/** File scan limits, not counts of unverified declarations. */
+	unclassifiedFiles: number;
+	sensitiveFiles: number;
 }
 
 export interface RunGraphifyExtractResult {
@@ -59,6 +67,7 @@ export interface RunGraphifyExtractResult {
 	durationMs: number;
 	stdout: string;
 	stderr: string;
+	emptyCode?: GraphifyEmptyCode;
 }
 
 export interface RunGraphifyExtractFailure {
@@ -126,6 +135,39 @@ export function edgeCount(graph: GraphifyGraphSmoke): number {
 	if (Array.isArray(graph.links)) return graph.links.length;
 	if (Array.isArray(graph.edges)) return graph.edges.length;
 	return 0;
+}
+
+const EMPTY_GRAPH_MESSAGE = "[graphify extract] graph is empty — extraction produced no nodes. Possible causes: all files skipped, binary-only corpus, or LLM returned no edges.";
+
+/** Be conservative: a generic empty-graph error can also hide parser failures. */
+function confirmedEmptyCode(stdout: string, stderr: string, exitCode: number): GraphifyEmptyCode | undefined {
+	if (exitCode !== 1 || stderr.trim() !== EMPTY_GRAPH_MESSAGE) return undefined;
+	const scans = [...stdout.matchAll(/^\[graphify extract\] found (\d+) code, \d+ docs, \d+ papers, \d+ images\r?$/gm)];
+	if (scans.length !== 1 || scans[0]![1] !== "0") return undefined;
+	const count = (pattern: RegExp) => {
+		const matches = [...stdout.matchAll(pattern)];
+		return matches.reduce((total, match) => total + Number(match[1]), 0);
+	};
+	return {
+		unclassifiedFiles: count(/^\[graphify extract\] (\d+) file\(s\) not classified\b/gm),
+		sensitiveFiles: count(/^\[graphify extract\] (\d+) file\(s\) skipped as potentially sensitive\b/gm),
+	};
+}
+
+/** Do not persist arbitrary CLI output: it can contain source text or secrets. */
+export function graphifyFailureReason(failure: RunGraphifyExtractFailure): string {
+	const stderr = failure.stderr ?? "";
+	const status = failure.exitCode === undefined ? "" : ` (exit ${failure.exitCode})`;
+	if (stderr.includes("[graphify extract] graph is empty — extraction produced no nodes.")) {
+		return `Graphify produced no graph nodes${status}. The scan did not qualify as a confirmed zero-code snapshot`;
+	}
+	const missing = stderr.match(/ModuleNotFoundError: No module named ['"]([\w.-]+)['"]/);
+	if (missing) return `Graphify is missing Python module ${missing[1]}${status}`;
+	const exception = stderr.match(/^([A-Za-z][A-Za-z0-9_]*(?:Error|Exception)):/m);
+	if (exception) return `Graphify failed with ${exception[1]}${status}`;
+	if (failure.error.startsWith("extract succeeded but graph.json missing")) return "Graphify completed without producing graph.json";
+	if (failure.error.startsWith("graphify CLI not found")) return "Graphify CLI was not found";
+	return `Graphify extraction failed${status}`;
 }
 
 /**
@@ -226,6 +268,18 @@ export async function runGraphifyExtract(
 		return { ok: false, error: "Extraction cancelled", durationMs };
 	}
 	if (exitCode !== 0) {
+		const emptyCode = codeOnly && opts.allowEmptyCode
+			? confirmedEmptyCode(stdout, stderr, exitCode) : undefined;
+		if (emptyCode && !existsSync(graphPath)) {
+			const graph = { nodes: [], links: [] };
+			// Keep the success contract: graphJsonPath always names a real graph.
+			mkdirSync(dirname(graphPath), { recursive: true });
+			await Bun.write(graphPath, JSON.stringify(graph));
+			return {
+				ok: true, repoRoot, outDir, graphifyOut: dirname(graphPath), graphJsonPath: graphPath,
+				graph, nodeCount: 0, edgeCount: 0, usedTempOut, durationMs, stdout, stderr, emptyCode,
+			};
+		}
 		failCleanup();
 		return {
 			ok: false,

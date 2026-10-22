@@ -4,18 +4,140 @@
  * The timeline is append-only: a forward walk from an epoch, a durable cursor,
  * and one compact event per commit. Extending it
  * only ever processes commits after the cursor, so the beginning is never
- * redone. Per-commit observations are not stored — only the transition lists,
- * the verified count, and coverage.
+ * redone. Full per-commit inventories are not stored — only transitions with
+ * commit-qualified source spans, the verified count, and coverage.
  */
 
-export const CONSTRUCT_TIMELINE_ANALYZER = "construct-timeline-v1";
+import { constructFileSupport } from "./construct-support";
+
+export const CONSTRUCT_TIMELINE_ANALYZER = "construct-timeline-v2";
 export const CONSTRUCT_TIMELINE_DEFAULT_COMMITS = 50;
 export const CONSTRUCT_TIMELINE_MAX_COMMITS = 100_000;
+
+/** One-based, inclusive source lines at a particular commit. */
+export interface ConstructTimelineSpan {
+	startLine: number;
+	endLine: number;
+	contentHash: string;
+}
+
+export interface ConstructTimelineEvidence {
+	sha: string;
+	span: ConstructTimelineSpan;
+}
 
 export interface ConstructTimelineIdentity {
 	file: string;
 	symbol: string;
 	construct?: string;
+	/** Optional only for legacy spanless events and absent transition sides. */
+	before?: ConstructTimelineEvidence;
+	after?: ConstructTimelineEvidence;
+}
+
+export interface ConstructTimelineDeclarationOutcome {
+	symbol: string;
+	construct?: string;
+	status: "verified" | "unresolved" | "unsupported" | "error";
+	/** Only verified declarations have source-confirmed line ranges. */
+	startLine?: number;
+	endLine?: number;
+	/** Extractor-reported location, not a verified source span. */
+	graphStartLine?: number;
+	/** Controlled verifier diagnostic, never source text or raw CLI output. */
+	evidence?: string;
+}
+
+export interface ConstructTimelineFileCoverage {
+	file: string;
+	verified: number;
+	unresolved: number;
+	unsupported: number;
+	error: number;
+	/** Absent in older count-only results. Includes unchanged candidates. */
+	declarations?: ConstructTimelineDeclarationOutcome[];
+}
+
+export type ConstructTimelineFileStatus = "verified" | "partial" | "unresolved" | "unsupported" | "error" | "uncovered" | "non-code";
+
+/** Git first-parent history, newest first, independent of analysis progress. */
+export interface ConstructTimelineCommit {
+	sha: string;
+	committedAt: string;
+	subject: string;
+}
+
+export interface ConstructTimelineFileSnapshot {
+	sha: string;
+	/** Read-only Git metadata, not analysis evidence or persisted timeline data. */
+	message?: string;
+	/** Relative to the first parent (empty tree for root commits). Renames are remove + add. */
+	changes?: Array<{
+		path: string;
+		status: "added" | "modified" | "removed";
+		/** Deleted buildings use their previous size/kind, never current coverage. */
+		before?: { size: number; kind: "file" | "symlink" | "submodule" };
+	}>;
+	/** Explicit false for a Git-only preview; absent in legacy clients. */
+	analyzed?: boolean;
+	/** False for older events; never infer file coverage from transition lists. */
+	coverageAvailable: boolean;
+	extraction?: ConstructTimelineEvent["extraction"];
+	files: Array<{
+		path: string;
+		size: number;
+		kind: "file" | "symlink" | "submodule";
+		status: ConstructTimelineFileStatus;
+		coverage?: ConstructTimelineFileCoverage;
+	}>;
+}
+
+export function timelineFileStatus(
+	coverage?: ConstructTimelineFileCoverage,
+	path?: string,
+	kind: ConstructTimelineFileSnapshot["files"][number]["kind"] = "file",
+): ConstructTimelineFileStatus {
+	// Recorded results take precedence over today's parser capabilities.
+	if (!coverage) {
+		if (!path || kind !== "file") return "uncovered";
+		const support = constructFileSupport(path);
+		return support === "supported" ? "uncovered" : support;
+	}
+	if (coverage.verified) return coverage.error || coverage.unresolved || coverage.unsupported ? "partial" : "verified";
+	if (coverage.error) return "error";
+	if (coverage.unresolved) return "unresolved";
+	if (coverage.unsupported) return "unsupported";
+	return "uncovered";
+}
+
+/** Counts observed declaration candidates, not a claim of whole-file completeness. */
+export function timelineFileCoverage(rows: readonly {
+	file: string;
+	symbol: string;
+	construct?: string;
+	graphStartLine?: number;
+	span?: { startLine: number; endLine: number };
+	verification: { status: ConstructTimelineDeclarationOutcome["status"]; evidence: string };
+}[]): ConstructTimelineFileCoverage[] {
+	const files = new Map<string, ConstructTimelineFileCoverage>();
+	for (const row of rows) {
+		let coverage = files.get(row.file);
+		if (!coverage) {
+			coverage = { file: row.file, verified: 0, unresolved: 0, unsupported: 0, error: 0, declarations: [] };
+			files.set(row.file, coverage);
+		}
+		coverage[row.verification.status]++;
+		const verified = row.verification.status === "verified";
+		coverage.declarations!.push({
+			symbol: row.symbol,
+			status: row.verification.status,
+			...(row.construct && row.construct !== "unknown" ? { construct: row.construct } : {}),
+			...(verified && row.span ? { startLine: row.span.startLine, endLine: row.span.endLine } : {}),
+			...(!verified && row.graphStartLine ? { graphStartLine: row.graphStartLine } : {}),
+			...(!verified ? { evidence: row.verification.evidence } : {}),
+		});
+	}
+	return [...files.values()].sort((a, b) => a.file.localeCompare(b.file));
 }
 
 /** One commit's transitions, appended oldest -> newest. */
@@ -26,9 +148,15 @@ export interface ConstructTimelineEvent {
 	introduced: ConstructTimelineIdentity[];
 	removed: ConstructTimelineIdentity[];
 	changed: ConstructTimelineIdentity[];
+	/** Same content hash, different line range. Absent in legacy events. */
+	relocated?: ConstructTimelineIdentity[];
 	/** Source-verified declarations at this commit. */
 	constructs: number;
 	coverage: { verified: number; unresolved: number; unsupported: number; error: number };
+	/** Per-file evidence for this commit, including unchanged declarations. */
+	files?: ConstructTimelineFileCoverage[];
+	/** An empty scan is not evidence that the repository contains no constructs. */
+	extraction?: { status: "no-supported-code"; unclassifiedFiles: number; sensitiveFiles: number };
 	timing: { checkoutMs: number; extractMs: number; matchMs: number; totalMs: number };
 }
 
@@ -38,6 +166,8 @@ export interface ConstructTimelineMeta {
 	purl: string;
 	/** Newest analyzed commit; the next extension continues after it. */
 	cursor?: { sha: string; committedAt: string };
+	/** Live worker progress, not a saved analysis result or durable checkpoint. */
+	processing?: { sha: string; committedAt: string };
 	/** Oldest analyzed commit (the epoch). */
 	epoch?: { sha: string; committedAt: string };
 	status: "idle" | "running" | "interrupted" | "failed";
@@ -55,10 +185,40 @@ export interface ConstructTimeline {
 }
 
 export interface ConstructTimelineOptions {
-	/** Cap commits processed in this call; the cursor resumes the rest. */
+	/** Defaults to 50 only when no history period or runtime is selected. */
 	maxCommits?: number;
-	/** Wall-clock cap for this call; the cursor resumes the rest. */
+	/** Optional wall-clock cap. Omitted means no time limit. */
 	maxMinutes?: number;
+	/** Advance through the next UTC day/week/calendar month of history. */
+	historyPeriod?: "day" | "week" | "month";
+}
+
+/** Select a contiguous oldest-first prefix, never skip commits to match dates. */
+export function selectTimelineExtensionCommits<T extends { committedAt: string }>(
+	commits: readonly T[], options: ConstructTimelineOptions,
+): T[] {
+	const maxCommits = options.maxCommits ?? (options.historyPeriod || options.maxMinutes !== undefined
+		? Infinity : CONSTRUCT_TIMELINE_DEFAULT_COMMITS);
+	const pending = commits.slice(0, maxCommits);
+	if (!options.historyPeriod || !pending.length) return pending;
+	const end = new Date(pending[0]!.committedAt);
+	if (!Number.isFinite(end.getTime())) throw new Error("History contains an invalid commit date.");
+	end.setUTCHours(0, 0, 0, 0);
+	if (options.historyPeriod === "month") {
+		const day = end.getUTCDate();
+		end.setUTCMonth(end.getUTCMonth() + 1, 1);
+		const lastDay = new Date(end);
+		lastDay.setUTCMonth(end.getUTCMonth() + 1, 0);
+		end.setUTCDate(Math.min(day, lastDay.getUTCDate()));
+	} else {
+		end.setUTCDate(end.getUTCDate() + (options.historyPeriod === "week" ? 7 : 1));
+	}
+	const boundary = pending.findIndex((commit) => {
+		const date = Date.parse(commit.committedAt);
+		if (!Number.isFinite(date)) throw new Error("History contains an invalid commit date.");
+		return date >= end.getTime();
+	});
+	return boundary < 0 ? pending : pending.slice(0, boundary);
 }
 
 export interface ConstructTimelineSummary {

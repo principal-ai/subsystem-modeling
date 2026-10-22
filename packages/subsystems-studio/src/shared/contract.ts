@@ -36,6 +36,8 @@ import type {
 	ConstructTimelineMeta,
 	ConstructTimelineOptions,
 	ConstructTimelineSummary,
+	ConstructTimelineFileSnapshot,
+	ConstructTimelineCommit,
 } from "./construct-timeline";
 
 /** Canonical subsystem-model types, re-shared with both processes. */
@@ -2003,11 +2005,24 @@ export type StudioRequests = {
 		params: { purl: string };
 		response: { ok: boolean; error?: string; meta?: ConstructTimelineMeta; summary?: ConstructTimelineSummary };
 	};
+	getConstructTimelineFiles: {
+		params: { purl: string; sha: string };
+		response: { ok: boolean; error?: string; snapshot?: ConstructTimelineFileSnapshot };
+	};
+	getConstructTimelineHistory: {
+		params: { purl: string };
+		response: { ok: boolean; error?: string; commits?: ConstructTimelineCommit[] };
+	};
 	extendConstructTimeline: {
 		params: { purl: string; options?: ConstructTimelineOptions };
 		response: { ok: boolean; error?: string; meta?: ConstructTimelineMeta };
 	};
 	cancelConstructTimeline: {
+		params: { purl: string };
+		response: { ok: boolean; error?: string };
+	};
+	/** Deletes only the selected repository's managed timeline cache; requires idle analysis. */
+	resetConstructTimeline: {
 		params: { purl: string };
 		response: { ok: boolean; error?: string };
 	};

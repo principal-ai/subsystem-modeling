@@ -1999,11 +1999,33 @@ const requests: RequestHandlers = {
 					return { ok: false, error: error instanceof Error ? error.message : "Could not read the timeline checkpoint." };
 				}
 			},
+			getConstructTimelineHistory: async ({ purl }) => {
+				try {
+					return { ok: true, commits: await constructTimeline.getHistory(purl) };
+				} catch {
+					return { ok: false, error: "Could not read local Git history." };
+				}
+			},
+			getConstructTimelineFiles: async ({ purl, sha }) => {
+				try {
+					return { ok: true, snapshot: await constructTimeline.getFiles(purl, sha) };
+				} catch (error) {
+					return { ok: false, error: error instanceof Error ? error.message : "Could not read commit file coverage." };
+				}
+			},
 			extendConstructTimeline: async ({ purl, options }) => {
 				try {
 					return { ok: true, meta: await constructTimeline.extend(purl, options ?? {}) };
 				} catch (error) {
 					return { ok: false, error: error instanceof Error ? error.message : "Could not extend the timeline." };
+				}
+			},
+			resetConstructTimeline: async ({ purl }) => {
+				try {
+					await constructTimeline.reset(purl);
+					return { ok: true };
+				} catch (error) {
+					return { ok: false, error: error instanceof Error ? error.message : "Could not reset the timeline." };
 				}
 			},
 			cancelConstructTimeline: async ({ purl }) => {

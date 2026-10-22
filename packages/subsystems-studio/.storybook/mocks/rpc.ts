@@ -18,7 +18,7 @@ import type {
 	ViewerSettings,
   ConstructInventoryRepo,
 } from "../../src/shared/contract";
-import type { ConstructTimelineMeta, ConstructTimelineSummary } from "../../src/shared/construct-timeline";
+import type { ConstructTimelineMeta, ConstructTimelineSummary, ConstructTimelineFileSnapshot, ConstructTimelineCommit } from "../../src/shared/construct-timeline";
 
 type RpcRequest = Record<string, (params?: unknown) => Promise<unknown>>;
 export const constructLoadCalls = { graphInventory: 0, graphify: 0, packages: 0, timelineExtensions: 0 };
@@ -115,6 +115,13 @@ const request: RpcRequest = {
   readSubsystemSpan: async () => ({ ok: true, text: "export function calculate() {\n  return 2;\n}", verified: true }),
   getConstructRepositoryInfo: async () => ({ ok: true, commits: 128, firstCommitAt: "2026-02-01T00:00:00Z", ageDays: 258 }),
   getConstructTimeline: async () => ({ ok: true, meta: timelineMeta, summary: timelineSummary }),
+  getConstructTimelineHistory: async () => ({ ok: true, commits: timelineHistory ?? [...timelineFileSnapshots.keys()].map((sha, index) => ({
+    sha, committedAt: `2026-10-${String(21 - index).padStart(2, "0")}T12:00:00Z`, subject: `Fixture commit ${index + 1}`,
+  })) }),
+  getConstructTimelineFiles: async (params) => ({
+    ok: true, snapshot: timelineFileSnapshots.get((params as { sha: string }).sha) ?? { sha: (params as { sha: string }).sha, analyzed: false, coverageAvailable: false,
+      files: [{ path: "src/calculate.ts", size: 200, kind: "file", status: "uncovered" }] },
+  }),
   extendConstructTimeline: async (params) => {
     constructLoadCalls.timelineExtensions++;
     const { purl } = params as { purl: string };
@@ -129,6 +136,13 @@ const request: RpcRequest = {
   },
   cancelConstructTimeline: async () => {
     if (timelineMeta) timelineMeta = { ...timelineMeta, status: "interrupted" };
+    return { ok: true };
+  },
+  resetConstructTimeline: async () => {
+    timelineMeta = undefined;
+    timelineSummary = undefined;
+    timelineFileSnapshots.clear();
+    timelineHistory = undefined;
     return { ok: true };
   },
   assessConstructComplexity: async (params) => {
@@ -277,6 +291,17 @@ let inventoryLoadingResponses = 0;
 
 let timelineMeta: ConstructTimelineMeta | undefined;
 let timelineSummary: ConstructTimelineSummary | undefined;
+let timelineFileSnapshots = new Map<string, ConstructTimelineFileSnapshot>();
+let timelineHistory: ConstructTimelineCommit[] | undefined;
+
+export function mockConstructTimelineHistory(commits: ConstructTimelineCommit[]): void {
+  timelineHistory = structuredClone(commits);
+}
+
+export function mockConstructTimelineFiles(snapshots: ConstructTimelineFileSnapshot[]): void {
+  timelineHistory = undefined;
+  timelineFileSnapshots = new Map(snapshots.map((snapshot) => [snapshot.sha, structuredClone(snapshot)]));
+}
 
 export function mockConstructTimeline(meta?: ConstructTimelineMeta, summary?: ConstructTimelineSummary): void {
   timelineMeta = meta ? structuredClone(meta) : undefined;

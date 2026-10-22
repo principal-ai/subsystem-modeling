@@ -45,6 +45,9 @@ const config: StorybookConfig = {
       config.resolve.alias = {
         ...config.resolve.alias,
         "@storybook/blocks": "@storybook/addon-docs/blocks",
+        // file-city-builder 0.5.5 points `module` at an unpublished index.mjs.
+        // Use its shipped ESM `main` entry until that package fixes the metadata.
+        "@principal-ai/file-city-builder": path.resolve(here, "../node_modules/@principal-ai/file-city-builder/dist/index.js"),
       };
     }
     return config;

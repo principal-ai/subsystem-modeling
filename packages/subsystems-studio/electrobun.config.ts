@@ -10,12 +10,17 @@ export default {
 		identifier: "ai.principal.subsystems-studio",
 		version: "0.1.0",
 	},
+	scripts: {
+		// Runs for every build, including dev --watch reloads and direct CLI builds.
+		preBuild: "scripts/build-analysis-worker.ts",
+	},
 	build: {
 		// Electrobun 1.x always runs the main process on Bun (no Cottontail /
 		// Hutch build-time runtime), so there is no `mainProcess` field.
 		bun: {
 			entrypoint: "src/bun/index.ts",
 		},
+		watch: ["src/shared", "scripts/build-analysis-worker.ts"],
 		views: {
 			mainview: {
 				entrypoint: "src/mainview/index.tsx",

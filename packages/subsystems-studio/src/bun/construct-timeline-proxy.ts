@@ -47,6 +47,20 @@ export class ConstructTimelineProxy {
 		void analysisWorker.request({ type: "timelineCancel", purl }, 5_000).catch(() => analysisWorker.stop());
 	}
 
+	/** All mutations go through the worker so active analyses cannot race deletion. */
+	async reset(purl: string): Promise<void> {
+		await analysisWorker.request({ type: "timelineReset", purl }, 120_000);
+	}
+
+	/** Immutable recorded events and Git objects need no worker round trip. */
+	getFiles(purl: string, sha: string) {
+		return this.disk.getFiles(purl, sha);
+	}
+
+	getHistory(purl: string) {
+		return this.disk.getHistory(purl);
+	}
+
 	/** Terminate the worker (app shutdown, tests). */
 	stop(): void {
 		analysisWorker.stop();
