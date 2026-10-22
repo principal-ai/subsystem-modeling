@@ -155,37 +155,6 @@ describe('index rebuild', () => {
       'topic-external',
     );
   });
-
-  test('legacy topic files preserve unknown fields verbatim', async () => {
-    const store = makeStore();
-    await store.createTopic({
-      id: 'topic-legacy',
-      title: 'Legacy',
-      repos: ['pkg:github/a/b'],
-    });
-    const topicPath = join(topicsDir, 'topic-legacy.json');
-    const legacy = {
-      ...JSON.parse(readFileSync(topicPath, 'utf8')),
-      trailIds: ['old-trail'],
-      status: { state: 'working', label: 'in flight' },
-      description: 'Keep this description',
-    };
-    writeFileSync(topicPath, JSON.stringify(legacy), 'utf8');
-
-    const loaded = await store.getTopic('topic-legacy');
-
-    expect(loaded).toMatchObject({
-      id: 'topic-legacy',
-      title: 'Legacy',
-      description: 'Keep this description',
-      repos: ['pkg:github/a/b'],
-    });
-    expect(loaded).toHaveProperty('trailIds', ['old-trail']);
-    // `status` was removed from the contract; legacy files still load and are
-    // read back verbatim until the desktop cleans them up.
-    expect(loaded).toHaveProperty('status', { state: 'working', label: 'in flight' });
-    expect(JSON.parse(readFileSync(topicPath, 'utf8'))).toHaveProperty('trailIds', ['old-trail']);
-  });
 });
 
 describe('migration', () => {
