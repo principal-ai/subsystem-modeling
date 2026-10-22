@@ -3,17 +3,8 @@
  * agrees on. Browser-safe (no `node:*`); the file-per-topic store that reads and
  * writes these lives in `./node` (see `topicStore.ts`).
  *
- * A **topic** is a locally authored subject brief that may be published. Two
- * distinct named shapes, split by id-namespace / ownership, with an explicit
- * translation between them — NOT one shared shape. Their `id` fields live in
- * different namespaces (local vs server), so passing one where the other is
- * expected corrupts topic identity.
- *
- * - {@link DraftTopic}     — locally-authored, what desktop persists + edits.
- * - {@link PublishedTopic} — server-authoritative, what the server returns and
- *                            mobile reads.
- * - {@link publishedFromDraft} — the Draft -> Published projection (one-way;
- *                            there is no reverse hydration).
+ * A **topic** is a locally authored subject brief. {@link DraftTopic} is the
+ * shape desktop persists to `~/.principal/topics/<id>.json` and edits.
  *
  * All timestamps are ISO 8601 strings because this contract crosses the
  * desktop/web boundary.
@@ -63,18 +54,14 @@ export interface TopicStatus {
  * description. Bytes live on the topic (referenced from the description via an
  * `asset://<id>` markdown link), not inlined into the description string. A
  * render-time resolver swaps `asset://<id>` for `url` (preferred) or a data-URL
- * built from `data`, keeping a local (data-only) and a published (url-bearing)
- * topic interchangeable on read.
- *
- * Local-only on a {@link DraftTopic}: assets are uploaded/resolved at publish
- * time, so a {@link PublishedTopic} carries the resolved `url`, not raw `data`.
+ * built from `data`.
  */
 export interface TopicAsset {
   /** Content hash — free dedup and the stable `asset://` target. */
   id: string;
   /** MIME type, e.g. "image/png". */
   mime: string;
-  /** Base64-encoded bytes. Present locally and on publish. */
+  /** Base64-encoded bytes. */
   data?: string;
   /** Resolvable URL, when the bytes have been offloaded (e.g. to S3). */
   url?: string;
@@ -87,7 +74,7 @@ export interface TopicAsset {
 /**
  * GitHub identity of a topic's creator. Populated when a signed-in user
  * authors a topic; left undefined for local-only topics created before
- * sign-in. The server requires this on publish.
+ * sign-in.
  */
 export interface TopicCreator {
   githubId: number;
@@ -99,8 +86,8 @@ export interface TopicCreator {
  * specific runtime trails (flows) within that model.
  *
  * The link lives on the **topic** side, in the local store id namespace, and
- * never on the model: a subsystem-model document is a portable, host-free
- * artifact (shared/published) that must not embed local topic or store ids.
+ * never on the model: a subsystem-model document is a portable artifact that
+ * must not embed local topic or store ids.
  */
 export interface TopicSubsystemModelRef {
   /** Store-assigned model id, e.g. "sg-1781...". */
@@ -113,14 +100,9 @@ export interface TopicSubsystemModelRef {
  * Locally-authored topic — the shape desktop persists to
  * `~/.principal/topics/<id>.json` and edits.
  *
- * Local id namespace. `description` / `createdBy` are optional (a Draft may be
- * authored before sign-in). Carries local-only {@link TopicAsset}s
- * (`asset://<id>` screenshots, raw `data`). Has NO `visibility` — that's a
- * published concept.
- *
- * A Draft keeps existing after publish (it can be in a "published state"); its
- * link to the server identity lives in the desktop's `topics-sync.json`
- * sidecar, not in this shape.
+ * `description` / `createdBy` are optional (a Draft may be authored before
+ * sign-in). Carries local-only {@link TopicAsset}s (`asset://<id>` screenshots,
+ * raw `data`).
  */
 export interface DraftTopic {
   /** Unique identifier in the LOCAL id namespace. */
@@ -134,7 +116,7 @@ export interface DraftTopic {
    * `pkg:github/owner/repo`). The topic's own source of truth for "which repos"
    * — portable and machine-independent, matching `WorkspaceMembership.repositoryId`.
    * Machine-local clone paths stay a workspace-membership concern and never
-   * appear here, so this round-trips across machines on publish/fetch.
+   * appear here, so this round-trips across machines.
    */
   repos?: string[];
   /** ISO 8601. */
@@ -148,90 +130,8 @@ export interface DraftTopic {
   /** Local image attachments, referenced from the description via `asset://<id>`. */
   assets?: TopicAsset[];
   /**
-   * Subsystem models this topic concerns, as local store ids. Local-only: not
-   * carried on publish, since the referenced models are a local artifact.
+   * Subsystem models this topic concerns, as local store ids. Local-only, since
+   * the referenced models are a local artifact.
    */
   subsystemModels?: TopicSubsystemModelRef[];
-}
-
-/**
- * Server-authoritative topic — the shape the server returns and mobile reads.
- *
- * Remote id namespace. `description` / `createdBy` are required (publish is the
- * validation gate). Carries `visibility`; assets have been resolved to `url`s.
- *
- * CAVEAT: "Published" means "has a server identity", NOT "public" — a
- * PublishedTopic can be `visibility: 'private'`.
- */
-export interface PublishedTopic {
-  /** Unique identifier in the REMOTE (server) id namespace. */
-  id: string;
-  /** Display title. */
-  title: string;
-  /** Markdown body — required on the server. */
-  description: string;
-  /**
-   * Repositories this topic is about, as PURL strings (e.g.
-   * `pkg:github/owner/repo`). Travels with the topic across the wire so a
-   * received shared topic carries its repos; preserved on publish/fetch.
-   */
-  repos?: string[];
-  /** ISO 8601. */
-  createdAt: string;
-  /** ISO 8601. */
-  updatedAt: string;
-  /** Creator identity — required on the server. */
-  createdBy: TopicCreator;
-  /** Optional workflow status, travels with the topic when published. */
-  status?: TopicStatus;
-  /** Server visibility. "private" is still a PublishedTopic. */
-  visibility: 'private' | 'public';
-}
-
-/**
- * Inputs the {@link DraftTopic} cannot supply on its own — the namespace
- * crossing and the fields publish must enforce. The caller resolves these
- * before projecting:
- * - `createdBy`: required on the server; supplied here if the draft lacks it.
- * - `visibility`: a published concept the draft never carries.
- */
-export interface PublishProjection {
-  createdBy: TopicCreator;
-  visibility: 'private' | 'public';
-}
-
-/**
- * Project a {@link DraftTopic} into a {@link PublishedTopic} — the one-way
- * Draft -> Published translation. It does NOT perform any I/O (no id minting,
- * no asset upload, no network): the caller resolves the namespace-crossing and
- * required fields into {@link PublishProjection} first (uploading assets,
- * choosing visibility), and this enforces the shape.
- *
- * One-way by design: there is no reverse `PublishedTopic -> DraftTopic`
- * hydration. A published topic's edits write through to the server; the local
- * Draft is reconciled from the server's response field-by-field, never by
- * rebuilding a Draft from a Published shape.
- *
- * Throws if `description` is empty — publish is also the validation gate, and
- * the server rejects a description-less topic.
- */
-export function publishedFromDraft(
-  draft: DraftTopic,
-  projection: PublishProjection
-): PublishedTopic {
-  const description = (draft.description ?? '').trim();
-  if (description.length === 0) {
-    throw new Error(`Topic ${draft.id} has no description; a description is required to publish.`);
-  }
-  return {
-    id: draft.id,
-    title: draft.title,
-    description,
-    ...(draft.repos !== undefined ? { repos: draft.repos } : {}),
-    createdAt: draft.createdAt,
-    updatedAt: draft.updatedAt,
-    createdBy: projection.createdBy,
-    ...(draft.status !== undefined ? { status: draft.status } : {}),
-    visibility: projection.visibility,
-  };
 }

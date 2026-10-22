@@ -22,11 +22,8 @@ export type {
   TopicUpdate,
   MigrationResult,
 } from './storage/topicStore';
-export { publishedFromDraft } from './storage/topic-types';
 export type {
   DraftTopic,
-  PublishedTopic,
-  PublishProjection,
   TopicStatus,
   TopicAsset,
   TopicCreator,
