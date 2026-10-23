@@ -1389,50 +1389,61 @@ windowedGraphs.length === 0 ? (
 					action={emptyAction}
 				/>
 			) : (
-			<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-				{sortedGraphs.map((graph) => {
+			<div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+				{sortedGraphs.map((graph, i) => {
 					const rowSelectedFile =
 						selectedFile?.graphId === graph.id ? selectedFile : null;
 					return (
-						<SubsystemModelCard
+						<div
 							key={graph.id}
-							graph={graph}
-							selectedFile={
-								rowSelectedFile
-									? {
-											repoKey: rowSelectedFile.repoKey,
-											displayPath: rowSelectedFile.displayPath,
-										}
-									: null
-							}
-							openFile={
-								previewFile
-									? {
-											repoKey: previewFile.repoKey,
-											displayPath: previewFile.displayPath,
-										}
-									: null
-							}
-							rowExpanded={expandedIds.has(graph.id)}
-							copied={copiedId === graph.id}
-							sharing={sharingId === graph.id}
-							onRowClick={() => onRowClick(graph)}
-							onToggleDetails={() => onToggleDetails(graph)}
-							onCopyPath={() => void onCopyPath(graph)}
-							onShareGist={() => requestShareGist(graph)}
-							onDelete={() => requestDelete(graph)}
-							onOpenTrail={(trailId) => void onOpen(graph, trailId)}
-							onOpenComponent={(m) => {
-								setSelectedId(graph.id);
-								setListOverlay(true);
-								setPreviewFile({
-									graphId: graph.id,
-									repoKey: rowSelectedFile?.repoKey,
-									displayPath: rowSelectedFile?.displayPath ?? "",
-									focusLine: m.startLine ?? null,
-								});
+							// Hairline between rows, like the sidebar's `RepoRow`
+							// wrappers; an inset shadow so it adds no height.
+							style={{
+								boxShadow:
+									i > 0
+										? `inset 0 1px 0 ${theme.colors.border ?? "#333"}`
+										: undefined,
 							}}
-						/>
+						>
+							<SubsystemModelCard
+								graph={graph}
+								selectedFile={
+									rowSelectedFile
+										? {
+												repoKey: rowSelectedFile.repoKey,
+												displayPath: rowSelectedFile.displayPath,
+											}
+										: null
+								}
+								openFile={
+									previewFile
+										? {
+												repoKey: previewFile.repoKey,
+												displayPath: previewFile.displayPath,
+											}
+										: null
+								}
+								rowExpanded={expandedIds.has(graph.id)}
+								copied={copiedId === graph.id}
+								sharing={sharingId === graph.id}
+								onRowClick={() => onRowClick(graph)}
+								onToggleDetails={() => onToggleDetails(graph)}
+								onCopyPath={() => void onCopyPath(graph)}
+								onShareGist={() => requestShareGist(graph)}
+								onDelete={() => requestDelete(graph)}
+								onOpenTrail={(trailId) => void onOpen(graph, trailId)}
+								onOpenComponent={(m) => {
+									setSelectedId(graph.id);
+									setListOverlay(true);
+									setPreviewFile({
+										graphId: graph.id,
+										repoKey: rowSelectedFile?.repoKey,
+										displayPath: rowSelectedFile?.displayPath ?? "",
+										focusLine: m.startLine ?? null,
+									});
+								}}
+							/>
+						</div>
 					);
 				})}
 			</div>
@@ -1570,9 +1581,9 @@ windowedGraphs.length === 0 ? (
 							minWidth: 0,
 							minHeight: 0,
 							overflowY: "auto",
-							// The composed graph is a full-bleed canvas; the model
-							// list keeps the pane's inset.
-							padding: combinedPane ? 0 : "16px 24px",
+							// The composed graph and the model list are both
+							// full-bleed: rows sit flush against the pane edges.
+							padding: 0,
 							// In composed mode the list is a persistent right
 							// panel, so the preview's dock-to-rail behavior is off.
 							...(previewFile && listOverlay && !combinedPane
@@ -1597,7 +1608,7 @@ windowedGraphs.length === 0 ? (
 						display: "flex",
 						alignItems: "center",
 						gap: 8,
-						padding: "0 0 8px",
+						padding: "16px 24px 8px",
 					}}
 				>
 					<span
@@ -1637,7 +1648,14 @@ windowedGraphs.length === 0 ? (
 				</div>
 			)}
 			{error && (
-				<div style={{ fontSize: theme.fontSizes[1], color: "#e5534b", marginBottom: 10 }}>
+				<div
+					style={{
+						fontSize: theme.fontSizes[1],
+						color: "#e5534b",
+						marginBottom: 10,
+						padding: combinedPane ? 0 : "12px 24px 0",
+					}}
+				>
 					{error}
 				</div>
 			)}

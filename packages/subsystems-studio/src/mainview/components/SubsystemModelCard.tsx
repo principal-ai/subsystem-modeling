@@ -263,23 +263,30 @@ export function SubsystemModelCard({
 		<div
 			data-subsystem-row={graph.id}
 			onClick={onRowClick}
+			// Same row chrome as the sidebar `RepoRow`: flat, transparent at
+			// rest, filled on hover, and separated by a hairline drawn on the
+			// wrapper (see `SubsystemModelsView`).
 			onMouseEnter={(e) => {
-				e.currentTarget.style.borderColor = theme.colors.textMuted ?? "#555";
+				e.currentTarget.style.background = theme.colors.border ?? "#333";
 			}}
 			onMouseLeave={(e) => {
-				e.currentTarget.style.borderColor = theme.colors.border ?? "#333";
+				e.currentTarget.style.background = "transparent";
 			}}
 			style={{
 				display: "flex",
 				flexDirection: "column",
 				alignItems: "stretch",
-				padding: "8px 12px",
-				borderRadius: 4,
-				border: `1px solid ${theme.colors.border ?? "#333"}`,
-				background: theme.colors.backgroundSecondary ?? "transparent",
+				padding: 12,
+				// Same 52px row as `RepoRow` (12px padding + 28px avatar),
+				// so the two lists line up row for row.
+				minHeight: 52,
+				justifyContent: "center",
+				border: "none",
+				borderRadius: 0,
+				background: "transparent",
 				cursor: "pointer",
 				fontSize: theme.fontSizes[2],
-				transition: "border-color 0.15s ease",
+				transition: "background 120ms ease",
 			}}
 		>
 			<div

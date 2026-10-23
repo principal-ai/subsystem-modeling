@@ -218,9 +218,12 @@ export function FilesDrilldown({
 								flexShrink: 0,
 								display: "flex",
 								flexDirection: "column",
-								borderTop:
+								// Inset separator (not a border) so the 1px divider
+								// does not add to the row height: these rows keep the
+								// same 52px pitch as the subsystem model list.
+								boxShadow:
 									i > 0
-										? `1px solid ${theme.colors.border ?? "#333"}`
+										? `inset 0 1px 0 ${theme.colors.border ?? "#333"}`
 										: undefined,
 							}}
 						>
