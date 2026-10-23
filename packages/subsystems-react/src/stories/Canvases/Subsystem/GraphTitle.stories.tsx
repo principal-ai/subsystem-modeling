@@ -54,7 +54,7 @@ export const GraphOnlyWithTitle: Story = {
   render: () => <GraphOnly />,
 };
 
-/** graphTitle also works alongside the full sidebar (chip + sidebar title). */
+/** Full-width name header above the graph and its description/trails sidebar. */
 export const WithSidebar: Story = {
   render: () => (
     <div style={{ width: '100%', height: '100vh' }}>
@@ -63,7 +63,6 @@ export const WithSidebar: Story = {
         trails={graphOnlyEdges.trails}
         title="Checkout"
         description="A small e-commerce checkout subsystem: an HTTP entry point that writes to retained cart state and calls out to Stripe."
-        graphTitle="Checkout"
       />
     </div>
   ),

@@ -90,6 +90,12 @@ export function diagnosticTitle(diagnostic: SubsystemDiagnostic): string {
 export interface SubsystemDiagnosticToggleProps extends SubsystemDiagnostic {
   /** Icon size in px. @default 14 */
   size?: number;
+  /** Optional visible label beside the status icon. */
+  labelText?: string;
+  /** Outline the button in header toolbars. */
+  bordered?: boolean;
+  /** Match an option inside a shared segmented view switch. */
+  segmented?: boolean;
 }
 
 export function SubsystemDiagnosticToggle({
@@ -100,6 +106,9 @@ export function SubsystemDiagnosticToggle({
   busy = false,
   active = false,
   size = 14,
+  labelText,
+  bordered = false,
+  segmented = false,
   onToggle,
   ...rest
 }: SubsystemDiagnosticToggleProps) {
@@ -122,7 +131,7 @@ export function SubsystemDiagnosticToggle({
   const showFixable = fixableCount > 0 && !busy;
   const fixableColor = theme.colors.success ?? '#2da44e';
   const background = active
-    ? hexWithAlpha(color, hover ? 0.24 : 0.16)
+    ? segmented ? theme.colors.border : hexWithAlpha(color, hover ? 0.24 : 0.16)
     : hover
       ? theme.colors.border
       : 'transparent';
@@ -138,15 +147,16 @@ export function SubsystemDiagnosticToggle({
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
         title={label}
-        aria-label={label}
+        aria-label={labelText ? `${labelText}: ${label}` : label}
         aria-pressed={active}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
+          justifyContent: bordered || segmented ? 'center' : undefined,
           gap: 4,
-          height: 22,
-          padding: showCount ? '0 7px 0 6px' : '0 5px',
-          border: 'none',
+          height: bordered || segmented ? 28 : 22,
+          padding: segmented ? '4px 16px' : bordered ? '4px 7px' : showCount ? '0 7px 0 6px' : '0 5px',
+          border: bordered ? `1px solid ${theme.colors.border}` : 'none',
           borderRadius: 4,
           background,
           color,
@@ -206,12 +216,18 @@ export function SubsystemDiagnosticToggle({
             </span>
           )}
         </span>
+        {labelText && (
+          <span style={{ fontFamily: theme.fonts.monospace, fontSize: theme.fontSizes[0] }}>
+            {labelText}
+          </span>
+        )}
         {showCount && (
           <span
             style={{
               fontFamily: theme.fonts.monospace,
               fontSize: theme.fontSizes[0],
               fontWeight: 600,
+              marginLeft: segmented && labelText ? 4 : undefined,
               lineHeight: 1,
             }}
           >

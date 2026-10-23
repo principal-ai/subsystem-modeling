@@ -140,7 +140,7 @@ function ReorderGraphDemo() {
           trails={trails}
           onReorderTrails={onReorder}
           title="drawing-files flows"
-          description="Drag the grip at the right of a trail row to reorder it. Grips show only while every row is collapsed — expand one and they hide. The header above mirrors the array order; dropping a row calls `onReorderTrails` with the next array."
+          description="Drag the grip at the right of a trail row to reorder it. Select a trail to open its steps and focus its components; Back restores the full list and model. The header above mirrors the array order; dropping a row calls `onReorderTrails` with the next array."
         />
       </div>
     </div>

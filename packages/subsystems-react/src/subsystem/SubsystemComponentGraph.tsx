@@ -16,7 +16,7 @@
  */
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react';
+import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -32,7 +32,7 @@ import {
   applyNodeChanges,
 } from '@xyflow/react';
 import { useTheme } from '@principal-ade/industry-theme';
-import { FileText, ArrowDown, ArrowRight, Unlink, X } from 'lucide-react';
+import { ArrowDown, ArrowRight, Files, Route, Unlink, X } from 'lucide-react';
 import { IndustryMarkdownSlide } from 'themed-markdown';
 import {
   buildSubsystemGraph,
@@ -80,8 +80,9 @@ import {
   type SubsystemIssue,
   type SubsystemIssueCategory,
 } from './IssueList';
-import { SubsystemFileTree } from './SubsystemFileTree';
 import { GraphLayoutCover } from './GraphLayoutCover';
+import { SubsystemFileTree } from './SubsystemFileTree';
+import { buildTrailSidebarScope, type TrailSidebarScope } from './trailSidebarScope';
 import { GRAPH_CANVAS_CLASS, GRAPH_NAV_PROPS, GraphChrome, GraphLayerStyle, LAYOUT_FLIP_CLASS, LAYOUT_FLIP_EDGE_MS, LAYOUT_FLIP_NODE_MS } from './graphChrome';
 import { ComponentDeclaration } from './ComponentDeclaration';
 import type { ComponentVerificationState } from './ComponentDeclaration';
@@ -89,9 +90,7 @@ import type { DeclarationSymbolRef, SymbolInspection } from './symbolRefs';
 import { FileDrawer, FILE_DRAWER_HEIGHT_MS } from './FileDrawer';
 import { GraphWithSidebar } from './GraphWithSidebar';
 import type { GraphSidebarTab } from './GraphSidebar';
-import { buildRepoGroups, repoAvatarUrl, type RepoGroup } from './paths';
 import { TrailsPanel, TRAIL_PLAY_PAUSE_MS } from './TrailsPanel';
-import { TrailStackBreadcrumb } from './TrailStackBreadcrumb';
 import type { StepEmphasisMap } from './stepEmphasis';
 import {
   EDGE_LABEL_WIDTH,
@@ -145,19 +144,19 @@ type DrawerTarget =
 /**
  * Per-model UI state persisted to `localStorage`, keyed by `persistKey`.
  * Stores the trail working set (which flows are expanded and which
- * flow/step is selected) and which sidebar/diagnostics tab is showing, so
+ * flow/step is selected) and which diagnostics tab is showing, so
  * tabbing away from a model and back lands you where you left off. Transient
  * things (hover, drag, camera) are not saved.
  */
 interface PersistedViewState {
   expandedTrails?: string[];
   focusedTrailId?: string | null;
+  sidebarTrailId?: string | null;
   focusedStepIndex?: number | null;
   /** Sidebar width moved to the shared GraphWithSidebar chrome (persisted
    *  under `principal.subsystems.sidebarWidth.<persistKey>`); reading the old
    *  field still restores a width saved before that move. */
   sidebarWidth?: number;
-  sidebarView?: 'files' | 'trails';
   diagnosticsTab?: 'issues' | 'agents';
   /** Flow direction chosen with the canvas toggle, restored on the next visit. */
   layoutDirection?: SubsystemLayoutDirection;
@@ -196,12 +195,11 @@ export interface SubsystemComponentGraphProps {
   components: SubsystemComponent[];
   /**
    * Ordered runtime trails — one trail per flow. When present the
-   * sidebar's bottom half offers a Files/Trails toggle:
-   * the flows panel lists each trail's steps (`symbol` or `file:line`);
-   * clicking a flow row toggles its steps; clicking a step focuses that
+   * sidebar's bottom half lists trails; clicking a flow opens its steps and
+   * lays out only that flow. Back restores the full list and model.
+   * Clicking a step focuses that
    * step's edge and (when `renderTrailViewer` is set) opens the code
-   * drawer on that flow's snippets. Opened flows stay on the canvas
-   * (unselected ones dimmed); everything else is hidden.
+   * drawer on that flow's snippets.
    */
   trails?: SubsystemTrail[];
   /**
@@ -322,15 +320,14 @@ export interface SubsystemComponentGraphProps {
    * - `graphify`: graphify-native static edges (`imports`, `contains`, …)
    * - `trails`: trail step edges (`calls`, `feeds`, …), including
    *   step numbers when a flow is focused/hovered
-   * Leave unset to let the sidebar's Files / Trails tab drive it: Files
-   * draws graphify edges, Trails draws runtime steps. Without visible
-   * tabs, defaults to `trails`.
+   * Defaults to `trails` when trails exist, otherwise `graphify` when
+   * static relations exist.
    */
   edgeView?: SubsystemEdgeView;
-  /** Subsystem title displayed in the sidebar. */
+  /** Subsystem title displayed above the sidebar and graph. */
   title?: string;
   /**
-   * Suppresses the sidebar entirely (title, description, file tree,
+   * Suppresses the header and sidebar entirely (title, description,
    * trails) for graph-only embeds. Pair with `graphTitle` to keep the
    * subsystem name visible as an overlay on the canvas.
    */
@@ -398,21 +395,22 @@ export interface SubsystemComponentGraphProps {
   /** Rendered in the sidebar under the description (e.g. selection inspector). */
   sidebarAfterDescription?: ReactNode;
   /**
-   * Diagnostics status chip in the sidebar title row (beside the description
-   * toggle). Shows the last verification pass's state as an icon color + count,
+   * Diagnostics status chip in the full-width graph header.
+   * Shows the last verification pass's state as an icon color + count,
    * and toggles the sidebar between the diagnostics list and the normal
-   * files/trails view. Omit to hide the chip.
+   * trails view. Omit to hide the chip.
    */
   diagnostic?: SubsystemDiagnostic;
   /**
    * Verification issues for this graph (audit findings). When diagnostics are
    * active the sidebar's bottom panel becomes the issue list instead of the
-   * file tree / trails.
+   * file tree / trails. Graph issue badges and issue-driven dimming are only
+   * shown in that mode.
    */
   issues?: SubsystemIssue[];
   /**
    * Pin diagnostics mode (controlled). When omitted, the sidebar seeds
-   * diagnostics on iff `issues` is non-empty, and the title-row chip toggles it.
+   * diagnostics on iff `issues` is non-empty, and the header chip toggles it.
    */
   showIssues?: boolean;
   /**
@@ -463,8 +461,7 @@ export interface SubsystemComponentGraphProps {
    */
   hideDrawer?: boolean;
   /**
-   * Called when a file in the sidebar file tree is clicked (repo-root-relative
-   * path). The tree is derived from the components' `file` values.
+   * Called when a source file is opened (repo-root-relative path).
    */
   onFileSelect?: (file: string) => void;
   /** Live verification status for the selected component. */
@@ -613,11 +610,14 @@ const TrailDrawerContent = memo(function TrailDrawerContent({
 
 interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
+  filesActive: boolean;
+  sidebarScope: TrailSidebarScope;
+  onSidebarTrailChange: (trailId: string | null) => void;
 }
 
-function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, refocusOnLayoutFlip = true, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, stepEmphasis, onRemoveStepEmphasis, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, title, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, diagnostic, issues, showIssues, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
+function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, refocusOnLayoutFlip = true, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, stepEmphasis, onRemoveStepEmphasis, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, issues, showIssues, filesActive, sidebarScope, onSidebarTrailChange, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
   const { theme } = useTheme();
-  const { fitView, fitBounds, screenToFlowPosition } = useReactFlow();
+  const { fitView, fitBounds } = useReactFlow();
   const viewport = useViewport();
   // Restored once per mount from `localStorage` (see `readViewState`). Each
   // graph is its own tab/mount, so `persistKey` is stable for a mount.
@@ -668,10 +668,6 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     },
     [layoutDirectionProp, onLayoutDirectionChange, requestedDirection],
   );
-
-  const toggleLayoutFocus = useCallback((trailId: string) => {
-    setLayoutTrailId((cur) => (cur === trailId ? null : trailId));
-  }, []);
 
   // A focused trail that disappears (model reload) releases the solo layout
   // instead of pinning the canvas to a slice that no longer exists.
@@ -796,75 +792,6 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   drawerOpenRef.current = drawerTarget != null;
   // Pending deferred fit after opening the drawer; cancelled on re-entry / unmount.
   const pendingFocusFitRef = useRef<number | null>(null);
-  // Component the pointer is over (null on leave) → transient tree highlight.
-  const [hoveredComponentAlias, setHoveredComponentId] = useState<string | null>(null);
-  // Boundary frame hovered on the canvas → highlight the matching folder row in
-  // the sidebar file tree, so a frame's place in the repo tree is visible.
-  const [hoveredRegion, setHoveredRegion] = useState<{
-    kind: string;
-    key: string;
-  } | null>(null);
-  const hoveredBoundaryPath =
-    hoveredRegion && (hoveredRegion.kind === 'module' || hoveredRegion.kind === 'directory')
-      ? hoveredRegion.key
-      : null;
-  // Path frames (module / directory) as absolute flow-coord rects, hit-tested
-  // on pointer move. A pointer hit-test keeps the frames' interior hoverable
-  // WITHOUT an overlay that would block edges / child nodes.
-  const pathFrameRects = useMemo(() => {
-    const out: Array<{ kind: string; key: string; x: number; y: number; w: number; h: number }> = [];
-    for (const n of built.nodes) {
-      if (n.type !== 'subsystem-group') continue;
-      const region = (n.data as { region?: { kind?: string; key?: string } } | undefined)?.region;
-      if (!region?.key || (region.kind !== 'module' && region.kind !== 'directory')) continue;
-      const r = built.absoluteRects.get(n.id);
-      if (!r) continue;
-      out.push({ kind: region.kind, key: region.key, x: r.x, y: r.y, w: r.width, h: r.height });
-    }
-    return out;
-  }, [built.nodes, built.absoluteRects]);
-  useEffect(() => {
-    if (pathFrameRects.length === 0) return;
-    let raf = 0;
-    let last: { x: number; y: number } | null = null;
-    const overCanvas = (e: MouseEvent): boolean =>
-      e.composedPath().some(
-        (el) => el instanceof HTMLElement && el.classList.contains(GRAPH_CANVAS_CLASS),
-      );
-    const onMove = (e: MouseEvent) => {
-      if (!overCanvas(e)) {
-        last = null;
-        setHoveredRegion((prev) => (prev == null ? prev : null));
-        return;
-      }
-      last = { x: e.clientX, y: e.clientY };
-      if (raf) return;
-      raf = window.requestAnimationFrame(() => {
-        raf = 0;
-        if (!last) return;
-        const p = screenToFlowPosition(last);
-        let best: { kind: string; key: string } | null = null;
-        let bestArea = Number.POSITIVE_INFINITY;
-        for (const f of pathFrameRects) {
-          if (p.x >= f.x && p.x <= f.x + f.w && p.y >= f.y && p.y <= f.y + f.h) {
-            const area = f.w * f.h;
-            if (area < bestArea) {
-              bestArea = area;
-              best = { kind: f.kind, key: f.key };
-            }
-          }
-        }
-        setHoveredRegion((prev) =>
-          prev?.kind === best?.kind && prev?.key === best?.key ? prev : best,
-        );
-      });
-    };
-    window.addEventListener('mousemove', onMove);
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, [pathFrameRects, screenToFlowPosition]);
   // Trail focus — selected flow (or step) is full strength; other
   // opened-flow members stay visible but dimmed; everything else is hidden.
   // Restored from the persisted view state when a `persistKey` is set.
@@ -884,49 +811,28 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     trailId: string;
     stepIndex: number | null;
   } | null>(null);
-  // Sidebar bottom half: which panel is shown when trails exist.
-  // The persisted value is membership-checked rather than trusted: a stale
-  // localStorage entry from before the walkthrough->trail rename would match
-  // neither panel and render a blank sidebar with no selected tab.
-  const [sidebarView, setSidebarView] = useState<'files' | 'trails'>(() => {
-    const stored = persisted.sidebarView;
-    const restored: 'files' | 'trails' =
-      stored === 'files' || stored === 'trails' ? stored : 'trails';
-    return trails?.length ? restored : 'files';
-  });
   // Diagnostics area tab: issues list vs the Maintain agent pipeline.
   const [diagnosticsTab, setDiagnosticsTab] = useState<'issues' | 'agents'>(
     () => persisted.diagnosticsTab ?? 'issues',
   );
-  // One edge source at a time. When the caller doesn't pick, the sidebar's
-  // Files / Trails tab picks: Files draws graphify static edges,
-  // Trails draws runtime step edges. Without visible tabs (no trails,
-  // or a sidebar-less embed) fall back to trail edges.
-  const sidebarTabsVisible = !hideSidebar && (trails?.length ?? 0) > 0;
+  // One edge source at a time. Prefer runtime steps when trails exist;
+  // otherwise draw static relations, unless the caller picks explicitly.
   // A solo trail layout only draws that flow's steps, so the trail edge source
   // is the only one that can render anything.
   const resolvedEdgeView: SubsystemEdgeView = committedTrailId
     ? 'trails'
     : edgeView ??
-    (sidebarTabsVisible
-      ? (sidebarView === 'trails' ? 'trails' : 'graphify')
-      : (trails?.length ?? 0) > 0
-        ? 'trails'
-        : (graphifyRelations?.length ?? 0) > 0
-          ? 'graphify'
-          : 'trails');
+    ((trails?.length ?? 0) > 0
+      ? 'trails'
+      : (graphifyRelations?.length ?? 0) > 0
+        ? 'graphify'
+        : 'trails');
   // Trail flows the user has expanded (via the title row). Closed by
   // default so a graph with several flows doesn't dump every step list at once.
   // Restored from the persisted view state when a `persistKey` is set.
   const [expandedTrails, setExpandedTrails] = useState<Set<string>>(
     () => new Set(persisted.expandedTrails ?? []),
   );
-  // Sidebar description visibility. Hidden by default so the files/flows
-  // panel gets the vertical room; the title-row toggle reveals it.
-  const [descriptionVisible, setDescriptionVisible] = useState(false);
-  const [descToggleHover, setDescToggleHover] = useState(false);
-  // `true` only when a description exists AND the user opened it.
-  const showDesc = !!description && descriptionVisible;
   // Sidebar width lives in the shared GraphWithSidebar chrome — draggable and
   // persisted under `principal.subsystems.sidebarWidth.<persistKey>`. The graph
   // caps it at half the view width so the canvas keeps room to breathe;
@@ -951,10 +857,6 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     if (!persistKey) return;
     writeViewState(persistKey, { focusedStepIndex });
   }, [persistKey, focusedStepIndex]);
-  useEffect(() => {
-    if (!persistKey) return;
-    writeViewState(persistKey, { sidebarView });
-  }, [persistKey, sidebarView]);
   useEffect(() => {
     if (!persistKey) return;
     writeViewState(persistKey, { diagnosticsTab });
@@ -1282,12 +1184,10 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     };
     SUBSYSTEM_CALLBACKS.onEdgeSelect = selectEdge;
     SUBSYSTEM_CALLBACKS.maxNodeWidth = maxNodeWidth;
-    SUBSYSTEM_CALLBACKS.onHover = setHoveredComponentId;
     return () => {
       SUBSYSTEM_CALLBACKS.onSelect = undefined;
       SUBSYSTEM_CALLBACKS.onEdgeSelect = undefined;
       SUBSYSTEM_CALLBACKS.maxNodeWidth = undefined;
-      SUBSYSTEM_CALLBACKS.onHover = undefined;
     };
   }, [components, onSelect, maxNodeWidth, selectEdge]);
 
@@ -1363,7 +1263,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   // node says "diagnostics here" for every finding the sidebar lists.
   const issueBadgeByAlias = useMemo(() => {
     const map = new Map<string, SubsystemNodeIssue>();
-    if (!issues?.length) return map;
+    if (showIssues !== true || !issues?.length) return map;
     for (const issue of issues) {
       const rung = issueRung(issue.kind);
       if (!rung && !ISSUE_KIND_ICON[issue.kind]) continue;
@@ -1398,7 +1298,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       if (kinded) map.set(alias, { ...badge, kind: kinded.kind });
     }
     return map;
-  }, [issues, issueComponent]);
+  }, [showIssues, issues, issueComponent]);
 
   // Per-frame diagnostics badge: the same fold, but for findings about a
   // BOUNDARY rather than a construct. Keyed by the region's React Flow node
@@ -1409,7 +1309,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   // borrowing its layer's icon would imply the frame is at fault for it.
   const regionIssueByNodeId = useMemo(() => {
     const map = new Map<string, SubsystemRegionIssue>();
-    if (!issues?.length) return map;
+    if (showIssues !== true || !issues?.length) return map;
     for (const issue of issues) {
       const target = issue.target;
       if (!target || !ISSUE_KIND_ICON[issue.kind]) continue;
@@ -1430,7 +1330,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       });
     }
     return map;
-  }, [issues]);
+  }, [showIssues, issues]);
 
   // Per-edge step verification badge: maps edge IDs to step verification status.
   // Keyed by the React Flow edge id (from → mechanism → to). An edge can have
@@ -1448,7 +1348,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       step_span_stale: 1,
     };
     const map = new Map<string, { kind: StepIssueKind; severity: 'info' | 'error'; count: number }>();
-    if (!issues?.length || !trails?.length) {
+    if (showIssues !== true || !issues?.length || !trails?.length) {
       return map;
     }
     for (const issue of issues) {
@@ -1475,7 +1375,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       });
     }
     return map;
-  }, [issues, trails, issueStep]);
+  }, [showIssues, issues, trails, issueStep]);
 
   // Expanded verification layers in the diagnostics list. When any layer with
   // findings is expanded, the canvas dims everything that layer does not
@@ -1524,7 +1424,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   // Returns null when nothing is expanded, no expanded layer has findings, or
   // the findings implicate nothing — so no dimming is applied.
   const issueFocus = useMemo(() => {
-    if (!issues?.length || expandedIssueCategories.length === 0) return null;
+    if (showIssues !== true || !issues?.length || expandedIssueCategories.length === 0) return null;
     const active = new Set(expandedIssueCategories);
     const activeIssues = issues.filter((i) => active.has(issueCategory(i)));
     if (activeIssues.length === 0) return null;
@@ -1579,7 +1479,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       if (nodeIds.has(e.source) && nodeIds.has(e.target)) edgeIds.add(e.id);
     }
     return { nodeIds, edgeIds };
-  }, [issues, expandedIssueCategories, components, trails, resolveAlias]);
+  }, [showIssues, issues, expandedIssueCategories, components, trails, resolveAlias]);
   const issueFocusNodeIds = issueFocus?.nodeIds ?? null;
   const issueFocusEdgeIds = issueFocus?.edgeIds ?? null;
 
@@ -1937,23 +1837,20 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     issueModuleFocusRef.current = null;
   }, []);
 
-  // Sidebar file trees — one per repo on multi-repo graphs, each under its
-  // own owner-avatar header. Clicking a header collapses that repo's tree.
-  const repoGroups = useMemo(() => buildRepoGroups(components), [components]);
   const hasTrails = useMemo(() => (trails?.length ?? 0) > 0, [trails]);
+  const { treePaths, trail: sidebarTrail } = sidebarScope;
+  const treeFilePaths = useMemo(() => treePaths.entries.map((entry) => entry.displayPath), [treePaths]);
+  useEffect(() => {
+    if (persistKey) writeViewState(persistKey, { sidebarTrailId: sidebarTrail?.id ?? null });
+  }, [persistKey, sidebarTrail?.id]);
   // Alias → component, so the Trails panel can show human hop names instead
   // of model-local aliases (and the site/`via` distinction can read).
   const componentByAlias = useMemo(
     () => new Map(components.map((c) => [c.alias, c])),
     [components],
   );
-  // Diagnostics view in the sidebar. Uncontrolled unless the host pins
-  // `showIssues`: the title-row chip toggles it, seeded from issues presence.
-  const [diagnosticsOpen, setDiagnosticsOpen] = useState<boolean>(
-    showIssues ?? (issues?.length ?? 0) > 0,
-  );
-  const controlledIssues = showIssues !== undefined;
-  const issuesActive = controlledIssues ? showIssues : diagnosticsOpen;
+  // The outer header owns the diagnostics toggle and passes its resolved state.
+  const issuesActive = showIssues === true;
   // Layer focus only applies while the diagnostics list is on screen — closing
   // it clears any dimming the expanded layers were driving.
   useEffect(() => {
@@ -1961,35 +1858,6 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       setExpandedIssueCategories([]);
     }
   }, [issuesActive]);
-  const toggleIssues = () => {
-    if (!controlledIssues) setDiagnosticsOpen((v) => !v);
-    diagnostic?.onToggle?.();
-  };
-  const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(new Set());
-  const toggleRepoCollapsed = useCallback((key: string) => {
-    setCollapsedRepos((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
-  const treeFiles = useMemo(
-    () => repoGroups.groups.flatMap((g) => g.entries.map((e) => e.file)),
-    [repoGroups],
-  );
-  const onTreeSelectFile = useCallback(
-    (file: string) => {
-      setFileOverlay(null);
-      if (openFileRef.current?.file === file && openFileRef.current.startLine == null) {
-        setDrawerTarget(null);
-        return;
-      }
-      setDrawerTarget({ kind: 'file', file });
-      onFileSelect?.(file);
-    },
-    [onFileSelect],
-  );
 
   const onOpenDeclarationFile = useCallback(
     (file: string, opts?: SubsystemOpenFileOptions) => {
@@ -2261,26 +2129,48 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         onTrailSelect?.(null);
         return;
       }
+      setExpandedTrails(new Set([tl.id]));
+      setLayoutTrailId(tl.id);
+      onSidebarTrailChange(tl.id);
       setFocusedStepIndex(null);
       setFocusedTrailId(tl.id);
       onTrailSelect?.({ trailId: tl.id });
       fitFocusBounds(new Set(tl.steps.map((s) => trailStepGraphEdgeId(s))));
       setDrawerTarget((prev) => (prev?.kind === 'trail' ? null : prev));
     },
-    [fitFocusBounds, trailStepMode, onTrailSelect],
+    [fitFocusBounds, trailStepMode, onTrailSelect, onSidebarTrailChange],
   );
 
   const clearTrailFocus = useCallback(() => {
+    if (pendingFocusFitRef.current != null) {
+      window.clearTimeout(pendingFocusFitRef.current);
+      pendingFocusFitRef.current = null;
+    }
+    setExpandedTrails(new Set());
+    setLayoutTrailId(null);
+    onSidebarTrailChange(null);
     setFocusedTrailId(null);
     setFocusedStepIndex(null);
     setHoveredTrailStep(null);
     setDrawerTarget((prev) => (prev?.kind === 'trail' ? null : prev));
     onTrailSelect?.(null);
-  }, [onTrailSelect]);
+  }, [onTrailSelect, onSidebarTrailChange]);
+
+  // Switching panels keeps the selected trail, but drops transient hover previews.
+  const filesWereActive = useRef(false);
+  useEffect(() => {
+    const enteringFiles = filesActive && !filesWereActive.current;
+    filesWereActive.current = filesActive;
+    if (!enteringFiles) return;
+    if (!sidebarTrail) clearTrailFocus();
+    setSelectedEdgeId(null);
+    setHoveredTrailStep(null);
+    onTrailStepHover?.(null);
+  }, [filesActive, clearTrailFocus, onTrailStepHover, sidebarTrail]);
 
   // Host deep-link: opening the graph from a trail row selects that
-  // flow — expand its steps, focus its edges, and switch the sidebar to
-  // Trails. Guarded by a ref so a later in-tab selection isn't yanked
+  // flow — expand its steps and focus its edges.
+  // Guarded by a ref so a later in-tab selection isn't yanked
   // back; a remount (or a new id) re-applies it.
   const appliedInitialTrailRef = useRef<string | null>(null);
   useEffect(() => {
@@ -2290,25 +2180,9 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     const tl = trails.find((t) => t.id === initialTrailId);
     if (!tl) return;
     appliedInitialTrailRef.current = initialTrailId;
-    setSidebarView('trails');
     setExpandedTrails((prev) => new Set(prev).add(tl.id));
     focusTrailEdges(tl);
   }, [initialTrailId, layoutReady, trails, focusTrailEdges]);
-
-  // Switching sidebar panels also switches the edge vocabulary. Leaving the
-  // Trails panel drops its canvas state (focus, expanded flows, selected
-  // edge) so the Files view's topology edges aren't gated by a flow the user
-  // can no longer see or un-dim.
-  const changeSidebarView = useCallback(
-    (view: 'files' | 'trails') => {
-      setSidebarView(view);
-      if (view === 'trails') return;
-      clearTrailFocus();
-      setExpandedTrails(new Set());
-      setSelectedEdgeId(null);
-    },
-    [clearTrailFocus],
-  );
 
   // Focus a single step's edge on the canvas and open/scroll the trail
   // drawer to that step's snippet. Clicking the already-focused step clears
@@ -2330,6 +2204,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         return;
       }
       // Toggle: clicking the selected step unselects it (back to whole flow).
+      onSidebarTrailChange(tl.id);
       if (focusedTrailId === tl.id && focusedStepIndex === stepIndex) {
         setFocusedStepIndex(null);
         // Pointer is still over the row — keep hover preview so dimming doesn't
@@ -2385,6 +2260,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       renderTrailViewer,
       trailStepMode,
       onTrailSelect,
+      onSidebarTrailChange,
     ],
   );
 
@@ -2810,15 +2686,6 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     return labels;
   }, [dispEdges, selectedFlowStepNos, stepIssueBadgeByEdgeId]);
 
-  // Unique source files across components → sidebar file trees.
-  const treeFilePaths = treeFiles;
-
-  // The hovered node's file (null when not hovering / file-less component).
-  const hoveredFile = useMemo(() => {
-    if (!hoveredComponentAlias) return null;
-    return components.find((c) => c.alias === hoveredComponentAlias)?.file ?? null;
-  }, [components, hoveredComponentAlias]);
-
   // Drawer content renderer. Path-keyed only — the component-keyed
   // `renderFileView` variant was removed; nothing in-repo passed it.
   const fileViewer = renderFileViewer;
@@ -2839,102 +2706,29 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     [],
   );
 
-  // Sidebar chrome — title/description header, Files/Trails (or Issues/Agents)
-  // tab strip, and the lower panels. Everything renders through the shared
+  // Sidebar chrome — description header, files/trails, and optional Issues/Agents
+  // diagnostics. Everything renders through the shared
   // GraphWithSidebar; the graph keeps owning every bit of *state* (focused
-  // trail, active tab, description visibility) because the canvas dims from
+  // trail, diagnostics tab) because the canvas dims from
   // the same facts the sidebar renders.
   const sidebarVisible =
     !hideSidebar &&
-    (title || description || diagnostic || issuesActive || sidebarExtra || sidebarAfterDescription ||
-      treeFilePaths.length > 0 || hasTrails);
-  const sidebarBodyVisible = treeFilePaths.length > 0 || hasTrails || issuesActive;
-  const sidebarTabs: GraphSidebarTab[] | undefined = issuesActive
+    (description || filesActive || issuesActive || sidebarExtra || sidebarAfterDescription ||
+      hasTrails);
+  const sidebarBodyVisible = hasTrails || filesActive || issuesActive;
+  const sidebarTabs: GraphSidebarTab[] | undefined = issuesActive && !sidebarTrail
     ? agentsPanel
       ? [
           { id: 'issues', label: 'Issues' },
           { id: 'agents', label: 'Agents' },
         ]
       : undefined
-    : hasTrails
-      ? [
-          { id: 'trails', label: 'Trails' },
-          { id: 'files', label: 'Files' },
-        ]
-      : undefined;
-  const activeSidebarTab = issuesActive ? diagnosticsTab : sidebarView;
-  // Header block: the extras, then the title/actions row (diagnostic chip +
-  // description toggle), then the description that toggles out from under it.
+    : undefined;
+  // Header block: extras, then the description.
   const sidebarHeader = (
     <>
       {sidebarExtra}
-      {(title || description || diagnostic) && (
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-          {title && (
-            <h2
-              style={{
-                margin: 0,
-                flex: 1,
-                minWidth: 0,
-                fontSize: theme.fontSizes[2],
-                fontWeight: 600,
-                color: theme.colors.text,
-                fontFamily: theme.fonts.monospace,
-              }}
-            >
-              {title}
-            </h2>
-          )}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              flexShrink: 0,
-              // Title's flex:1 already pushes this cluster right; without a
-              // title, keep the actions flush right instead of flush-left.
-              marginLeft: title ? undefined : 'auto',
-            }}
-          >
-            {diagnostic && (
-              <SubsystemDiagnosticToggle
-                {...diagnostic}
-                active={issuesActive}
-                onToggle={toggleIssues}
-              />
-            )}
-            {description && (
-              <button
-                type="button"
-                aria-expanded={descriptionVisible}
-                aria-label={descriptionVisible ? 'Hide description' : 'Show description'}
-                title={descriptionVisible ? 'Hide description' : 'Show description'}
-                onMouseEnter={() => setDescToggleHover(true)}
-                onMouseLeave={() => setDescToggleHover(false)}
-                onClick={() => setDescriptionVisible((v) => !v)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                  width: 22,
-                  height: 22,
-                  padding: 0,
-                  border: 'none',
-                  borderRadius: 4,
-                  background: descriptionVisible || descToggleHover ? theme.colors.border : 'transparent',
-                  color: descriptionVisible || descToggleHover ? theme.colors.text : (theme.colors.textMuted ?? theme.colors.textSecondary),
-                  cursor: 'pointer',
-                  transition: 'background 120ms ease, color 120ms ease',
-                }}
-              >
-                <FileText size={14} />
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-      {description && descriptionVisible && (
+      {description && (
         <div style={{ fontSize: theme.fontSizes[0], lineHeight: 1.5 }}>
           <IndustryMarkdownSlide
             content={description}
@@ -2952,16 +2746,15 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       {sidebarAfterDescription}
     </>
   );
-  // Lower panel: the Issues/Agents diagnostics stack, or the Files/Trails
-  // stack with the trail flow list / repo file tree.
-  const sidebarBody = issuesActive ? (
-    diagnosticsTab === 'agents' && agentsPanel ? (
+  // Lower panel: diagnostics, the file tree, or the trail flow list.
+  const sidebarPanel = issuesActive ? (
+    diagnosticsTab === 'agents' && agentsPanel && !sidebarTrail ? (
       <SubsystemAgentsPanel {...agentsPanel} />
     ) : (
       <SubsystemIssueList
-        issues={issues ?? []}
+        issues={sidebarScope.issues}
         focusCategory={focusIssueCategory}
-        laneStatus={laneStatus}
+        laneStatus={sidebarTrail ? undefined : laneStatus}
         onSelectIssue={focusIssueTarget}
         onDeselectIssue={unfocusIssueTarget}
         onApplyFix={onApplyIssueFix}
@@ -2969,21 +2762,30 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         onExpandedCategoriesChange={handleExpandedCategoriesChange}
       />
     )
-  ) : sidebarView === 'trails' && trails && trails.length > 0 ? (
+  ) : filesActive ? treePaths.entries.length === 0 ? (
+    <div style={{ padding: 16, color: theme.colors.textSecondary }}>No files for this trail.</div>
+  ) : (
+    <SubsystemFileTree
+      headerless
+      files={treeFilePaths}
+      selectedFile={openFile ? treePaths.toDisplay.get(openFile) : null}
+      onSelectFile={(path) => {
+        const file = treePaths.toFile.get(path);
+        if (file) onOpenDeclarationFile(file);
+      }}
+    />
+  ) : null;
+  const trailNavigation = trails && trails.length > 0 ? (
     <TrailsPanel
+      drilldown={trailStepMode !== 'dim'}
       trails={trails}
       expandedTrails={expandedTrails}
-      focusedTrailId={focusedTrailId}
-      focusedStepIndex={focusedStepIndex}
+      focusedTrailId={sidebarTrail?.id ?? focusedTrailId}
+      focusedStepIndex={!sidebarTrail || focusedTrailId === sidebarTrail.id ? focusedStepIndex : null}
+      detailContent={sidebarPanel}
       hoveredTrailStep={hoveredTrailStep}
       onToggleCollapsed={toggleTrailCollapsed}
-      onFocusFlow={(tl) => {
-        // While a solo layout is on, following the selection keeps the canvas
-        // and the highlighted flow in agreement instead of leaving the graph
-        // pinned to a flow the user just navigated away from.
-        if (layoutTrailId != null) setLayoutTrailId(tl.id);
-        focusTrailEdges(tl);
-      }}
+      onFocusFlow={focusTrailEdges}
       onClearFocus={clearTrailFocus}
       onFocusStep={focusTrailStep}
       onHoverStep={(tl, i) => {
@@ -3002,47 +2804,11 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       componentByAlias={componentByAlias}
       stepEmphasis={stepEmphasis}
       onRemoveStepEmphasis={onRemoveStepEmphasis}
-      layoutFocusedTrailId={layoutTrailId}
-      onFocusLayout={toggleLayoutFocus}
     />
-  ) : treeFilePaths.length > 0 ? (
-    <>
-      {repoGroups.groups.map((group, i) => {
-        const groupKey = group.repoKey ?? '__no-repo__';
-        const collapsed = collapsedRepos.has(groupKey);
-        return (
-          <div
-            key={groupKey}
-            style={{
-              flex: collapsed ? '0 0 auto' : 1,
-              minHeight: collapsed ? 0 : undefined,
-              display: 'flex',
-              flexDirection: 'column',
-              borderTop: i > 0 ? `1px solid ${theme.colors.border}` : undefined,
-            }}
-          >
-            {repoGroups.multiRepo && (
-              <RepoGroupHeader
-                group={group}
-                collapsed={collapsed}
-                onToggle={() => toggleRepoCollapsed(groupKey)}
-              />
-            )}
-            {!collapsed && (
-              <SubsystemFileTree
-                files={group.entries.map((e) => e.displayPath)}
-                selectedFile={selected?.file ?? openFile}
-                hoveredFile={hoveredFile}
-                onSelectFile={onTreeSelectFile}
-                hoveredFolder={hoveredBoundaryPath}
-                headerless={repoGroups.multiRepo}
-              />
-            )}
-          </div>
-        );
-      })}
-    </>
   ) : null;
+  const sidebarBody = sidebarTrail && trailStepMode !== 'dim'
+    ? trailNavigation
+    : sidebarPanel ?? trailNavigation;
   const fileOverlayView = fileOverlay && (
     <div
       style={{
@@ -3098,15 +2864,11 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     <GraphWithSidebar
       hidden={!sidebarVisible}
       bodyHidden={!sidebarBodyVisible}
-      stretchHeader={showDesc}
+      headerMaxHeight={sidebarBodyVisible ? '30%' : '100%'}
       header={sidebarHeader}
       tabs={sidebarTabs}
-      activeTab={activeSidebarTab}
-      onTabChange={(id) =>
-        issuesActive
-          ? setDiagnosticsTab(id as 'issues' | 'agents')
-          : changeSidebarView(id as 'files' | 'trails')
-      }
+      activeTab={diagnosticsTab}
+      onTabChange={(id) => setDiagnosticsTab(id as 'issues' | 'agents')}
       sidebarBody={sidebarBody}
       tabListLabel={issuesActive ? 'Diagnostics view' : 'Sidebar view'}
       defaultWidth={persisted.sidebarWidth ?? 450}
@@ -3603,18 +3365,6 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         suppressEscape={fileOverlayOpen}
         hidden={hideDrawer}
         progress={drawerProgress}
-        subheader={
-          drawerTarget?.kind === 'trail' &&
-          focusedTrail &&
-          drawerTarget.stepIndex != null ? (
-            <TrailStackBreadcrumb
-              trail={focusedTrail}
-              stepIndex={drawerTarget.stepIndex}
-              componentByAlias={componentByAlias}
-              onFocusStep={(index) => focusTrailStep(focusedTrail, index)}
-            />
-          ) : null
-        }
       >
         {drawerTarget?.kind === 'trail' &&
         focusedTrail &&
@@ -3649,88 +3399,71 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   );
 }
 
-/** Sidebar header for one repo's tree: owner avatar + repo name + file count.
- *  Clicking toggles the tree's visibility. */
-function RepoGroupHeader({
-  group,
-  collapsed,
-  onToggle,
-}: {
-  group: RepoGroup;
-  collapsed: boolean;
-  onToggle: () => void;
-}) {
-  const { theme } = useTheme();
-  const avatar = repoAvatarUrl(group.repoKey);
-  const label = group.repo ?? 'No repo';
-  return (
-    <div
-      role="button"
-      aria-expanded={!collapsed}
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle();
-      }}
-      title={collapsed ? 'Show files' : 'Hide files'}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '10px 16px 4px',
-        flexShrink: 0,
-        cursor: 'pointer',
-        userSelect: 'none',
-      }}
-    >
-      {avatar ? (
-        <img
-          src={avatar}
-          alt=""
-          width={16}
-          height={16}
-          loading="lazy"
-          style={{ borderRadius: 4, flexShrink: 0, background: theme.colors.border }}
-        />
-      ) : group.owner ? (
-        <span
-          style={{
-            width: 16,
-            height: 16,
-            borderRadius: 4,
-            flexShrink: 0,
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 9,
-            fontWeight: 700,
-            fontFamily: theme.fonts.monospace,
-            color: theme.colors.text,
-            background: theme.colors.border,
-          }}
-        >
-          {group.owner.charAt(0).toUpperCase()}
-        </span>
-      ) : null}
-      <span
-        style={{
-          fontSize: theme.fontSizes[1],
-          fontFamily: theme.fonts.monospace,
-          color: theme.colors.text,
-          fontWeight: 600,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {label}
-      </span>
-    </div>
-  );
-}
-
 export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
+  const { theme } = useTheme();
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const [filesOpen, setFilesOpen] = useState(false);
+  // Browsing a trail is independent of selecting one of its files or findings.
+  const [sidebarTrailId, setSidebarTrailId] = useState<string | null>(() => {
+    const saved = readViewState(props.persistKey);
+    return saved.sidebarTrailId !== undefined ? saved.sidebarTrailId : saved.focusedTrailId ?? null;
+  });
+  const sidebarScope = useMemo(
+    () => buildTrailSidebarScope(props.components, props.trails, props.issues, sidebarTrailId),
+    [props.components, props.trails, props.issues, sidebarTrailId],
+  );
+  const fileCount = sidebarScope.treePaths.entries.length;
+  const trailViewLabel = sidebarScope.trail ? 'Trail' : 'Trails';
+  const trailCount = props.trails?.length ?? 0;
+  const hasFiles = fileCount > 0 || sidebarScope.trail != null;
+  const sidebarDiagnostic: SubsystemDiagnostic = sidebarScope.trail ? {
+    ...props.diagnostic,
+    status: props.issues == null ? props.diagnostic?.status ?? 'unknown'
+      : sidebarScope.issues.length > 0 ? 'issues' : 'ok',
+    issueCount: sidebarScope.issues.length,
+    fixableCount: sidebarScope.issues.filter((issue) => issue.fix != null).length,
+    title: undefined,
+  } : props.diagnostic ?? { status: 'unknown', issueCount: props.issues?.length };
+  const hasIssues = (props.issues != null
+    ? sidebarScope.issues.length
+    : sidebarDiagnostic.issueCount ?? 0) > 0;
+  useEffect(() => {
+    if (sidebarTrailId != null && !sidebarScope.trail) setSidebarTrailId(null);
+  }, [sidebarTrailId, sidebarScope.trail]);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState<boolean>(
+    props.showIssues ?? (props.issues?.length ?? 0) > 0,
+  );
+  const issuesRequested = props.showIssues ?? diagnosticsOpen;
+  const issuesActive = hasIssues && issuesRequested;
+  const filesActive = filesOpen && hasFiles && !issuesActive;
+  const selectSidebarView = (view: 'trails' | 'files' | 'issues') => {
+    const nextIssuesActive = view === 'issues';
+    setFilesOpen(view === 'files');
+    if (nextIssuesActive !== issuesRequested) {
+      if (props.showIssues === undefined) setDiagnosticsOpen(nextIssuesActive);
+      props.diagnostic?.onToggle?.();
+    }
+  };
+  const viewButtonStyle = (active: boolean): CSSProperties => ({
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    height: 28,
+    padding: '4px 16px',
+    fontFamily: theme.fonts.monospace,
+    fontSize: theme.fontSizes[0],
+    border: 'none',
+    borderRadius: 4,
+    background: active ? theme.colors.border : 'transparent',
+    color: active ? theme.colors.text : (theme.colors.textMuted ?? theme.colors.textSecondary),
+    cursor: 'pointer',
+  });
+
+  useEffect(() => {
+    if (props.initialTrailId) setFilesOpen(false);
+  }, [props.initialTrailId]);
 
   // Measure the container so React Flow always has a real, non-zero pixel size
   // (responsive to the parent; avoids the %→0 blank canvas).
@@ -3755,7 +3488,6 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
 
   return (
     <div
-      ref={wrapRef}
       style={{
         position: 'relative',
         width: '100%',
@@ -3765,7 +3497,87 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
         flexDirection: 'column',
       }}
     >
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      {!constructsOnly && !props.hideSidebar && (
+        <header
+          style={{
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '12px 16px',
+            background: theme.colors.background,
+            borderBottom: `1px solid ${theme.colors.border}`,
+          }}
+        >
+          {props.title && (
+            <h2
+              style={{
+                margin: 0,
+                minWidth: 0,
+                fontSize: theme.fontSizes[2],
+                fontWeight: 600,
+                color: theme.colors.text,
+                fontFamily: theme.fonts.monospace,
+                overflowWrap: 'anywhere',
+              }}
+            >
+              {props.title}
+            </h2>
+          )}
+            <div
+              role="group"
+              aria-label="Sidebar view"
+              style={{
+                marginLeft: 'auto',
+                flexShrink: 0,
+                display: 'grid',
+                gridAutoFlow: 'column',
+                gridAutoColumns: '1fr',
+                alignItems: 'center',
+                gap: 2,
+                padding: 2,
+                border: `1px solid ${theme.colors.border}`,
+                borderRadius: 6,
+              }}
+            >
+              <button
+                type="button"
+                aria-label={sidebarScope.trail ? 'Trail' : `Trails (${trailCount} ${trailCount === 1 ? 'trail' : 'trails'})`}
+                aria-pressed={!filesActive && !issuesActive}
+                onClick={() => selectSidebarView('trails')}
+                style={viewButtonStyle(!filesActive && !issuesActive)}
+              >
+                <Route size={14} aria-hidden />
+                <span>{trailViewLabel}</span>
+                {!sidebarScope.trail && <span style={{ fontWeight: 600, marginLeft: 4 }}>{trailCount}</span>}
+              </button>
+              {hasFiles && (
+                <button
+                  type="button"
+                  aria-label={`Files (${fileCount} files)`}
+                  title="Show files"
+                  aria-pressed={filesActive}
+                  onClick={() => selectSidebarView('files')}
+                  style={viewButtonStyle(filesActive)}
+                >
+                  <Files size={14} aria-hidden />
+                  <span>Files</span>
+                  <span style={{ fontWeight: 600, marginLeft: 4 }}>{fileCount}</span>
+                </button>
+              )}
+              {hasIssues && (
+                <SubsystemDiagnosticToggle
+                  {...sidebarDiagnostic}
+                  labelText="Issues"
+                  segmented
+                  active={issuesActive}
+                  onToggle={() => selectSidebarView('issues')}
+                />
+              )}
+            </div>
+        </header>
+      )}
+      <div ref={wrapRef} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {constructsOnly ? (
           <ConstructsCatalog
             components={props.components}
@@ -3785,7 +3597,8 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
           />
         ) : (
           <ReactFlowProvider>
-            <Inner {...props} measured={size} />
+            <Inner {...props} showIssues={issuesActive} filesActive={filesActive} measured={size}
+              sidebarScope={sidebarScope} onSidebarTrailChange={setSidebarTrailId} />
           </ReactFlowProvider>
         )}
       </div>

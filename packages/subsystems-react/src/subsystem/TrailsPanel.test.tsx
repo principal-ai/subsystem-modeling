@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { useState } from 'react';
 import { Window } from 'happy-dom';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react/pure';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import {
   STEP_COPY_FEEDBACK_MS,
+  TRAIL_HOVER_PREVIEW_MS,
   TrailsPanel,
   type TrailsPanelProps,
 } from './TrailsPanel';
@@ -113,33 +115,196 @@ function renderPanel(overrides: Partial<TrailsPanelProps> = {}) {
   );
 }
 
-const COPY_LABEL = 'Copy step 1 of Auth flow for an agent';
+describe('TrailsPanel drilldown navigation', () => {
+  test('clicking a trail opens its steps, and Back restores the list without playback', () => {
+    const onFocusFlow = mock(() => {});
+    const onFocusStep = mock(() => {});
+    const onClearFocus = mock(() => {});
+    const onToggleCollapsed = mock(() => {});
+    function Harness() {
+      const [focusedTrailId, setFocusedTrailId] = useState<string | null>(null);
+      return (
+        <ThemeProvider theme={defaultEditorTheme}>
+          <TrailsPanel
+            drilldown
+            trails={trails}
+            expandedTrails={new Set()}
+            focusedTrailId={focusedTrailId}
+            focusedStepIndex={null}
+            hoveredTrailStep={null}
+            onToggleCollapsed={onToggleCollapsed}
+            onFocusFlow={(trail) => {
+              onFocusFlow(trail);
+              setFocusedTrailId(trail.id);
+            }}
+            onClearFocus={() => {
+              onClearFocus();
+              setFocusedTrailId(null);
+            }}
+            onFocusStep={onFocusStep}
+            onHoverStep={() => {}}
+            onHoverFlow={() => {}}
+            onLeaveStep={() => {}}
+          />
+        </ThemeProvider>
+      );
+    }
+    const { getByRole, queryByRole, queryByText } = render(<Harness />);
+    expect(queryByText('Login.submit')).toBeNull();
+    fireEvent.click(getByRole('button', { name: 'Auth flow', exact: true }));
+    expect(onFocusFlow).toHaveBeenCalledWith(trails[0]);
+    expect(onToggleCollapsed).not.toHaveBeenCalled();
+    fireEvent.click(getByRole('button', { name: /Login.submit/ }));
+    expect(onFocusStep).toHaveBeenCalledWith(trails[0], 0);
+    expect(queryByRole('button', { name: /Play|Pause|Focus layout/ })).toBeNull();
+    fireEvent.click(getByRole('button', { name: 'Back to trails' }));
+    expect(onClearFocus).toHaveBeenCalledTimes(1);
+    expect(getByRole('button', { name: 'Auth flow', exact: true })).toBeTruthy();
+    expect(queryByRole('button', { name: /Login.submit/ })).toBeNull();
+  });
+
+  test('supports Command-click copy in the focused pane without extra controls', async () => {
+    const onFocusStep = mock(() => {});
+    const { getByText, getByLabelText, queryByLabelText, queryByRole } = renderPanel({
+      drilldown: true,
+      focusedTrailId: 'auth-flow',
+      onFocusStep,
+    });
+    fireEvent.click(getByText('Login.submit').closest('button')!, { metaKey: true });
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(buildStepBrief(trails[0]!, 0)));
+    expect(onFocusStep).not.toHaveBeenCalled();
+    expect(queryByRole('button', { name: /Copy step/ })).toBeNull();
+    expect(queryByLabelText('Play Auth flow')).toBeNull();
+    expect(queryByLabelText('Collapse Auth flow')).toBeNull();
+    expect(getByLabelText('Back to trails')).toBeTruthy();
+  });
+
+  test('keeps reordering available in the list even after an old expanded state is restored', () => {
+    const { getByRole } = renderPanel({
+      drilldown: true,
+      onReorder: () => {},
+    });
+    expect(getByRole('button', { name: 'Reorder Auth flow' }).getAttribute('draggable')).toBe('true');
+  });
+});
+
+describe('TrailsPanel trail titles', () => {
+  for (const title of ['Short flow', 'Validate every selected checkout item and persist the complete customer order']) {
+    for (const collapsed of [true, false]) {
+      test(`keeps explicit title spacing for ${collapsed ? 'collapsed' : 'expanded'} ${title}`, () => {
+        const { getByRole } = renderPanel({
+          trails: [{ ...trails[0]!, title }],
+          expandedTrails: collapsed ? new Set() : new Set(['auth-flow']),
+          onReorder: () => {},
+        });
+        const button = getByRole('button', { name: title, exact: true });
+        const row = button.parentElement!;
+        expect(row.style.paddingTop).toBe('14px');
+        expect(row.style.paddingBottom).toBe('14px');
+        expect(row.style.paddingLeft).toBe('16px');
+        expect(row.style.paddingRight).toBe(row.style.paddingLeft);
+        expect(row.style.minHeight).toBe('');
+        expect(row.style.alignItems).toBe('flex-start');
+        expect(button.style.padding).toBe('0px');
+        expect((button.lastElementChild as HTMLElement).style.lineHeight).toBe('20px');
+        expect((button.firstElementChild as SVGElement).style.marginTop).toBe('3px');
+        if (collapsed) {
+          expect(getByRole('button', { name: `Reorder ${title}` }).style.height).toBe('20px');
+          expect(getByRole('button', { name: `Reorder ${title}` }).style.marginRight).toBe('');
+        } else {
+          expect(getByRole('button', { name: `Play ${title}` }).style.height).toBe('20px');
+        }
+      });
+    }
+  }
+
+  test('highlights immediately without a CSS fade while graph preview waits', async () => {
+    const onHoverFlow = mock(() => {});
+    const onLeaveStep = mock(() => {});
+    const { getByRole } = renderPanel({
+      drilldown: true,
+      expandedTrails: new Set(),
+      onHoverFlow,
+      onLeaveStep,
+    });
+    const button = getByRole('button', { name: 'Auth flow', exact: true });
+    const row = button.parentElement!;
+    const icon = button.firstElementChild as SVGElement;
+    const accent = document.createElement('span');
+    accent.style.color = defaultEditorTheme.colors.primary;
+    expect(row.style.background).toBe('transparent');
+    fireEvent.mouseEnter(row);
+    expect(row.style.background).not.toBe('transparent');
+    expect(row.style.transition).toBe('');
+    expect(icon.style.color).toBe(accent.style.color);
+    expect(onHoverFlow).not.toHaveBeenCalled();
+    await waitFor(() => expect(onHoverFlow).toHaveBeenCalledWith(trails[0]));
+    fireEvent.mouseLeave(row);
+    expect(row.style.background).toBe('transparent');
+    expect(onLeaveStep).toHaveBeenCalled();
+  });
+
+  test('a pending graph preview does not hold a row highlight after the pointer leaves', async () => {
+    const onHoverFlow = mock(() => {});
+    const { getByRole } = renderPanel({
+      drilldown: true,
+      expandedTrails: new Set(),
+      // The host may still be showing the previous graph preview.
+      hoveredTrailStep: { trailId: 'auth-flow', stepIndex: null },
+      onHoverFlow,
+    });
+    const row = getByRole('button', { name: 'Auth flow', exact: true }).parentElement!;
+    expect(row.style.background).toBe('transparent');
+    fireEvent.mouseEnter(row);
+    expect(row.style.background).not.toBe('transparent');
+    fireEvent.mouseLeave(row);
+    expect(row.style.background).toBe('transparent');
+    await new Promise((resolve) => setTimeout(resolve, TRAIL_HOVER_PREVIEW_MS + 20));
+    expect(onHoverFlow).not.toHaveBeenCalled();
+  });
+
+  for (const collapsed of [true, false]) {
+    test(`shows a decorative trail icon before the ${collapsed ? 'collapsed' : 'expanded'} trail name`, () => {
+      const onFocusFlow = mock(() => {});
+      const { getByRole } = renderPanel({
+        expandedTrails: collapsed ? new Set() : new Set(['auth-flow']),
+        onFocusFlow,
+      });
+      const button = getByRole('button', { name: 'Auth flow', exact: true });
+      const icon = button.firstElementChild;
+      expect(icon?.tagName.toLowerCase()).toBe('svg');
+      expect(icon?.classList.contains('lucide-route')).toBe(true);
+      expect(icon?.getAttribute('aria-hidden')).toBe('true');
+      expect(icon?.nextElementSibling?.textContent).toBe('Auth flow');
+      fireEvent.click(button);
+      expect(onFocusFlow).toHaveBeenCalledWith(trails[0]);
+    });
+  }
+});
 
 describe('TrailsPanel step copy', () => {
-  test('copy icon is hidden until the step row is hovered', () => {
-    const { getByText, queryByLabelText } = renderPanel();
-    expect(queryByLabelText(COPY_LABEL)).toBeNull();
+  test('does not show a copy button on hover or keyboard focus', () => {
+    const { getByText, queryByRole, container } = renderPanel();
     const row = getByText('Login.submit').closest('button')!;
     fireEvent.mouseEnter(row);
-    expect(queryByLabelText(COPY_LABEL)).not.toBeNull();
-  });
-
-  test('copy icon is revealed on keyboard focus', () => {
-    const { getByText, queryByLabelText } = renderPanel();
-    const row = getByText('Login.submit').closest('button')!;
     fireEvent.focus(row);
-    expect(queryByLabelText(COPY_LABEL)).not.toBeNull();
+    expect(queryByRole('button', { name: /Copy step/ })).toBeNull();
+    expect(container.querySelector('.lucide-copy')).toBeNull();
+    expect(row.hasAttribute('title')).toBe(false);
+    expect(row.firstElementChild?.textContent).toBe('1');
   });
 
-  test('clicking copies the step brief and flashes a copied state', async () => {
-    const { getByText, getByLabelText } = renderPanel();
-    fireEvent.mouseEnter(getByText('Login.submit').closest('button')!);
-    const copy = getByLabelText(COPY_LABEL);
-    fireEvent.mouseDown(copy);
-    fireEvent.click(copy);
-    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+  test('Command-click copies the brief without focusing and replaces the number with a checkmark', async () => {
+    const onFocusStep = mock(() => {});
+    const { getByText, getByRole } = renderPanel({ onFocusStep });
+    const row = getByText('Login.submit').closest('button')!;
+    fireEvent.click(row, { metaKey: true });
+    await waitFor(() => expect(getByRole('status', { name: 'Copied' })).toBeTruthy());
+    expect(writeText).toHaveBeenCalledTimes(1);
     expect(writeText).toHaveBeenCalledWith(buildStepBrief(trails[0]!, 0));
-    expect(copy.getAttribute('title')).toBe('Copied');
+    expect(onFocusStep).not.toHaveBeenCalled();
+    expect(row.hasAttribute('title')).toBe(false);
+    expect(row.firstElementChild?.querySelector('.lucide-check')).not.toBeNull();
   });
 
   test('hovering the row still focuses the step on click', () => {
@@ -149,30 +314,95 @@ describe('TrailsPanel step copy', () => {
     fireEvent.mouseEnter(row);
     fireEvent.click(row);
     expect(onFocusStep).toHaveBeenCalledWith(trails[0]!, 0);
+    expect(writeText).not.toHaveBeenCalled();
   });
 
   test('the copied checkmark clears after the feedback window', async () => {
-    const { getByText, getByLabelText } = renderPanel();
-    fireEvent.mouseEnter(getByText('Login.submit').closest('button')!);
-    const copy = getByLabelText(COPY_LABEL);
-    fireEvent.click(copy);
-    await waitFor(() => expect(copy.getAttribute('title')).toBe('Copied'));
+    const { getByText, getByRole, queryByRole } = renderPanel();
+    const row = getByText('Login.submit').closest('button')!;
+    fireEvent.click(row, { metaKey: true });
+    await waitFor(() => expect(getByRole('status', { name: 'Copied' })).toBeTruthy());
     await new Promise((r) => setTimeout(r, STEP_COPY_FEEDBACK_MS + 20));
-    await waitFor(() => expect(copy.getAttribute('title')).not.toBe('Copied'));
+    await waitFor(() => expect(queryByRole('status', { name: 'Copied' })).toBeNull());
+    expect(row.firstElementChild?.textContent).toBe('1');
   });
 
   test('a failed copy shows no copied state', async () => {
     writeText.mockImplementationOnce(() => Promise.reject(new Error('denied')));
-    const { getByText, getByLabelText } = renderPanel();
-    fireEvent.mouseEnter(getByText('Login.submit').closest('button')!);
-    const copy = getByLabelText(COPY_LABEL);
-    fireEvent.click(copy);
+    const { getByText, queryByRole } = renderPanel();
+    const row = getByText('Login.submit').closest('button')!;
+    fireEvent.click(row, { metaKey: true });
     await new Promise((r) => setTimeout(r, 10));
-    expect(copy.getAttribute('title')).toBe('Copy this step for an agent');
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(queryByRole('status', { name: 'Copied' })).toBeNull();
+    expect(row.firstElementChild?.textContent).toBe('1');
+  });
+
+  test('an unavailable clipboard leaves the number and does not focus the step', () => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    const onFocusStep = mock(() => {});
+    const { getByText, queryByRole } = renderPanel({ onFocusStep });
+    const row = getByText('Login.submit').closest('button')!;
+    fireEvent.click(row, { metaKey: true });
+    expect(writeText).not.toHaveBeenCalled();
+    expect(onFocusStep).not.toHaveBeenCalled();
+    expect(queryByRole('status', { name: 'Copied' })).toBeNull();
+    expect(row.firstElementChild?.textContent).toBe('1');
   });
 });
 
 describe('TrailsPanel step semantics', () => {
+  for (const drilldown of [false, true]) {
+    test(`shows accent annotations above symbols in ${drilldown ? 'drilldown' : 'inline'} steps`, () => {
+      const trail = {
+        ...trails[0]!,
+        steps: [{ ...trails[0]!.steps[0]!, annotation: 'Submit the login request.' }],
+      };
+      const onFocusStep = mock(() => {});
+      const { getByText, getByRole } = renderPanel({
+        trails: [trail],
+        drilldown,
+        focusedTrailId: trail.id,
+        onFocusStep,
+      });
+      const annotation = getByText('Submit the login request.');
+      const symbol = getByText('Login.submit');
+      const accent = document.createElement('span');
+      accent.style.color = defaultEditorTheme.colors.primary;
+      const normal = document.createElement('span');
+      normal.style.color = defaultEditorTheme.colors.text;
+      expect(annotation.style.color).toBe(accent.style.color);
+      expect(annotation.style.fontFamily).toBe(defaultEditorTheme.fonts.monospace);
+      expect(symbol.style.color).toBe(normal.style.color);
+      expect(symbol.style.fontFamily).toBe(defaultEditorTheme.fonts.body);
+      expect(symbol.previousElementSibling).toBe(annotation);
+      const row = symbol.closest('button')!;
+      expect(row.style.paddingTop).toBe('14px');
+      expect(row.style.paddingBottom).toBe('14px');
+      expect(row.style.paddingLeft).toBe(drilldown ? '12px' : '16px');
+      expect((row.firstElementChild as HTMLElement).style.width).toBe('14px');
+      expect((row.firstElementChild as HTMLElement).style.textAlign).toBe('center');
+      fireEvent.click(getByRole('button', { name: /Submit the login request.*Login.submit/ }));
+      expect(onFocusStep).toHaveBeenCalledWith(trail, 0);
+    });
+
+    test(`keeps nested steps offset from the ${drilldown ? 'selected' : 'inline'} header column`, () => {
+      const trail: SubsystemTrail = {
+        ...trails[0]!,
+        steps: [
+          { ...trails[0]!.steps[0]!, from: 'a', to: 'b', symbol: 'A.go' },
+          { ...trails[0]!.steps[0]!, from: 'b', to: 'c', symbol: 'B.go' },
+          { ...trails[0]!.steps[0]!, from: 'a', to: 'd', symbol: 'A.next' },
+        ],
+      };
+      const { getByText } = renderPanel({ trails: [trail], drilldown, focusedTrailId: trail.id });
+      const inset = drilldown ? 12 : 16;
+      expect(getByText('A.go').closest('button')!.style.paddingLeft).toBe(`${inset}px`);
+      expect(getByText('B.go').closest('button')!.style.paddingLeft).toBe(`${inset + 10}px`);
+      expect(getByText('A.next').closest('button')!.style.paddingLeft).toBe(`${inset}px`);
+    });
+  }
+
   test('calls leads with the caller frame', () => {
     const { getByText, queryByText } = renderPanel();
     expect(getByText('Login.submit')).toBeTruthy();

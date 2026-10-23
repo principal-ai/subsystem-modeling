@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react';
+import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
 import { useTheme } from '@principal-ade/industry-theme';
 
 /**
@@ -55,6 +55,8 @@ export interface GraphSidebarProps {
   /** Give the header the flexible share of the column, pinning the lower
    *  panel at half height (e.g. a description that unpacks on demand). */
   stretchHeader?: boolean;
+  /** Cap the upper block while letting short content use only the height it needs. */
+  headerMaxHeight?: CSSProperties['maxHeight'];
   /** Controlled sidebar width (px). */
   width?: number;
   onWidthChange?: (width: number) => void;
@@ -100,6 +102,7 @@ export function GraphSidebar({
   hidden = false,
   bodyHidden = false,
   stretchHeader = false,
+  headerMaxHeight,
   width,
   onWidthChange,
   defaultWidth = DEFAULT_WIDTH,
@@ -207,6 +210,8 @@ export function GraphSidebar({
             style={{
               flex: stretchHeader ? 1 : '0 0 auto',
               minHeight: 0,
+              maxHeight: headerMaxHeight,
+              boxSizing: 'border-box',
               overflowY: 'auto',
               padding: 16,
               display: 'flex',

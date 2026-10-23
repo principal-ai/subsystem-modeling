@@ -56,6 +56,61 @@ function renderNav(props: Record<string, unknown>) {
 }
 
 describe('TrailStepsNav', () => {
+  for (const title of ['Short flow', 'Generate the account report and deliver it to every subscribed recipient']) {
+    for (const selected of [false, true]) {
+      test(`keeps explicit title spacing in the ${selected ? 'selected header' : 'list'} for ${title}`, () => {
+        const { getByRole } = renderNav({
+          trails: [{ ...TRAILS[0], title }],
+          focusedTrailId: selected ? 't1' : null,
+          focusedStepIndex: null,
+          hoveredTrailStep: null,
+          onFocusFlow: () => {},
+          onClearFocus: () => {},
+          onFocusStep: () => {},
+          onHoverStep: () => {},
+          onHoverFlow: () => {},
+          onLeaveStep: () => {},
+        });
+        const button = getByRole('button', { name: selected ? title : new RegExp(title), exact: selected });
+        const row = selected ? button.parentElement! : button;
+        const label = selected ? button : button.children[1] as HTMLElement;
+        expect(row.style.paddingTop).toBe('14px');
+        expect(row.style.paddingBottom).toBe('14px');
+        expect(row.style.paddingLeft).toBe('12px');
+        expect(row.style.paddingRight).toBe(row.style.paddingLeft);
+        expect(row.style.alignItems).toBe('flex-start');
+        expect(label.style.lineHeight).toBe('20px');
+        expect((row.firstElementChild as SVGElement).style.marginTop).toBe('3px');
+        if (selected) {
+          expect(row.style.borderBottomStyle).toBe('');
+          expect(getByRole('button', { name: 'Back to trails' }).style.height).toBe('20px');
+        }
+      });
+    }
+  }
+
+  test('keeps the selected trail header when files or issues replace the step body', () => {
+    let cleared = false;
+    const { getByRole, getByText, queryByText } = renderNav({
+      trails: TRAILS,
+      focusedTrailId: 't1',
+      focusedStepIndex: null,
+      hoveredTrailStep: null,
+      onFocusFlow: () => {},
+      onClearFocus: () => { cleared = true; },
+      onFocusStep: () => {},
+      onHoverStep: () => {},
+      onHoverFlow: () => {},
+      onLeaveStep: () => {},
+      detailContent: createElement('div', null, 'Files for this trail'),
+    });
+    expect(getByRole('button', { name: 'First flow', exact: true })).toBeTruthy();
+    expect(getByText('Files for this trail')).toBeTruthy();
+    expect(queryByText('A.go')).toBeNull();
+    fireEvent.click(getByRole('button', { name: 'Back to trails' }));
+    expect(cleared).toBe(true);
+  });
+
   test('lists trails with step counts and focuses on click', () => {
     let focused: string | null = null;
     const { getByText, getByRole } = renderNav({
@@ -149,10 +204,50 @@ describe('TrailStepsNav', () => {
     expect(getByText('A.go')).toBeTruthy();
     expect(getByText('B.go')).toBeTruthy();
     expect(getByText('Read the source seam.')).toBeTruthy();
+    const accent = document.createElement('span');
+    accent.style.color = defaultEditorTheme.colors.primary;
+    const normal = document.createElement('span');
+    normal.style.color = defaultEditorTheme.colors.text;
+    expect(getByText('A.go').style.color).toBe(normal.style.color);
+    expect(getByText('B.go').style.color).toBe(normal.style.color);
+    expect(getByText('Read the source seam.').style.color).toBe(accent.style.color);
+    expect(getByText('Read the source seam.').style.fontFamily).toBe(defaultEditorTheme.fonts.monospace);
+    expect(getByText('A.go').style.fontFamily).toBe(defaultEditorTheme.fonts.body);
+    expect(getByText('B.go').style.fontFamily).toBe(defaultEditorTheme.fonts.body);
+    expect(getByRole('button', { name: /A\.go/ }).style.paddingLeft).toBe('12px');
+    expect(getByRole('button', { name: /B\.go/ }).style.paddingLeft).toBe('22px');
+    for (const name of [/A\.go/, /B\.go/]) {
+      const row = getByRole('button', { name });
+      expect(row.style.paddingTop).toBe('14px');
+      expect(row.style.paddingBottom).toBe('14px');
+    }
     fireEvent.click(getByRole('button', { name: /B\.go/ }));
     expect(focusedStep).toBe(1);
     fireEvent.click(getByLabelText('Back to trails'));
     expect(cleared).toBe(true);
+  });
+
+  test('returns sibling calls to their parent indentation level', () => {
+    const trail: SubsystemTrail = {
+      id: 'nested',
+      title: 'Nested calls',
+      steps: [step('a', 'b', 'A.go'), step('b', 'c', 'B.go'), step('a', 'd', 'A.next')],
+    };
+    const { getByRole } = renderNav({
+      trails: [trail],
+      focusedTrailId: trail.id,
+      focusedStepIndex: null,
+      hoveredTrailStep: null,
+      onFocusFlow: () => {},
+      onClearFocus: () => {},
+      onFocusStep: () => {},
+      onHoverStep: () => {},
+      onHoverFlow: () => {},
+      onLeaveStep: () => {},
+    });
+    expect(getByRole('button', { name: /A\.go/ }).style.paddingLeft).toBe('12px');
+    expect(getByRole('button', { name: /B\.go/ }).style.paddingLeft).toBe('22px');
+    expect(getByRole('button', { name: /A\.next/ }).style.paddingLeft).toBe('12px');
   });
 
   test('uses rows show the logical hop and the via site', () => {

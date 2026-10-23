@@ -143,6 +143,7 @@ export function SubsystemFileTree({ files, selectedFile, hoveredFile, hoveredFol
       ref={treeRef}
       onClickCapture={handleContainerClick}
       style={{
+        paddingTop: headerless ? 8 : undefined,
         flex: 1,
         minHeight: 0,
         display: 'flex',
@@ -187,7 +188,7 @@ export function SubsystemFileTree({ files, selectedFile, hoveredFile, hoveredFol
             '--trees-fg-muted-override': muted,
             '--trees-accent-override': theme.colors.primary,
             '--trees-font-family-override': theme.fonts.monospace,
-            '--trees-font-size-override': `${theme.fontSizes[0]}px`,
+            '--trees-font-size-override': `${theme.fontSizes[1]}px`,
             '--trees-theme-list-hover-bg': theme.colors.border,
             '--trees-theme-list-active-selection-bg': theme.colors.border,
           } as CSSProperties

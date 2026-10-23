@@ -11,9 +11,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { DragEvent as ReactDragEvent } from 'react';
+import type { DragEvent as ReactDragEvent, ReactNode } from 'react';
 import { useTheme } from '@principal-ade/industry-theme';
-import { Check, ChevronDown, Copy, Focus, GripVertical, Minimize2, Pause, Play, Star } from 'lucide-react';
+import { Check, ChevronDown, Focus, GripVertical, Minimize2, Pause, Play, Route, Star } from 'lucide-react';
 import { IndustryMarkdownSlide } from 'themed-markdown';
 import {
   reorderTargetIndex,
@@ -28,6 +28,7 @@ import {
   type TrailComponentLabels,
 } from './trailStepDisplay';
 import { buildTrailStack } from './trailStack';
+import { TrailStepsNav } from './TrailStepsNav';
 
 /** Pause (ms) between steps when a trail autoplays. */
 export const TRAIL_PLAY_PAUSE_MS = 2500;
@@ -44,10 +45,10 @@ const EMPHASIS_COLOR = '#f5a524';
  */
 export const TRAIL_HOVER_PREVIEW_MS = 150;
 
-/** How long a step's copy button flashes its "copied" checkmark (ms). */
+/** How long a step's number shows its "copied" checkmark (ms). */
 export const STEP_COPY_FEEDBACK_MS = 2000;
 
-/** Square size (px) of a trail header's Play/Collapse control. */
+/** Width (px) of a trail header's Play/Collapse control. */
 const TRAIL_CONTROL_SIZE = 34;
 
 /** Drag state handed to a row's grip while a reorder is in flight. */
@@ -83,6 +84,7 @@ function TrailFlow({
   stepEmphasis,
   onRemoveStepEmphasis,
   componentByAlias,
+  hideHeader = false,
 }: {
   trail: SubsystemTrail;
   collapsed: boolean;
@@ -121,6 +123,8 @@ function TrailFlow({
   onRemoveStepEmphasis?: (tl: SubsystemTrail, stepIndex: number) => void;
   /** Alias → component, for turning hops into human display names. */
   componentByAlias?: TrailComponentLabels;
+  /** The shared drill-down navigation supplies the trail header. */
+  hideHeader?: boolean;
 }) {
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -162,11 +166,6 @@ function TrailFlow({
   // A pending preview must not fire after the row unmounts or collapses.
   useEffect(() => () => cancelHoverPreview(), [cancelHoverPreview]);
   const stepButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  // Per-step copy affordance: revealed while a row is hovered or holds focus.
-  // `focusedStep` tracks focus-within (button or its copy control) so the icon
-  // stays put while the pointer or focus moves between them.
-  const [focusedStep, setFocusedStep] = useState<number | null>(null);
-  const [copyHoverStep, setCopyHoverStep] = useState<number | null>(null);
   const [copiedStep, setCopiedStep] = useState<number | null>(null);
   const copyTimerRef = useRef<number | null>(null);
   // Autoplay: stepping through the flow's steps with a pause between each.
@@ -272,7 +271,7 @@ function TrailFlow({
 
   return (
     <div>
-      <div
+      {!hideHeader && <div
         onMouseEnter={() => {
           if (isHoverSuppressed?.()) return;
           setHeaderHover(true);
@@ -287,12 +286,11 @@ function TrailFlow({
         }}
         style={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           gap: 4,
-          minHeight: TRAIL_CONTROL_SIZE,
-          padding: '0 0 0 16px',
-          background: wholeFlowActive || headerHover ? hoverBg : 'transparent',
-          transition: 'background 120ms ease',
+          padding: '14px 16px',
+          // A collapsed row follows the pointer, not the delayed graph preview.
+          background: headerHover || (!collapsed && wholeFlowActive) ? hoverBg : 'transparent',
         }}
       >
         <button
@@ -314,21 +312,26 @@ function TrailFlow({
           style={{
             flex: 1,
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             minWidth: 0,
-            // Vertical padding, not just the row's min-height: a title that
-            // wraps to two+ lines must grow the header past `minHeight`, and
-            // without this the text sits flush against the row's top and bottom
-            // edges (the controls stretch to the text height). 6px keeps a
-            // one-line title under `TRAIL_CONTROL_SIZE`, so single-line rows
-            // stay 34px.
-            padding: '6px 0',
+            gap: 8,
+            padding: 0,
             border: 'none',
             background: 'transparent',
             textAlign: 'left',
             cursor: 'pointer',
           }}
         >
+          <Route
+            size={14}
+            strokeWidth={2}
+            aria-hidden
+            style={{
+              flexShrink: 0,
+              marginTop: 3,
+              color: headerHover || (!collapsed && wholeFlowActive) ? theme.colors.primary : muted,
+            }}
+          />
           <span
             style={{
               minWidth: 0,
@@ -336,6 +339,7 @@ function TrailFlow({
               fontSize: theme.fontSizes[1],
               fontFamily: theme.fonts.monospace,
               fontWeight: 600,
+              lineHeight: '20px',
               color: theme.colors.text,
             }}
           >
@@ -351,6 +355,7 @@ function TrailFlow({
               gap: 2,
               flexShrink: 0,
               marginRight: 4,
+              height: 20,
               fontSize: theme.fontSizes[0],
               fontFamily: theme.fonts.monospace,
               color: theme.colors.accent ?? theme.colors.primary ?? muted,
@@ -387,7 +392,7 @@ function TrailFlow({
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
-                alignSelf: 'stretch',
+                height: 20,
                 width: TRAIL_CONTROL_SIZE,
                 padding: 0,
                 border: 'none',
@@ -420,7 +425,7 @@ function TrailFlow({
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
-              alignSelf: 'stretch',
+              height: 20,
               width: TRAIL_CONTROL_SIZE,
               padding: 0,
               border: 'none',
@@ -449,7 +454,7 @@ function TrailFlow({
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
-              alignSelf: 'stretch',
+              height: 20,
               width: TRAIL_CONTROL_SIZE,
               padding: 0,
               border: 'none',
@@ -482,8 +487,8 @@ function TrailFlow({
               display: 'inline-flex',
               alignItems: 'center',
               flexShrink: 0,
-              marginRight: 8,
-              padding: '2px 0',
+              height: 20,
+              padding: 0,
               color: gripHover || reorder.isDragging ? theme.colors.text : muted,
               cursor: reorder.isDragging ? 'grabbing' : 'grab',
               transition: 'color 120ms ease',
@@ -492,7 +497,7 @@ function TrailFlow({
             <GripVertical size={14} strokeWidth={2} />
           </span>
         )}
-      </div>
+      </div>}
       {!collapsed && (
         <div
           style={{ display: 'flex', flexDirection: 'column' }}
@@ -504,10 +509,7 @@ function TrailFlow({
         >
           {trail.steps.map((step, i) => {
             const stepActive = active !== null && active.stepIndex === i;
-            const revealed =
-              stepActive || hoveredStep === i || focusedStep === i || copiedStep === i;
             const copied = copiedStep === i;
-            const copyHovered = copyHoverStep === i;
             const record = stepEmphasis?.get(emphasisKey(trail.id, step));
             const display = trailStepDisplay(step, componentByAlias);
             // Calls nest; uses/data steps sit at their anchor frame's depth.
@@ -516,6 +518,7 @@ function TrailFlow({
               i,
               componentByAlias,
             ).frames.length;
+            const stepInset = (hideHeader ? 12 : 16) + Math.max(0, stackDepth - 1) * 10;
             // The guidance body follows step focus: clicking a step opens it,
             // clicking the focused step again returns to the flow. Hover is
             // deliberately not enough — the list would flutter on sweep.
@@ -524,14 +527,8 @@ function TrailFlow({
               <div
                 key={`${trailStepGraphEdgeId(step)}-${i}`}
                 style={{ position: 'relative' }}
-                onFocus={() => setFocusedStep(i)}
-                onBlur={(e) => {
-                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-                    setFocusedStep((cur) => (cur === i ? null : cur));
-                  }
-                }}
               >
-                {/* The row's absolute affordances (star, copy) are scoped to
+                {/* The row's absolute star is scoped to
                     this wrapper so the guidance body below cannot stretch
                     them — `top:0;bottom:0` on the outer row would grow their
                     hit area with the markdown block. */}
@@ -545,16 +542,23 @@ function TrailFlow({
                     setHoveredStep(i);
                     scheduleHoverPreview(() => onHoverStep(trail, i));
                   }}
-                  onClick={() => onFocusStep(trail, i)}
+                  onClick={(e) => {
+                    if (e.metaKey) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      cancelHoverPreview();
+                      copyStep(i);
+                      return;
+                    }
+                    onFocusStep(trail, i);
+                  }}
                   style={{
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: 8,
                     minWidth: 0,
                     width: '100%',
-                    padding: `8px 70px 8px ${
-                      17 + Math.max(0, stackDepth - 1) * 10
-                    }px`,
+                    padding: `14px 36px 14px ${stepInset}px`,
                     textAlign: 'left',
                     borderRadius: 0,
                     border: 'none',
@@ -565,36 +569,63 @@ function TrailFlow({
                   }}
                 >
                   <span
+                    role={copied ? 'status' : undefined}
+                    aria-label={copied ? 'Copied' : undefined}
                     style={{
                       flexShrink: 0,
                       width: 14,
+                      textAlign: 'center',
                       paddingTop: 1,
                       fontSize: theme.fontSizes[0],
                       fontFamily: theme.fonts.monospace,
                       fontWeight: record ? 700 : undefined,
-                      color: record
+                      color: copied
+                        ? theme.colors.primary
+                        : record
                         ? EMPHASIS_COLOR
                         : stepActive
                           ? theme.colors.text
                           : muted,
                     }}
                   >
-                    {i + 1}
+                    {copied ? <Check size={12} strokeWidth={2} aria-hidden /> : i + 1}
                   </span>
                   <span
                     style={{
                       flex: 1,
                       minWidth: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 2,
                       overflowWrap: 'anywhere',
                       whiteSpace: 'normal',
-                      fontSize: theme.fontSizes[1],
-                      fontFamily: theme.fonts.monospace,
-                      color: record
-                        ? EMPHASIS_COLOR
-                        : theme.colors.text,
                     }}
                   >
-                    {display.primary}
+                    {step.annotation && (
+                      <span
+                        style={{
+                          minWidth: 0,
+                          overflowWrap: 'anywhere',
+                          fontSize: theme.fontSizes[1],
+                          fontFamily: theme.fonts.monospace,
+                          color: theme.colors.primary,
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        {step.annotation}
+                      </span>
+                    )}
+                    <span
+                      style={{
+                        minWidth: 0,
+                        overflowWrap: 'anywhere',
+                        fontSize: theme.fontSizes[1],
+                        fontFamily: theme.fonts.body,
+                        color: record ? EMPHASIS_COLOR : theme.colors.text,
+                      }}
+                    >
+                      {display.primary}
+                    </span>
                   </span>
                 </button>
                 {record && (
@@ -603,7 +634,7 @@ function TrailFlow({
                     title="Key step"
                     style={{
                       position: 'absolute',
-                      right: 34,
+                      right: 12,
                       top: 0,
                       bottom: 0,
                       display: 'inline-flex',
@@ -618,54 +649,12 @@ function TrailFlow({
                     <Star size={12} strokeWidth={2} fill={EMPHASIS_COLOR} />
                   </span>
                 )}
-                {revealed && (
-                  <button
-                    type="button"
-                    aria-label={`Copy step ${i + 1} of ${trail.title} for an agent`}
-                    title={copied ? 'Copied' : 'Copy this step for an agent'}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onMouseEnter={() => setCopyHoverStep(i)}
-                    onMouseLeave={() =>
-                      setCopyHoverStep((cur) => (cur === i ? null : cur))
-                    }
-                    onClick={() => copyStep(i)}
-                    style={{
-                      position: 'absolute',
-                      right: 0,
-                      top: 0,
-                      bottom: 0,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: 'auto',
-                      aspectRatio: '1 / 1',
-                      padding: 0,
-                      border: 'none',
-                      borderRadius: 0,
-                      background: copied
-                        ? 'rgba(16,185,129,0.12)'
-                        : copyHovered
-                          ? theme.colors.border
-                          : 'transparent',
-                      color: copied ? '#10b981' : copyHovered ? theme.colors.text : muted,
-                      cursor: 'pointer',
-                      transition: 'background 120ms ease, color 120ms ease',
-                    }}
-                  >
-                    {copied ? (
-                      <Check size={12} strokeWidth={2} />
-                    ) : (
-                      <Copy size={12} strokeWidth={2} />
-                    )}
-                  </button>
-                )}
                 </div>
                 {guidanceVisible && record?.guidance && (
                   <div
                     style={{
-                      // Align with the step text: 17px row inset + 14px number
-                      // column + 8px gap.
-                      padding: '2px 12px 10px 39px',
+                      // Follow the row inset, number column, and text gap.
+                      padding: `2px 12px 10px ${stepInset + 14 + 8}px`,
                       fontSize: theme.fontSizes[0],
                       lineHeight: 1.5,
                     }}
@@ -748,6 +737,10 @@ export interface TrailsPanelProps {
   onRemoveStepEmphasis?: (tl: SubsystemTrail, stepIndex: number) => void;
   /** Alias → component, for turning hops into human display names. */
   componentByAlias?: TrailComponentLabels;
+  /** Slide from the trail list into its steps, without playback controls. */
+  drilldown?: boolean;
+  /** Files or issues for the selected trail, beneath its shared header. */
+  detailContent?: ReactNode;
 }
 
 /**
@@ -774,12 +767,14 @@ export function TrailsPanel({
   stepEmphasis,
   onRemoveStepEmphasis,
   componentByAlias,
+  drilldown = false,
+  detailContent,
 }: TrailsPanelProps) {
   const { theme } = useTheme();
   // Reordering is offered only while every row is collapsed: the compact list
   // is what you drag, and expanded step lists would make drop targets tall and
   // the landing boundary ambiguous.
-  const allCollapsed = trails.every((w) => !expandedTrails.has(w.id));
+  const allCollapsed = drilldown || trails.every((w) => !expandedTrails.has(w.id));
   const reorderable = onReorder != null && allCollapsed;
   // Row being dragged, and the gap the pointer is over (boundaries 0..n
   // between rows). The boundary is where the dragged row will be inserted.
@@ -861,7 +856,7 @@ export function TrailsPanel({
   const accent = theme.colors.accent ?? theme.colors.primary ?? theme.colors.text;
   const isHoverSuppressed = useCallback(() => suppressHoverRef.current, []);
 
-  return (
+  const list = (
     <div
       style={{
         flex: 1,
@@ -926,7 +921,7 @@ export function TrailsPanel({
             )}
             <TrailFlow
               trail={tl}
-              collapsed={!expandedTrails.has(tl.id)}
+              collapsed={drilldown || !expandedTrails.has(tl.id)}
               active={
                 focusedTrailId === tl.id
                   ? { stepIndex: focusedStepIndex }
@@ -935,7 +930,7 @@ export function TrailsPanel({
                     : null
               }
               focusedStepIndex={focusedTrailId === tl.id ? focusedStepIndex : null}
-              onToggleCollapsed={onToggleCollapsed}
+              onToggleCollapsed={drilldown ? () => {} : onToggleCollapsed}
               onFocusFlow={onFocusFlow}
               onClearFocus={onClearFocus}
               onFocusStep={onFocusStep}
@@ -966,5 +961,51 @@ export function TrailsPanel({
         );
       })}
     </div>
+  );
+
+  if (!drilldown) return list;
+
+  return (
+    <TrailStepsNav
+      trails={trails}
+      focusedTrailId={focusedTrailId}
+      focusedStepIndex={focusedStepIndex}
+      hoveredTrailStep={hoveredTrailStep}
+      onFocusFlow={onFocusFlow}
+      onClearFocus={onClearFocus}
+      onFocusStep={onFocusStep}
+      onHoverStep={onHoverStep}
+      onHoverFlow={onHoverFlow}
+      onLeaveStep={onLeaveStep}
+      componentByAlias={componentByAlias}
+      listContent={list}
+      detailContent={detailContent}
+      renderSteps={(trail) => (
+        <TrailFlow
+          key={trail.id}
+          trail={trail}
+          collapsed={false}
+          hideHeader
+          active={
+            focusedTrailId === trail.id
+              ? { stepIndex: focusedStepIndex }
+              : hoveredTrailStep?.trailId === trail.id
+                ? { stepIndex: hoveredTrailStep.stepIndex }
+                : null
+          }
+          focusedStepIndex={focusedTrailId === trail.id ? focusedStepIndex : null}
+          onToggleCollapsed={onToggleCollapsed}
+          onFocusFlow={onFocusFlow}
+          onClearFocus={onClearFocus}
+          onFocusStep={onFocusStep}
+          onHoverStep={onHoverStep}
+          onHoverFlow={onHoverFlow}
+          onLeaveStep={onLeaveStep}
+          componentByAlias={componentByAlias}
+          stepEmphasis={stepEmphasis}
+          onRemoveStepEmphasis={onRemoveStepEmphasis}
+        />
+      )}
+    />
   );
 }

@@ -95,6 +95,24 @@ describe('GraphSidebar chrome', () => {
     expect(queryByText('body')).toBeNull();
   });
 
+  test('a capped header fits its content while the body fills the remaining space', () => {
+    const { container } = renderSidebar({
+      header: createElement('span', null, 'description'),
+      headerMaxHeight: '30%',
+      sidebarBody: createElement('span', null, 'trails'),
+    });
+    const column = sidebarColumn(container);
+    const header = column.firstElementChild as HTMLElement;
+    const body = column.lastElementChild as HTMLElement;
+    expect(header.style.flexGrow).toBe('0');
+    expect(header.style.flexBasis).toBe('auto');
+    expect(header.style.maxHeight).toBe('30%');
+    expect(header.style.boxSizing).toBe('border-box');
+    expect(header.style.overflowY).toBe('auto');
+    expect(body.style.flexGrow).toBe('1');
+    expect(body.style.height).toBe('');
+  });
+
   test('controlled width applies to the column and reports drag changes', () => {
     let reports = 0;
     const { container, getByLabelText } = renderSidebar({

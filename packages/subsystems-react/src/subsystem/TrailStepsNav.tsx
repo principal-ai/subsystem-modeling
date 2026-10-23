@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { ChevronRight, Route, X } from 'lucide-react';
 import { useTheme } from '@principal-ade/industry-theme';
 import type { SubsystemTrail } from './model';
@@ -7,6 +7,7 @@ import {
   trailStepDisplay,
   type TrailComponentLabels,
 } from './trailStepDisplay';
+import { buildTrailStack } from './trailStack';
 
 /**
  * TrailStepsNav — the trails side panel as a two-step slide: a list of trails,
@@ -49,6 +50,12 @@ export interface TrailStepsNavProps {
   componentByAlias?: TrailComponentLabels;
   /** Slide duration in ms. @default 340 */
   transitionMs?: number;
+  /** Optional list content, for hosts with reordering controls. */
+  listContent?: ReactNode;
+  /** Optional step content, for hosts with copy and guidance controls. */
+  renderSteps?: (trail: SubsystemTrail) => ReactNode;
+  /** Replace the step body without replacing the selected trail's header. */
+  detailContent?: ReactNode;
 }
 
 const PANE: CSSProperties = {
@@ -73,6 +80,9 @@ export function TrailStepsNav({
   onLeaveStep,
   componentByAlias,
   transitionMs = 340,
+  listContent,
+  renderSteps,
+  detailContent,
 }: TrailStepsNavProps) {
   const { theme } = useTheme();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -126,7 +136,7 @@ export function TrailStepsNav({
         }}
         onMouseLeave={leaveList}
       >
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 0 12px' }}>
+        {listContent ?? <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 0 12px' }}>
           {trails.map((trail) => {
             const focusedRow = trail.id === focusedTrailId;
             const hovered = hoveredRow === trail.id;
@@ -142,11 +152,11 @@ export function TrailStepsNav({
                 onClick={() => onFocusFlow(trail)}
                 style={{
                   display: 'flex',
-                  alignItems: 'center',
+                  alignItems: 'flex-start',
                   gap: 8,
                   width: '100%',
                   minWidth: 0,
-                  padding: '10px 8px 10px 12px',
+                  padding: '14px 12px',
                   border: 'none',
                   borderRadius: 0,
                   background: focusedRow || hovered ? hoverBg : 'transparent',
@@ -161,6 +171,7 @@ export function TrailStepsNav({
                   aria-hidden
                   style={{
                     flexShrink: 0,
+                    marginTop: 3,
                     color: focusedRow || hovered ? theme.colors.primary : muted,
                     transition: 'color 120ms ease',
                   }}
@@ -173,6 +184,7 @@ export function TrailStepsNav({
                     fontSize: theme.fontSizes[1],
                     fontFamily: theme.fonts.monospace,
                     fontWeight: 600,
+                    lineHeight: '20px',
                     color: theme.colors.text,
                   }}
                 >
@@ -182,6 +194,7 @@ export function TrailStepsNav({
                   style={{
                     flexShrink: 0,
                     fontSize: theme.fontSizes[0],
+                    lineHeight: '20px',
                     fontFamily: theme.fonts.monospace,
                     color: muted,
                   }}
@@ -192,7 +205,7 @@ export function TrailStepsNav({
               </button>
             );
           })}
-        </div>
+        </div>}
       </div>
 
       {/* Step pane. */}
@@ -210,12 +223,11 @@ export function TrailStepsNav({
               style={{
                 flexShrink: 0,
                 display: 'flex',
-                alignItems: 'center',
+                alignItems: 'flex-start',
                 gap: 8,
                 // Left inset + leading cell + gap match the step rows below, so
                 // the trail icon and the step numbers share one column.
-                padding: '6px 6px 6px 12px',
-                borderBottom: `1px solid ${theme.colors.border}`,
+                padding: '14px 12px',
               }}
             >
               <Route
@@ -224,7 +236,7 @@ export function TrailStepsNav({
                 aria-hidden
                 // The focused trail: the icon stays primary, matching the row's
                 // hover colour in the list it came from.
-                style={{ flexShrink: 0, color: theme.colors.primary }}
+                style={{ flexShrink: 0, marginTop: 3, color: theme.colors.primary }}
               />
               {/* The title is the back affordance too: clicking it goes back to
                   the list, like the trailing close. */}
@@ -247,6 +259,7 @@ export function TrailStepsNav({
                   fontSize: theme.fontSizes[1],
                   fontFamily: theme.fonts.monospace,
                   fontWeight: 600,
+                  lineHeight: '20px',
                   color: theme.colors.text,
                 }}
               >
@@ -265,7 +278,7 @@ export function TrailStepsNav({
                   justifyContent: 'center',
                   flexShrink: 0,
                   width: 24,
-                  height: 24,
+                  height: 20,
                   padding: 0,
                   border: 'none',
                   borderRadius: 4,
@@ -278,16 +291,17 @@ export function TrailStepsNav({
                 <X size={16} strokeWidth={2} />
               </button>
             </div>
-            <div
+            {detailContent ?? <div
               style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 0 12px' }}
               onMouseLeave={onLeaveStep}
             >
-              {displayedTrail.steps.map((step, i) => {
+              {renderSteps ? renderSteps(displayedTrail) : displayedTrail.steps.map((step, i) => {
                 const active = focusedStepIndex === i;
                 const hovered =
                   hoveredTrailStep?.trailId === displayedTrail.id &&
                   hoveredTrailStep.stepIndex === i;
                 const display = trailStepDisplay(step, componentByAlias);
+                const stackDepth = buildTrailStack(displayedTrail, i, componentByAlias).frames.length;
                 return (
                   <button
                     key={`${step.from}->${step.to}-${i}`}
@@ -300,7 +314,7 @@ export function TrailStepsNav({
                       gap: 8,
                       width: '100%',
                       minWidth: 0,
-                      padding: '8px 16px 8px 12px',
+                      padding: `14px 16px 14px ${12 + Math.max(0, stackDepth - 1) * 10}px`,
                       border: 'none',
                       borderRadius: 0,
                       background: active || hovered ? hoverBg : 'transparent',
@@ -312,8 +326,8 @@ export function TrailStepsNav({
                     <span
                       style={{
                         flexShrink: 0,
-                        // Same 14px leading column as the header's trail icon,
-                        // so the digit sits under it.
+                        // Root steps align with the header icon; nested steps
+                        // move the number and text together.
                         width: 14,
                         textAlign: 'center',
                         paddingTop: 1,
@@ -339,8 +353,8 @@ export function TrailStepsNav({
                             minWidth: 0,
                             overflowWrap: 'anywhere',
                             fontSize: theme.fontSizes[1],
-                            fontFamily: theme.fonts.body,
-                            color: theme.colors.text,
+                            fontFamily: theme.fonts.monospace,
+                            color: theme.colors.primary,
                             lineHeight: 1.35,
                           }}
                         >
@@ -352,7 +366,7 @@ export function TrailStepsNav({
                           minWidth: 0,
                           overflowWrap: 'anywhere',
                           fontSize: theme.fontSizes[1],
-                          fontFamily: theme.fonts.monospace,
+                          fontFamily: theme.fonts.body,
                           color: theme.colors.text,
                         }}
                       >
@@ -362,7 +376,7 @@ export function TrailStepsNav({
                   </button>
                 );
               })}
-            </div>
+            </div>}
           </>
         )}
       </div>

@@ -2,7 +2,6 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import '@xyflow/react/dist/style.css';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
-import { FileText, LayoutDashboard } from 'lucide-react';
 import { IndustryMarkdownSlide } from 'themed-markdown';
 import { C4Graph } from '../../../subsystem/C4Graph';
 import { GraphWithSidebar } from '../../../subsystem/GraphWithSidebar';
@@ -101,9 +100,6 @@ function Demo() {
     trailId: string;
     stepIndex: number;
   } | null>(null);
-  // The header description, collapsible like the component graph's sidebar.
-  const [descriptionVisible, setDescriptionVisible] = useState(true);
-
   /**
    * EXPERIMENT: when a trail is focused, remove the elements it does not touch
    * from the model outright, so ELK lays the diagram out to the cast alone
@@ -346,6 +342,31 @@ function Demo() {
         fontFamily: 'monospace',
       }}
     >
+      <header
+        style={{
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '12px 16px',
+          background: defaultEditorTheme.colors.background,
+          borderBottom: `1px solid ${defaultEditorTheme.colors.border}`,
+        }}
+      >
+        <h2
+          style={{
+            margin: 0,
+            minWidth: 0,
+            fontSize: defaultEditorTheme.fontSizes[2],
+            fontWeight: 600,
+            color: defaultEditorTheme.colors.text,
+            fontFamily: defaultEditorTheme.fonts.monospace,
+            overflowWrap: 'anywhere',
+          }}
+        >
+          {DRILLDOWN_DOC.title}
+        </h2>
+      </header>
       {/* C4 — the summary and, on focus, the construct implementation. */}
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <GraphWithSidebar
@@ -353,76 +374,22 @@ function Demo() {
           defaultWidth={320}
           minWidth={240}
           maxWidth={480}
+          headerMaxHeight="30%"
           header={
             <>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                {/* Icon + title centred as a group, so the icon stays vertically
-                    centred when the title wraps. */}
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <LayoutDashboard
-                    size={15}
-                    strokeWidth={2}
-                    aria-hidden
-                    style={{
-                      flexShrink: 0,
-                      color:
-                        defaultEditorTheme.colors.textMuted ??
-                        defaultEditorTheme.colors.textSecondary,
-                    }}
-                  />
-                  <h2
-                    style={{
-                      margin: 0,
-                      flex: 1,
-                      minWidth: 0,
-                      fontSize: defaultEditorTheme.fontSizes[2],
-                      fontWeight: 600,
-                      color: defaultEditorTheme.colors.primary,
-                      fontFamily: defaultEditorTheme.fonts.monospace,
-                    }}
-                  >
-                    {DRILLDOWN_DOC.title}
-                  </h2>
-                </div>
-                <button
-                  type="button"
-                  aria-expanded={descriptionVisible}
-                  aria-label={descriptionVisible ? 'Hide description' : 'Show description'}
-                  title={descriptionVisible ? 'Hide description' : 'Show description'}
-                  onClick={() => setDescriptionVisible((v) => !v)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                    width: 22,
-                    height: 22,
-                    padding: 0,
-                    border: 'none',
-                    borderRadius: 4,
-                    background: descriptionVisible ? '#333' : 'transparent',
-                    color: descriptionVisible ? '#ddd' : '#999',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <FileText size={14} />
-                </button>
+              <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+                <IndustryMarkdownSlide
+                  content={MODEL_DESCRIPTION}
+                  slideIdPrefix="c4-desc"
+                  slideIndex={0}
+                  isVisible={true}
+                  theme={defaultEditorTheme}
+                  disableScroll={true}
+                  disableBasePadding
+                  enableKeyboardScrolling={false}
+                  autoFocusOnVisible={false}
+                />
               </div>
-              {descriptionVisible && (
-                <div style={{ fontSize: 12, lineHeight: 1.5 }}>
-                  <IndustryMarkdownSlide
-                    content={MODEL_DESCRIPTION}
-                    slideIdPrefix="c4-desc"
-                    slideIndex={0}
-                    isVisible={true}
-                    theme={defaultEditorTheme}
-                    disableScroll={true}
-                    disableBasePadding
-                    enableKeyboardScrolling={false}
-                    autoFocusOnVisible={false}
-                  />
-                </div>
-              )}
             </>
           }
           sidebarBody={

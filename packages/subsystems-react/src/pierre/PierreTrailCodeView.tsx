@@ -452,19 +452,12 @@ export function PierreTrailCodeView({
             <span title="This file isn't in the local checkout">
               not in checkout
             </span>
-          ) : (
-            <>
-              {step.site?.span
-                ? `${step.site.symbol} · L${step.site.span.startLine}-${step.site.span.endLine}`
-                : `L${step.span?.startLine ?? '?'}`}
-              {onOpenFile && (
-                <OpenFileHeaderButton
-                  file={step.file}
-                  line={step.span?.startLine}
-                  onOpenFile={onOpenFile}
-                />
-              )}
-            </>
+          ) : onOpenFile && (
+            <OpenFileHeaderButton
+              file={step.file}
+              line={step.span?.startLine}
+              onOpenFile={onOpenFile}
+            />
           )}
         </span>
       );
