@@ -105,6 +105,11 @@ let viewerSettings: ViewerSettings = {
 };
 
 const request: RpcRequest = {
+  searchConstructRepositories: async (params) => {
+    const query = (params as { query: string }).query.trim().toLowerCase();
+    return { ok: true, repos: query && inventoryRepo &&
+      `${inventoryRepo.repoKey}`.toLowerCase().includes(query) ? [inventoryRepo] : [] };
+  },
   listVerifiedConstructs: async () => ({ ok: true, repos: [] }),
   listConstructInventory: async () => ({ ok: true, repos: inventoryRepo ? [inventoryRepo] : [] }),
   getConstructInventory: async () => (constructLoadCalls.graphInventory++, inventoryLoadingResponses-- > 0

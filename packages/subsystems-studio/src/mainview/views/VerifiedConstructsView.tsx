@@ -1,7 +1,8 @@
 /**
  * VerifiedConstructsView — the "Constructs" tab.
  *
- * Repositories are scoped to stored subsystem models. Tab load reads saved
+ * Repositories start with stored subsystem models; Alexandria search can open
+ * other registered repositories without analysis. Tab load reads saved
  * model audits and the cumulative timeline only; it never runs Graphify or
  * parses the current graph. Timeline analysis starts only on an explicit action.
  * Spans are read and checked on demand from the working tree.
@@ -34,6 +35,7 @@ import { electrobun, packageLayersChangeSubscribers, subsystemModelChangeSubscri
 import { CenteredMessage, relativeTime } from "../ui";
 import { ConstructComplexityControl } from "../components/ConstructComplexityControl";
 import { ConstructsDrilldown } from "../components/ConstructsDrilldown";
+import { ConstructRepositorySearch } from "../components/ConstructRepositorySearch";
 import { ConstructTimelinePanel, ConstructTimelineTrigger, useConstructTimeline } from "../components/ConstructTimelineControl";
 
 const POLL_MS = 15_000;
@@ -395,6 +397,14 @@ export function VerifiedConstructsView() {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 	const [repos, setRepos] = useState<ConstructInventoryRepo[] | null>(null);
+	const [registryRepos, setRegistryRepos] = useState<ConstructInventoryRepo[]>([]);
+	const sidebarRepos = useMemo(() => {
+		const saved = new Map((repos ?? []).map((repo) => [repo.repoKey.toLowerCase(), repo]));
+		for (const repo of registryRepos) {
+			if (!saved.has(repo.repoKey.toLowerCase())) saved.set(repo.repoKey.toLowerCase(), repo);
+		}
+		return [...saved.values()];
+	}, [repos, registryRepos]);
 	const [error, setError] = useState<string | null>(null);
 	const [focusedRepoKey, setFocusedRepoKey] = useState<string | null>(null);
 	const timeline = useConstructTimeline(focusedRepoKey);
@@ -521,8 +531,8 @@ export function VerifiedConstructsView() {
 		return () => { cancelled = true; };
 	}, [focusedRepoKey]);
 
-	const repo = useMemo(() => repos?.find((entry) => entry.repoKey === focusedRepoKey) ?? null,
-		[repos, focusedRepoKey]);
+	const repo = useMemo(() => sidebarRepos.find((entry) => entry.repoKey === focusedRepoKey) ?? null,
+		[sidebarRepos, focusedRepoKey]);
 
 	// Keep the selected saved audit row current across metadata refreshes.
 	useEffect(() => {
@@ -563,15 +573,6 @@ export function VerifiedConstructsView() {
 	if (repos === null) {
 		return <CenteredMessage title="Loading saved constructs…" />;
 	}
-	if (repos.length === 0) {
-		return (
-			<CenteredMessage
-				title="No repositories with subsystem models"
-				detail="Add a subsystem model for a repository to show it here. Opening this tab does not run Graphify."
-			/>
-		);
-	}
-
 	return (
 		<main aria-label="Constructs"
 			style={{
@@ -597,13 +598,23 @@ export function VerifiedConstructsView() {
 					userSelect: panelDrag ? "none" : undefined,
 				}}
 			>
+				<ConstructRepositorySearch onSelect={(match) => {
+					const existing = sidebarRepos.find((repo) => repo.repoKey.toLowerCase() === match.repoKey.toLowerCase());
+					if (!existing) setRegistryRepos((current) => [...current, match]);
+					setFocusedRepoKey(existing?.repoKey ?? match.repoKey);
+				}} />
+				{sidebarRepos.length === 0 && (
+					<div style={{ padding: 12, color: muted, fontSize: theme.fontSizes[1] }}>
+						Search Alexandria to open a repository, or add a subsystem model.
+					</div>
+				)}
 				{error && (
 					<div role="alert" style={{ flexShrink: 0, padding: "8px 12px", color: "#e5534b", fontSize: theme.fontSizes[1] }}>
 						{error}
 					</div>
 				)}
 				<ConstructsDrilldown
-					repos={repos}
+					repos={sidebarRepos}
 					focusedRepoKey={focusedRepoKey}
 					onFocusRepo={focusRepo}
 					renderFocused={() => repo && (

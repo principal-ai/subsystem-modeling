@@ -84,6 +84,7 @@ import { auditSubsystemModel, applyDeterministicSpanFixes, applySubsystemModelAu
 import { inspectSubsystemSymbol } from "./inspect-symbol";
 import { listVerifiedConstructs, readSubsystemSpan } from "./verified-constructs";
 import { constructInventory, listConstructRepositories } from "./construct-inventory";
+import { searchConstructRepositories } from "./construct-repository-search";
 import { constructTimeline } from "./construct-timeline-proxy";
 import { assessConstructComplexity } from "./jev-complexity";
 import {
@@ -1954,6 +1955,13 @@ const requests: RequestHandlers = {
 					}),
 				);
 				return { graphs };
+			},
+			searchConstructRepositories: async ({ query }) => {
+				try {
+					return { ok: true, repos: searchConstructRepositories(query) };
+				} catch {
+					return { ok: false, error: "Could not search the Alexandria registry.", repos: [] };
+				}
 			},
 			listConstructInventory: async () => {
 				try {

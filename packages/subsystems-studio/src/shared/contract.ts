@@ -1977,6 +1977,11 @@ export type StudioRequests = {
 		params: Record<string, never>;
 		response: { ok: boolean; error?: string; repos: VerifiedConstructRepo[] };
 	};
+	/** Search Alexandria repository metadata without starting analysis. */
+	searchConstructRepositories: {
+		params: { query: string };
+		response: { ok: boolean; error?: string; repos: ConstructInventoryRepo[] };
+	};
 	listConstructInventory: {
 		params: Record<string, never>;
 		response: { ok: boolean; error?: string; repos: ConstructInventoryRepo[] };
