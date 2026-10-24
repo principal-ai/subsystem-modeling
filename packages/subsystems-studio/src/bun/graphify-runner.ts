@@ -218,7 +218,9 @@ export async function runGraphifyExtract(
 
 	const proc = Bun.spawn({
 		cmd: [bin, ...args],
-		cwd: repoRoot,
+		// Graphify re-execs as `python -m graphify` to pin its hash seed.
+		// Running in the checkout can import its code instead of the installed CLI.
+		cwd: outDir,
 		stdio: ["ignore", "pipe", "pipe"],
 		detached: !!opts.signal,
 		env: {

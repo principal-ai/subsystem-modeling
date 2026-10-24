@@ -24,6 +24,38 @@ process.exit(${exitCode});
 	return bin;
 }
 
+describe("Graphify launch isolation", () => {
+	test("runs outside the scanned checkout while passing absolute input and output paths", async () => {
+		const repoRoot = join(root, "shadowing-repo");
+		await fs.mkdir(join(repoRoot, "graphify"), { recursive: true });
+		await fs.writeFile(join(repoRoot, "graphify", "__init__.py"), "raise RuntimeError('checkout code must not run')\n");
+		const bin = join(root, `graphify-${next++}`);
+		await fs.writeFile(bin, `#!${process.execPath}
+import { existsSync } from "node:fs";
+if (existsSync("graphify/__init__.py")) {
+	process.stderr.write("ModuleNotFoundError: No module named 'graspologic'");
+	process.exit(1);
+}
+process.stdout.write(JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2) }));
+await Bun.write(process.env.GRAPHIFY_OUT + "/graph.json", '{"nodes":[{"id":"installed-analyzer"}],"links":[]}');
+`);
+		await fs.chmod(bin, 0o700);
+		for (const outDir of [undefined, join(root, "explicit-output")]) {
+			const result = await runGraphifyExtract({ repoRoot, outDir, bin, isolatedOutput: true });
+			expect(result.ok).toBe(true);
+			if (!result.ok) throw new Error(result.stderr ?? result.error);
+			try {
+				const launched = JSON.parse(result.stdout);
+				expect(launched.cwd).toBe(await fs.realpath(result.outDir));
+				expect(launched.args).toEqual(["extract", repoRoot, "--out", result.outDir, "--code-only"]);
+				expect(result.nodeCount).toBe(1);
+			} finally {
+				if (result.usedTempOut) await fs.rm(result.outDir, { recursive: true, force: true });
+			}
+		}
+	});
+});
+
 describe("Graphify empty-code extraction", () => {
 	test("accepts an explicitly enabled zero-code scan and retains file-level coverage limits", async () => {
 		const bin = await cli(scan +
