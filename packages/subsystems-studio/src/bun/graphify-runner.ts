@@ -215,6 +215,8 @@ export async function runGraphifyExtract(
 	const args = ["extract", repoRoot, "--out", outDir];
 	if (codeOnly) args.push("--code-only");
 	if (opts.extraArgs?.length) args.push(...opts.extraArgs);
+	// Avoid Graphify's one-process-per-CPU default exhausting desktop memory.
+	args.push("--max-workers", "2");
 
 	const proc = Bun.spawn({
 		cmd: [bin, ...args],

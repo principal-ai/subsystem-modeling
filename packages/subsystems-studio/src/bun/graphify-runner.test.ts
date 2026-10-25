@@ -47,7 +47,7 @@ await Bun.write(process.env.GRAPHIFY_OUT + "/graph.json", '{"nodes":[{"id":"inst
 			try {
 				const launched = JSON.parse(result.stdout);
 				expect(launched.cwd).toBe(await fs.realpath(result.outDir));
-				expect(launched.args).toEqual(["extract", repoRoot, "--out", result.outDir, "--code-only"]);
+				expect(launched.args).toEqual(["extract", repoRoot, "--out", result.outDir, "--code-only", "--max-workers", "2"]);
 				expect(result.nodeCount).toBe(1);
 			} finally {
 				if (result.usedTempOut) await fs.rm(result.outDir, { recursive: true, force: true });
