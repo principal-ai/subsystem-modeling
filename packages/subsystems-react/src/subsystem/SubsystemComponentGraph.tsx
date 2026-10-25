@@ -89,6 +89,7 @@ import type { ComponentVerificationState } from './ComponentDeclaration';
 import type { DeclarationSymbolRef, SymbolInspection } from './symbolRefs';
 import { FileDrawer, FILE_DRAWER_HEIGHT_MS } from './FileDrawer';
 import { GraphWithSidebar } from './GraphWithSidebar';
+import { DescriptionOverlay } from './DescriptionOverlay';
 import type { GraphSidebarTab } from './GraphSidebar';
 import { TrailsPanel, TRAIL_PLAY_PAUSE_MS } from './TrailsPanel';
 import type { StepEmphasisMap } from './stepEmphasis';
@@ -618,6 +619,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
 function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, refocusOnLayoutFlip = true, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, stepEmphasis, onRemoveStepEmphasis, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, issues, showIssues, filesActive, sidebarScope, onSidebarTrailChange, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
   const { theme } = useTheme();
   const { fitView, fitBounds } = useReactFlow();
+  const [descriptionOpen, setDescriptionOpen] = useState(false);
   const viewport = useViewport();
   // Restored once per mount from `localStorage` (see `readViewState`). Each
   // graph is its own tab/mount, so `persistKey` is stable for a mount.
@@ -2730,17 +2732,45 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       {sidebarExtra}
       {description && (
         <div style={{ fontSize: theme.fontSizes[0], lineHeight: 1.5 }}>
-          <IndustryMarkdownSlide
-            content={description}
-            slideIdPrefix="subsystem-desc"
-            slideIndex={0}
-            isVisible={true}
-            theme={theme}
-            disableScroll={true}
-            disableBasePadding
-            enableKeyboardScrolling={false}
-            autoFocusOnVisible={false}
-          />
+          <div style={{
+            display: '-webkit-box',
+            WebkitBoxOrient: 'vertical',
+            WebkitLineClamp: 6,
+            maxHeight: '9em',
+            overflow: 'hidden',
+          }}>
+            <IndustryMarkdownSlide
+              content={description}
+              slideIdPrefix="subsystem-desc"
+              slideIndex={0}
+              isVisible={true}
+              theme={theme}
+              disableScroll={true}
+              disableBasePadding
+              enableKeyboardScrolling={false}
+              autoFocusOnVisible={false}
+            />
+          </div>
+          <button
+            type="button"
+            aria-label="Read full description"
+            aria-haspopup="dialog"
+            aria-expanded={descriptionOpen}
+            onClick={() => setDescriptionOpen(true)}
+            style={{
+              marginTop: 6,
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              color: theme.colors.textSecondary,
+              fontFamily: theme.fonts.body,
+              fontSize: theme.fontSizes[0],
+              textDecoration: 'underline',
+              cursor: 'pointer',
+            }}
+          >
+            More
+          </button>
         </div>
       )}
       {sidebarAfterDescription}
@@ -2864,7 +2894,6 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     <GraphWithSidebar
       hidden={!sidebarVisible}
       bodyHidden={!sidebarBodyVisible}
-      headerMaxHeight={sidebarBodyVisible ? '30%' : '100%'}
       header={sidebarHeader}
       tabs={sidebarTabs}
       activeTab={diagnosticsTab}
@@ -2877,6 +2906,9 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       persistKey={persistKey}
       onResizeEnd={() => requestAnimationFrame(() => fitView())}
     >
+      {!hideSidebar && description && descriptionOpen && (
+        <DescriptionOverlay description={description} onClose={() => setDescriptionOpen(false)} />
+      )}
       {/* Graph area */}
       <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: committedDirection === 'vertical' ? 'row' : 'column', minHeight: 0, minWidth: 0 }}>
         {/* Canvas box — the edge-label overlay and legend anchor here, so

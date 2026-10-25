@@ -50,12 +50,19 @@ describe('subsystem graph sidebar', () => {
     expect(content?.textContent).not.toContain('Request subsystem');
   });
 
-  test('caps the scrollable description at 30% above the trails', () => {
+  test('truncates the description without scrolling and offers the full description', () => {
     const body = renderGraph();
-    const description = body.querySelector('[style*="max-height:30%"]') as HTMLElement;
+    const description = body.querySelector('[style*="-webkit-line-clamp:6"]') as HTMLElement;
     expect(description).not.toBeNull();
     expect(description.textContent).toContain('Always visible description.');
-    expect(description.style.overflowY).toBe('auto');
+    expect(description.style.overflow).toBe('hidden');
+    expect(description.style.maxHeight).toBe('9em');
+    const more = body.querySelector('button[aria-label="Read full description"]');
+    expect(more?.textContent).toBe('More');
+    expect(more?.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(more?.getAttribute('aria-expanded')).toBe('false');
+    expect(body.querySelector('[role="dialog"]')).toBeNull();
+    expect(body.querySelector('[style*="max-height:30%"]')).toBeNull();
   });
 
   test('keeps the Files button in the header when no name is provided', () => {
