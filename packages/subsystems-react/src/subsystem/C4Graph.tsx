@@ -1383,10 +1383,16 @@ function Inner({ model, onSelectNode, onSelectEdge, onTrailClick, onToggleContai
           element: n,
           selected: false,
           componentCount: childComponentCount.get(n.id) ?? 0,
-          // A container with components opens; the same affordance closes it
-          // again, so the toggle lives in one place.
-          ...(n.kind === 'container' && (childComponentCount.get(n.id) ?? 0) > 0 && canToggle
-            ? { onExpand: () => toggle(n.id), open: opened.has(n.id) }
+          // A container with components — or with constructs hosted from the
+          // model, when no C4 component layer exists — opens; the same
+          // affordance closes it again, so the toggle lives in one place.
+          ...(n.kind === 'container' &&
+          ((childComponentCount.get(n.id) ?? 0) > 0 ||
+            (constructGraphByContainer?.get(n.id)?.components.length ?? 0) > 0)
+            ? {
+                ...(canToggle ? { onExpand: () => toggle(n.id) } : {}),
+                open: opened.has(n.id),
+              }
             : {}),
           // A component grown to hold its constructs is a drawn-as-card group:
           // no description, absolute box, sized by ELK.
