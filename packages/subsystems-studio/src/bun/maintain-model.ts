@@ -23,7 +23,9 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type {
 	SubsystemModelAuditReport,
+	SubsystemModelProposal,
 	SubsystemModelVerificationLayer,
+	SubsystemVerificationLane,
 } from "../shared/contract";
 import {
 	classifyAuditReport,
@@ -38,6 +40,7 @@ import {
 	type StoredSubsystemModel,
 } from "./subsystem-model-store";
 import {
+	listSubsystemModelProposals,
 	pendingProposalCount,
 	pendingProposalCountForRun,
 } from "./proposal-store";
@@ -170,6 +173,7 @@ function isBoundaryFindingKind(kind: string | undefined): boolean {
 	return (
 		kind === "boundary_module_file_mismatch" ||
 		kind === "boundary_process_nest_disagree" ||
+		kind === "boundary_process_missing" ||
 		// Process-verification kinds (element-store read): never construct work.
 		kind === "boundary_process_unassigned" ||
 		kind === "boundary_process_proposed" ||
@@ -285,9 +289,9 @@ function hasConstructCheckGaps(report: SubsystemModelAuditReport): boolean {
 }
 
 /**
- * Pick the next Maintain agent. Hard failures first, then unconfirmed claims;
- * within each tier: construct → static topology (package/module containment) →
- * dynamic topology (process runtime).
+ * Pick the next Maintain agent. Hard failures first, then module containment,
+ * independent trail/construct evidence, and finally process/container claims.
+ * Missing containers still precede the process membership that depends on them.
  */
 export function selectMaintainRoute(
 	report: SubsystemModelAuditReport,
@@ -310,7 +314,7 @@ export function selectMaintainRoute(
 			mode: "issues",
 		};
 	}
-	// Unconfirmed claims: module containment, then process, then construct.
+	// Unconfirmed claims: module containment, then independent source evidence.
 	if (
 		report.findings.some(isPackageModuleGapFinding) ||
 		report.boundaryChecks?.some(
@@ -320,6 +324,25 @@ export function selectMaintainRoute(
 		return {
 			agent: PACKAGE_MODULE_VERIFIER_AGENT,
 			layer: "static-topology",
+			mode: "verify",
+		};
+	}
+	// Container decisions must not hold up unrelated call-site or declaration
+	// evidence. Keep both lanes ahead of process/container verification.
+	if (report.findings.some(isTrailStepGapFinding)) {
+		return {
+			agent: TRAIL_VERIFIER_AGENT,
+			layer: "trail",
+			mode: "verify",
+		};
+	}
+	if (
+		report.findings.some(isConstructGapFinding) ||
+		hasConstructCheckGaps(report)
+	) {
+		return {
+			agent: CONSTRUCT_VERIFIER_AGENT,
+			layer: "construct",
 			mode: "verify",
 		};
 	}
@@ -357,23 +380,6 @@ export function selectMaintainRoute(
 			mode: "verify",
 		};
 	}
-	if (report.findings.some(isTrailStepGapFinding)) {
-		return {
-			agent: TRAIL_VERIFIER_AGENT,
-			layer: "trail",
-			mode: "verify",
-		};
-	}
-	if (
-		report.findings.some(isConstructGapFinding) ||
-		hasConstructCheckGaps(report)
-	) {
-		return {
-			agent: CONSTRUCT_VERIFIER_AGENT,
-			layer: "construct",
-			mode: "verify",
-		};
-	}
 	return null;
 }
 
@@ -388,6 +394,138 @@ export async function nextMaintainRouteForModel(
 	const saved = await loadSubsystemModelAudit(graphId);
 	if (!saved) return null;
 	return selectMaintainRoute(saved.report);
+}
+
+export interface MaintainPlanProposalSummary {
+	id: string;
+	author?: string;
+	lane: SubsystemVerificationLane;
+	rationale: string;
+	findingKind?: string;
+	runId?: string;
+	/** Jev confidence 0-1; absent when the proposal has not been scored. */
+	confidence?: number;
+	verdict?: "accurate" | "uncertain" | "inaccurate";
+	/** Accept-safety judgment, separate from confidence. */
+	risk?: string;
+	/** Present when scoring failed — the gate fails closed, so it stays pending. */
+	secondOpinionError?: string;
+}
+
+/**
+ * Compact view of the review queue for a Maintain plan. Newest first, so the
+ * proposals a run just produced lead. Full proposal bodies stay at
+ * `GET /proposals`.
+ */
+export function summarizePendingProposals(
+	proposals: SubsystemModelProposal[],
+): MaintainPlanProposalSummary[] {
+	return proposals
+		.slice()
+		.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+		.map((proposal) => ({
+			id: proposal.id,
+			author: proposal.author,
+			lane: proposal.lane,
+			rationale: proposal.rationale,
+			findingKind: proposal.finding?.kind,
+			runId: proposal.runId,
+			confidence: proposal.secondOpinion?.confidence,
+			verdict: proposal.secondOpinion?.verdict,
+			risk: proposal.secondOpinion?.risk,
+			secondOpinionError: proposal.secondOpinion?.error,
+		}));
+}
+
+export interface MaintainPlanResult {
+	ok: boolean;
+	error?: string;
+	graphId: string;
+	title?: string;
+	/** Audit verdict the router used. */
+	verdict?: SubsystemModelAuditVerdict;
+	/** Next stage a sequenced Maintain run would execute, or null when converged. */
+	route: MaintainRoute | null;
+	/** Proposals already waiting for human review. */
+	pendingCount: number;
+	/** Compact review queue — confidence/risk included so low-confidence holds surface. */
+	pendingProposals: MaintainPlanProposalSummary[];
+	/** The auto-accept gate the host is applying to new proposals. */
+	autoAccept: {
+		enabled: boolean;
+		/** Jev confidence required to auto-accept (0-1). */
+		confidenceThreshold: number;
+	};
+	/** Compact audit summary — the full report is still available at /audit. */
+	audit?: {
+		checkedAt: string;
+		needsUpdate: boolean;
+		summary: SubsystemModelAuditReport["summary"];
+		findings: { total: number; error: number; info: number };
+	};
+}
+
+/**
+ * Read-only Maintain plan: run the deterministic audit fresh, classify it, and
+ * return the stage a sequenced run would start with. This is the query path an
+ * external orchestrator needs before deciding whether to start a run — it never
+ * spawns an agent and never writes proposals.
+ */
+export async function planMaintainForModel(
+	graphId: string,
+): Promise<MaintainPlanResult> {
+	const settings = loadViewerSettings();
+	const autoAccept = {
+		enabled: settings.autoAcceptSubsystemModelProposals,
+		confidenceThreshold: settings.autoAcceptSubsystemModelConfidenceThreshold,
+	};
+	const graph = await getSubsystemModel(graphId);
+	if (!graph) {
+		return {
+			ok: false,
+			error: `unknown graph: ${graphId}`,
+			graphId,
+			route: null,
+			pendingCount: 0,
+			pendingProposals: [],
+			autoAccept,
+		};
+	}
+	const audit = await auditSubsystemModel(graphId);
+	if (!audit.ok) {
+		return {
+			ok: false,
+			error: audit.error,
+			graphId,
+			title: graph.title,
+			route: null,
+			pendingCount: 0,
+			pendingProposals: [],
+			autoAccept,
+		};
+	}
+	const findings = audit.report.findings;
+	const pending = await listSubsystemModelProposals(graphId);
+	return {
+		ok: true,
+		graphId,
+		title: graph.title,
+		verdict: classifyAuditReport(audit.report),
+		route: selectMaintainRoute(audit.report),
+		pendingCount: pending.length,
+		pendingProposals: summarizePendingProposals(pending),
+		autoAccept,
+		audit: {
+			checkedAt: audit.report.checkedAt,
+			needsUpdate: audit.report.needsUpdate,
+			summary: audit.report.summary,
+			findings: {
+				total: findings.length,
+				error: findings.filter((f) => f.severity === "error").length,
+				info: findings.filter((f) => f.severity === "info").length,
+			},
+		},
+	};
 }
 
 export function maintainActionLabel(_mode: MaintainMode | null): string {

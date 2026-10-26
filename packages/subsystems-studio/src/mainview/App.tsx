@@ -33,6 +33,8 @@ import { PackageLayersReposView } from "./views/PackageLayersReposView";
 import { OpencodeV2DebugView } from "./views/OpencodeV2DebugView";
 import { SessionEventsView } from "./views/SessionEventsView";
 import { SubsystemModelView } from "./views/SubsystemModelView";
+import { SubsystemC4View } from "./views/SubsystemC4View";
+import { C4SketchView } from "./views/C4SketchView";
 import { TourViewer } from "./views/TourViewer";
 
 interface BoundaryState {
@@ -176,6 +178,23 @@ function ActiveTab({
 					});
 					return;
 				}
+				if (tab.kind === "subsystem-c4") {
+					setState({
+						kind: "subsystem-c4",
+						id: tab.id,
+						graphId: tab.graphId ?? "",
+						source: tab.c4Source,
+					});
+					return;
+				}
+				if (tab.kind === "c4-sketch") {
+					setState({
+						kind: "c4-sketch",
+						id: tab.id,
+						sketchId: tab.sketchId ?? "",
+					});
+					return;
+				}
 				if (tab.kind === "subsystem-showcase") {
 					setState({
 						kind: "subsystem-showcase",
@@ -277,6 +296,18 @@ function ActiveTab({
 				liveAgent={state.liveAgent}
 			/>
 		);
+	}
+	if (state.kind === "subsystem-c4") {
+		return (
+			<SubsystemC4View
+				tabId={state.id}
+				graphId={state.graphId}
+				source={state.source}
+			/>
+		);
+	}
+	if (state.kind === "c4-sketch") {
+		return <C4SketchView tabId={state.id} sketchId={state.sketchId} />;
 	}
 	if (state.kind === "subsystem-showcase") {
 		return (

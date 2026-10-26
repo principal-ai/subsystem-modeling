@@ -48,8 +48,19 @@ import { autoAcceptProposalIfConfident } from "./jev-maintenance";
 import { buildProposalSourceContext } from "./proposal-source-context";
 import { loadViewerSettings } from "./viewer-settings";
 import { getMaintainerProbeRegistry } from "./maintainer-probe";
+import { listSubsystemModelRuns } from "./subsystem-model-runs";
+import type { MaintainPlanResult } from "./maintain-model";
 import { registerProjectInAlexandria } from "./alexandria";
-import type { SubsystemModelProposalChange } from "../shared/contract";
+import {
+	createC4Sketch,
+	deleteC4Sketch,
+	getC4Sketch,
+	listC4Sketches,
+	updateC4Sketch,
+	type C4SketchCreateInput,
+	type C4SketchPatch,
+} from "./c4-sketch-store";
+import type { SubsystemModelProposalChange, SubsystemC4Source } from "../shared/contract";
 const PORT = Number(process.env["PRINCIPAL_STUDIO_HTTP_PORT"] ?? 3045);
 
 /** Callback invoked when an agent requests a graph be opened in a tab. */
@@ -61,12 +72,50 @@ export type OpenShowcaseTabHandler = (opts: {
 	ids: string[];
 }) => Promise<{ ok: boolean; error?: string; tabId?: string }>;
 
+/** Callback invoked when an agent opens a model's C4 projection tab. */
+export type OpenC4TabHandler = (
+	id: string,
+	source?: SubsystemC4Source,
+) => Promise<{ ok: boolean; error?: string; tabId?: string }>;
+
+/** Callback invoked when an agent opens a C4 sketch tab. */
+export type OpenC4SketchHandler = (
+	sketchId: string,
+) => Promise<{ ok: boolean; error?: string; tabId?: string }>;
+
+/** Callback invoked when a sketch is deleted (close any tab rendering it). */
+export type DeleteC4SketchHandler = (
+	sketchId: string,
+) => Promise<{ ok: boolean; error?: string }>;
+
 /** Callback invoked when an agent deletes a graph (bridged so the host can
  *  close tabs rendering it before the record disappears). */
 export type DeleteGraphHandler = (id: string) => Promise<{ ok: boolean; error?: string }>;
 
 /** Notify the renderer when HTTP creates/accepts/rejects proposals. */
 export type ProposalsChangedHandler = (graphId: string, pendingCount: number) => void;
+
+export type MaintainStartResult = {
+	ok: boolean;
+	started?: boolean;
+	alreadyRunning?: boolean;
+	model?: string;
+	error?: string;
+};
+
+/**
+ * Host-backed Maintain operations. Injected by the Studio host because the
+ * runner depends on the OpenCode session service, Graphify, and the in-memory
+ * in-flight registry — none of which belong in the HTTP layer.
+ */
+export type MaintainHttpHandlers = {
+	plan: (graphId: string) => Promise<MaintainPlanResult>;
+	start: (
+		graphId: string,
+		opts: { model?: string },
+	) => Promise<MaintainStartResult>;
+	isRunning: (graphId: string) => boolean;
+};
 
 let server: ReturnType<typeof Bun.serve> | null = null;
 let onProposalsChanged: ProposalsChangedHandler | null = null;
@@ -275,6 +324,10 @@ export async function handleSubsystemModelRequest(
 	onOpenTab: OpenGraphTabHandler,
 	onDeleteGraph: DeleteGraphHandler,
 	onOpenShowcase: OpenShowcaseTabHandler,
+	maintain?: MaintainHttpHandlers,
+	onOpenC4?: OpenC4TabHandler,
+	onOpenC4Sketch?: OpenC4SketchHandler,
+	onDeleteC4Sketch?: DeleteC4SketchHandler,
 ): Promise<Response> {
 	const url = new URL(req.url);
 	const path = url.pathname;
@@ -406,6 +459,53 @@ export async function handleSubsystemModelRequest(
 		});
 	}
 
+	// Maintain plan (read-only): fresh deterministic audit + next routed stage.
+	// Lets an external orchestrator decide whether a run is worth starting
+	// without duplicating the router's priority order.
+	const maintainPlanMatch = path.match(
+		/^\/api\/subsystem-model\/([^/]+)\/maintain\/plan$/,
+	);
+	if (maintainPlanMatch && method === "GET") {
+		if (!maintain) return error("maintain is not available in this host", 503);
+		const result = await maintain.plan(maintainPlanMatch[1]!);
+		return json(result, result.ok ? 200 : 404);
+	}
+
+	// Maintain run state: in-flight flag plus recent persisted runs.
+	const maintainStatusMatch = path.match(
+		/^\/api\/subsystem-model\/([^/]+)\/maintain\/status$/,
+	);
+	if (maintainStatusMatch && method === "GET") {
+		if (!maintain) return error("maintain is not available in this host", 503);
+		const id = maintainStatusMatch[1]!;
+		const graph = await getSubsystemModel(id);
+		if (!graph) return error(`unknown graph: ${id}`, 404);
+		const runs = await listSubsystemModelRuns({ graphId: id, limit: 10 });
+		return json({
+			ok: true,
+			graphId: id,
+			running: maintain.isRunning(id),
+			runs,
+		});
+	}
+
+	// Start the sequenced Maintain run (audit → routed stages, stopping when a
+	// stage leaves proposals for a human). Returns immediately; poll /status.
+	const maintainStartMatch = path.match(
+		/^\/api\/subsystem-model\/([^/]+)\/maintain$/,
+	);
+	if (maintainStartMatch && method === "POST") {
+		if (!maintain) return error("maintain is not available in this host", 503);
+		const body = (await parseBody(req)) as { model?: unknown } | null;
+		if (body?.model !== undefined && typeof body.model !== "string") {
+			return error("model must be a string when provided");
+		}
+		const result = await maintain.start(maintainStartMatch[1]!, {
+			model: body?.model?.trim() || undefined,
+		});
+		return json(result, result.ok ? 202 : 400);
+	}
+
 	// Backfill missing `site` constructs on calls steps. Dry-run unless
 	// `{ apply: true }`; one model by id, or every model with the id-less path.
 	const backfillOneMatch = path.match(
@@ -523,6 +623,89 @@ export async function handleSubsystemModelRequest(
 		return json({ ok: true, proposal: result.proposal });
 	}
 
+	// C4 sketches — authored, unverified hypotheses. Separate from models and
+	// from the accepted element store.
+	if (path === "/api/c4-sketches" && method === "GET") {
+		const repoKey = url.searchParams.get("repo")?.trim() || undefined;
+		const sketches = await listC4Sketches(repoKey ? { repoKey } : undefined);
+		return json({ ok: true, sketches });
+	}
+
+	if (path === "/api/c4-sketches" && method === "POST") {
+		const body = (await parseBody(req)) as Record<string, unknown> | null;
+		if (!body) return error("Invalid JSON body");
+		const result = await createC4Sketch({
+			title: typeof body["title"] === "string" ? body["title"] : "",
+			repoKeys: body["repoKeys"] as string[] | undefined,
+			model: body["model"] as C4SketchCreateInput["model"],
+			author: typeof body["author"] === "string" ? body["author"] : undefined,
+			notes: typeof body["notes"] === "string" ? body["notes"] : undefined,
+		});
+		if (!result.ok) return error(result.error, 400);
+		return json({ ok: true, sketch: result.sketch }, 201);
+	}
+
+	const c4SketchOpenMatch = path.match(/^\/api\/c4-sketches\/([^/]+)\/open$/);
+	if (c4SketchOpenMatch && method === "POST") {
+		if (!onOpenC4Sketch) return error("C4 sketch tabs are not available in this host", 503);
+		const result = await onOpenC4Sketch(c4SketchOpenMatch[1]!);
+		if (!result.ok) return error(result.error ?? "could not open C4 sketch tab", 404);
+		return json(result);
+	}
+
+	const c4SketchMatch = path.match(/^\/api\/c4-sketches\/([^/]+)$/);
+	if (c4SketchMatch) {
+		const sketchId = c4SketchMatch[1]!;
+		if (method === "GET") {
+			const sketch = await getC4Sketch(sketchId);
+			if (!sketch) return error("Sketch not found", 404);
+			return json({ ok: true, sketch });
+		}
+		if (method === "PUT") {
+			const body = (await parseBody(req)) as C4SketchPatch | null;
+			if (!body) return error("Invalid JSON body");
+			const result = await updateC4Sketch(sketchId, body);
+			if (!result.ok) return error(result.error, 400);
+			return json({ ok: true, sketch: result.sketch });
+		}
+		if (method === "DELETE") {
+			const result = onDeleteC4Sketch
+				? await onDeleteC4Sketch(sketchId)
+				: { ok: await deleteC4Sketch(sketchId) };
+			if (!result.ok) return error(result.error ?? "Sketch not found", 404);
+			return json({ ok: true });
+		}
+	}
+
+	// C4 projection of a model — accepted containers when available, else a
+	// draft derived from `process` keys. Read-only.
+	const c4OpenMatch = path.match(/^\/api\/subsystem-model\/([^/]+)\/c4\/open$/);
+	if (c4OpenMatch && method === "POST") {
+		if (!onOpenC4) return error("C4 tabs are not available in this host", 503);
+		const body = (await parseBody(req)) as { source?: unknown } | null;
+		const raw = typeof body?.source === "string" ? body.source : undefined;
+		if (raw !== undefined && raw !== "auto" && raw !== "accepted" && raw !== "draft") {
+			return error("source must be auto, accepted, or draft", 400);
+		}
+		const result = await onOpenC4(c4OpenMatch[1]!, raw);
+		if (!result.ok) return error(result.error ?? "could not open C4 tab", 404);
+		return json(result);
+	}
+
+	const c4Match = path.match(/^\/api\/subsystem-model\/([^/]+)\/c4$/);
+	if (c4Match && method === "GET") {
+		const id = c4Match[1]!;
+		const raw = url.searchParams.get("source") ?? "auto";
+		if (raw !== "auto" && raw !== "accepted" && raw !== "draft") {
+			return error("source must be auto, accepted, or draft", 400);
+		}
+		const graph = await getSubsystemModel(id);
+		if (!graph) return error("Graph not found", 404);
+		const { buildC4ProjectionForModel } = await import("./c4-projection");
+		const projection = await buildC4ProjectionForModel(graph, raw);
+		return json({ ok: true, ...projection });
+	}
+
 	// Get / Open / Update / Delete by id
 	const graphMatch = path.match(/^\/api\/subsystem-model\/([^/]+)$/);
 	if (graphMatch) {
@@ -605,13 +788,21 @@ export function startHttpServer(
 	onDeleteGraph: DeleteGraphHandler,
 	onOpenShowcase: OpenShowcaseTabHandler,
 	proposalsChanged?: ProposalsChangedHandler,
+	maintain?: MaintainHttpHandlers,
+	onOpenC4?: OpenC4TabHandler,
+	onOpenC4Sketch?: OpenC4SketchHandler,
+	onDeleteC4Sketch?: DeleteC4SketchHandler,
 ): void {
 	onProposalsChanged = proposalsChanged ?? null;
 	server = Bun.serve({
 		port: PORT,
 		hostname: "127.0.0.1",
+		// Audits and Maintain plans can run longer than Bun's 10s default; this
+		// is the maximum Bun allows and keeps plan/audit requests from being cut
+		// off mid-pass on larger models.
+		idleTimeout: 255,
 		async fetch(req) {
-			return handleSubsystemModelRequest(req, onOpenTab, onDeleteGraph, onOpenShowcase);
+			return handleSubsystemModelRequest(req, onOpenTab, onDeleteGraph, onOpenShowcase, maintain, onOpenC4, onOpenC4Sketch, onDeleteC4Sketch);
 		},
 	});
 

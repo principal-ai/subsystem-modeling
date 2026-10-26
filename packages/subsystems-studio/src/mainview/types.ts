@@ -7,6 +7,7 @@
 import type { DataSlice } from "@principal-ade/panel-framework-core";
 import type { FileTree } from "@principal-ai/repository-abstraction";
 import type { IntroductionTour } from "@principal-ai/file-city-builder";
+import type { SubsystemC4Source } from "../shared/contract";
 
 export type TabState =
 	| { kind: "loading" }
@@ -36,6 +37,17 @@ export type TabState =
 			liveAgent?: string;
 	  }
 	| { kind: "subsystem-showcase"; id: string; title: string; ids: string[] }
+	| {
+			kind: "subsystem-c4";
+			id: string;
+			graphId: string;
+			source?: SubsystemC4Source;
+	  }
+	| {
+			kind: "c4-sketch";
+			id: string;
+			sketchId: string;
+	  }
 	| { kind: "error"; message: string }
 	| {
 			kind: "ready-tour";

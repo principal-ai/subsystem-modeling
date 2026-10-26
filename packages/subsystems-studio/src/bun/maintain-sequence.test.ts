@@ -3,7 +3,9 @@ import type { SubsystemModelAuditReport } from "../shared/contract";
 import {
 	CONSTRUCT_FIXER_AGENT,
 	CONSTRUCT_VERIFIER_AGENT,
+	CONTAINER_VERIFIER_AGENT,
 	PACKAGE_MODULE_VERIFIER_AGENT,
+	TRAIL_VERIFIER_AGENT,
 } from "./maintain-model";
 import { runMaintainSequence, type MaintainStageRun } from "./maintain-sequence";
 
@@ -178,4 +180,46 @@ describe("runMaintainSequence", () => {
 		expect(result.stages).toHaveLength(1);
 		expect(result.blockedAt?.agent).toBe(CONSTRUCT_FIXER_AGENT);
 	});
+
+	for (const containerPending of [0, 2]) {
+		test(`repairs trail and construct evidence before a container stage with ${containerPending} pending proposals blocks`, async () => {
+			const container: SubsystemModelAuditReport["findings"][number] = {
+				kind: "boundary_process_proposed",
+				severity: "info",
+				processKey: "app/host",
+				message: "container proposal awaits a decision",
+			};
+			const declaration: SubsystemModelAuditReport["findings"][number] = {
+				kind: "construct_span_stale",
+				severity: "info",
+				componentAlias: "a",
+				message: "declaration evidence is stale",
+			};
+			const trail: SubsystemModelAuditReport["findings"][number] = {
+				kind: "step_span_unconfirmed",
+				severity: "error",
+				trailId: "wt",
+				step: 0,
+				message: "call-site evidence is missing",
+			};
+			const { audit, calls } = scriptedAudit([
+				emptyReport({ findings: [container, declaration, trail] }),
+				emptyReport({ findings: [container, declaration] }),
+				emptyReport({ findings: [container] }),
+			]);
+			const result = await runMaintainSequence({
+				audit,
+				runStage: async () => okRun(`r${calls.n}`),
+				pendingForRun: async (runId) => runId === "r3" ? containerPending : 0,
+			});
+			expect(result.stages.map((stage) => stage.route.agent)).toEqual([
+				TRAIL_VERIFIER_AGENT,
+				CONSTRUCT_VERIFIER_AGENT,
+				CONTAINER_VERIFIER_AGENT,
+			]);
+			expect(result.outcome).toBe(containerPending ? "needs_unblock" : "stalled");
+			expect(result.blockedAt?.agent).toBe(CONTAINER_VERIFIER_AGENT);
+			expect(result.stages).toHaveLength(3);
+		});
+	}
 });

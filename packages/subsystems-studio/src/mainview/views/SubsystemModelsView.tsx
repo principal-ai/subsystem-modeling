@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { LayoutDashboard, LayoutGrid, List, Loader2, Share2, Trash2 } from "lucide-react";
+import { LayoutDashboard, LayoutGrid, List, Loader2, PencilRuler, Share2, Trash2 } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
 	buildRepoGroups,
@@ -20,6 +20,7 @@ import {
 	type RepoGroup,
 } from "@principal-ai/subsystems-react";
 import type {
+	C4SketchSummary,
 	SubsystemModelSummary,
 	StudioMessages,
 } from "../../shared/contract";
@@ -35,6 +36,7 @@ import {
 	type RepoFileCoverage,
 } from "../components/FilesDrilldown";
 import { SubsystemModelCard } from "../components/SubsystemModelCard";
+import { SubsystemSketchCard } from "../components/SubsystemSketchCard";
 import {
 	Modal,
 	ModalBody,
@@ -751,6 +753,7 @@ export function SubsystemModelsView({
 } = {}) {
 	const { theme } = useTheme();
 	const [graphs, setGraphs] = useState<SubsystemModelSummary[] | null>(null);
+	const [sketches, setSketches] = useState<C4SketchSummary[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [confirmId, setConfirmId] = useState<string | null>(null);
 	const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -932,7 +935,12 @@ export function SubsystemModelsView({
 
 	const refresh = useCallback(async () => {
 		try {
-			const subResult = await electrobun.rpc!.request.listSubsystemModels({});
+			const [subResult, sketchResult] = await Promise.all([
+				electrobun.rpc!.request.listSubsystemModels({}),
+				electrobun.rpc!.request
+					.listC4Sketches({})
+					.catch(() => null),
+			]);
 			// Keep the previous array identity when nothing changed — otherwise
 			// every 10s poll rebuilds the file-panel groups and the Pierre
 			// tree sees a new `files` prop, calling `resetPaths` and wiping
@@ -943,9 +951,17 @@ export function SubsystemModelsView({
 					? prev
 					: subResult.graphs,
 			);
+			setSketches((prev) => {
+				if (!sketchResult?.ok) return prev ?? [];
+				const next = sketchResult.sketches ?? [];
+				return prev !== null && JSON.stringify(prev) === JSON.stringify(next)
+					? prev
+					: next;
+			});
 			setError(null);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
+			setSketches((prev) => prev ?? []);
 		}
 	}, []);
 
@@ -1005,6 +1021,27 @@ export function SubsystemModelsView({
 		},
 		[graphs, onOpen],
 	);
+
+	/** Open an authored C4 hypothesis in its own tab. */
+	const onOpenSketch = useCallback((sketch: C4SketchSummary) => {
+		void electrobun.rpc!.request.openC4Sketch({ sketchId: sketch.id });
+	}, []);
+
+	/** Delete a sketch, then drop it from the in-memory list. */
+	const onDeleteSketch = useCallback(async (sketch: C4SketchSummary) => {
+		try {
+			const res = await electrobun.rpc!.request.deleteC4Sketch({
+				sketchId: sketch.id,
+			});
+			if (!res.ok) {
+				setError(res.error ?? "Could not delete sketch");
+				return;
+			}
+			setSketches((prev) => prev?.filter((s) => s.id !== sketch.id) ?? null);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		}
+	}, []);
 
 	/** Map mode: a file click just selects its owning graph (no preview pane). */
 	const onMapHighlightGraph = useCallback(
@@ -1262,7 +1299,7 @@ export function SubsystemModelsView({
 			</SubsystemsTabShell>
 		);
 	}
-	if (graphs === null) {
+	if (graphs === null || sketches === null) {
 		return (
 			<SubsystemsTabShell>
 				<SubsystemsTabBody>
@@ -1271,7 +1308,7 @@ export function SubsystemModelsView({
 			</SubsystemsTabShell>
 		);
 	}
-	if (graphs.length === 0) {
+	if (graphs.length === 0 && sketches.length === 0) {
 		return (
 			<SubsystemsTabShell>
 				<SubsystemsTabBody>
@@ -1287,6 +1324,17 @@ export function SubsystemModelsView({
 	const now = Date.now();
 	const inEditedWindow = (g: SubsystemModelSummary) =>
 		editedInWindow(g.updatedAt, editedWindow, now);
+	// Sketches are a separate artifact, but they carry repo keys and updatedAt,
+	// so the list's repo drilldown and recency window apply the same way. A
+	// showcase is an explicit model-id set, so sketches are not part of it.
+	const visibleSketches = (sketches ?? []).filter((sketch) => {
+		if (scope || previewFile) return false;
+		if (!editedInWindow(sketch.updatedAt, editedWindow, now)) return false;
+		if (!focusedRepo) return true;
+		return sketch.repoKeys.some(
+			(repoKey) => drilldownRepoKey({ repoKey }) === focusedRepo,
+		);
+	});
 	// Showcase scope: an explicit, ordered id set. When present it wins over
 	// repo drilldown and recency hiding — the agent chose the set and its order.
 	const scopeOrder = scope?.ids ?? null;
@@ -1381,6 +1429,48 @@ export function SubsystemModelsView({
 						onClick: () => onFocusRepo(focusedRepo),
 					}
 				: undefined;
+	const sketchSection = visibleSketches.length > 0 ? (
+		<div
+			style={{
+				borderBottom: `1px solid ${theme.colors.border ?? "#333"}`,
+			}}
+		>
+			<div
+				style={{
+					display: "flex",
+					alignItems: "center",
+					gap: 6,
+					padding: "12px 24px 6px",
+					color: muted,
+					fontSize: theme.fontSizes[0],
+					fontFamily: theme.fonts.monospace,
+					letterSpacing: 0.3,
+					textTransform: "uppercase",
+				}}
+			>
+				<PencilRuler size={12} aria-hidden="true" />
+				C4 sketches
+				<span style={{ color: theme.colors.textMuted ?? muted }}>
+					{visibleSketches.length}
+				</span>
+			</div>
+			{visibleSketches.map((sketch) => (
+				<div
+					key={sketch.id}
+					style={{
+						boxShadow: `inset 0 1px 0 ${theme.colors.border ?? "#333"}`,
+					}}
+				>
+					<SubsystemSketchCard
+						sketch={sketch}
+						onOpen={() => onOpenSketch(sketch)}
+						onDelete={() => void onDeleteSketch(sketch)}
+					/>
+				</div>
+			))}
+		</div>
+	) : null;
+
 	const modelList = (
 windowedGraphs.length === 0 ? (
 				<SubsystemEmptyState
@@ -1427,6 +1517,11 @@ windowedGraphs.length === 0 ? (
 								copied={copiedId === graph.id}
 								sharing={sharingId === graph.id}
 								onRowClick={() => onRowClick(graph)}
+								onOpenC4={() => {
+									void electrobun.rpc!.request.openSubsystemC4Model({
+										graphId: graph.id,
+									});
+								}}
 								onToggleDetails={() => onToggleDetails(graph)}
 								onCopyPath={() => void onCopyPath(graph)}
 								onShareGist={() => requestShareGist(graph)}
@@ -1463,7 +1558,13 @@ windowedGraphs.length === 0 ? (
 				}}
 			/>
 			)}
-			{panelGraphs.length === 0 ? (
+			{panelGraphs.length === 0 && visibleSketches.length > 0 ? (
+				<SubsystemsTabBody>
+					<div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+						{sketchSection}
+					</div>
+				</SubsystemsTabBody>
+			) : panelGraphs.length === 0 ? (
 				<SubsystemsTabBody>
 					<SubsystemEmptyState
 						title={emptyCopy.title}
@@ -1686,7 +1787,10 @@ windowedGraphs.length === 0 ? (
 					</div>
 				</div>
 			) : (
-				modelList
+				<>
+					{sketchSection}
+					{modelList}
+				</>
 			)}
 				</div>
 				{previewFile && (

@@ -8,9 +8,11 @@ import {
 	PACKAGE_MODULE_FIXER_AGENT,
 	PACKAGE_MODULE_VERIFIER_AGENT,
 	RUNTIME_TOPOLOGY_VERIFIER_AGENT,
+	summarizePendingProposals,
 	TRAIL_VERIFIER_AGENT,
 	selectMaintainRoute,
 } from "./maintain-model";
+import type { SubsystemModelProposal } from "../shared/contract";
 import type { StoredSubsystemModel } from "./subsystem-model-store";
 
 function graphFixture(partial?: Partial<StoredSubsystemModel>): StoredSubsystemModel {
@@ -270,6 +272,20 @@ describe("selectMaintainRoute", () => {
 		);
 	});
 
+	test("a missing process claim remains runtime-topology work, not construct work", () => {
+		const report = emptyReport({
+			findings: [
+				{
+					kind: "boundary_process_missing",
+					severity: "info",
+					componentAlias: "a",
+					message: "claims no process",
+				},
+			],
+		});
+		expect(selectMaintainRoute(report)?.agent).toBe(RUNTIME_TOPOLOGY_VERIFIER_AGENT);
+	});
+
 	test("unbacked process gap routes to container-verifier, ahead of runtime-topology", () => {
 		// Container-first: with no accepted container to assign from, the
 		// missing-claim gap cannot be fixed by proposing component claims —
@@ -312,7 +328,7 @@ describe("selectMaintainRoute", () => {
 		expect(route?.agent).not.toBe(CONTAINER_VERIFIER_AGENT);
 	});
 
-	test("prefers process gaps over construct gaps", () => {
+	test("repairs independent construct evidence before process gaps", () => {
 		const report = emptyReport({
 			findings: [
 				{
@@ -330,8 +346,53 @@ describe("selectMaintainRoute", () => {
 			],
 		});
 		expect(selectMaintainRoute(report)?.agent).toBe(
-			RUNTIME_TOPOLOGY_VERIFIER_AGENT,
+			CONSTRUCT_VERIFIER_AGENT,
 		);
+	});
+
+	for (const containerKind of [
+		"boundary_process_unassigned",
+		"boundary_process_proposed",
+		"boundary_process_unbacked",
+	] as const) {
+		for (const [evidenceKind, severity, agent] of [
+			["step_span_unconfirmed", "error", TRAIL_VERIFIER_AGENT],
+			["construct_span_stale", "info", CONSTRUCT_VERIFIER_AGENT],
+			["signature_unconfirmed", "info", CONSTRUCT_VERIFIER_AGENT],
+		] as const) {
+			test(`repairs ${evidenceKind} before ${containerKind}`, () => {
+				const report = emptyReport({
+					findings: [
+						{
+							kind: containerKind,
+							severity: "info",
+							processKey: "app/host",
+							message: "container decision unresolved",
+						},
+						{
+							kind: evidenceKind,
+							severity,
+							componentAlias: "a",
+							trailId: "wt",
+							step: 0,
+							message: "source evidence needs refreshing",
+						},
+					],
+				});
+				expect(selectMaintainRoute(report)?.agent).toBe(agent);
+			});
+		}
+	}
+
+	test("hard construct failures still precede trail evidence and container decisions", () => {
+		const report = emptyReport({
+			findings: [
+				{ kind: "missing_file", severity: "error", componentAlias: "a", message: "gone" },
+				{ kind: "step_span_unconfirmed", severity: "error", trailId: "wt", step: 0, message: "missing span" },
+				{ kind: "boundary_process_unbacked", severity: "info", componentAlias: "a", message: "no container" },
+			],
+		});
+		expect(selectMaintainRoute(report)?.agent).toBe(CONSTRUCT_FIXER_AGENT);
 	});
 
 	test("routes construct gaps to construct-verifier when nothing else remains", () => {
@@ -407,5 +468,63 @@ describe("buildVerificationBrief", () => {
 		const brief = buildVerificationBrief({ graph: graphFixture() });
 		expect(brief).toContain("- **Verdict**: unknown (no audit persisted yet)");
 		expect(brief).toContain("no persisted audit");
+	});
+});
+
+function proposalFixture(
+	partial: Partial<SubsystemModelProposal>,
+): SubsystemModelProposal {
+	return {
+		id: "sp-1",
+		graphId: "sg-1",
+		status: "pending",
+		createdAt: "2026-10-22T18:00:00.000Z",
+		lane: "dynamic-topology",
+		rationale: "because",
+		changes: [],
+		preview: [],
+		...partial,
+	} as SubsystemModelProposal;
+}
+
+describe("summarizePendingProposals", () => {
+	test("orders newest first and carries confidence, risk, and scoring errors", () => {
+		const older = proposalFixture({
+			id: "sp-old",
+			createdAt: "2026-10-22T17:00:00.000Z",
+			author: "runtime-topology-verifier",
+			secondOpinion: {
+				source: "jev-latest",
+				checkedAt: "2026-10-22T17:01:00.000Z",
+				verdict: "uncertain",
+				confidence: 0.83,
+				risk: "Unsafe",
+			},
+		});
+		const newer = proposalFixture({
+			id: "sp-new",
+			createdAt: "2026-10-22T18:00:00.000Z",
+			secondOpinion: {
+				source: "jev-latest",
+				checkedAt: "2026-10-22T18:01:00.000Z",
+				verdict: "uncertain",
+				confidence: 0.5,
+				error: "timeout",
+			},
+		});
+
+		const summary = summarizePendingProposals([older, newer]);
+
+		expect(summary.map((p) => p.id)).toEqual(["sp-new", "sp-old"]);
+		expect(summary[1]).toMatchObject({
+			confidence: 0.83,
+			risk: "Unsafe",
+			author: "runtime-topology-verifier",
+			lane: "dynamic-topology",
+		});
+		expect(summary[0]).toMatchObject({
+			confidence: 0.5,
+			secondOpinionError: "timeout",
+		});
 	});
 });

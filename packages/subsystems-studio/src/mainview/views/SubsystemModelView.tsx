@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PenTool, Wrench, X } from "lucide-react";
+import { PenTool, Wrench, X, Boxes } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
 	SubsystemComponentGraph,
@@ -740,10 +740,21 @@ export function SubsystemModelView({
 					excalidrawOpen ? <SelectionInspector selection={selection} /> : undefined
 				}
 				sidebarExtra={
-					excalidrawOpen ? (
+					<div
+						style={{
+							display: "flex",
+							gap: 8,
+							flexWrap: "wrap",
+							alignSelf: "flex-start",
+						}}
+					>
 						<button
 							type="button"
-							onClick={() => setExcalidrawOpen(false)}
+							onClick={() => {
+								void electrobun.rpc!.request.openSubsystemC4Model({
+									graphId,
+								});
+							}}
 							style={{
 								display: "inline-flex",
 								alignItems: "center",
@@ -756,13 +767,35 @@ export function SubsystemModelView({
 								fontSize: theme.fontSizes[1],
 								fontFamily: theme.fonts.monospace,
 								cursor: "pointer",
-								alignSelf: "flex-start",
 							}}
+							title="Open this model as a C4 container diagram"
 						>
-							<X size={14} />
-							Back to graph
+							<Boxes size={14} />
+							C4 view
 						</button>
-					) : undefined
+						{excalidrawOpen && (
+							<button
+								type="button"
+								onClick={() => setExcalidrawOpen(false)}
+								style={{
+									display: "inline-flex",
+									alignItems: "center",
+									gap: 6,
+									padding: "6px 12px",
+									borderRadius: 6,
+									border: `1px solid ${theme.colors.border ?? "#333"}`,
+									background: theme.colors.background,
+									color: theme.colors.text,
+									fontSize: theme.fontSizes[1],
+									fontFamily: theme.fonts.monospace,
+									cursor: "pointer",
+								}}
+							>
+								<X size={14} />
+								Back to graph
+							</button>
+						)}
+					</div>
 				}
 				canvasOverlay={
 					<>

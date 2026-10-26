@@ -32,6 +32,8 @@ import { handoffToRunning, startIpcServer, type LoadTourMessage } from "./ipc";
 import { startHttpServer } from "./http-server";
 import { resolveSandboxed } from "./sandboxed-path";
 import { deleteSubsystemModel, getSubsystemModel, listSubsystemModels, purlRepoKey, resolveRepoRootForComponent, setSubsystemModelChangeListener, stampVerifiedCommits, startSubsystemModelDirWatcher, subsystemModelFilePath, touchSubsystemModelOpened, updateSubsystemModel } from "./subsystem-model-store";
+import { buildC4ProjectionForModel } from "./c4-projection";
+import { deleteC4Sketch, getC4Sketch, listC4Sketches } from "./c4-sketch-store";
 import { mergeSubsystemModels, type MergeInputModel } from "./merge-submodel-models";
 import type { ModelProvenanceSnapshot } from "../shared/contract";
 import {
@@ -65,6 +67,7 @@ import {
 	buildVerificationBrief,
 	maintainSubsystemModelSequence,
 	nextMaintainRouteForModel,
+	planMaintainForModel,
 } from "./maintain-model";
 import {
 	autoAcceptProposalIfConfident,
@@ -147,6 +150,7 @@ import type {
 	SubsystemModelAuditFixGroup,
 	SubsystemModelAuditReport,
 	SubsystemModelVerification,
+	SubsystemC4Source,
 	ViewerMode,
 	ViewerSettings,
 } from "../shared/contract";
@@ -552,6 +556,27 @@ interface SubsystemModelTabState {
 }
 
 /**
+ * A read-only C4 projection of a stored model, rendered in its own tab. The
+ * tab carries the requested source; the view resolves `auto` against the
+ * model's accepted containers.
+ */
+interface SubsystemC4TabState {
+	id: string;
+	kind: "subsystem-c4";
+	title: string;
+	graphId: string;
+	c4Source?: SubsystemC4Source;
+}
+
+/** A read-only authored C4 hypothesis. */
+interface C4SketchTabState {
+	id: string;
+	kind: "c4-sketch";
+	title: string;
+	sketchId: string;
+}
+
+/**
  * A read-only, agent-authored slice of the Subsystems list: the same view and
  * rows as the permanent Subsystems tab, but scoped to an explicit, ordered set
  * of model ids and without the filter header.
@@ -575,6 +600,8 @@ type TabState =
 	| OpencodeV2TabState
 	| SessionEventsTabState
 	| SubsystemModelTabState
+	| SubsystemC4TabState
+	| C4SketchTabState
 	| SubsystemShowcaseTabState
 	| TourTabState;
 
@@ -1053,6 +1080,96 @@ async function openSubsystemModelTab(
 }
 
 /**
+ * Open a model's C4 projection in its own tab. Fast path focuses an already
+ * open C4 tab and retargets its source; otherwise resolves the title from the
+ * index (falling back to a full read) and mints the tab.
+ */
+async function openSubsystemC4Tab(
+	graphId: string,
+	source?: SubsystemC4Source,
+): Promise<string | null> {
+	for (const existing of tabs.values()) {
+		if (existing.kind === "subsystem-c4" && existing.graphId === graphId) {
+			if (source !== undefined) existing.c4Source = source;
+			suggestedTabId = existing.id;
+			console.log(
+				`[principal-studio] subsystem-c4 tab ${existing.id} focused (already open): ${graphId}`,
+			);
+			broadcastTabsChanged(existing.id);
+			void touchSubsystemModelOpened(graphId).catch(() => {});
+			return existing.id;
+		}
+	}
+
+	let title: string | null = null;
+	try {
+		title = (await listSubsystemModels()).find((e) => e.id === graphId)?.title ?? null;
+	} catch {
+		title = null;
+	}
+	if (title == null) {
+		const graph = await getSubsystemModel(graphId);
+		if (!graph) return null;
+		title = graph.title;
+	}
+
+	const id = String(nextTabId++);
+	tabs.set(id, {
+		id,
+		kind: "subsystem-c4",
+		title: `C4 · ${title}`,
+		graphId,
+		...(source ? { c4Source: source } : {}),
+	});
+	suggestedTabId = id;
+	console.log(`[principal-studio] subsystem-c4 tab ${id} added: ${graphId}`);
+	broadcastTabsChanged(id);
+	void touchSubsystemModelOpened(graphId).catch(() => {});
+	return id;
+}
+
+/**
+ * Open an authored C4 sketch in its own tab. A sketch can exist without a
+ * model; `modelId` optionally pins the model to ground it against.
+ */
+async function openC4SketchTab(sketchId: string): Promise<string | null> {
+	for (const existing of tabs.values()) {
+		if (existing.kind === "c4-sketch" && existing.sketchId === sketchId) {
+			suggestedTabId = existing.id;
+			broadcastTabsChanged(existing.id);
+			return existing.id;
+		}
+	}
+
+	const sketch = await getC4Sketch(sketchId);
+	if (!sketch) return null;
+	const id = String(nextTabId++);
+	tabs.set(id, {
+		id,
+		kind: "c4-sketch",
+		title: `C4 sketch · ${sketch.title}`,
+		sketchId,
+	});
+	suggestedTabId = id;
+	console.log(`[principal-studio] c4-sketch tab ${id} added: ${sketchId}`);
+	broadcastTabsChanged(id);
+	return id;
+}
+
+/** Delete a sketch and close any tab rendering it. */
+async function deleteC4SketchAndCloseTabs(
+	sketchId: string,
+): Promise<{ ok: boolean; error?: string }> {
+	for (const tab of Array.from(tabs.values())) {
+		if (tab.kind === "c4-sketch" && tab.sketchId === sketchId) {
+			closeTabById(tab.id);
+		}
+	}
+	const deleted = await deleteC4Sketch(sketchId);
+	return deleted ? { ok: true } : { ok: false, error: `unknown sketch: ${sketchId}` };
+}
+
+/**
  * Open an agent-authored showcase: a Subsystems-like tab scoped to an explicit,
  * ordered set of stored model ids and stripped of the filter header. Unknown
  * ids are dropped; returns null when none survive so callers report the error.
@@ -1084,7 +1201,10 @@ async function openSubsystemShowcaseTab(opts: {
  *  close any tab rendering it so the view can't linger on a missing record. */
 async function deleteGraphAndCloseTabs(graphId: string): Promise<{ ok: boolean; error?: string }> {
 	for (const tab of Array.from(tabs.values())) {
-		if (tab.kind === "subsystem-model" && tab.graphId === graphId) {
+		if (
+			(tab.kind === "subsystem-model" || tab.kind === "subsystem-c4") &&
+			tab.graphId === graphId
+		) {
 			closeTabById(tab.id);
 		}
 	}
@@ -1361,6 +1481,17 @@ function summarize(tab: TabState): TabSummary {
 			path: subsystemModelFilePath(tab.graphId),
 		};
 	}
+	if (tab.kind === "subsystem-c4") {
+		return {
+			id: tab.id,
+			kind: "subsystem-c4",
+			title: tab.title,
+			path: subsystemModelFilePath(tab.graphId),
+		};
+	}
+	if (tab.kind === "c4-sketch") {
+		return { id: tab.id, kind: "c4-sketch", title: tab.title };
+	}
 	if (tab.kind === "subsystem-showcase") {
 		return { id: tab.id, kind: "subsystem-showcase", title: tab.title };
 	}
@@ -1399,6 +1530,25 @@ function fullState(tab: TabState): TabFullState {
 			liveSessionId: tab.liveSessionId,
 			liveTitle: tab.liveTitle,
 			liveAgent: tab.liveAgent,
+		};
+	}
+	if (tab.kind === "subsystem-c4") {
+		return {
+			ok: true,
+			id: tab.id,
+			kind: "subsystem-c4",
+			title: tab.title,
+			graphId: tab.graphId,
+			c4Source: tab.c4Source,
+		};
+	}
+	if (tab.kind === "c4-sketch") {
+		return {
+			ok: true,
+			id: tab.id,
+			kind: "c4-sketch",
+			title: tab.title,
+			sketchId: tab.sketchId,
 		};
 	}
 	if (tab.kind === "subsystem-showcase") {
@@ -2177,6 +2327,32 @@ const requests: RequestHandlers = {
 				if (!tabId) return { ok: false, error: `unknown graph: ${graphId}` };
 				return { ok: true, tabId };
 			},
+			getSubsystemC4Model: async ({ graphId, source }) => {
+				const graph = await getSubsystemModel(graphId);
+				if (!graph) return { ok: false, error: `unknown graph: ${graphId}` };
+				const projection = await buildC4ProjectionForModel(graph, source ?? "auto");
+				return { ok: true, projection };
+			},
+			openSubsystemC4Model: async ({ graphId, source }) => {
+				const tabId = await openSubsystemC4Tab(graphId, source);
+				if (!tabId) return { ok: false, error: `unknown graph: ${graphId}` };
+				return { ok: true, tabId };
+			},
+			listC4Sketches: async ({ repoKey }) => ({
+				ok: true,
+				sketches: await listC4Sketches(repoKey ? { repoKey } : undefined),
+			}),
+			getC4Sketch: async ({ sketchId }) => {
+				const sketch = await getC4Sketch(sketchId);
+				if (!sketch) return { ok: false, error: `unknown sketch: ${sketchId}` };
+				return { ok: true, sketch };
+			},
+			openC4Sketch: async ({ sketchId }) => {
+				const tabId = await openC4SketchTab(sketchId);
+				if (!tabId) return { ok: false, error: `unknown sketch: ${sketchId}` };
+				return { ok: true, tabId };
+			},
+			deleteC4Sketch: async ({ sketchId }) => deleteC4SketchAndCloseTabs(sketchId),
 			deleteSubsystemModel: async ({ graphId }) => deleteGraphAndCloseTabs(graphId),
 			shareSubsystemModelAsGist: async ({ graphId }) => {
 				const graph = await getSubsystemModel(graphId);
@@ -2462,39 +2638,8 @@ const requests: RequestHandlers = {
 				broadcastSubsystemModelProposalsChanged({ graphId, pendingCount });
 				return { ok: true, proposal: stored.proposal, cached: false };
 			},
-			maintainSubsystemModel: async ({ graphId, model, remember }) => {
-				const full = await getSubsystemModel(graphId);
-				if (!full) return { ok: false, error: `unknown graph: ${graphId}` };
-				if (maintainingGraphIds.has(graphId)) {
-					return { ok: true, started: false, alreadyRunning: true };
-				}
-				const directory = full.components
-					.map((c) => resolveRepoRootForComponent(c.purl)).find(Boolean);
-				let selected: Awaited<ReturnType<typeof resolveSubsystemMaintainerModel>>;
-				try {
-					selected = await resolveSubsystemMaintainerModel({
-						configured: model === null || (model === undefined && remember === true)
-							? null : model?.trim() || viewerSettings.subsystemMaintainerModel,
-						strictConfigured: !!model?.trim(),
-						directory,
-					});
-				} catch (err) {
-					return { ok: false, error: err instanceof Error ? err.message : String(err) };
-				}
-				if (maintainingGraphIds.has(graphId)) {
-					return { ok: true, started: false, alreadyRunning: true };
-				}
-				if (remember === true) {
-					const trimmed = typeof model === "string" ? model.trim() : "";
-					viewerSettings = patchViewerSettings(viewerSettings, {
-						subsystemMaintainerModel: trimmed.length > 0 ? trimmed : null,
-					});
-				}
-				maintainSubsystemModelInBackground(graphId, {
-					model: selected.model,
-				});
-				return { ok: true, started: true, model: selected.model };
-			},
+			maintainSubsystemModel: async ({ graphId, model, remember }) =>
+				await startMaintainSubsystemModel(graphId, { model, remember }),
 			openMaintainLive: async ({ sessionId, graphId, title, agent }) => {
 				if (!sessionId) return { ok: false, error: "sessionId is required" };
 				return await openMaintainLive({ sessionId, graphId, title, agent });
@@ -3205,6 +3350,57 @@ async function reconcileRunsNow(): Promise<void> {
 setTimeout(() => void reconcileRunsNow(), 8_000);
 setInterval(() => void reconcileRunsNow(), 5 * 60_000);
 
+/**
+ * Resolve the Maintain model, remember an explicit pick when asked, and start
+ * the sequenced run in the background. Shared by the RPC surface and the HTTP
+ * bridge so both paths choose a model and guard against double-runs the same
+ * way.
+ */
+async function startMaintainSubsystemModel(
+	graphId: string,
+	opts?: { model?: string | null; remember?: boolean },
+): Promise<{
+	ok: boolean;
+	started?: boolean;
+	error?: string;
+	model?: string;
+	alreadyRunning?: boolean;
+}> {
+	const full = await getSubsystemModel(graphId);
+	if (!full) return { ok: false, error: `unknown graph: ${graphId}` };
+	if (maintainingGraphIds.has(graphId)) {
+		return { ok: true, started: false, alreadyRunning: true };
+	}
+	const directory = full.components
+		.map((c) => resolveRepoRootForComponent(c.purl)).find(Boolean);
+	let selected: Awaited<ReturnType<typeof resolveSubsystemMaintainerModel>>;
+	try {
+		selected = await resolveSubsystemMaintainerModel({
+			configured:
+				opts?.model === null || (opts?.model === undefined && opts?.remember === true)
+					? null
+					: opts?.model?.trim() || viewerSettings.subsystemMaintainerModel,
+			strictConfigured: !!opts?.model?.trim(),
+			directory,
+		});
+	} catch (err) {
+		return { ok: false, error: err instanceof Error ? err.message : String(err) };
+	}
+	if (maintainingGraphIds.has(graphId)) {
+		return { ok: true, started: false, alreadyRunning: true };
+	}
+	if (opts?.remember === true) {
+		const trimmed = typeof opts.model === "string" ? opts.model.trim() : "";
+		viewerSettings = patchViewerSettings(viewerSettings, {
+			subsystemMaintainerModel: trimmed.length > 0 ? trimmed : null,
+		});
+	}
+	maintainSubsystemModelInBackground(graphId, {
+		model: selected.model,
+	});
+	return { ok: true, started: true, model: selected.model };
+}
+
 function maintainSubsystemModelInBackground(
 	graphId: string,
 	opts?: { model?: string },
@@ -3911,4 +4107,31 @@ startHttpServer(
 	(graphId, pendingCount) => {
 		broadcastSubsystemModelProposalsChanged({ graphId, pendingCount });
 	},
+	{
+		plan: (graphId) => planMaintainForModel(graphId),
+		start: (graphId, opts) =>
+			startMaintainSubsystemModel(graphId, { model: opts.model }),
+		isRunning: (graphId) => maintainingGraphIds.has(graphId),
+	},
+	async (graphId, source) => {
+		const tabId = await openSubsystemC4Tab(graphId, source);
+		if (!tabId) return { ok: false, error: `unknown graph: ${graphId}` };
+		try {
+			browserWindow.focus();
+		} catch (err) {
+			console.warn(`[principal-studio] could not focus window: ${(err as Error).message}`);
+		}
+		return { ok: true, tabId };
+	},
+	async (sketchId) => {
+		const tabId = await openC4SketchTab(sketchId);
+		if (!tabId) return { ok: false, error: `unknown sketch: ${sketchId}` };
+		try {
+			browserWindow.focus();
+		} catch (err) {
+			console.warn(`[principal-studio] could not focus window: ${(err as Error).message}`);
+		}
+		return { ok: true, tabId };
+	},
+	async (sketchId) => deleteC4SketchAndCloseTabs(sketchId),
 );

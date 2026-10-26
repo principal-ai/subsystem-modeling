@@ -753,65 +753,14 @@ export function rollupEdgeTrailRefs(opts: {
 }
 
 /**
- * The C4 elements a trail touches — every element that owns a step endpoint.
- *
- * This is the reverse of the memberships above: given a step's `from`/`to`
- * alias, which C4 box(es) hold it. Because a container's own process-claim
- * membership AND the authored components nested inside it both claim the
- * aliases, BOTH end up in the set: the container is the visible card at
- * container view, its components are the visible cards when it is open, so
- * either view stays honest.
- *
- * The complement of the result (all element ids minus these) is what a
- * trail-driven emphasis pass should dim. Pure, and the spec the story's
- * "players stay bright" is asserted against.
+ * Trail-focus helpers live in production code now (`c4TrailFocus.ts`); keep
+ * these re-exports so the fixture's tests and the drill story can import them
+ * from the same place they always did.
  */
-export function deriveTrailPlayerElements(
-  steps: SubsystemTrail['steps'],
-  members: Readonly<Record<string, readonly string[]>>,
-): Set<string> {
-  const byAlias = new Map<string, string[]>();
-  for (const [elementId, aliases] of Object.entries(members)) {
-    for (const alias of aliases) {
-      const list = byAlias.get(alias);
-      if (list) list.push(elementId);
-      else byAlias.set(alias, [elementId]);
-    }
-  }
-  const players = new Set<string>();
-  for (const step of steps) {
-    for (const id of byAlias.get(step.from) ?? []) players.add(id);
-    for (const id of byAlias.get(step.to) ?? []) players.add(id);
-  }
-  return players;
-}
-
-/**
- * The C4 edges that carry the current focus — the line-level half of the
- * emphasis pair above.
- *
- * An edge is lit iff its authored `trailRefs` cover the source: the whole
- * trail, or one specific step of it. A step that is entirely internal to a
- * container folds into no C4 line (the rollup only keeps cross-boundary
- * hops), so its source lights NOTHING — every line dims, which is honest:
- * no drawn edge represents that hop.
- */
-export function deriveLitC4Edges(
-  source: { trailId: string; stepIndex?: number },
-  edges: readonly C4Edge[],
-): Set<string> {
-  const lit = new Set<string>();
-  for (const edge of edges) {
-    for (const ref of edge.trailRefs ?? []) {
-      if (ref.trailId !== source.trailId) continue;
-      if (source.stepIndex == null || ref.stepIndices.includes(source.stepIndex)) {
-        lit.add(edge.id);
-        break;
-      }
-    }
-  }
-  return lit;
-}
+export {
+  deriveLitC4Edges,
+  deriveTrailPlayerElements,
+} from '../c4TrailFocus';
 
 /**
  * Process claims the accepted C4 element set backs NOT at all — the set the

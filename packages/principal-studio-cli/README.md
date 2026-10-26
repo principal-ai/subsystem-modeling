@@ -20,7 +20,7 @@ Bin name: `principal-ai`.
 
 | Command | Purpose |
 |---|---|
-| `subsystem-model` | Create / open / list / get / audit / propose / accept / reject |
+| `subsystem-model` | Create / open / list / get / audit / maintain / propose / accept / reject |
 | `open-studio` | Launch or focus Subsystems Studio |
 | `tour` | Author / validate / analyze / open introduction tours |
 | `topic` | Open a topic in the desktop app |

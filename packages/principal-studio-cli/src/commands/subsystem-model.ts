@@ -329,6 +329,7 @@ async function getAction(id: string | undefined): Promise<void> {
 async function studioFetch(
   path: string,
   init?: RequestInit,
+  timeoutMs = 120_000,
 ): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
   if (!(await studioHttpUp())) {
     process.stderr.write(
@@ -339,7 +340,7 @@ async function studioFetch(
   try {
     const res = await fetch(`${studioHttpBase()}${path}`, {
       ...init,
-      signal: AbortSignal.timeout(120_000),
+      signal: AbortSignal.timeout(timeoutMs),
       headers: {
         'Content-Type': 'application/json',
         ...(init?.headers ?? {}),
@@ -360,6 +361,256 @@ async function auditAction(id: string | undefined): Promise<void> {
   }
   const { ok, json } = await studioFetch(`/api/subsystem-model/${encodeURIComponent(id)}/audit`);
   process.stdout.write(JSON.stringify(json, null, 2) + '\n');
+  if (!ok) process.exit(2);
+}
+
+interface MaintainPlanJson {
+  graphId?: string;
+  title?: string;
+  verdict?: string;
+  route?: { agent: string; layer: string; mode: string } | null;
+  pendingCount?: number;
+  pendingProposals?: Array<{
+    id?: string;
+    author?: string;
+    lane?: string;
+    rationale?: string;
+    confidence?: number;
+    verdict?: string;
+    risk?: string;
+    secondOpinionError?: string;
+  }>;
+  autoAccept?: { enabled?: boolean; confidenceThreshold?: number };
+  audit?: {
+    checkedAt?: string;
+    needsUpdate?: boolean;
+    findings?: { total: number; error: number; info: number };
+  };
+}
+
+function formatMaintainPlan(plan: MaintainPlanJson): string {
+  const lines: string[] = [];
+  lines.push(`${plan.title ?? plan.graphId ?? 'model'} (${plan.graphId ?? '?'})`);
+  if (plan.audit) {
+    lines.push(
+      `  audited   ${plan.audit.checkedAt ?? 'unknown'}${
+        plan.audit.needsUpdate ? ' · verification failed' : ''
+      }`,
+    );
+    lines.push(`  verdict   ${plan.verdict ?? 'unknown'}`);
+    const findings = plan.audit.findings;
+    if (findings) {
+      lines.push(
+        `  findings  ${findings.total} (${findings.error} error, ${findings.info} info)`,
+      );
+    }
+  }
+  lines.push(
+    `  next      ${
+      plan.route
+        ? `${plan.route.agent} (${plan.route.layer} · ${plan.route.mode})`
+        : 'none — nothing queued'
+    }`,
+  );
+  if (plan.autoAccept?.enabled) {
+    const threshold = plan.autoAccept.confidenceThreshold;
+    lines.push(
+      `  gate      auto-accept on${threshold != null ? ` · confidence ≥ ${threshold}` : ''}`,
+    );
+  } else {
+    lines.push('  gate      auto-accept off — every proposal waits for review');
+  }
+
+  const pending = plan.pendingProposals ?? [];
+  lines.push(`  pending   ${plan.pendingCount ?? pending.length} proposal(s) awaiting review`);
+  for (const proposal of pending) {
+    const bits = [
+      proposal.author,
+      proposal.lane,
+      proposal.confidence != null ? `confidence ${proposal.confidence}` : 'unscored',
+      proposal.risk,
+      proposal.secondOpinionError ? `scoring error: ${proposal.secondOpinionError}` : null,
+    ].filter(Boolean);
+    lines.push(`    ${proposal.id ?? '?'}  ${bits.join(' · ')}`);
+    const firstLine = (proposal.rationale ?? '').split('\n')[0];
+    if (firstLine) lines.push(`      ${firstLine}`);
+  }
+  return lines.join('\n') + '\n';
+}
+
+interface MaintainOptions {
+  plan?: boolean;
+  start?: boolean;
+  status?: boolean;
+  wait?: boolean;
+  all?: boolean;
+  model?: string;
+  timeout?: string;
+  json?: boolean;
+}
+
+async function maintainAction(
+  id: string | undefined,
+  opts: MaintainOptions,
+): Promise<void> {
+  if (!id && !opts.all) {
+    process.stderr.write('Pass a model id or --all.\n');
+    process.exit(2);
+  }
+  if (id && opts.all) {
+    process.stderr.write('Pass either a model id or --all, not both.\n');
+    process.exit(2);
+  }
+  if (opts.all && (opts.start || opts.status)) {
+    process.stderr.write('--all only applies to --plan.\n');
+    process.exit(2);
+  }
+  if (opts.plan && (opts.start || opts.status)) {
+    process.stderr.write('Pass only one of --plan, --start, or --status.\n');
+    process.exit(2);
+  }
+  if (opts.start && opts.status) {
+    process.stderr.write('Pass only one of --plan, --start, or --status.\n');
+    process.exit(2);
+  }
+  if (opts.wait && !opts.start) {
+    process.stderr.write('--wait requires --start.\n');
+    process.exit(2);
+  }
+
+  if (opts.all) {
+    const listed = await studioFetch('/api/subsystem-model');
+    if (!listed.ok) {
+      process.stderr.write(`${String(listed.json.error ?? 'could not list models')}\n`);
+      process.exit(2);
+    }
+    const graphs = Array.isArray(listed.json.graphs)
+      ? (listed.json.graphs as Array<{ id?: unknown; title?: unknown }>)
+      : [];
+    const plans: Array<Record<string, unknown>> = [];
+    let allOk = true;
+    for (const graph of graphs) {
+      if (typeof graph.id !== 'string') continue;
+      const plan = await studioFetch(
+        `/api/subsystem-model/${encodeURIComponent(graph.id)}/maintain/plan`,
+        undefined,
+        300_000,
+      );
+      allOk = allOk && plan.ok;
+      plans.push(plan.json);
+      if (!opts.json) {
+        process.stdout.write(
+          formatMaintainPlan(plan.json as unknown as MaintainPlanJson) + '\n',
+        );
+      }
+    }
+    if (opts.json) {
+      process.stdout.write(JSON.stringify({ ok: allOk, models: plans }, null, 2) + '\n');
+    }
+    if (!allOk) process.exit(2);
+    return;
+  }
+
+  const enc = encodeURIComponent(id!);
+  const planPath = `/api/subsystem-model/${enc}/maintain/plan`;
+  const statusPath = `/api/subsystem-model/${enc}/maintain/status`;
+  const startPath = `/api/subsystem-model/${enc}/maintain`;
+
+  if (opts.status) {
+    const { ok, json } = await studioFetch(statusPath);
+    process.stdout.write(JSON.stringify(json, null, 2) + '\n');
+    if (!ok) process.exit(2);
+    return;
+  }
+
+  if (!opts.start) {
+    const { ok, json } = await studioFetch(planPath, undefined, 300_000);
+    if (opts.json) {
+      process.stdout.write(JSON.stringify(json, null, 2) + '\n');
+    } else if (ok) {
+      process.stdout.write(formatMaintainPlan(json as unknown as MaintainPlanJson));
+    } else {
+      process.stderr.write(`${String(json.error ?? 'maintain plan failed')}\n`);
+    }
+    if (!ok) process.exit(2);
+    return;
+  }
+
+  const started = await studioFetch(startPath, {
+    method: 'POST',
+    body: JSON.stringify(opts.model ? { model: opts.model } : {}),
+  });
+  if (!started.ok) {
+    if (opts.json) {
+      process.stdout.write(JSON.stringify(started.json, null, 2) + '\n');
+    } else {
+      process.stderr.write(
+        `${String(started.json.error ?? 'could not start maintain run')}\n`,
+      );
+    }
+    process.exit(2);
+  }
+
+  if (!opts.wait) {
+    process.stdout.write(JSON.stringify(started.json, null, 2) + '\n');
+    return;
+  }
+
+  if (!opts.json) {
+    const model = started.json.model ? ` · ${String(started.json.model)}` : '';
+    process.stderr.write(
+      started.json.alreadyRunning
+        ? `Maintain already running for ${id}${model}\n`
+        : `Maintain started for ${id}${model}\n`,
+    );
+  }
+
+  const timeoutSeconds = Math.max(1, Number(opts.timeout ?? 1800) || 1800);
+  const deadline = Date.now() + timeoutSeconds * 1000;
+  let status: Record<string, unknown> = {};
+  while (true) {
+    const polled = await studioFetch(statusPath);
+    status = polled.json;
+    if (!polled.ok) process.exit(2);
+    if (status.running !== true) break;
+    if (Date.now() >= deadline) {
+      process.stderr.write(
+        `Timed out after ${timeoutSeconds}s; the run is still in flight. Check \`principal-ai subsystem-model maintain ${id} --status\`.\n`,
+      );
+      process.stdout.write(JSON.stringify(status, null, 2) + '\n');
+      process.exit(1);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+
+  const plan = await studioFetch(planPath, undefined, 300_000);
+  const runs = Array.isArray(status.runs)
+    ? (status.runs as Array<Record<string, unknown>>)
+    : [];
+  const latest = runs[0];
+  const ok = plan.ok && latest?.status !== 'error';
+  const outcome = {
+    ok,
+    started: started.json,
+    status,
+    plan: plan.json,
+  };
+
+  if (opts.json) {
+    process.stdout.write(JSON.stringify(outcome, null, 2) + '\n');
+  } else {
+    if (latest) {
+      const agent = latest.agent ? ` · ${String(latest.agent)}` : '';
+      const error = latest.error ? ` — ${String(latest.error)}` : '';
+      process.stdout.write(`Run ${String(latest.status)}${agent}${error}\n`);
+      if (latest.summary) process.stdout.write(`${String(latest.summary)}\n`);
+    }
+    if (plan.ok) {
+      process.stdout.write(formatMaintainPlan(plan.json as unknown as MaintainPlanJson));
+    } else {
+      process.stderr.write(`${String(plan.json.error ?? 'maintain plan failed')}\n`);
+    }
+  }
   if (!ok) process.exit(2);
 }
 
@@ -553,6 +804,22 @@ export function createSubsystemModelCommand(): Command {
     )
     .argument('<id>', 'Model id (sg-…)')
     .action(auditAction);
+
+  cmd
+    .command('maintain')
+    .description(
+      'Plan or start a Maintain run: fresh audit → routed agent stage (requires Studio HTTP)',
+    )
+    .argument('[id]', 'Model id (sg-…)')
+    .option('--plan', 'Only show the fresh audit, next routed stage, and pending proposals (default)')
+    .option('--all', 'With --plan, plan every stored model')
+    .option('--start', 'Start the sequenced Maintain run in the background')
+    .option('--status', 'Show in-flight state and recent Maintain runs')
+    .option('--wait', 'With --start, poll until the run finishes or needs a human')
+    .option('--timeout <seconds>', 'Max seconds to wait with --wait (default 1800)')
+    .option('--model <ref>', 'OpenCode provider/id model override for this run')
+    .option('--json', 'Print raw JSON')
+    .action(maintainAction);
 
   cmd
     .command('backfill-sites')

@@ -21,6 +21,7 @@ import {
 	LayoutDashboard,
 	Route as RouteIcon,
 	Box,
+	Boxes,
 	Share2,
 	X,
 } from "lucide-react";
@@ -59,6 +60,8 @@ export interface SubsystemModelCardProps {
 	sharing?: boolean;
 	/** Row click — opens the model in its own tab. */
 	onRowClick?: (e: ReactMouseEvent) => void;
+	/** Open the model's C4 projection in its own tab. */
+	onOpenC4?: () => void;
 	/** Toggle the inline details (description + trail list). */
 	onToggleDetails?: () => void;
 	onCopyPath?: () => void;
@@ -225,6 +228,7 @@ export function SubsystemModelCard({
 	copied = false,
 	sharing = false,
 	onRowClick,
+	onOpenC4,
 	onToggleDetails,
 	onCopyPath,
 	onShareGist,
@@ -335,6 +339,13 @@ export function SubsystemModelCard({
 					accent={theme.colors.primary}
 					active={isOpen}
 					onClick={() => onToggleDetails?.()}
+				/>
+				<ActionButton
+					icon={<Boxes size={12} />}
+					label="C4"
+					ariaLabel={`Open ${graph.title} as a C4 diagram`}
+					accent={theme.colors.primary}
+					onClick={() => onOpenC4?.()}
 				/>
 				<ActionButton
 					icon={copied ? <Check size={12} /> : <Copy size={12} />}

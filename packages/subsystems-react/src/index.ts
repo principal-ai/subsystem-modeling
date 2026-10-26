@@ -298,6 +298,20 @@ export type {
 // --- C4 projection -----------------------------------------------------
 export { C4Graph } from './subsystem/C4Graph';
 export type { C4GraphProps } from './subsystem/C4Graph';
+export { C4ProjectionView } from './subsystem/C4ProjectionView';
+export type { C4ProjectionViewProps } from './subsystem/C4ProjectionView';
+export { C4SketchView } from './subsystem/C4SketchView';
+export type { C4SketchViewProps } from './subsystem/C4SketchView';
+export type {
+  C4Sketch,
+  C4SketchSummary,
+  SubsystemC4Source,
+  SubsystemC4Projection,
+} from './subsystem/c4Sketch';
+export {
+  deriveLitC4Edges,
+  deriveTrailPlayerElements,
+} from './subsystem/c4TrailFocus';
 export { GraphSidebar } from './subsystem/GraphSidebar';
 export type { GraphSidebarProps, GraphSidebarTab } from './subsystem/GraphSidebar';
 export { GraphWithSidebar } from './subsystem/GraphWithSidebar';

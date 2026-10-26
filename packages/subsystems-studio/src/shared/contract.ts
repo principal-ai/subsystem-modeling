@@ -524,6 +524,20 @@ export interface SubsystemModelSummary {
 	}>;
 }
 
+/** C4 projection and sketch types live in the React package. */
+import type {
+	SubsystemC4Source,
+	SubsystemC4Projection,
+	C4Sketch,
+	C4SketchSummary,
+} from "@principal-ai/subsystems-react";
+export type {
+	SubsystemC4Source,
+	SubsystemC4Projection,
+	C4Sketch,
+	C4SketchSummary,
+} from "@principal-ai/subsystems-react";
+
 /** Result of verifying one subsystem component (declaration-panel Verify). */
 export interface SubsystemComponentVerificationResult {
 	ok: boolean;
@@ -1648,7 +1662,7 @@ export interface ConstructInventoryRepo extends Omit<VerifiedConstructRepo, "pac
 
 export interface TabSummary {
 	id: string;
-	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "constructs" | "maintenance" | "graphify" | "package-layers" | "opencode-v2";
+	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-c4" | "c4-sketch" | "subsystem-showcase" | "subsystems" | "constructs" | "maintenance" | "graphify" | "package-layers" | "opencode-v2";
 	title: string;
 	mode?: ViewerMode;
 	/** For `subsystem-model` tabs — absolute path to the persisted JSON. */
@@ -1659,7 +1673,7 @@ export interface TabFullState {
 	ok: boolean;
 	error?: string;
 	id: string;
-	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-showcase" | "subsystems" | "constructs" | "maintenance" | "graphify" | "package-layers" | "opencode-v2";
+	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-c4" | "c4-sketch" | "subsystem-showcase" | "subsystems" | "constructs" | "maintenance" | "graphify" | "package-layers" | "opencode-v2";
 	title: string;
 	mode?: ViewerMode;
 	repoRoot?: string;
@@ -1669,6 +1683,10 @@ export interface TabFullState {
 	agent?: string;
 	/** For `subsystem-model` tabs — the graph id the tab renders. */
 	graphId?: string;
+	/** For `subsystem-c4` tabs — which C4 source to request. */
+	c4Source?: SubsystemC4Source;
+	/** For `c4-sketch` tabs — the sketch id the tab renders. */
+	sketchId?: string;
 	/** For `subsystem-model` tabs opened from a trail row — the
 	 *  trail to select when the view mounts. */
 	focusTrailId?: string;
@@ -2074,6 +2092,44 @@ export type StudioRequests = {
 			focusIssueCategory?: string;
 		};
 		response: { ok: boolean; error?: string; tabId?: string };
+	};
+	/**
+	 * Read a drawable C4 projection for one model. `auto` prefers accepted
+	 * containers when one claims a process key this model uses, else drafts
+	 * containers from `process` keys. Read-only — nothing is written.
+	 */
+	getSubsystemC4Model: {
+		params: { graphId: string; source?: SubsystemC4Source };
+		response: { ok: boolean; error?: string; projection?: SubsystemC4Projection };
+	};
+	/** Open (or focus) a model's C4 tab. */
+	openSubsystemC4Model: {
+		params: { graphId: string; source?: SubsystemC4Source };
+		response: { ok: boolean; error?: string; tabId?: string };
+	};
+	/** List C4 sketches, optionally filtered to one repo key. */
+	listC4Sketches: {
+		params: { repoKey?: string };
+		response: { ok: boolean; error?: string; sketches?: C4SketchSummary[] };
+	};
+	/** Read one sketch by id. */
+	getC4Sketch: {
+		params: { sketchId: string };
+		response: {
+			ok: boolean;
+			error?: string;
+			sketch?: C4Sketch;
+		};
+	};
+	/** Open (or focus) a sketch tab. */
+	openC4Sketch: {
+		params: { sketchId: string };
+		response: { ok: boolean; error?: string; tabId?: string };
+	};
+	/** Delete a sketch and close any tab rendering it. */
+	deleteC4Sketch: {
+		params: { sketchId: string };
+		response: { ok: boolean; error?: string };
 	};
 	deleteSubsystemModel: {
 		params: { graphId: string };
