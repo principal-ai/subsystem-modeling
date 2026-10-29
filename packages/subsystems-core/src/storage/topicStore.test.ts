@@ -7,6 +7,7 @@ import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from 'fs
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { TopicStore } from './topicStore';
+import type { TopicReference } from './topic-types';
 
 let dir: string;
 let topicsDir: string;
@@ -89,6 +90,56 @@ describe('CRUD', () => {
       subsystemModels: [{ modelId: 'sg-2-def' }],
     });
     expect(updated.subsystemModels).toEqual([{ modelId: 'sg-2-def' }]);
+  });
+
+  test('references survive fresh reads and unrelated updates, and can be replaced or cleared', async () => {
+    const store = makeStore();
+    const references: TopicReference[] = [
+      { kind: 'c4-sketch', sketchId: 'c4s-1-abc' },
+      { kind: 'topic', topicId: 'topic-related' },
+    ];
+    const created = await store.createTopic({
+      id: 'topic-refs',
+      title: 'Architecture',
+      description: '[Related](principal://topic/topic-related)',
+      subsystemModels: [{ modelId: 'sg-1-abc' }],
+      references,
+    });
+    expect(created.references).toEqual(references);
+    expect((await makeStore().getTopic(created.id))?.references).toEqual(references);
+
+    await store.updateTopic(created.id, { title: 'Renamed' });
+    expect((await makeStore().getTopic(created.id))?.references).toEqual(references);
+
+    const replacement: TopicReference[] = [{ kind: 'topic', topicId: 'topic-other' }];
+    await store.updateTopic(created.id, { references: replacement });
+    expect((await makeStore().getTopic(created.id))?.references).toEqual(replacement);
+
+    await store.updateTopic(created.id, { references: [] });
+    expect(await makeStore().getTopic(created.id)).toMatchObject({
+      references: [],
+      description: created.description,
+      subsystemModels: created.subsystemModels,
+    });
+  });
+
+  test('existing topics need no references migration', async () => {
+    const store = makeStore();
+    const topic = await store.createTopic({ title: 'Without attachments' });
+    expect(topic).not.toHaveProperty('references');
+    await store.updateTopic(topic.id, { description: 'Still without attachments' });
+    expect(await makeStore().getTopic(topic.id)).not.toHaveProperty('references');
+  });
+
+  test('deleting a referenced topic preserves the attachment for missing-target display', async () => {
+    const store = makeStore();
+    const target = await store.createTopic({ title: 'Target' });
+    const owner = await store.createTopic({
+      title: 'Owner',
+      references: [{ kind: 'topic', topicId: target.id }],
+    });
+    await store.deleteTopic(target.id);
+    expect((await makeStore().getTopic(owner.id))?.references).toEqual(owner.references);
   });
 
   test('delete removes the file and the index entry', async () => {

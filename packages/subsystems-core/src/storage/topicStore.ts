@@ -115,7 +115,7 @@ export interface MigrationResult {
 export type TopicUpdate = Partial<
   Pick<
     DraftTopic,
-    'title' | 'description' | 'createdBy' | 'assets' | 'repos' | 'subsystemModels'
+    'title' | 'description' | 'createdBy' | 'assets' | 'repos' | 'subsystemModels' | 'references'
   >
 >;
 

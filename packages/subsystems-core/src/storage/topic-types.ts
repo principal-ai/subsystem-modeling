@@ -57,6 +57,15 @@ export interface TopicSubsystemModelRef {
 }
 
 /**
+ * A directional, local-only reference owned by a topic. Targets remain separate
+ * artifacts; their contents and titles are resolved by the host, not copied here.
+ * Referencing a C4 sketch does not make its authored hypothesis evidence.
+ */
+export type TopicReference =
+  | { kind: 'c4-sketch'; sketchId: string }
+  | { kind: 'topic'; topicId: string };
+
+/**
  * Locally-authored topic — the shape desktop persists to
  * `~/.principal/topics/<id>.json` and edits.
  *
@@ -92,4 +101,10 @@ export interface DraftTopic {
    * the referenced models are a local artifact.
    */
   subsystemModels?: TopicSubsystemModelRef[];
+  /**
+   * Attached topics and C4 sketches. Whole-array replacement on update; `[]`
+   * clears attachments. Independent of links in `description`: neither edits
+   * the other. Hosts validate target existence and reject self-references.
+   */
+  references?: TopicReference[];
 }

@@ -13,6 +13,15 @@
 
 export * from './types';
 
+export type {
+  DraftTopic,
+  TopicAsset,
+  TopicCreator,
+  TopicSubsystemModelRef,
+  TopicReference,
+} from './storage/topic-types';
+export { formatTopicReferenceLink, parseTopicReferenceLink } from './storage/topic-reference-links';
+
 // Cross-field validation (the rules the JSON Schema can't express). Structural
 // (schema) validation is enforced per surface against
 // `schemas/subsystem-model.schema.json`.

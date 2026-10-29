@@ -27,7 +27,9 @@ export type {
   TopicAsset,
   TopicCreator,
   TopicSubsystemModelRef,
+  TopicReference,
 } from './storage/topic-types';
+export { formatTopicReferenceLink, parseTopicReferenceLink } from './storage/topic-reference-links';
 
 // OpenCode event retrieval (Node.js only - SQLite)
 export { OpenCodeEventStore, defaultOpenCodeDBPath } from './opencode/OpenCodeEventStore';
