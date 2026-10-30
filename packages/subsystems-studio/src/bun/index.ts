@@ -24,6 +24,7 @@ import {
 } from "electrobun/bun";
 import { promises as fs } from "node:fs";
 import { existsSync, readFileSync } from "node:fs";
+import { isDevBuild } from "./studio-http-port";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import {
 	parsePurl,
@@ -3972,21 +3973,6 @@ if (bootSubsystemModelId) {
 // ---------------------------------------------------------------------------
 // Window
 // ---------------------------------------------------------------------------
-
-/**
- * True when this host is the `electrobun dev` build. Electrobun stamps the
- * build channel into the bundle's `Resources/version.json`, and the host runs
- * from `Contents/MacOS`, so that file sits one directory up. Release builds
- * ("canary"/"stable") and any read failure report false, leaving activation on.
- */
-function isDevBuild(): boolean {
-	try {
-		const raw = readFileSync(join("..", "Resources", "version.json"), "utf8");
-		return (JSON.parse(raw) as { channel?: string }).channel === "dev";
-	} catch {
-		return false;
-	}
-}
 
 // `electrobun dev --watch` rebuilds and relaunches this host on every change,
 // and each launch would otherwise activate the window and yank focus out of the

@@ -10,6 +10,7 @@ permission:
   question: deny
   bash:
     "curl *3045*": allow
+    "curl *3046*": allow
     "* subsystem-model *": allow
     "node *subsystem-model*": allow
     "bun *subsystem-model*": allow

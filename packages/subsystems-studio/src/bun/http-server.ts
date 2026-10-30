@@ -2,7 +2,8 @@
  * HTTP server for agent ↔ principal-studio communication.
  *
  * Runs alongside the Unix socket IPC server on a configurable port
- * (default 3045, override via `PRINCIPAL_STUDIO_HTTP_PORT`). Provides a
+ * (3045 for release builds, 3046 for the dev build, override via
+ * `PRINCIPAL_STUDIO_HTTP_PORT`; see `studio-http-port.ts`). Provides a
  * REST API for subsystem graphs and graphify knowledge graphs so agents
  * can POST diagrams, ensure code graphs, list stored graphs, and open tabs.
  *
@@ -64,7 +65,8 @@ import {
 	type C4SketchPatch,
 } from "./c4-sketch-store";
 import type { SubsystemModelProposalChange, SubsystemC4Source } from "../shared/contract";
-const PORT = Number(process.env["PRINCIPAL_STUDIO_HTTP_PORT"] ?? 3045);
+import { resolveStudioHttpPort } from "./studio-http-port";
+const PORT = resolveStudioHttpPort();
 
 /** Callback invoked when an agent requests a graph be opened in a tab. */
 export type OpenGraphTabHandler = (id: string) => Promise<{ ok: boolean; error?: string; tabId?: string }>;

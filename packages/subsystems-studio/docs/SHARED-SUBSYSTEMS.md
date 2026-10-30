@@ -54,7 +54,8 @@ accepted in the configuration payload.
 
 ## Agent HTTP API
 
-The default bridge is `http://127.0.0.1:3045` (override with
+The default bridge is `http://127.0.0.1:3045` for release builds and
+`http://127.0.0.1:3046` for the `electrobun dev` build (override with
 `PRINCIPAL_STUDIO_HTTP_PORT`). These endpoints reject cross-origin browser
 requests.
 

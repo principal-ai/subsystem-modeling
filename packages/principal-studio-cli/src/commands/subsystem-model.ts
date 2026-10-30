@@ -49,21 +49,48 @@ async function readPayload(file: string | undefined): Promise<unknown> {
   }
 }
 
-function studioHttpBase(): string {
-  const port = process.env['PRINCIPAL_STUDIO_HTTP_PORT'] ?? '3045';
-  return `http://127.0.0.1:${port}`;
+/** Release Studio first, then the `electrobun dev` build. */
+const STUDIO_HTTP_PORTS = [3045, 3046] as const;
+const STUDIO_HTTP_PORTS_HINT = STUDIO_HTTP_PORTS.map((p) => `:${p}`).join(' or ');
+
+/**
+ * True when `base` is Studio's bridge. Other local dev servers answer
+ * `/health` with `status: ok` too, so require Studio's graphify field.
+ */
+async function isStudioHealth(base: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${base}/health`, { signal: AbortSignal.timeout(5_000) });
+    if (!res.ok) return false;
+    const json = (await res.json()) as { status?: unknown; graphify?: unknown };
+    return json.status === 'ok' && json.graphify !== undefined;
+  } catch {
+    return false;
+  }
+}
+
+let studioHttpBaseLookup: Promise<string | null> | undefined;
+
+/**
+ * Base URL of a running Studio bridge, or null when none answers.
+ * `PRINCIPAL_STUDIO_HTTP_PORT` pins the port; otherwise probe the defaults
+ * in order. Resolved once per process.
+ */
+function studioHttpBase(): Promise<string | null> {
+  studioHttpBaseLookup ??= (async () => {
+    const pinned = process.env['PRINCIPAL_STUDIO_HTTP_PORT'];
+    const candidates = pinned ? [pinned] : STUDIO_HTTP_PORTS;
+    for (const port of candidates) {
+      const base = `http://127.0.0.1:${port}`;
+      if (await isStudioHealth(base)) return base;
+    }
+    return null;
+  })();
+  return studioHttpBaseLookup;
 }
 
 /** True when Studio's HTTP bridge answers /health. */
 async function studioHttpUp(): Promise<boolean> {
-  try {
-    const res = await fetch(`${studioHttpBase()}/health`, {
-      signal: AbortSignal.timeout(5_000),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
+  return (await studioHttpBase()) !== null;
 }
 
 /**
@@ -74,8 +101,10 @@ async function studioHttpUp(): Promise<boolean> {
 async function createViaHttp(
   body: Record<string, unknown>,
 ): Promise<{ record: StoredSubsystemModel; reused: boolean } | null> {
+  const base = await studioHttpBase();
+  if (base === null) return null;
   try {
-    const res = await fetch(`${studioHttpBase()}/api/subsystem-model`, {
+    const res = await fetch(`${base}/api/subsystem-model`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -100,8 +129,10 @@ async function createViaHttp(
 }
 
 async function openViaHttp(id: string): Promise<boolean> {
+  const base = await studioHttpBase();
+  if (base === null) return false;
   try {
-    const res = await fetch(`${studioHttpBase()}/api/subsystem-model/open`, {
+    const res = await fetch(`${base}/api/subsystem-model/open`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
@@ -331,14 +362,15 @@ async function studioFetch(
   init?: RequestInit,
   timeoutMs = 120_000,
 ): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
-  if (!(await studioHttpUp())) {
+  const base = await studioHttpBase();
+  if (base === null) {
     process.stderr.write(
-      'Principal Studio HTTP is not running (need audit / propose apply via Studio on :3045).\n',
+      `Principal Studio HTTP is not running (need audit / propose apply via Studio on ${STUDIO_HTTP_PORTS_HINT}).\n`,
     );
     process.exit(2);
   }
   try {
-    const res = await fetch(`${studioHttpBase()}${path}`, {
+    const res = await fetch(`${base}${path}`, {
       ...init,
       signal: AbortSignal.timeout(timeoutMs),
       headers: {
@@ -724,7 +756,7 @@ async function showcaseAction(
 ): Promise<void> {
   if (!(await studioHttpUp())) {
     process.stderr.write(
-      'Principal Studio HTTP is not running (need Studio on :3045 to open a showcase).\n',
+      `Principal Studio HTTP is not running (need Studio on ${STUDIO_HTTP_PORTS_HINT} to open a showcase).\n`,
     );
     process.exit(2);
   }

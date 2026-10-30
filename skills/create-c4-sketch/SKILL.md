@@ -18,8 +18,9 @@ Sketches live at `~/.principal/c4-sketches/<id>.json` and open in their own
 Sketches are created through Studio's local HTTP API, not the CLI:
 
 ```bash
-STUDIO=http://127.0.0.1:3045       # PRINCIPAL_STUDIO_HTTP_PORT overrides this
-curl -fsS "$STUDIO/health"
+STUDIO=http://127.0.0.1:3045       # release Studio; the dev build listens on :3046.
+                                   # PRINCIPAL_STUDIO_HTTP_PORT overrides both.
+curl -fsS "$STUDIO/health"       # Studio's reply includes a `graphify` field
 ```
 
 If that fails, ask the user to launch Studio. You can try:

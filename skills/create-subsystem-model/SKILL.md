@@ -423,7 +423,8 @@ lost id, or re-deriving the same subsystem, won't leave a second copy.
 Pass `--force` (or `"force": true` in the HTTP body) when you intentionally want
 a distinct record over the same title + purls. Prefer omitting it.
 
-While Subsystems Studio is running, the HTTP bridge still supports update/delete:
+While Subsystems Studio is running, the HTTP bridge still supports update/delete
+(release Studio listens on `:3045`, the dev build on `:3046`):
 
 ```bash
 curl -s -X PUT http://127.0.0.1:3045/api/subsystem-model/<id> \
