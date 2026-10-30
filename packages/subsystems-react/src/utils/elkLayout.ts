@@ -103,7 +103,8 @@ export interface ElkLayoutOptions {
   /**
    * Order same-layer nodes by their source line (ascending) instead of leaving
    * it to the crossing-minimizer. Nodes must carry a `data.component.line`
-   * (used when set; nodes without one keep ELK's neutral ordering). Off by
+   * (used when set; nodes without one keep ELK's neutral ordering). A
+   * `data.layoutOrder` number on a node always wins over the line. Off by
    * default — the generic layered layout is tuned for crossings, and line order
    * only makes sense for graphs that model a source region top-to-bottom.
    * @default false
@@ -503,8 +504,8 @@ export function getElkOptions(options: ElkLayoutOptions): LayoutOptions {
   const baseOptions: LayoutOptions = {
     'elk.algorithm': 'layered',
     'elk.direction': direction,
-    // Keep same-layer ordering stable (not reversed / randomized) so a
-    // line-ordered rewrite or ELK's own ordering is predictable.
+    // Honour per-node `elk.position` hints (see `computeElkLayout`) as the
+    // preferred same-layer order; the sweep may still deviate to cut crossings.
     'elk.layered.crossingMinimization.semiInteractive': 'true',
     // Spacing
     'elk.spacing.nodeNode': String(nodeSpacing),
@@ -530,9 +531,7 @@ export function getElkOptions(options: ElkLayoutOptions): LayoutOptions {
     'elk.layered.thoroughness': '50',
   };
 
-  // Model order (position hints) so a per-node `data.line` can drive same-layer
-  // ordering. ELK honours the `y` of each node as a position hint against the
-  // model order.
+  // Line order also wants model order respected where positions tie.
   if (orderByLine) {
     baseOptions['elk.layered.fixedAlignment'] = 'NONE';
     baseOptions['elk.layered.considerModelOrder.strategy'] = 'NODES_AND_EDGES';
@@ -807,12 +806,20 @@ export async function computeElkLayout(
     const nd = node.data as { component?: { layer?: number }; layer?: number } | undefined;
     layer = nd?.layer ?? nd?.component?.layer;
 
-    // Optional source-line ordering: seed each node's `y` hint from its line so
-    // ELK's model-order placement puts lower lines further down within a layer.
-    let y = node.position.y;
-    if (orderByLine) {
-      const line = (node.data as { component?: { line?: number } } | undefined)?.component?.line;
-      if (typeof line === 'number') y = line;
+    // Same-layer order hint. Semi-interactive crossing minimization reads the
+    // `elk.position` PROPERTY, not the node's x/y coordinates, so a hint only
+    // takes effect when written there. `data.layoutOrder` is an explicit rank
+    // from the caller; `orderByLine` falls back to the component's line. Nodes
+    // with neither get no property and keep ELK's own ordering. The same value
+    // goes on both axes so the hint reads the same whichever axis the layout
+    // direction makes the in-layer one.
+    let orderHint: number | undefined;
+    const hintData = node.data as
+      | { layoutOrder?: number; component?: { line?: number } }
+      | undefined;
+    if (typeof hintData?.layoutOrder === 'number') orderHint = hintData.layoutOrder;
+    else if (orderByLine && typeof hintData?.component?.line === 'number') {
+      orderHint = hintData.component.line;
     }
 
     return {
@@ -820,11 +827,12 @@ export async function computeElkLayout(
       width,
       height,
       x: node.position.x,
-      y,
+      y: node.position.y,
       // Add ports on each side for edge connections
       ports: cardinalPorts(node.id),
       properties: {
         'portConstraints': 'FIXED_SIDE',
+        ...(orderHint !== undefined ? { 'elk.position': `(${orderHint},${orderHint})` } : {}),
         ...(layer !== undefined ? { 'layering.layer': String(layer) } : {}),
         ...(partitionByNode ? { partition: String(partitionByNode.get(node.id) ?? 0) } : {}),
       },

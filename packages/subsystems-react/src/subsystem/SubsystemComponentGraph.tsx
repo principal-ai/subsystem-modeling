@@ -91,7 +91,7 @@ import { FileDrawer, FILE_DRAWER_HEIGHT_MS } from './FileDrawer';
 import { GraphWithSidebar } from './GraphWithSidebar';
 import { DescriptionOverlay } from './DescriptionOverlay';
 import type { GraphSidebarTab } from './GraphSidebar';
-import { TrailsPanel, TRAIL_PLAY_PAUSE_MS } from './TrailsPanel';
+import { TrailsPanel, TRAIL_PLAY_PAUSE_MS, TRAIL_HOVER_PREVIEW_MS } from './TrailsPanel';
 import type { StepEmphasisMap } from './stepEmphasis';
 import {
   EDGE_LABEL_WIDTH,
@@ -815,6 +815,29 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     trailId: string;
     stepIndex: number | null;
   } | null>(null);
+  // Each trail row delays its hover preview by TRAIL_HOVER_PREVIEW_MS but
+  // reports mouseleave at once, so crossing from one row to the next would
+  // clear the preview and flash the whole graph bright before the next row's
+  // preview lands. The clear waits the same beat and is dropped if any newer
+  // preview (hover, focus, autoplay) has replaced the one being left.
+  const hoverLeaveTimerRef = useRef<number | null>(null);
+  const cancelPendingHoverLeave = useCallback(() => {
+    if (hoverLeaveTimerRef.current != null) {
+      window.clearTimeout(hoverLeaveTimerRef.current);
+      hoverLeaveTimerRef.current = null;
+    }
+  }, []);
+  const scheduleHoverLeave = useCallback(
+    (leaving: typeof hoveredTrailStep) => {
+      cancelPendingHoverLeave();
+      hoverLeaveTimerRef.current = window.setTimeout(() => {
+        hoverLeaveTimerRef.current = null;
+        setHoveredTrailStep((prev) => (prev === leaving ? null : prev));
+      }, TRAIL_HOVER_PREVIEW_MS);
+    },
+    [cancelPendingHoverLeave],
+  );
+  useEffect(() => () => cancelPendingHoverLeave(), [cancelPendingHoverLeave]);
   // Diagnostics area tab: issues list vs the Maintain agent pipeline.
   const [diagnosticsTab, setDiagnosticsTab] = useState<'issues' | 'agents'>(
     () => persisted.diagnosticsTab ?? 'issues',
@@ -2821,15 +2844,17 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       onClearFocus={clearTrailFocus}
       onFocusStep={focusTrailStep}
       onHoverStep={(tl, i) => {
+        cancelPendingHoverLeave();
         setHoveredTrailStep({ trailId: tl.id, stepIndex: i });
         onTrailStepHover?.({ trailId: tl.id, stepIndex: i });
       }}
       onHoverFlow={(tl) => {
+        cancelPendingHoverLeave();
         setHoveredTrailStep({ trailId: tl.id, stepIndex: null });
         onTrailStepHover?.(null);
       }}
       onLeaveStep={() => {
-        setHoveredTrailStep(null);
+        scheduleHoverLeave(hoveredTrailStep);
         onTrailStepHover?.(null);
       }}
       onReorder={onReorderTrails}

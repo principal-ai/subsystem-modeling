@@ -1144,6 +1144,12 @@ export interface SubsystemGraphNodeData extends Record<string, unknown> {
   dimmed?: boolean;
   /** Diagnostics badge — see `SubsystemNodeIssue`. Absent when no findings. */
   issue?: SubsystemNodeIssue;
+  /**
+   * Preferred rank among same-layer nodes (lower = earlier along the cross
+   * axis). Set by the layout from trail order; ELK may still deviate to avoid
+   * crossings.
+   */
+  layoutOrder?: number;
 }
 
 /**
@@ -1802,6 +1808,33 @@ export function convertSubsystemToGroups(
 }
 
 /**
+ * Rank node ids for same-layer ordering: every alias in first-appearance order
+ * across the trails' steps (`from` before `to`, trail by trail), then any
+ * remaining id in the order given. Ids the trails name but the graph lacks are
+ * skipped so ranks stay dense.
+ */
+export function trailLayoutOrder(
+  trails: readonly SubsystemTrail[] | undefined,
+  nodeIds: readonly string[],
+): Map<string, number> {
+  const known = new Set(nodeIds);
+  const order = new Map<string, number>();
+  const rank = (alias: string) => {
+    // A target that is not a component is drawn as an `external:` stub.
+    const id = known.has(alias) ? alias : `external:${alias}`;
+    if (known.has(id) && !order.has(id)) order.set(id, order.size);
+  };
+  for (const trail of trails ?? []) {
+    for (const step of trail.steps) {
+      rank(step.from);
+      rank(step.to);
+    }
+  }
+  for (const id of nodeIds) rank(id);
+  return order;
+}
+
+/**
  * Convert a subsystem graph document into React Flow edges. Edges whose target
  * is an external label (not a component alias) point at a synthetic stub so the
  * relationship is visible without a member node.
@@ -2026,6 +2059,15 @@ export async function buildSubsystemGraph(
       const mh = measuredHeights.get(n.id);
       if (mh) n.height = mh;
     }
+  }
+
+  // Same-layer order follows the trails: a component ranks by the first step
+  // that mentions it, so a trail reads top-to-bottom (or left-to-right) as it
+  // fans out. Components no trail touches follow in declaration order.
+  const order = trailLayoutOrder(doc.trails, nodes.map((n) => n.id));
+  for (const n of nodes) {
+    const rank = order.get(n.id);
+    if (rank !== undefined) (n.data as SubsystemGraphNodeData).layoutOrder = rank;
   }
 
   // ELK auto-layout: nested compound parents (process → module → leaves).

@@ -43,6 +43,7 @@ import {
   describeConstructBreakdown,
   reorderTrails,
   reorderTargetIndex,
+  trailLayoutOrder,
 } from './model';
 import type { SubsystemComponent, SubsystemComponentEdge, SubsystemTrail } from './model';
 
@@ -1123,6 +1124,40 @@ describe('reorderTrails', () => {
   });
 });
 
+describe('trailLayoutOrder', () => {
+  const trails: SubsystemTrail[] = [
+    {
+      id: 't1',
+      title: 'T1',
+      steps: [
+        { from: 'c', to: 'd', mechanism: 'call' },
+        { from: 'd', to: 'a', mechanism: 'call' },
+      ],
+    },
+    { id: 't2', title: 'T2', steps: [{ from: 'b', to: 'ext', mechanism: 'http' }] },
+  ];
+
+  test('ranks aliases by first appearance across trails, then the rest in given order', () => {
+    const order = trailLayoutOrder(trails, ['a', 'b', 'c', 'd', 'e', 'external:ext']);
+    expect([...order.entries()]).toEqual([
+      ['c', 0],
+      ['d', 1],
+      ['a', 2],
+      ['b', 3],
+      ['external:ext', 4],
+      ['e', 5],
+    ]);
+  });
+
+  test('skips trail aliases the graph does not draw and keeps ranks dense', () => {
+    const order = trailLayoutOrder(trails, ['a', 'd']);
+    expect([...order.entries()]).toEqual([['d', 0], ['a', 1]]);
+  });
+
+  test('no trails: plain given order', () => {
+    expect([...trailLayoutOrder(undefined, ['y', 'x']).entries()]).toEqual([['y', 0], ['x', 1]]);
+  });
+});
 describe('reorderTargetIndex', () => {
   // Boundaries are the n+1 gaps between rows: 0 is above row 0, n is below
   // the last row. Dragging row `from` to boundary `b` lands it at b, minus one
