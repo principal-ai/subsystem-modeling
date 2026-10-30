@@ -16,7 +16,7 @@ Portable document schema: `schemas/subsystem-model.schema.json`
 
 ## Topic references
 
-`DraftTopic.references` attaches local topics and C4 sketches by ID:
+`DraftTopic.references` attaches local topics, C4 sketches, and drawings by ID:
 
 ```ts
 import {
@@ -29,14 +29,21 @@ const reference: TopicReference = { kind: 'c4-sketch', sketchId: 'c4s-123-abc' }
 formatTopicReferenceLink(reference); // principal://c4-sketch/c4s-123-abc
 parseTopicReferenceLink('principal://topic/topic-123-abc');
 // { kind: 'topic', topicId: 'topic-123-abc' }
+parseTopicReferenceLink('principal://drawing/0b6f7c1e');
+// { kind: 'drawing', drawingId: '0b6f7c1e' }
 ```
+
+A drawing ID is the file name, without extension, of a `.excalidraw` file in the
+host's drawings folder (the desktop app uses `~/.alexandria/drawings/`). Titles
+come from the drawing file's `appState.name` and are resolved by the host.
 
 Create/update accepts `references`; updates replace the whole array (`[]` clears
 it). Existing topics may omit the field. References are directional and local-only.
 Targets stay separate artifacts; deleting a target leaves a missing reference,
 not a cascading deletion. Existing `subsystemModels` associations are unchanged.
 
-Markdown links such as `[Architecture](principal://c4-sketch/c4s-123-abc)` and
+Markdown links such as `[Architecture](principal://c4-sketch/c4s-123-abc)`,
+`[Whiteboard](principal://drawing/0b6f7c1e)`, and
 `[Related](principal://topic/topic-123-abc)` use the same target shapes but are
 independent of attachments. Helpers only format/parse hrefs; hosts must allow the
 `principal` protocol in Markdown sanitizers and handle resolution, navigation,

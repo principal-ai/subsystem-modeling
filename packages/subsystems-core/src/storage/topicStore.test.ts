@@ -96,6 +96,7 @@ describe('CRUD', () => {
     const store = makeStore();
     const references: TopicReference[] = [
       { kind: 'c4-sketch', sketchId: 'c4s-1-abc' },
+      { kind: 'drawing', drawingId: 'drawing-1' },
       { kind: 'topic', topicId: 'topic-related' },
     ];
     const created = await store.createTopic({

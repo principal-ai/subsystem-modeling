@@ -60,9 +60,11 @@ export interface TopicSubsystemModelRef {
  * A directional, local-only reference owned by a topic. Targets remain separate
  * artifacts; their contents and titles are resolved by the host, not copied here.
  * Referencing a C4 sketch does not make its authored hypothesis evidence.
+ * A drawing ID is the `.excalidraw` file stem under the host's drawings folder.
  */
 export type TopicReference =
   | { kind: 'c4-sketch'; sketchId: string }
+  | { kind: 'drawing'; drawingId: string }
   | { kind: 'topic'; topicId: string };
 
 /**
@@ -102,7 +104,7 @@ export interface DraftTopic {
    */
   subsystemModels?: TopicSubsystemModelRef[];
   /**
-   * Attached topics and C4 sketches. Whole-array replacement on update; `[]`
+   * Attached topics, C4 sketches, and drawings. Whole-array replacement on update; `[]`
    * clears attachments. Independent of links in `description`: neither edits
    * the other. Hosts validate target existence and reject self-references.
    */
