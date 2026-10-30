@@ -575,12 +575,14 @@ export function App() {
 		[tabs, activeTabId],
 	);
 
-	// Cmd+1..9 switches to the Nth tab in strip order.
+	// Cmd+1..8 switches to the Nth tab in strip order; Cmd+9 jumps to the
+	// last tab, matching browser convention.
 	useEffect(() => {
 		const onKeyDown = (e: KeyboardEvent) => {
 			if (!e.metaKey || e.altKey || e.shiftKey || e.ctrlKey) return;
 			if (!/^[1-9]$/.test(e.key)) return;
-			const tab = tabs[Number(e.key) - 1];
+			const tab =
+				e.key === "9" ? tabs[tabs.length - 1] : tabs[Number(e.key) - 1];
 			if (!tab) return;
 			e.preventDefault();
 			onSelect(tab.id);
