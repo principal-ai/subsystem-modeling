@@ -16,7 +16,11 @@ import {
   preloadHighlighter,
 } from '@pierre/diffs';
 import { useTheme } from '@principal-ade/industry-theme';
-import { buildPierreOptions, PIERRE_FILE_STYLE } from './pierreBackground';
+import {
+  buildPierreOptions,
+  PIERRE_FILE_STYLE,
+  PIERRE_PREFERRED_HIGHLIGHTER,
+} from './pierreBackground';
 import { pierreLangForPath } from './pierreFileLang';
 import { remapSnippetLineNumbers, sliceSnippetWindow } from './sliceSnippet';
 
@@ -61,7 +65,11 @@ export function PierreSnippetView({
   useEffect(() => {
     let cancelled = false;
     setHighlighterReady(false);
-    void preloadHighlighter(getHighlighterOptions(lang, {}))
+    void preloadHighlighter(
+      getHighlighterOptions(lang, {
+        preferredHighlighter: PIERRE_PREFERRED_HIGHLIGHTER,
+      }),
+    )
       .catch(() => {
         // Fall through: let <File> attempt its own (plain-text) render.
       })
@@ -128,10 +136,10 @@ export function PierreSnippetView({
 
   const options = useMemo(
     () => ({
-      ...buildPierreOptions(background),
+      ...buildPierreOptions(background, undefined, theme.colors.textSecondary),
       onPostRender,
     }),
-    [background, onPostRender],
+    [background, theme.colors.textSecondary, onPostRender],
   );
 
   if (error) {

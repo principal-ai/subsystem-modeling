@@ -27,7 +27,12 @@ import type {
 import { resolveCurrentGraphifySlot } from "./graphify-store";
 import { purlRepoKey } from "./subsystem-model-store";
 
-const ROOT = join(homedir(), ".principal", "subsystem-model-audits");
+function auditRoot(): string {
+	return join(
+		process.env["PRINCIPAL_SUBSYSTEM_MODELS_HOME"]?.trim() || homedir(),
+		".principal", "subsystem-model-audits",
+	);
+}
 
 export interface PersistedSubsystemModelAudit {
 	version: 1;
@@ -357,11 +362,11 @@ export function summarizeLanes(
 }
 
 function auditPath(graphId: string): string {
-	return join(ROOT, `${graphId}.json`);
+	return join(auditRoot(), `${graphId}.json`);
 }
 
 async function ensureDir(): Promise<void> {
-	await fs.mkdir(ROOT, { recursive: true });
+	await fs.mkdir(auditRoot(), { recursive: true });
 }
 
 /**

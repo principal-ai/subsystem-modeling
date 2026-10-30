@@ -26,6 +26,7 @@ import type {
 	SubsystemModelProposal,
 	SubsystemModelVerificationLayer,
 	SubsystemVerificationLane,
+	SubsystemMaintenanceStage,
 } from "../shared/contract";
 import {
 	classifyAuditReport,
@@ -62,6 +63,12 @@ import {
 	noteSubsystemModelRunStart,
 } from "./subsystem-model-runs";
 import { capturePurlCommits } from "./purl-commits";
+import {
+	recordMaintenanceSequence,
+	unreportedProposalCounts,
+	type MaintenanceRecorder,
+} from "./subsystem-maintenance-runs";
+import { readMaintenanceSnapshot } from "./maintenance-status";
 
 export const CONSTRUCT_VERIFIER_AGENT = "construct-verifier";
 export const PACKAGE_MODULE_VERIFIER_AGENT = "package-module-verifier";
@@ -1259,6 +1266,7 @@ async function runMaintainStage(opts: {
 	route: MaintainRoute;
 	verdict?: SubsystemModelAuditVerdict;
 	onSession?: (sessionId: string) => void;
+	recorder?: MaintenanceRecorder;
 }): Promise<MaintainStageRunResult> {
 	const { ctx, graphId, report, route, verdict } = opts;
 	const { agent, mode, layer } = route;
@@ -1270,50 +1278,80 @@ async function runMaintainStage(opts: {
 		// The commit(s) the agent will read: the HEAD of every referenced repo
 		// that resolves locally. Best-effort — a run must never fail over the
 		// coordinate it records.
-		const commitsAtStart = await capturePurlCommits(graph.components).catch(
-			() => ({}),
-		);
+		const commitsAtStart = await capturePurlCommits(graph.components).catch(() => null);
 		let sessionId: string | undefined;
-		const run = await runMaintainAgent({
-			agent,
-			primaryRepoRoot: ctx.root,
-			task: buildMaintainBrief({
-				graph,
-				report,
-				route,
-				probeRunId,
-				runId,
-			}),
-			model: runModel,
-			graphId,
-			title: `Maintain — ${graph.title}`,
-			// The session id arrives from the create POST; write the durable
-			// sessionId -> graphId pair as soon as it does.
-			onSession: (sid) => {
-				sessionId = sid;
-				// Best-effort: a failed log write must never break the run.
-				void noteSubsystemModelRunStart({
-					graphId,
-					graphTitle: graph.title,
-					sessionId: sid,
+		const reportStage = (
+			status: SubsystemMaintenanceStage["status"],
+			details?: { summary?: string; error?: string; endedAt?: string },
+		) => opts.recorder?.stage({
+			runId, sessionId: sessionId ?? null, agent, layer, startedAt,
+			endedAt: details?.endedAt ?? null,
+			status, commitsAtStart, counts: unreportedProposalCounts(),
+			summary: details?.summary ?? null, error: details?.error ?? null,
+		});
+		// Persist identity before launching the agent, including pre-session failures.
+		await reportStage("running");
+		let sessionWrite = Promise.resolve();
+		let run: Awaited<ReturnType<typeof runMaintainAgent>>;
+		try {
+			run = await runMaintainAgent({
+				agent,
+				primaryRepoRoot: ctx.root,
+				task: buildMaintainBrief({
+					graph,
+					report,
+					route,
+					probeRunId,
 					runId,
-					agent,
-					layer,
-					mode,
-					model: runModel,
-					commitsAtStart,
-					startedAt,
-				}).catch(() => {});
-				opts.onSession?.(sid);
-			},
-			probeRunId,
-			firstActivityTimeoutMs: firstActivityTimeoutMsFor(runModel),
+				}),
+				model: runModel,
+				graphId,
+				title: `Maintain — ${graph.title}`,
+				// Persist session metadata in order, before the finish write.
+				onSession: (sid) => {
+					sessionId = sid;
+					sessionWrite = sessionWrite.then(async () => {
+						await noteSubsystemModelRunStart({
+							graphId, graphTitle: graph.title, sessionId: sid, runId,
+							maintenanceRunId: opts.recorder?.id,
+							agent, layer, mode, model: runModel,
+							commitsAtStart: commitsAtStart ?? undefined, startedAt,
+						}).catch(() => {});
+						await reportStage("running");
+					}).catch(() => {
+						// The final write retries the complete session metadata.
+					});
+					opts.onSession?.(sid);
+				},
+				probeRunId,
+				firstActivityTimeoutMs: firstActivityTimeoutMsFor(runModel),
+			});
+		} catch (error) {
+			await sessionWrite;
+			const message = error instanceof Error ? error.message : String(error);
+			const endedAt = new Date().toISOString();
+			await reportStage("error", { error: message, endedAt });
+			await noteSubsystemModelRunFinish({
+				graphId, graphTitle: graph.title, runId,
+				maintenanceRunId: opts.recorder?.id,
+				sessionId, agent, layer, mode, model: runModel,
+				commitsAtStart: commitsAtStart ?? undefined,
+				startedAt, endedAt, status: "error", ok: false, error: message,
+			}).catch(() => {});
+			throw error;
+		}
+		await sessionWrite;
+		sessionId = run.sessionId ?? sessionId;
+		const endedAt = new Date().toISOString();
+		await reportStage(run.ok ? "done" : "error", {
+			summary: run.summary, error: run.error, endedAt,
 		});
 		try {
 			await noteSubsystemModelRunFinish({
 				graphId,
 				graphTitle: graph.title,
 				runId,
+				maintenanceRunId: opts.recorder?.id,
 				sessionId: run.sessionId ?? sessionId,
 				agent,
 				layer,
@@ -1324,7 +1362,9 @@ async function runMaintainStage(opts: {
 				error: run.error,
 				summary: run.summary,
 				verdict,
-				endedAt: new Date().toISOString(),
+				commitsAtStart: commitsAtStart ?? undefined,
+				startedAt,
+				endedAt,
 			});
 		} catch {
 			// Best-effort log — never fail the run over it.
@@ -1455,6 +1495,7 @@ export interface MaintainSequenceHostResult {
 	error?: string;
 	model?: string;
 	pendingCount: number;
+	maintenanceRunId?: string;
 }
 
 /**
@@ -1468,6 +1509,28 @@ export async function maintainSubsystemModelSequence(
 		model?: string;
 		onSession?: (sessionId: string) => void;
 		maxStages?: number;
+		/** A durable attempt created by the host before acknowledging start. */
+		maintenanceRunId?: string;
+	},
+): Promise<MaintainSequenceHostResult> {
+	return recordMaintenanceSequence({
+		graphId,
+		runId: opts?.maintenanceRunId,
+		execute: (recorder) => executeMaintenanceSequence(graphId, { ...opts, recorder }),
+		refresh: async () => {
+			const graph = await getSubsystemModel(graphId);
+			if (graph) await readMaintenanceSnapshot(graph);
+		},
+	});
+}
+
+async function executeMaintenanceSequence(
+	graphId: string,
+	opts: {
+		model?: string;
+		onSession?: (sessionId: string) => void;
+		maxStages?: number;
+		recorder: MaintenanceRecorder;
 	},
 ): Promise<MaintainSequenceHostResult> {
 	const startedAt = new Date().toISOString();
@@ -1476,6 +1539,7 @@ export async function maintainSubsystemModelSequence(
 		// No stage/session exists yet, but this was still a user-requested run.
 		await noteSubsystemModelRunFinish({
 			graphId,
+			maintenanceRunId: opts.recorder.id,
 			model: opts?.model,
 			status: "error",
 			ok: false,
@@ -1491,6 +1555,8 @@ export async function maintainSubsystemModelSequence(
 		};
 	}
 	const { ctx } = resolved;
+	const commitsAtStart = await capturePurlCommits(ctx.graph.components).catch(() => null);
+	await opts.recorder.context({ title: ctx.graph.title, commitsAtStart });
 	let lastModel = ctx.model;
 
 	const result = await runMaintainSequence({
@@ -1507,6 +1573,7 @@ export async function maintainSubsystemModelSequence(
 				route,
 				verdict: classifyAuditReport(report),
 				onSession: opts?.onSession,
+				recorder: opts.recorder,
 			});
 			lastModel = stage.model;
 			return {
@@ -1525,6 +1592,7 @@ export async function maintainSubsystemModelSequence(
 	if (result.stages.length === 0) {
 		await noteSubsystemModelRunFinish({
 			graphId,
+			maintenanceRunId: opts.recorder.id,
 			graphTitle: ctx.graph.title,
 			model: ctx.model,
 			status: result.ok ? "skipped" : "error",
@@ -1533,6 +1601,7 @@ export async function maintainSubsystemModelSequence(
 			summary: result.ok ? "Nothing to run: the audit found no maintenance stage to execute." : undefined,
 			pendingCount,
 			startedAt,
+			commitsAtStart: commitsAtStart ?? undefined,
 		}).catch(() => {});
 	}
 	return {

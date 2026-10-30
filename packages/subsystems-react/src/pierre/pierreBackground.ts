@@ -1,13 +1,29 @@
 /** Shared Pierre / @pierre/diffs option helpers for file + snippet views. */
 
+import { canUseWASM, type HighlighterTypes } from '@pierre/diffs';
+
+/**
+ * Highlighting backend for every Pierre surface.
+ *
+ * `'highlights'` is Pierre's WASM lexer (see `@pierre/highlights`): much faster
+ * than Shiki and built for streaming/live edits. It needs WebAssembly + SIMD,
+ * so older engines fall back to Shiki's JavaScript engine.
+ */
+export const PIERRE_PREFERRED_HIGHLIGHTER: HighlighterTypes = canUseWASM()
+  ? 'highlights'
+  : 'shiki-js';
+
 export const PIERRE_FILE_STYLE = { display: 'block' } as const;
 
 export const PIERRE_BASE_OPTIONS = {
   disableFileHeader: true,
+  preferredHighlighter: PIERRE_PREFERRED_HIGHLIGHTER,
 } as const;
 
 /** Chrome overrides for the per-file header (`[data-diffs-header]`). */
 export interface PierreHeaderStyle {
+  /** Foreground for the header path and icon. */
+  color?: string;
   /** Fill behind the header row. */
   background?: string;
   /** Rule under the header row. */
@@ -44,6 +60,7 @@ export interface PierreHeaderStyle {
 export function buildBackgroundCSS(
   background: string,
   header?: PierreHeaderStyle,
+  lineNumberColor?: string,
 ): string {
   const headerDeclarations = header
     ? Object.entries(header)
@@ -55,6 +72,7 @@ export function buildBackgroundCSS(
   :host {
     --diffs-light-bg: ${background};
     --diffs-dark-bg: ${background};
+    ${lineNumberColor ? `--diffs-fg-number-override: ${lineNumberColor};` : ''}
     background: ${background} !important;
   }
   ${
@@ -74,10 +92,11 @@ function kebab(property: string): string {
 export function buildPierreOptions(
   background?: string,
   header?: PierreHeaderStyle,
+  lineNumberColor?: string,
 ) {
   if (!background) return PIERRE_BASE_OPTIONS;
   return {
     ...PIERRE_BASE_OPTIONS,
-    unsafeCSS: buildBackgroundCSS(background, header),
+    unsafeCSS: buildBackgroundCSS(background, header, lineNumberColor),
   };
 }

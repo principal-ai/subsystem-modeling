@@ -10,6 +10,7 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
+import { handleRemoteModelRequest, type OpenRemoteModelsHandler } from "./remote-model-http";
 import {
 	getGraphifyStatus,
 	installGraphify,
@@ -49,6 +50,8 @@ import { buildProposalSourceContext } from "./proposal-source-context";
 import { loadViewerSettings } from "./viewer-settings";
 import { getMaintainerProbeRegistry } from "./maintainer-probe";
 import { listSubsystemModelRuns } from "./subsystem-model-runs";
+import { readMaintenanceSnapshot } from "./maintenance-status";
+import { maintenanceRuns } from "./subsystem-maintenance-runs";
 import type { MaintainPlanResult } from "./maintain-model";
 import { registerProjectInAlexandria } from "./alexandria";
 import {
@@ -101,6 +104,7 @@ export type MaintainStartResult = {
 	alreadyRunning?: boolean;
 	model?: string;
 	error?: string;
+	maintenanceRunId?: string;
 };
 
 /**
@@ -328,10 +332,14 @@ export async function handleSubsystemModelRequest(
 	onOpenC4?: OpenC4TabHandler,
 	onOpenC4Sketch?: OpenC4SketchHandler,
 	onDeleteC4Sketch?: DeleteC4SketchHandler,
+	onOpenRemoteModels?: OpenRemoteModelsHandler,
 ): Promise<Response> {
 	const url = new URL(req.url);
 	const path = url.pathname;
 	const method = req.method;
+
+	const remote = await handleRemoteModelRequest(req, onOpenRemoteModels);
+	if (remote) return remote;
 
 	// CORS preflight
 	if (method === "OPTIONS") {
@@ -471,7 +479,7 @@ export async function handleSubsystemModelRequest(
 		return json(result, result.ok ? 200 : 404);
 	}
 
-	// Maintain run state: in-flight flag plus recent persisted runs.
+	// Keep the legacy fields, adding the authoritative parent-attempt snapshot.
 	const maintainStatusMatch = path.match(
 		/^\/api\/subsystem-model\/([^/]+)\/maintain\/status$/,
 	);
@@ -481,11 +489,20 @@ export async function handleSubsystemModelRequest(
 		const graph = await getSubsystemModel(id);
 		if (!graph) return error(`unknown graph: ${id}`, 404);
 		const runs = await listSubsystemModelRuns({ graphId: id, limit: 10 });
+		let snapshot, delivery;
+		try {
+			snapshot = await readMaintenanceSnapshot(graph, { isRunning: () => maintain.isRunning(id) });
+			delivery = await maintenanceRuns.deliveryStatus(id);
+		} catch {
+			return error("Maintenance status could not be read reliably", 503);
+		}
 		return json({
 			ok: true,
 			graphId: id,
 			running: maintain.isRunning(id),
 			runs,
+			snapshot,
+			delivery,
 		});
 	}
 
@@ -792,6 +809,7 @@ export function startHttpServer(
 	onOpenC4?: OpenC4TabHandler,
 	onOpenC4Sketch?: OpenC4SketchHandler,
 	onDeleteC4Sketch?: DeleteC4SketchHandler,
+	onOpenRemoteModels?: OpenRemoteModelsHandler,
 ): void {
 	onProposalsChanged = proposalsChanged ?? null;
 	server = Bun.serve({
@@ -802,7 +820,7 @@ export function startHttpServer(
 		// off mid-pass on larger models.
 		idleTimeout: 255,
 		async fetch(req) {
-			return handleSubsystemModelRequest(req, onOpenTab, onDeleteGraph, onOpenShowcase, maintain, onOpenC4, onOpenC4Sketch, onDeleteC4Sketch);
+			return handleSubsystemModelRequest(req, onOpenTab, onDeleteGraph, onOpenShowcase, maintain, onOpenC4, onOpenC4Sketch, onDeleteC4Sketch, onOpenRemoteModels);
 		},
 	});
 

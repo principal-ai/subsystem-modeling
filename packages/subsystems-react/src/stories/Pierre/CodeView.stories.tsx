@@ -13,6 +13,7 @@ import {
 } from '@pierre/diffs/react';
 import { ThemeProvider, defaultEditorTheme, useTheme } from '@principal-ade/industry-theme';
 import { sliceSnippetWindow } from '../../pierre/sliceSnippet';
+import { PIERRE_PREFERRED_HIGHLIGHTER } from '../../pierre/pierreBackground';
 import { resolvePierreSyntaxThemeName } from '../../pierre/pierreSyntaxTheme';
 import componentDeclarationSource from '../../subsystem/ComponentDeclaration.tsx?raw';
 import resolveSource from '../../graphify/resolve.ts?raw';
@@ -78,7 +79,7 @@ type Story = StoryObj;
 
 function MultiFileSnippetsDemo() {
   const { theme, mode } = useTheme();
-  const viewRef = useRef<CodeViewHandle>(null);
+  const viewRef = useRef<CodeViewHandle<undefined, undefined>>(null);
   const [activeId, setActiveId] = React.useState<string | null>(SNIPPETS[0]?.id ?? null);
 
   const sliced = useMemo(() => {
@@ -94,7 +95,7 @@ function MultiFileSnippetsDemo() {
     });
   }, []);
 
-  const items = useMemo((): CodeViewItem[] => {
+  const items = useMemo((): CodeViewItem<undefined>[] => {
     return sliced.map(({ spec, slice }) => ({
       id: spec.id,
       type: 'file' as const,
@@ -131,6 +132,7 @@ function MultiFileSnippetsDemo() {
         light: resolvePierreSyntaxThemeName('light'),
       } as const,
       stickyHeaders: true,
+      preferredHighlighter: PIERRE_PREFERRED_HIGHLIGHTER,
       layout: { paddingTop: 12, paddingBottom: 24, gap: 16 },
       ...(mode === 'light' || mode === 'dark' ? { themeType: mode as 'light' | 'dark' } : {}),
     }),

@@ -13,7 +13,11 @@ import {
   preloadHighlighter,
 } from '@pierre/diffs';
 import { useTheme } from '@principal-ade/industry-theme';
-import { buildPierreOptions, PIERRE_FILE_STYLE } from './pierreBackground';
+import {
+  buildPierreOptions,
+  PIERRE_FILE_STYLE,
+  PIERRE_PREFERRED_HIGHLIGHTER,
+} from './pierreBackground';
 import { pierreLangForPath } from './pierreFileLang';
 import { isFileUnavailableError } from './fileAvailability';
 import { scrollFocusLineIntoView } from './scrollAnchor';
@@ -41,9 +45,9 @@ export function PierreFileView({
   const [contents, setContents] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Pierre highlights on the main thread with no worker pool: a cold first
-  // render paints an empty <pre> and never re-renders once Shiki resolves.
-  // Warm the shared highlighter for this file before mounting <File> so the
-  // very first render produces content.
+  // render paints an empty <pre> and never re-renders once the highlighter
+  // resolves. Warm the shared highlighter for this file before mounting <File>
+  // so the very first render produces content.
   const [highlighterReady, setHighlighterReady] = useState(false);
   const lang = pierreLangForPath(filePath) ?? getFiletypeFromFileName(fileName);
 
@@ -76,7 +80,11 @@ export function PierreFileView({
   useEffect(() => {
     let cancelled = false;
     setHighlighterReady(false);
-    void preloadHighlighter(getHighlighterOptions(lang, {}))
+    void preloadHighlighter(
+      getHighlighterOptions(lang, {
+        preferredHighlighter: PIERRE_PREFERRED_HIGHLIGHTER,
+      }),
+    )
       .catch(() => {
         // Fall through: let <File> attempt its own (plain-text) render.
       })
@@ -98,10 +106,10 @@ export function PierreFileView({
 
   const options = useMemo(
     () => ({
-      ...buildPierreOptions(background),
+      ...buildPierreOptions(background, undefined, theme.colors.textSecondary),
       ...(focusLine != null ? { onPostRender } : {}),
     }),
-    [background, focusLine, onPostRender],
+    [background, theme.colors.textSecondary, focusLine, onPostRender],
   );
 
   if (error) {

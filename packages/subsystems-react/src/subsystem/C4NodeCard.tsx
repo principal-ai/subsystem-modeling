@@ -245,12 +245,17 @@ export function nodeTechnology(node: C4Element): string | undefined {
 export function nodeStyle(node: C4Element, theme: Theme, selected = false): NodeStyle {
   const muted = theme.colors.border ?? '#555';
   const techColor = technologyBrand(nodeTechnology(node))?.color;
-  if (selected) return { color: theme.colors.primary ?? '#5aa', dash: 'solid', width: 3 };
+  if (selected) return {
+    color: theme.colors.accent ?? theme.colors.primary ?? theme.colors.text ?? '#5aa',
+    dash: node.state === 'proposed' ? 'dashed' : node.state === 'rejected' ? 'dotted' : 'solid',
+    width: 3,
+  };
 
   // Border weight carries the level, so a component stays a component even
   // in grayscale or for a reader who cannot separate the hues.
   const weight = node.kind === 'component' ? 1 : 2;
-  const color = techColor ?? muted;
+  // Components use primary for contrast; containers retain their technology hue.
+  const color = node.kind === 'component' ? (theme.colors.primary ?? muted) : (techColor ?? muted);
 
   switch (node.state) {
     case 'accepted':

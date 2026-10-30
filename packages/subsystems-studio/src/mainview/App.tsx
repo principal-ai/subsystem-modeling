@@ -26,6 +26,8 @@ import { TabStrip } from "./components/TabStrip";
 import { AgentSessionsOverviewView } from "./views/AgentSessions";
 import { LibraryView } from "./views/LibraryView";
 import { SubsystemModelsView } from "./views/SubsystemModelsView";
+import { SharedSubsystemsView } from "./views/SharedSubsystemsView";
+import { RemoteSubsystemModelView } from "./views/RemoteSubsystemModelView";
 import { VerifiedConstructsView } from "./views/VerifiedConstructsView";
 import { MaintenanceView } from "./views/MaintenanceView";
 import { GraphifyReposView } from "./views/GraphifyReposView";
@@ -88,6 +90,7 @@ const STATIC_TAB_IDS = new Set([
 	"agent-sessions",
 	"maintenance-sessions",
 	"subsystems",
+	"shared-subsystems",
 	"constructs",
 	"maintenance",
 	"graphify",
@@ -104,6 +107,7 @@ function staticTabState(tabId: string): TabState | null {
 	if (tabId === "agent-sessions") return { kind: "agent-sessions" };
 	if (tabId === "maintenance-sessions") return { kind: "maintenance-sessions" };
 	if (tabId === "subsystems") return { kind: "subsystems" };
+	if (tabId === "shared-subsystems") return { kind: "shared-subsystems" };
 	if (tabId === "constructs") return { kind: "constructs" };
 	if (tabId === "maintenance") return { kind: "maintenance" };
 	if (tabId === "graphify") return { kind: "graphify" };
@@ -124,6 +128,7 @@ function renderStaticView(tabId: string, active: boolean): ReactNode | null {
 	if (state.kind === "maintenance-sessions")
 		return <AgentSessionsOverviewView scope="maintain" active={active} />;
 	if (state.kind === "subsystems") return <SubsystemModelsView />;
+	if (state.kind === "shared-subsystems") return <SharedSubsystemsView active={active} />;
 	if (state.kind === "constructs") return <VerifiedConstructsView />;
 	if (state.kind === "maintenance") return <MaintenanceView />;
 	if (state.kind === "graphify") return <GraphifyReposView />;
@@ -162,6 +167,10 @@ function ActiveTab({
 						id: tab.id,
 						sessionId: tab.sessionId ?? "",
 					});
+					return;
+				}
+				if (tab.kind === "remote-subsystem-model") {
+					setState({ kind: "remote-subsystem-model", id: tab.id, sourceId: tab.sourceId ?? "", modelKey: tab.modelKey ?? "" });
 					return;
 				}
 				if (tab.kind === "subsystem-model") {
@@ -282,6 +291,9 @@ function ActiveTab({
 	}
 	if (state.kind === "session-events") {
 		return <SessionEventsView sessionId={state.sessionId} />;
+	}
+	if (state.kind === "remote-subsystem-model") {
+		return <RemoteSubsystemModelView sourceId={state.sourceId} modelKey={state.modelKey} />;
 	}
 	if (state.kind === "subsystem-model") {
 		return (

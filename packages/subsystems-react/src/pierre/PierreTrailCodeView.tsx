@@ -212,7 +212,7 @@ export function PierreTrailCodeView({
   const headerFontSize = theme.fontSizes[1];
   const headerHeight =
     Math.round(headerFontSize * TRAIL_HEADER_LINE_HEIGHT) + 2 * TRAIL_HEADER_PAD_Y;
-  const viewRef = useRef<CodeViewHandle<undefined>>(null);
+  const viewRef = useRef<CodeViewHandle<TrailStepAnnotation, undefined>>(null);
   // CodeView's scroll container — also the box we measure items against.
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [load, setLoad] = useState<FileLoadState>({ status: 'loading' });
@@ -428,7 +428,7 @@ export function PierreTrailCodeView({
   // and the drawer header carries a segmented progress readout.
 
   const renderHeaderMetadata = useMemo(() => {
-    return (item: CodeViewItem) => {
+    return (item: CodeViewItem<TrailStepAnnotation>) => {
       const index = Number.parseInt(item.id.split(':').pop() ?? '', 10);
       const step = trail.steps[index];
       if (!step) return null;
@@ -469,6 +469,9 @@ export function PierreTrailCodeView({
       annotation:
         | LineAnnotation<TrailStepAnnotation>
         | DiffLineAnnotation<TrailStepAnnotation>,
+      // 1.6 moved the displayed file/diff to the second argument and the item
+      // to the third; trail annotations only need the item id.
+      _fileOrDiff: unknown,
       item: CodeViewItem<TrailStepAnnotation>,
     ) => {
       const index = Number.parseInt(item.id.split(':').pop() ?? '', 10);
@@ -513,7 +516,8 @@ export function PierreTrailCodeView({
   // Per-token interactions for construct navigation. Only wired when the host
   // supplies both callbacks; providing them also switches Pierre into its
   // token-transformer render path (pointer events land on token spans).
-  const symbolHandlers = useMemo((): Partial<CodeViewReactOptions> => {
+  const symbolHandlers = useMemo(
+    (): Partial<CodeViewReactOptions<TrailStepAnnotation, undefined>> => {
     if (resolveSymbol == null || onSymbolClick == null) return {};
     const resolveAt = (
       props: TokenEventBase,
@@ -537,7 +541,7 @@ export function PierreTrailCodeView({
     };
   }, [resolveSymbol, onSymbolClick]);
 
-  const options = useMemo((): CodeViewReactOptions => {
+  const options = useMemo((): CodeViewReactOptions<TrailStepAnnotation, undefined> => {
     return {
       theme: {
         dark: resolvePierreSyntaxThemeName('dark'),
@@ -551,10 +555,11 @@ export function PierreTrailCodeView({
       // PIERRE_BASE_OPTIONS and `disableFileHeader` must follow it.
       ...buildPierreOptions(background, {
         background: theme.colors.backgroundSecondary,
+        color: theme.colors.text,
         fontSize: `${headerFontSize}px`,
         lineHeight: String(TRAIL_HEADER_LINE_HEIGHT),
         padding: `${TRAIL_HEADER_PAD_Y}px 8px`,
-      }),
+      }, theme.colors.textSecondary),
       disableFileHeader: false,
       // The library assumes a 44px header (DEFAULT_VIRTUAL_FILE_METRICS); the
       // compact chrome above is `headerHeight`. CodeView uses this for its
@@ -566,7 +571,7 @@ export function PierreTrailCodeView({
       ...symbolHandlers,
       ...(mode === 'light' || mode === 'dark' ? { themeType: mode } : {}),
     };
-  }, [background, headerFontSize, headerHeight, theme.colors.backgroundSecondary, mode, onPostRender, onOpenFile, onLineClick, symbolHandlers]);
+  }, [background, headerFontSize, headerHeight, theme.colors.backgroundSecondary, theme.colors.text, theme.colors.textSecondary, mode, onPostRender, onOpenFile, onLineClick, symbolHandlers]);
 
   useEffect(() => {
     if (load.status !== 'ready' || stepIndex == null) return;

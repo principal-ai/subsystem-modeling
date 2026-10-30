@@ -13,4 +13,6 @@ tooling around it:
 | `packages/principal-studio-cli` | `@principal-ai/principal-studio-cli` | CLI (`principal-ai` bin) |
 | `site` | — | Marketing / docs site |
 
+Studio can also browse S3- and Cloudflare R2-backed models in its **Shared Subsystems** tab.
+See [bucket configuration and agent HTTP API](packages/subsystems-studio/docs/SHARED-SUBSYSTEMS.md).
 

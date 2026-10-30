@@ -56,6 +56,11 @@ const TAB_TOGGLES: Array<{
 		description: "Verified constructs by repo, with source spans",
 	},
 	{
+		key: "sharedSubsystems",
+		label: "Shared Subsystems",
+		description: "Read-only models from S3 and Cloudflare R2 buckets",
+	},
+	{
 		key: "maintenance",
 		label: "Maintainer",
 		description: "Live Maintain overview: verification progress and proposals",

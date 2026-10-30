@@ -18,7 +18,6 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { SubsystemModelRun } from "../shared/contract";
 
-const ROOT = join(homedir(), ".principal", "subsystem-model-runs");
 const MAX_RUNS_PER_MODEL = 50;
 
 interface RunsFile {
@@ -29,7 +28,10 @@ interface RunsFile {
 
 /** Directory the run log lives in (overridable per-call for tests). */
 export function subsystemModelRunsDir(): string {
-	return ROOT;
+	return join(
+		process.env["PRINCIPAL_SUBSYSTEM_MODELS_HOME"]?.trim() || homedir(),
+		".principal", "subsystem-model-runs",
+	);
 }
 
 function runPath(graphId: string, root: string): string {
@@ -79,6 +81,7 @@ export async function noteSubsystemModelRunStart(opts: {
 	 * the run; falls back to a fresh uuid when absent.
 	 */
 	runId?: string;
+	maintenanceRunId?: string;
 	agent?: string;
 	layer?: SubsystemModelRun["layer"];
 	mode?: SubsystemModelRun["mode"];
@@ -88,9 +91,10 @@ export async function noteSubsystemModelRunStart(opts: {
 	startedAt?: string;
 	root?: string;
 }): Promise<SubsystemModelRun> {
-	const root = opts.root ?? ROOT;
+	const root = opts.root ?? subsystemModelRunsDir();
 	const run: SubsystemModelRun = {
 		id: opts.runId ?? randomUUID(),
+		maintenanceRunId: opts.maintenanceRunId,
 		graphId: opts.graphId,
 		graphTitle: opts.graphTitle ?? opts.graphId,
 		sessionId: opts.sessionId,
@@ -117,6 +121,7 @@ export async function noteSubsystemModelRunFinish(opts: {
 	graphId: string;
 	graphTitle?: string;
 	runId?: string;
+	maintenanceRunId?: string;
 	/** OpenCode session id, when one was created. */
 	sessionId?: string;
 	agent?: string;
@@ -139,7 +144,7 @@ export async function noteSubsystemModelRunFinish(opts: {
 	endedAt?: string;
 	root?: string;
 }): Promise<void> {
-	const root = opts.root ?? ROOT;
+	const root = opts.root ?? subsystemModelRunsDir();
 	const endedAt = opts.endedAt ?? new Date().toISOString();
 	const runs = await readRunsFile(opts.graphId, root);
 
@@ -156,6 +161,7 @@ export async function noteSubsystemModelRunFinish(opts: {
 		summary: opts.summary,
 		pendingCount: opts.pendingCount,
 		verdict: opts.verdict,
+		...(opts.maintenanceRunId ? { maintenanceRunId: opts.maintenanceRunId } : {}),
 		// Only carry a capture when one was made — present so it survives the
 		// spread of a start-then-finish, absent so an update never nulls it out.
 		...(opts.commitsAtStart ? { commitsAtStart: opts.commitsAtStart } : {}),
@@ -197,7 +203,7 @@ export async function listSubsystemModelRuns(opts?: {
 	limit?: number;
 	root?: string;
 }): Promise<SubsystemModelRun[]> {
-	const root = opts?.root ?? ROOT;
+	const root = opts?.root ?? subsystemModelRunsDir();
 	const limit = Math.max(1, Math.min(500, Math.floor(opts?.limit ?? 200)));
 	const cutoff = opts?.days != null ? Date.now() - opts.days * 86_400_000 : null;
 
@@ -234,7 +240,7 @@ export async function listSubsystemModelRuns(opts?: {
 
 export async function deleteSubsystemModelRuns(
 	graphId: string,
-	root: string = ROOT,
+	root: string = subsystemModelRunsDir(),
 ): Promise<void> {
 	try {
 		await fs.unlink(runPath(graphId, root));

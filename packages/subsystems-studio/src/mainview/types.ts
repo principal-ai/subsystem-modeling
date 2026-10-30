@@ -15,6 +15,8 @@ export type TabState =
 	| { kind: "agent-sessions" }
 	| { kind: "maintenance-sessions" }
 	| { kind: "subsystems" }
+	| { kind: "shared-subsystems" }
+	| { kind: "remote-subsystem-model"; id: string; sourceId: string; modelKey: string }
 	| { kind: "constructs" }
 	| { kind: "maintenance" }
 	| { kind: "graphify" }

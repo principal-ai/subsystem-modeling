@@ -32,6 +32,7 @@ import type {
 	SymbolInspection,
 } from "@principal-ai/subsystems-react";
 import type { SubsystemComponentRemoval } from "@principal-ai/subsystems-core";
+import type { RemoteModel, RemoteModelPage, RemoteModelSource, RemoteModelSourceInput } from "./remote-models";
 import type {
 	ConstructTimelineMeta,
 	ConstructTimelineOptions,
@@ -75,6 +76,8 @@ export interface DefaultTabFlags {
 	packageLayers: boolean;
 	/** Subsystems list tab. */
 	subsystems: boolean;
+	/** Read-only subsystem models from configured S3 or R2 sources. */
+	sharedSubsystems: boolean;
 	/** Verified constructs tab (source spans confirmed by the last audit). */
 	constructs: boolean;
 	/** Maintain overview tab (verification progress + proposals). */
@@ -91,6 +94,7 @@ export const DEFAULT_TAB_FLAGS: DefaultTabFlags = {
 	graphify: false,
 	packageLayers: false,
 	subsystems: true,
+	sharedSubsystems: true,
 	constructs: true,
 	maintenance: true,
 	opencodeV2: false,
@@ -1025,6 +1029,8 @@ export interface MaintenanceOverviewModel {
 export interface SubsystemModelRun {
 	/** Run-local id (stable row key across the running → finished transition). */
 	id: string;
+	/** Parent maintenance attempt, when this run belongs to a recorded sequence. */
+	maintenanceRunId?: string;
 	graphId: string;
 	graphTitle: string;
 	/** OpenCode session id — the durable join key back to opencode.db. */
@@ -1056,6 +1062,73 @@ export interface SubsystemModelRun {
 	summary?: string;
 	pendingCount?: number;
 	verdict?: "fully_verified" | "partially_verified" | "issues" | "unknown";
+}
+
+export type SubsystemMaintenanceOutcome =
+	| "converged"
+	| "needs_unblock"
+	| "stalled"
+	| "cap"
+	| "error";
+
+export interface SubsystemMaintenanceCounts {
+	proposalsCreated: number | null;
+	proposalsApplied: number | null;
+	proposalsPending: number | null;
+}
+
+export interface SubsystemMaintenanceStage {
+	runId: string;
+	sessionId: string | null;
+	agent: string;
+	layer: SubsystemVerificationLane;
+	startedAt: string;
+	endedAt: string | null;
+	status: "running" | "done" | "error" | "skipped";
+	commitsAtStart: Record<string, PurlCommit> | null;
+	counts: SubsystemMaintenanceCounts;
+	summary: string | null;
+	error: string | null;
+}
+
+/** Whole-attempt identity is independent of both agent ids and source commits. */
+export type SubsystemMaintenanceSequence = {
+	id: string;
+	startedAt: string;
+} & (
+	| {
+			status: "running" | "unknown";
+			outcome: null;
+			endedAt: null;
+	  }
+	| {
+			status: "finished";
+			outcome: SubsystemMaintenanceOutcome;
+			endedAt: string;
+	  }
+);
+
+/** Read snapshot, not a grant to start maintenance or resolve proposals. */
+export interface SubsystemMaintenanceSnapshot {
+	schemaVersion: 1;
+	model: { id: string; title: string };
+	sequence: SubsystemMaintenanceSequence;
+	/** Semantic changes within this attempt, never incremented just for a read. */
+	revision: number;
+	updatedAt: string;
+	observedAt: string;
+	stages: SubsystemMaintenanceStage[];
+	counts: SubsystemMaintenanceCounts & { stagesFinished: number };
+	commitsAtStart: Record<string, PurlCommit> | null;
+	/** Model's verified baseline, not inferred from this attempt's outcome. */
+	verifiedAtCommits: Record<string, PurlCommit> | null;
+	verification: {
+		checkedAt: string;
+		stale: boolean;
+		lanes: Record<SubsystemVerificationLane, VerificationLaneStatus>;
+	} | null;
+	summary: string | null;
+	blocker: string | null;
 }
 
 /** A pending proposal tagged with the model it belongs to. */
@@ -1662,7 +1735,7 @@ export interface ConstructInventoryRepo extends Omit<VerifiedConstructRepo, "pac
 
 export interface TabSummary {
 	id: string;
-	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-c4" | "c4-sketch" | "subsystem-showcase" | "subsystems" | "constructs" | "maintenance" | "graphify" | "package-layers" | "opencode-v2";
+	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-c4" | "c4-sketch" | "subsystem-showcase" | "subsystems" | "shared-subsystems" | "remote-subsystem-model" | "constructs" | "maintenance" | "graphify" | "package-layers" | "opencode-v2";
 	title: string;
 	mode?: ViewerMode;
 	/** For `subsystem-model` tabs — absolute path to the persisted JSON. */
@@ -1673,7 +1746,9 @@ export interface TabFullState {
 	ok: boolean;
 	error?: string;
 	id: string;
-	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-c4" | "c4-sketch" | "subsystem-showcase" | "subsystems" | "constructs" | "maintenance" | "graphify" | "package-layers" | "opencode-v2";
+	kind: TabSummary["kind"];
+	sourceId?: string;
+	modelKey?: string;
 	title: string;
 	mode?: ViewerMode;
 	repoRoot?: string;
@@ -1962,6 +2037,26 @@ export type StudioRequests = {
 	getSubsystemModel: {
 		params: { graphId: string };
 		response: { ok: boolean; error?: string; graph?: StoredSubsystemModel };
+	};
+	listRemoteModelSources: {
+		params: Record<string, never>;
+		response: { ok: boolean; sources?: RemoteModelSource[]; error?: string };
+	};
+	configureRemoteModelSource: {
+		params: { input: RemoteModelSourceInput };
+		response: { ok: boolean; source?: RemoteModelSource; preview?: RemoteModelPage; error?: string };
+	};
+	listRemoteModels: {
+		params: { sourceId: string; cursor?: string };
+		response: { ok: boolean; page?: RemoteModelPage; error?: string };
+	};
+	getRemoteModel: {
+		params: { sourceId: string; key: string };
+		response: { ok: boolean; model?: RemoteModel; error?: string };
+	};
+	openRemoteModel: {
+		params: { sourceId: string; key: string };
+		response: { ok: boolean; tabId?: string; error?: string };
 	};
 	/**
 	 * Apply a partial patch to a stored model from the renderer — e.g. the

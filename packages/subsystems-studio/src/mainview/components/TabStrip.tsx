@@ -39,6 +39,8 @@ const KIND_ICONS: Partial<Record<TabSummary["kind"], LucideIcon>> = {
 	"c4-sketch": PencilRuler,
 	"subsystem-showcase": LayoutGrid,
 	subsystems: LayoutDashboard,
+	"shared-subsystems": Share2,
+	"remote-subsystem-model": LayoutDashboard,
 	constructs: Braces,
 	maintenance: Gauge,
 	graphify: Share2,
@@ -106,6 +108,7 @@ export function TabStrip({
 					tab.kind === "agent-sessions" ||
 					tab.kind === "maintenance-sessions" ||
 					tab.kind === "subsystems" ||
+					tab.kind === "shared-subsystems" ||
 					tab.kind === "constructs" ||
 					tab.kind === "maintenance" ||
 					tab.kind === "graphify" ||

@@ -15,6 +15,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   absoluteRectOf,
   c4GroupDefs,
+  c4CameraNodeIds,
   hidesComponentDuringMorph,
   rebaseGroupBoundsAbsolute,
   showDescriptionFor,
@@ -61,6 +62,51 @@ const base = model([
 
 const groupById = (defs: ReturnType<typeof c4GroupDefs>['groups']) =>
   new Map(defs.map((g) => [g.id, g]));
+
+describe('C4 camera targets', () => {
+  const withOutside = model([
+    ...base.nodes,
+    { id: 'external:github', kind: 'external-system', label: 'GitHub' },
+    { id: 'person:dev', kind: 'person', label: 'Dev' },
+  ]);
+
+  test('focuses a container without fitting siblings or outside systems', () => {
+    expect(c4CameraNodeIds(withOutside, HOST)).toEqual([HOST]);
+    expect(c4CameraNodeIds({ ...withOutside, openContainerIds: [HOST] }, HOST)).toEqual([HOST]);
+  });
+
+  test('restores the system and outside elements for the overview', () => {
+    expect(c4CameraNodeIds(withOutside, null)).toEqual([SYSTEM, 'external:github', 'person:dev']);
+    expect(c4CameraNodeIds(withOutside)).toEqual([SYSTEM, 'external:github', 'person:dev']);
+  });
+
+  test('falls back to the overview for missing targets', () => {
+    const overview = [SYSTEM, 'external:github', 'person:dev'];
+    expect(c4CameraNodeIds(withOutside, 'missing')).toEqual(overview);
+    expect(c4CameraNodeIds(withOutside, ['missing', 'also-missing'])).toEqual(overview);
+    expect(c4CameraNodeIds(withOutside, [])).toEqual(overview);
+  });
+
+  test('frames both endpoint containers and excludes unrelated elements', () => {
+    expect(c4CameraNodeIds(withOutside, ['cmp:a', NOTES])).toEqual([HOST, NOTES]);
+  });
+
+  test('deduplicates endpoints in the same container', () => {
+    expect(c4CameraNodeIds(withOutside, ['cmp:a', 'cmp:b'])).toEqual([HOST]);
+    expect(c4CameraNodeIds(withOutside, ['cmp:a', HOST])).toEqual([HOST]);
+  });
+
+  test('keeps external endpoints in the relationship frame', () => {
+    expect(c4CameraNodeIds(withOutside, ['cmp:a', 'external:github']))
+      .toEqual([HOST, 'external:github']);
+    expect(c4CameraNodeIds(withOutside, ['person:dev', NOTES]))
+      .toEqual(['person:dev', NOTES]);
+  });
+
+  test('ignores missing endpoints when a valid target remains', () => {
+    expect(c4CameraNodeIds(withOutside, ['cmp:a', 'missing'])).toEqual([HOST]);
+  });
+});
 
 describe('c4GroupDefs — the system boundary', () => {
   test('is a group of its own, even with nothing open', () => {

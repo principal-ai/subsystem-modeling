@@ -14,6 +14,7 @@ import type {
 	SubsystemModelProposalChange,
 	SubsystemModelProposalPreviewRow,
 	SubsystemModelSecondOpinion,
+	SubsystemMaintenanceCounts,
 	SubsystemSignatureClaim,
 	SubsystemSiteConstruct,
 	SubsystemTargetConstruct,
@@ -76,15 +77,29 @@ function newProposalId(): string {
 	return `sp-${randomBytes(6).toString("hex")}`;
 }
 
-async function readFile(graphId: string): Promise<ProposalFile> {
+async function readFile(graphId: string, strict = false): Promise<ProposalFile> {
 	try {
 		const raw = await fs.readFile(proposalPath(graphId), "utf8");
 		const parsed = JSON.parse(raw) as ProposalFile;
 		if (!parsed || !Array.isArray(parsed.proposals)) {
+			if (strict) throw new Error("Invalid proposal store");
 			return { version: 1, graphId, proposals: [] };
+		}
+		if (strict && (parsed.version !== 1 || parsed.graphId !== graphId)) {
+			throw new Error("Invalid proposal store identity");
+		}
+		if (strict && parsed.proposals.some((p) =>
+			!p || typeof p.id !== "string" ||
+			p.graphId !== graphId ||
+			!["pending", "accepted", "rejected"].includes(p.status) ||
+			(p.runId !== undefined && typeof p.runId !== "string")
+		)) throw new Error("Invalid proposal records");
+		if (strict && new Set(parsed.proposals.map((p) => p.id)).size !== parsed.proposals.length) {
+			throw new Error("Duplicate proposal records");
 		}
 		return { version: 1, graphId, proposals: parsed.proposals };
 	} catch (err) {
+		if (strict && (err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
 		// A missing file is the normal empty case. A parse failure is not:
 		// swallow it silently and the model reads as "no proposals", which is
 		// indistinguishable from a clean store and hides real pending work.
@@ -1063,6 +1078,29 @@ export async function pendingProposalCountForRun(
 ): Promise<number> {
 	const pending = await listSubsystemModelProposals(graphId);
 	return pending.filter((p) => p.runId === runId).length;
+}
+
+/** Measured, run-attributed counts, including resolved proposals. Never totals
+ * from the model; null means the proposal store could not be read reliably. */
+export async function proposalCountsForRuns(
+	graphId: string,
+	runIds: readonly string[],
+): Promise<Record<string, SubsystemMaintenanceCounts> | null> {
+	try {
+		const doc = await readFile(graphId, true);
+		const counts: Record<string, SubsystemMaintenanceCounts> = Object.create(null);
+		for (const runId of runIds) {
+			const proposals = doc.proposals.filter((p) => p.runId === runId);
+			counts[runId] = {
+				proposalsCreated: proposals.length,
+				proposalsApplied: proposals.filter((p) => p.status === "accepted").length,
+				proposalsPending: proposals.filter((p) => p.status === "pending").length,
+			};
+		}
+		return counts;
+	} catch {
+		return null;
+	}
 }
 
 export async function getSubsystemModelProposal(

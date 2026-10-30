@@ -30,6 +30,7 @@ import {
 import { parseTourOrThrow } from "@principal-ai/file-city-builder";
 import { handoffToRunning, startIpcServer, type LoadTourMessage } from "./ipc";
 import { startHttpServer } from "./http-server";
+import { remoteModelSources, remoteSourceErrorMessage } from "./remote-model-sources";
 import { resolveSandboxed } from "./sandboxed-path";
 import { deleteSubsystemModel, getSubsystemModel, listSubsystemModels, purlRepoKey, resolveRepoRootForComponent, setSubsystemModelChangeListener, stampVerifiedCommits, startSubsystemModelDirWatcher, subsystemModelFilePath, touchSubsystemModelOpened, updateSubsystemModel } from "./subsystem-model-store";
 import { buildC4ProjectionForModel } from "./c4-projection";
@@ -172,6 +173,8 @@ import {
 } from "./viewer-settings";
 import { createRegularAuditScheduler } from "./regular-audit";
 import { reconcileOrphanedRuns } from "./subsystem-model-run-reconcile";
+import { maintenanceRuns } from "./subsystem-maintenance-runs";
+import { createMaintenanceOutcomeSender } from "./maintenance-outcome-delivery";
 
 /**
  * Resident store — the in-memory home for the recent window's processed
@@ -323,6 +326,7 @@ const LIBRARY_TAB_ID = "library";
 const AGENT_SESSIONS_TAB_ID = "agent-sessions";
 const MAINTENANCE_SESSIONS_TAB_ID = "maintenance-sessions";
 const SUBSYSTEMS_TAB_ID = "subsystems";
+const SHARED_SUBSYSTEMS_TAB_ID = "shared-subsystems";
 const CONSTRUCTS_TAB_ID = "constructs";
 const MAINTENANCE_TAB_ID = "maintenance";
 const GRAPHIFY_TAB_ID = "graphify";
@@ -337,6 +341,7 @@ const PERMANENT_TAB_DEFS: Array<{
 		| "agent-sessions"
 		| "maintenance-sessions"
 		| "subsystems"
+		| "shared-subsystems"
 		| "constructs"
 		| "maintenance"
 		| "graphify"
@@ -351,6 +356,12 @@ const PERMANENT_TAB_DEFS: Array<{
 		kind: "subsystems",
 		title: "Subsystems",
 		flag: "subsystems",
+	},
+	{
+		id: SHARED_SUBSYSTEMS_TAB_ID,
+		kind: "shared-subsystems",
+		title: "Shared Subsystems",
+		flag: "sharedSubsystems",
 	},
 	{
 		id: CONSTRUCTS_TAB_ID,
@@ -499,6 +510,20 @@ interface SubsystemsTabState {
 	title: "Subsystems";
 }
 
+interface SharedSubsystemsTabState {
+	id: typeof SHARED_SUBSYSTEMS_TAB_ID;
+	kind: "shared-subsystems";
+	title: "Shared Subsystems";
+}
+
+interface RemoteSubsystemModelTabState {
+	id: string;
+	kind: "remote-subsystem-model";
+	title: string;
+	sourceId: string;
+	modelKey: string;
+}
+
 interface ConstructsTabState {
 	id: typeof CONSTRUCTS_TAB_ID;
 	kind: "constructs";
@@ -593,6 +618,8 @@ type TabState =
 	| AgentSessionsTabState
 	| MaintenanceSessionsTabState
 	| SubsystemsTabState
+	| SharedSubsystemsTabState
+	| RemoteSubsystemModelTabState
 	| ConstructsTabState
 	| MaintenanceTabState
 	| GraphifyTabState
@@ -610,6 +637,7 @@ function permanentTabState(
 ):
 	| AgentSessionsTabState
 	| MaintenanceSessionsTabState
+	| SharedSubsystemsTabState
 	| SubsystemsTabState
 	| ConstructsTabState
 	| MaintenanceTabState
@@ -629,6 +657,9 @@ function permanentTabState(
 	}
 	if (def.kind === "subsystems") {
 		return { id: SUBSYSTEMS_TAB_ID, kind: "subsystems", title: "Subsystems" };
+	}
+	if (def.kind === "shared-subsystems") {
+		return { id: SHARED_SUBSYSTEMS_TAB_ID, kind: "shared-subsystems", title: "Shared Subsystems" };
 	}
 	if (def.kind === "constructs") {
 		return { id: CONSTRUCTS_TAB_ID, kind: "constructs", title: "Constructs" };
@@ -695,6 +726,8 @@ function ensurePermanentTab(id: string): void {
 				id === PACKAGE_LAYERS_TAB_ID || viewerSettings.defaultTabs.packageLayers,
 			subsystems:
 				id === SUBSYSTEMS_TAB_ID || viewerSettings.defaultTabs.subsystems,
+			sharedSubsystems:
+				id === SHARED_SUBSYSTEMS_TAB_ID || viewerSettings.defaultTabs.sharedSubsystems,
 			constructs:
 				id === CONSTRUCTS_TAB_ID || viewerSettings.defaultTabs.constructs,
 			maintenance:
@@ -1079,6 +1112,36 @@ async function openSubsystemModelTab(
 	return id;
 }
 
+async function remoteResult<T extends object>(operation: () => Promise<T>) {
+	try { return { ok: true as const, ...await operation() }; }
+	catch (err) { return { ok: false as const, error: remoteSourceErrorMessage(err) }; }
+}
+
+async function openRemoteModelsTab(sourceId: string, key?: string) {
+	return remoteResult(async () => {
+		remoteModelSources.getSource(sourceId);
+		if (!key) {
+			ensurePermanentTab(SHARED_SUBSYSTEMS_TAB_ID);
+			suggestedTabId = SHARED_SUBSYSTEMS_TAB_ID;
+			broadcastTabsChanged(SHARED_SUBSYSTEMS_TAB_ID);
+			return { tabId: SHARED_SUBSYSTEMS_TAB_ID };
+		}
+		const existing = Array.from(tabs.values()).find((tab) =>
+			tab.kind === "remote-subsystem-model" && tab.sourceId === sourceId && tab.modelKey === key);
+		if (existing) {
+			suggestedTabId = existing.id;
+			broadcastTabsChanged(existing.id);
+			return { tabId: existing.id };
+		}
+		const model = await remoteModelSources.get(sourceId, key);
+		const id = `remote-model-${nextTabId++}`;
+		tabs.set(id, { id, kind: "remote-subsystem-model", title: model.document.title, sourceId, modelKey: key });
+		suggestedTabId = id;
+		broadcastTabsChanged(id);
+		return { tabId: id };
+	});
+}
+
 /**
  * Open a model's C4 projection in its own tab. Fast path focuses an already
  * open C4 tab and retargets its source; otherwise resolves the title from the
@@ -1446,6 +1509,7 @@ function isStaticTab(
 	| AgentSessionsTabState
 	| MaintenanceSessionsTabState
 	| SubsystemsTabState
+	| SharedSubsystemsTabState
 	| ConstructsTabState
 	| MaintenanceTabState
 	| GraphifyTabState
@@ -1456,6 +1520,7 @@ function isStaticTab(
 		tab.kind === "agent-sessions" ||
 		tab.kind === "maintenance-sessions" ||
 		tab.kind === "subsystems" ||
+		tab.kind === "shared-subsystems" ||
 		tab.kind === "constructs" ||
 		tab.kind === "maintenance" ||
 		tab.kind === "graphify" ||
@@ -1470,6 +1535,9 @@ function isTourTab(tab: TabState): tab is TourTabState {
 }
 
 function summarize(tab: TabState): TabSummary {
+	if (tab.kind === "remote-subsystem-model") {
+		return { id: tab.id, kind: tab.kind, title: tab.title };
+	}
 	if (tab.kind === "session-events") {
 		return { id: tab.id, kind: "session-events", title: tab.title };
 	}
@@ -1508,6 +1576,9 @@ function summarize(tab: TabState): TabSummary {
 }
 
 function fullState(tab: TabState): TabFullState {
+	if (tab.kind === "remote-subsystem-model") {
+		return { ok: true, id: tab.id, kind: tab.kind, title: tab.title, sourceId: tab.sourceId, modelKey: tab.modelKey };
+	}
 	if (tab.kind === "session-events") {
 		return {
 			ok: true,
@@ -1987,6 +2058,15 @@ const requests: RequestHandlers = {
 				}
 			},
 
+			listRemoteModelSources: async () =>
+				remoteResult(async () => ({ sources: remoteModelSources.list().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) })),
+			configureRemoteModelSource: async ({ input }) =>
+				remoteResult(() => remoteModelSources.configure(input)),
+			listRemoteModels: async ({ sourceId, cursor }) =>
+				remoteResult(async () => ({ page: await remoteModelSources.browse(sourceId, cursor) })),
+			getRemoteModel: async ({ sourceId, key }) =>
+				remoteResult(async () => ({ model: await remoteModelSources.get(sourceId, key) })),
+			openRemoteModel: ({ sourceId, key }) => openRemoteModelsTab(sourceId, key),
 			getSubsystemModel: async ({ graphId }) => {
 				const graph = await getSubsystemModel(graphId);
 				if (!graph) return { ok: false, error: `unknown graph: ${graphId}` };
@@ -3365,6 +3445,7 @@ async function startMaintainSubsystemModel(
 	error?: string;
 	model?: string;
 	alreadyRunning?: boolean;
+	maintenanceRunId?: string;
 }> {
 	const full = await getSubsystemModel(graphId);
 	if (!full) return { ok: false, error: `unknown graph: ${graphId}` };
@@ -3395,24 +3476,39 @@ async function startMaintainSubsystemModel(
 			subsystemMaintainerModel: trimmed.length > 0 ? trimmed : null,
 		});
 	}
-	maintainSubsystemModelInBackground(graphId, {
-		model: selected.model,
-	});
-	return { ok: true, started: true, model: selected.model };
+	try {
+		const maintenanceRunId = await maintainSubsystemModelInBackground(graphId, {
+			model: selected.model,
+			title: full.title,
+		});
+		if (!maintenanceRunId) return { ok: true, started: false, alreadyRunning: true };
+		return { ok: true, started: true, model: selected.model, maintenanceRunId };
+	} catch (err) {
+		return { ok: false, error: err instanceof Error ? err.message : String(err) };
+	}
 }
 
-function maintainSubsystemModelInBackground(
+async function maintainSubsystemModelInBackground(
 	graphId: string,
-	opts?: { model?: string },
-): void {
+	opts?: { model?: string; title?: string },
+): Promise<string | undefined> {
 	if (maintainingGraphIds.has(graphId)) return;
 	maintainingGraphIds.add(graphId);
+	let maintenanceRunId: string;
+	try {
+		const snapshot = await maintenanceRuns.start({ graphId, title: opts?.title ?? graphId });
+		maintenanceRunId = snapshot.sequence.id;
+	} catch (err) {
+		maintainingGraphIds.delete(graphId);
+		throw err;
+	}
 	ensureLiveFeedBroadcast();
 	broadcastSubsystemModelMaintainChanged({ graphId, status: "running", model: opts?.model });
 	void (async () => {
 		try {
 			const result = await maintainSubsystemModelSequence(graphId, {
 				model: opts?.model,
+				maintenanceRunId,
 				onSession: () => {
 					// Do not auto-open the events tab — the run log now has the
 					// sessionId -> graphId pair; the Maintain surface opens the tab
@@ -3460,6 +3556,7 @@ function maintainSubsystemModelInBackground(
 			broadcastSubsystemModelRunsChanged({ graphId });
 		}
 	})();
+	return maintenanceRunId;
 }
 
 function broadcastStudioVersionChanged(
@@ -4078,6 +4175,11 @@ startIpcServer(async (msg) => {
 });
 
 // HTTP server for agent communication (subsystem graphs, etc.)
+const maintenanceOutcomeSender = createMaintenanceOutcomeSender({
+	store: maintenanceRuns,
+	onError: () => console.warn("[principal-studio] Maintenance outcome delivery is unavailable; inspect maintenance status."),
+});
+maintenanceOutcomeSender.start();
 setSubsystemModelChangeListener(broadcastSubsystemModelChanged);
 void startSubsystemModelDirWatcher().then(() => {
 	console.log("[principal-studio] watching ~/.principal/subsystem-models for changes");
@@ -4134,4 +4236,5 @@ startHttpServer(
 		return { ok: true, tabId };
 	},
 	async (sketchId) => deleteC4SketchAndCloseTabs(sketchId),
+	openRemoteModelsTab,
 );

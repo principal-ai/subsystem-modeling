@@ -251,6 +251,8 @@ export {
 export type {
   DecorationBaseTrailRef,
   DecorationDraft,
+  DecorationDraftC4,
+  DecorationDraftC4Element,
   DecorationDraftComponent,
   DecorationDraftEdge,
   DecorationDraftTrailRef,
@@ -259,9 +261,12 @@ export type {
   DecorationTrailRef,
   SubsystemDecoration,
 } from './subsystem/decoration';
-export { DecorationPanel } from './subsystem/DecorationPanel';
+export { applyDecorationC4 } from './subsystem/decorationC4';
+export { DecorationHeader, DecorationPanel } from './subsystem/DecorationPanel';
 export type {
+  DecorationHeaderProps,
   DecorationPanelProps,
+  DecorationPanelSelection,
   DecorationPanelTrailMeta,
 } from './subsystem/DecorationPanel';
 export { GraphLayoutCover } from './subsystem/GraphLayoutCover';

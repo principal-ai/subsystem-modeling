@@ -21,9 +21,11 @@ import {
 } from "react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
+	canUseWASM,
 	getFiletypeFromFileName,
 	getHighlighterOptions,
 	preloadHighlighter,
+	type HighlighterTypes,
 } from "@pierre/diffs";
 import { File } from "@pierre/diffs/react";
 import { Loader2, Search } from "lucide-react";
@@ -39,6 +41,14 @@ import { ConstructRepositorySearch } from "../components/ConstructRepositorySear
 import { ConstructTimelinePanel, ConstructTimelineTrigger, useConstructTimeline } from "../components/ConstructTimelineControl";
 
 const POLL_MS = 15_000;
+
+/**
+ * Pierre's WASM lexer needs WebAssembly + SIMD; fall back to Shiki's JS engine
+ * on older runtimes. Must match the option passed to every `<File>` here.
+ */
+const PREFERRED_HIGHLIGHTER: HighlighterTypes = canUseWASM()
+	? "highlights"
+	: "shiki-js";
 
 /** Total verified constructs in a repo (sum across its package groups). */
 function countRepo(repo: ConstructInventoryRepo): number {
@@ -113,7 +123,11 @@ function SpanCodeView({
 		setReady(false);
 		// Warm the shared highlighter first: a cold render paints an empty <pre>
 		// that never re-renders (no worker pool).
-		void preloadHighlighter(getHighlighterOptions(lang, {}))
+		void preloadHighlighter(
+			getHighlighterOptions(lang, {
+				preferredHighlighter: PREFERRED_HIGHLIGHTER,
+			}),
+		)
 			.catch(() => {
 				/* fall through to a plain-text render */
 			})
@@ -149,6 +163,7 @@ function SpanCodeView({
 	const options = useMemo(
 		() => ({
 			disableFileHeader: true,
+			preferredHighlighter: PREFERRED_HIGHLIGHTER,
 			unsafeCSS: `:host{--diffs-light-bg:${background};--diffs-dark-bg:${background};background:${background} !important;}`,
 			onPostRender,
 		}),

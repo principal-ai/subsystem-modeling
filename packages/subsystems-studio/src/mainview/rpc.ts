@@ -114,7 +114,8 @@ export const regularAuditChangeSubscribers = new Set<
 >();
 
 const rpc = Electroview.defineRPC<StudioRPC>({
-	maxRequestTime: 30000,
+	// S3 source validation can read several pages before finding model previews.
+	maxRequestTime: 120000,
 	handlers: {
 		requests: {},
 		messages: {

@@ -8,12 +8,12 @@ test("records a failed maintenance preamble even when no stage or session starts
 	try {
 		const modulePath = join(import.meta.dir, "maintain-model.ts");
 		const proc = Bun.spawn({
-			cmd: [process.execPath, "--eval", `
+			cmd: [process.execPath, "--no-env-file", "--eval", `
 				import { maintainSubsystemModelSequence } from ${JSON.stringify(modulePath)};
 				const result = await maintainSubsystemModelSequence("sg-missing", { model: "test/model" });
 				console.log(JSON.stringify(result));
 			`],
-			env: { ...process.env, HOME: home },
+			env: { ...process.env, HOME: home, PRINCIPAL_SUBSYSTEM_MODELS_HOME: home },
 			stdout: "pipe",
 			stderr: "pipe",
 		});
@@ -24,7 +24,8 @@ test("records a failed maintenance preamble even when no stage or session starts
 		]);
 		expect(stderr).toBe("");
 		expect(code).toBe(0);
-		expect(JSON.parse(stdout)).toMatchObject({
+		const result = JSON.parse(stdout);
+		expect(result).toMatchObject({
 			ok: false, stages: [], error: "unknown graph: sg-missing",
 		});
 		const file = JSON.parse(await readFile(
@@ -36,6 +37,16 @@ test("records a failed maintenance preamble even when no stage or session starts
 		});
 		expect(file.runs[0].sessionId).toBeUndefined();
 		expect(file.runs[0].startedAt).toBeDefined();
+		const parents = JSON.parse(await readFile(
+			join(home, ".principal", "subsystem-maintenance-runs", "sg-missing.json"), "utf8",
+		));
+		expect(parents.runs).toHaveLength(1);
+		expect(parents.runs[0].snapshot.sequence).toMatchObject({
+			id: result.maintenanceRunId, status: "finished", outcome: "error",
+		});
+		expect(parents.runs[0].snapshot.stages).toEqual([]);
+		expect(parents.runs[0].snapshot.verification).toBeNull();
+		expect(file.runs[0].maintenanceRunId).toBe(result.maintenanceRunId);
 	} finally {
 		await rm(home, { recursive: true, force: true });
 	}

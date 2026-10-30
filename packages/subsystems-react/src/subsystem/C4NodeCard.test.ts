@@ -44,9 +44,26 @@ function node(over: Partial<C4Container> = {}): C4Element {
 }
 
 describe('nodeStyle — one axis per channel', () => {
-  test('selected overrides everything', () => {
+  test('selected highlights the border colour and weight', () => {
     expect(nodeStyle(node({ state: 'accepted' }), theme, true).width).toBe(3);
     expect(nodeStyle(node({ state: 'accepted' }), theme, true).dash).toBe('solid');
+    expect(nodeStyle(node({ state: 'accepted', technology: 'React' }), theme, true).color)
+      .toBe(theme.colors.accent);
+  });
+
+  test('selected draft elements keep their dashed border', () => {
+    expect(nodeStyle(node({ state: 'proposed' }), theme, true)).toEqual({
+      color: theme.colors.accent,
+      dash: 'dashed',
+      width: 3,
+    });
+  });
+
+  test('selected uses the same accent fallback as the decoration panel', () => {
+    const primaryOnly = { colors: { primary: '#123456' } } as Parameters<typeof nodeStyle>[1];
+    const textOnly = { colors: { text: '#abcdef' } } as Parameters<typeof nodeStyle>[1];
+    expect(nodeStyle(node(), primaryOnly, true).color).toBe('#123456');
+    expect(nodeStyle(node(), textOnly, true).color).toBe('#abcdef');
   });
 
   test('accepted is solid', () => {
@@ -96,6 +113,23 @@ describe('nodeStyle — one axis per channel', () => {
 
   test('a component stays thinner once confirmed', () => {
     expect(nodeStyle(node({ kind: 'component', state: 'accepted' }), theme).width).toBe(1);
+  });
+
+  test('unselected components use primary without changing their draft/accepted encoding', () => {
+    for (const state of ['accepted', 'proposed'] as const) {
+      const component = node({ kind: 'component', technology: 'React', state });
+      expect(nodeStyle(component, theme)).toEqual({
+        color: theme.colors.primary,
+        dash: state === 'proposed' ? 'dashed' : 'solid',
+        width: 1,
+      });
+      expect(nodeStyle(component, theme, true).color).toBe(theme.colors.accent);
+    }
+  });
+
+  test('components fall back to the border color when primary is absent', () => {
+    const borderOnly = { colors: { border: '#555' } } as Parameters<typeof nodeStyle>[1];
+    expect(nodeStyle(node({ kind: 'component' }), borderOnly).color).toBe('#555');
   });
 
   test('falls back safely when the theme has no colour', () => {

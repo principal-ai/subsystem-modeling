@@ -21,6 +21,7 @@
  */
 
 import type { SubsystemTrail, SubsystemTrailMechanism } from './model';
+import type { C4Component, C4Container, C4Edge, C4ExternalSystem, C4Person } from './c4';
 
 export interface DecorationStepAnchor {
   /** Claim fingerprint of the anchored step (see `stepClaimKey`). */
@@ -74,9 +75,33 @@ export interface DecorationDraftEdge {
   mechanism: SubsystemTrailMechanism;
 }
 
+/**
+ * Authored C4 additions, not accepted architecture. The host projects these as
+ * `proposed`; a decoration cannot accept an element or change a base element.
+ * Containers claim a process; components name their container and member aliases,
+ * just like the base C4 contract. A component may belong to a base or draft container.
+ */
+export type DecorationDraftC4Element =
+  | Omit<C4Container, 'state' | 'decidedAt'>
+  | Omit<C4Component, 'state' | 'decidedAt'>
+  | Omit<C4ExternalSystem, 'state' | 'decidedAt'>
+  | Omit<C4Person, 'state' | 'decidedAt'>;
+
+export interface DecorationDraftC4 {
+  /**
+   * New elements only. Element ids and member aliases share the host's composed
+   * C4 namespace, so the host must qualify them when combining subsystem models.
+   * Omit a container's parentId to use the displayed system.
+   */
+  elements?: DecorationDraftC4Element[];
+  /** Authored relationships between existing or draft C4 element ids. */
+  edges?: C4Edge[];
+}
+
 export interface DecorationDraft {
   components?: DecorationDraftComponent[];
   edges?: DecorationDraftEdge[];
+  c4?: DecorationDraftC4;
 }
 
 export interface DecorationProvenance {

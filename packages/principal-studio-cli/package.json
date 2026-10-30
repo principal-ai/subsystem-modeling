@@ -1,7 +1,7 @@
 {
   "name": "@principal-ai/principal-studio-cli",
   "version": "0.52.0",
-  "description": "Principal AI CLI \u2014 subsystem models, Subsystems Studio, tours, and agent sessions",
+  "description": "Principal AI CLI — subsystem models, Subsystems Studio, tours, and agent sessions",
   "main": "dist/index.cjs",
   "types": "dist/index.d.ts",
   "bin": {
@@ -31,6 +31,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@pierre/diffs": "^1.6.2",
     "@principal-ai/agent-monitoring": "0.3.43",
     "@principal-ai/alexandria-core-library": "^0.4.0",
     "@principal-ai/codebase-composition": "^0.2.57",
@@ -46,7 +47,7 @@
     "js-yaml": "4.1.1"
   },
   "optionalDependencies": {
-    "@principal-ai/subsystems-studio": "^0.19.0"
+    "@principal-ai/subsystems-studio": "^0.20.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

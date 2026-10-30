@@ -327,6 +327,8 @@ export interface SubsystemComponentGraphProps {
   edgeView?: SubsystemEdgeView;
   /** Subsystem title displayed above the sidebar and graph. */
   title?: string;
+  /** Extra actions on the right side of the full-width graph header. */
+  headerActions?: ReactNode;
   /**
    * Suppresses the header and sidebar entirely (title, description,
    * trails) for graph-only embeds. Pair with `graphTitle` to keep the
@@ -3607,6 +3609,7 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
                 />
               )}
             </div>
+          {props.headerActions}
         </header>
       )}
       <div ref={wrapRef} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -3620,7 +3623,7 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
             descriptionOpen={props.descriptionOpen}
             onDescriptionOpenChange={props.onDescriptionOpenChange}
             diagnostic={props.diagnostic}
-            sidebarExtra={props.sidebarExtra}
+            sidebarExtra={props.headerActions ? <>{props.headerActions}{props.sidebarExtra}</> : props.sidebarExtra}
             sidebarAfterDescription={props.sidebarAfterDescription}
             renderFileViewer={props.renderFileViewer}
             onFileSelect={props.onFileSelect}

@@ -266,6 +266,8 @@ export interface C4Edge {
   label: string;
   /** The interaction's technology/protocol, e.g. `RPC`, `HTTP`, `stdin`. */
   protocol?: string;
+  /** Unverified decoration relationship, drawn with a segmented label border. */
+  draft?: boolean;
   /** Trail verbs that produced this line (`calls`, `writes`, …). */
   mechanisms: string[];
   /** How many underlying steps this line rolled up. */

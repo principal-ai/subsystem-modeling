@@ -95,6 +95,17 @@ export interface C4ConstructGraph {
 
 export interface C4GraphProps {
   model: C4Model;
+  /**
+   * Camera focus request. Components resolve to their containers; external
+   * endpoints are framed directly. Use `ids` for both ends of a relationship.
+   * The host opens the containers; this graph waits for their layout/morph.
+   * Pass a new object to refocus, or null for the overview. Omit for default camera policy.
+   */
+  containerFocus?: { id: string } | { ids: readonly string[] } | null;
+  /** Controlled element selection, independent of the camera target. Omit for local selection. */
+  selectedNodeId?: string | null;
+  /** Controlled relationship selection. Omit for local selection. */
+  selectedEdgeId?: string | null;
   onSelectNode?: (id: string | null) => void;
   /**
    * Click an edge. Fires with the rolled-up line (and its `trailRefs`
@@ -356,6 +367,24 @@ function C4EdgeLabels({
         zIndex: 5,
       }}
     >
+      <style>{`
+        @keyframes subsystem-c4-edge-label-pulse {
+          0%, 100% { opacity: 0.2; }
+          50% { opacity: 1; }
+        }
+        .subsystem-c4-edge-label-selected {
+          box-shadow:
+            0 0 12px color-mix(in srgb, currentColor 65%, transparent),
+            0 0 22px color-mix(in srgb, currentColor 25%, transparent);
+          opacity: 0.6;
+          animation: subsystem-c4-edge-label-pulse 2200ms ease-in-out infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .subsystem-c4-edge-label-selected {
+            animation: none;
+          }
+        }
+      `}</style>
       {[...positions].map(([id, p]) => {
         const edge = byId.get(id);
         if (!edge) return null;
@@ -385,16 +414,22 @@ function C4EdgeLabels({
               transition: 'opacity 220ms ease',
             }}
           >
+            {selected && (
+              <span
+                aria-hidden
+                className="subsystem-c4-edge-label-selected"
+                style={{ position: 'absolute', inset: 0, borderRadius: 4, color }}
+              />
+            )}
             <span
               aria-hidden
               style={{
                 position: 'absolute',
                 inset: 0,
                 borderRadius: 4,
-                border: `0.5px solid ${color}`,
+                border: `${selected ? 2 : edge.draft ? 1 : 0.5}px ${edge.draft ? 'dashed' : 'solid'} ${color}`,
                 background: surface,
-                // The selected chip echoes the edge's heavier stroke.
-                outline: selected ? `1.5px solid ${color}` : 'none',
+                color,
               }}
             />
             <span
@@ -798,6 +833,29 @@ const FADE_MS = 200;
  */
 const CAMERA_AFTER_MORPH_MS = FADE_MS + MORPH_MS + 60;
 
+/** Containers frame their contents; an overview also includes outside actors/systems. */
+export function c4CameraNodeIds(model: C4Model, targetIds?: string | readonly string[] | null): string[] {
+  const requested = typeof targetIds === 'string' ? [targetIds] : targetIds ?? [];
+  const byId = new Map(model.nodes.map((node) => [node.id, node]));
+  const targets = new Set<string>();
+  for (const id of requested) {
+    const node = byId.get(id);
+    if (!node) continue;
+    if (node.kind === 'component') {
+      if (byId.get(node.container)?.kind === 'container') targets.add(node.container);
+    } else {
+      targets.add(node.id);
+    }
+  }
+  if (targets.size > 0) return [...targets];
+  return [
+    model.system.id,
+    ...model.nodes
+      .filter((node) => node.kind === 'external-system' || node.kind === 'person')
+      .map((node) => node.id),
+  ];
+}
+
 /** A fully laid-out open state: the RF nodes/edges and label anchors. */
 interface Rendered {
   nodes: Node[];
@@ -1112,7 +1170,7 @@ export function hidesComponentDuringMorph(
   return morphTargets.has(owner);
 }
 
-function Inner({ model, onSelectNode, onSelectEdge, onTrailClick, onToggleContainer, onOpenContainer, onCloseContainer, gutter = 28, dimmedElementIds, dimmedEdgeIds, hiddenElementIds, hiddenEdgeIds, dimmedConstructIds, dimmedConstructEdgeIds, constructGraphByContainer, focusedStep, onCloseStep, renderFileViewer, renderTrailViewer, hideDrawer = false }: C4GraphProps) {
+function Inner({ model, containerFocus, selectedNodeId, selectedEdgeId: controlledSelectedEdgeId, onSelectNode, onSelectEdge, onTrailClick, onToggleContainer, onOpenContainer, onCloseContainer, gutter = 28, dimmedElementIds, dimmedEdgeIds, hiddenElementIds, hiddenEdgeIds, dimmedConstructIds, dimmedConstructEdgeIds, constructGraphByContainer, focusedStep, onCloseStep, renderFileViewer, renderTrailViewer, hideDrawer = false }: C4GraphProps) {
   const { theme, mode } = useTheme();
   const { fitView, fitBounds } = useReactFlow();
   const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -1121,14 +1179,29 @@ function Inner({ model, onSelectNode, onSelectEdge, onTrailClick, onToggleContai
    *  every layout change. */
   const nodesRef = useRef<Node[]>([]);
   nodesRef.current = nodes;
+  // Post-morph timers must use the latest request, not the selection that armed them.
+  const containerFocusRef = useRef(containerFocus);
+  containerFocusRef.current = containerFocus;
   const [rfEdges, setRfEdges] = useState<Edge[]>([]);
   const [ready, setReady] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [localSelectedId, setSelectedId] = useState<string | null>(null);
+  const selectedId = selectedNodeId === undefined ? localSelectedId : selectedNodeId;
+  const [localSelectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const selectedEdgeId = controlledSelectedEdgeId === undefined ? localSelectedEdgeId : controlledSelectedEdgeId;
   // The construct (subsystem component alias) whose functionality (declaration
   // + purpose) is open. Its own panel, so opening a construct never disturbs the
   // node/edge inspector.
   const [selectedConstructAlias, setSelectedConstructAlias] = useState<string | null>(null);
+  useEffect(() => {
+    if (!selectedNodeId) return;
+    setSelectedEdgeId(null);
+    setSelectedConstructAlias(null);
+  }, [selectedNodeId]);
+  useEffect(() => {
+    if (!controlledSelectedEdgeId) return;
+    setSelectedId(null);
+    setSelectedConstructAlias(null);
+  }, [controlledSelectedEdgeId]);
   const [labelPositions, setLabelPositions] = useState<Map<string, { x: number; y: number }>>(
     () => new Map(),
   );
@@ -1217,8 +1290,7 @@ function Inner({ model, onSelectNode, onSelectEdge, onTrailClick, onToggleContai
   const morphTargetsRef = useRef<Set<string>>(new Set());
 
   /**
-   * Frame the whole diagram: the system boundary *and* everything drawn outside
-   * it.
+   * Frame the requested endpoint containers, or the system and everything outside it.
    *
    * Named explicitly rather than left to the drawn nodes, because on a drill-down
    * those include the opened container's components — fitting all of them would
@@ -1227,15 +1299,14 @@ function Inner({ model, onSelectNode, onSelectEdge, onTrailClick, onToggleContai
    * it by definition, so fitting the frame alone crops exactly the things the
    * boundary is drawn in contrast to.
    */
-  const fitSystem = useCallback(() => {
-    const outside = model.nodes
-      .filter((n) => n.kind === 'external-system' || n.kind === 'person')
-      .map((n) => ({ id: n.id }));
+  const fitCamera = useCallback(() => {
+    const focus = containerFocusRef.current;
+    const targets = focus ? ('ids' in focus ? focus.ids : focus.id) : null;
     fitView({
       padding: 0.15,
       duration: CAMERA_MS,
       maxZoom: 1,
-      nodes: [{ id: model.system.id }, ...outside],
+      nodes: c4CameraNodeIds(model, targets).map((id) => ({ id })),
     });
   }, [fitView, model.system.id, model.nodes]);
 
@@ -1264,8 +1335,8 @@ function Inner({ model, onSelectNode, onSelectEdge, onTrailClick, onToggleContai
   useEffect(() => {
     if (!ready || !pendingFitRef.current) return;
     pendingFitRef.current = false;
-    fitSystem();
-  }, [ready, fitSystem]);
+    fitCamera();
+  }, [ready, fitCamera]);
 
   /** Called once the new layout is committed, from the layout effect. */
   const afterLayout = (grows: Map<string, FrameGrow> | null) => {
@@ -1719,7 +1790,7 @@ function Inner({ model, onSelectNode, onSelectEdge, onTrailClick, onToggleContai
       // instead of the one the FLIP specified (see `shouldRefitCamera`). Waiting
       // out the morph is the honest way to get both.
       if (cameraTimer.current) clearTimeout(cameraTimer.current);
-      cameraTimer.current = setTimeout(fitSystem, CAMERA_AFTER_MORPH_MS);
+      cameraTimer.current = setTimeout(fitCamera, CAMERA_AFTER_MORPH_MS);
     } else {
       morphTargetsRef.current = new Set();
     }
@@ -1876,6 +1947,15 @@ function Inner({ model, onSelectNode, onSelectEdge, onTrailClick, onToggleContai
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layoutKey]);
+
+  // A panel click can request a new camera fit without changing the layout.
+  // Wait for the latest layout and its resize animation before measuring the container.
+  useEffect(() => {
+    if (containerFocus === undefined || !ready || !settled) return;
+    if (prevCacheKeyRef.current !== currentCacheKeyRef.current) return;
+    const timer = setTimeout(fitCamera, 60);
+    return () => clearTimeout(timer);
+  }, [containerFocus, ready, settled, nodes, fitCamera]);
 
   // Remember this render's dim set for the *next* commit's leavers. Declared
   // after the layout effect so it runs after it: the layout effect reads the

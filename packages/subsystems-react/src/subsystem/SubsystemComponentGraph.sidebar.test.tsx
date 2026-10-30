@@ -38,6 +38,17 @@ function renderGraph(props: Partial<SubsystemComponentGraphProps> = {}) {
 }
 
 describe('subsystem graph sidebar', () => {
+  test('puts host actions on the right of the header, not above the description', () => {
+    const body = renderGraph({
+      headerActions: createElement('button', { type: 'button' }, 'C4 view'),
+    });
+    const header = body.querySelector('header');
+    expect(header?.lastElementChild?.textContent).toBe('C4 view');
+    expect(header?.querySelector('[aria-label="Sidebar view"]')).not.toBeNull();
+    expect(header?.nextElementSibling?.textContent).not.toContain('C4 view');
+    expect(header?.nextElementSibling?.textContent).toContain('Always visible description.');
+  });
+
   test('puts the name in a full-width header above the sidebar and graph', () => {
     const body = renderGraph();
     const header = body.querySelector('header');
