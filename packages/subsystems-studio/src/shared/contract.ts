@@ -100,6 +100,84 @@ export const DEFAULT_TAB_FLAGS: DefaultTabFlags = {
 	opencodeV2: false,
 };
 
+/** Backend that answers Jev-type questions. */
+export type SecondOpinionProvider = "typesafe" | "ollama";
+
+/** One model pulled on an Ollama server, as `/api/tags` lists it. */
+export interface OllamaModel {
+	/** Tag, e.g. `qwen3.6:27b`. Also the OpenCode model id under the `ollama` provider. */
+	name: string;
+	/** Capabilities Ollama reports (`completion`, `tools`, `thinking`, `vision`, `embedding`). */
+	capabilities: string[];
+	/** True when the server reports tool calling (needed to run Maintain agents). */
+	toolcall: boolean;
+	family?: string;
+	parameterSize?: string;
+	contextLength?: number;
+}
+
+/** Everything the Settings UI and `GET /api/ollama` show about the Ollama integration. */
+export interface OllamaIntegrationStatus {
+	baseUrl: string;
+	reachable: boolean;
+	error?: string;
+	models: OllamaModel[];
+	judge: { provider: SecondOpinionProvider; model: string | null; ready: boolean };
+	agent: {
+		/** Studio's maintainer model setting (`provider/id`). */
+		maintainerModel: string | null;
+		opencode: {
+			configPath: string;
+			/** `ollama` provider block OpenCode currently has, if any. */
+			provider: { baseUrl: string; models: string[] } | null;
+			defaultModel: string | null;
+		};
+	};
+}
+
+/** Body of `PUT /api/ollama` and params of `configureOllama`. */
+export interface OllamaConfigureInput {
+	/** Ollama origin; omitted keeps the current one. */
+	baseUrl?: string;
+	/** Tool-capable Ollama model to run Maintain agents on (written into OpenCode's config). */
+	agentModel?: string;
+	/** Ollama model that answers judge questions; `null` clears it. */
+	judgeModel?: string | null;
+	/** Defaults to `ollama` when a judge model is chosen. */
+	secondOpinionProvider?: SecondOpinionProvider;
+	/** Default true. False writes OpenCode's config without restarting the service. */
+	restartOpencode?: boolean;
+}
+
+export interface OllamaConfigureOutcome {
+	applied: {
+		baseUrl?: string;
+		judgeModel?: string | null;
+		secondOpinionProvider?: SecondOpinionProvider;
+		agentModel?: string;
+		maintainerModel?: string;
+		opencodeConfig?: { path: string; changed: boolean };
+		opencodeRestarted?: boolean;
+		/** Whether the OpenCode catalog lists the agent model after the change. */
+		opencodeCatalogHasModel?: boolean;
+	};
+	warnings: string[];
+	status: OllamaIntegrationStatus;
+}
+
+/** Result of asking the configured judge one canned question, to show latency and readiness. */
+export interface JudgeProbeResult {
+	ok: boolean;
+	error?: string;
+	/** Judge label (`jev-latest`, `ollama/<model>`). */
+	source: string;
+	provider: SecondOpinionProvider;
+	elapsedMs: number;
+	verdict?: SubsystemModelSecondOpinion["verdict"];
+	confidence?: number;
+	risk?: string;
+}
+
 export interface ViewerSettings {
 	defaultTabs: DefaultTabFlags;
 	/**
@@ -143,6 +221,24 @@ export interface ViewerSettings {
 	 */
 	typesafeApiKey: string | null;
 	/**
+	 * Which judge answers Jev-type questions (proposal second opinions, the
+	 * auto-accept gate, construct complexity). `typesafe` is the hosted Jev
+	 * SystemOne endpoint; `ollama` runs a local model through the Ollama server
+	 * at `ollamaBaseUrl`. Default `typesafe`.
+	 */
+	secondOpinionProvider: SecondOpinionProvider;
+	/**
+	 * Ollama server origin shared by the local judge and the OpenCode
+	 * `ollama` provider Studio writes. `null` = `http://localhost:11434`.
+	 */
+	ollamaBaseUrl: string | null;
+	/**
+	 * Ollama model (as listed by `/api/tags`, e.g. `qwen3.6:27b`) that answers
+	 * judge questions when `secondOpinionProvider` is `ollama`. `null` = not
+	 * chosen yet; Ollama-backed opinions fail with setup instructions.
+	 */
+	ollamaJudgeModel: string | null;
+	/**
 	 * Last repo (owner/name, lowercased) selected in the Maintainer tab's repo
 	 * filter, restored on the next mount. `null` = fall back to the first repo.
 	 */
@@ -182,6 +278,11 @@ export interface PartialViewerSettings {
 	autoApplyAuditFixes?: boolean;
 	/** Pass `null` to clear the stored Jev API key. */
 	typesafeApiKey?: string | null;
+	secondOpinionProvider?: SecondOpinionProvider;
+	/** Pass `null` to return to the default local Ollama origin. */
+	ollamaBaseUrl?: string | null;
+	/** Pass `null` to clear the Ollama judge model. */
+	ollamaJudgeModel?: string | null;
 	/** Pass `null` to fall back to the first repo on the next mount. */
 	maintenanceRepoKey?: string | null;
 	/** Pass `null` to forget the restored start tab. */
@@ -1420,7 +1521,7 @@ export interface SubsystemModelProposalPreviewRow {
  * proposal files without a score read as "not yet scored".
  */
 export interface SubsystemModelSecondOpinion {
-	/** Jev model id that produced the opinion (e.g. `jev-latest`). */
+	/** Judge that produced the opinion: a Jev model id (`jev-latest`) or `ollama/<model>`. */
 	source: string;
 	checkedAt: string;
 	/**
@@ -2589,6 +2690,25 @@ export type StudioRequests = {
 			/** Optional hint when a saved model is no longer available. */
 			note?: string;
 		};
+	};
+	/** Ollama reachability, pulled models, and how the judge / agents use it. */
+	getOllamaStatus: {
+		params: Record<string, never>;
+		response: { ok: boolean; error?: string; status?: OllamaIntegrationStatus };
+	};
+	/**
+	 * Point the judge and/or Maintain agents at Ollama. Validates models
+	 * against the live catalog, writes OpenCode's `ollama` provider, and
+	 * restarts the OpenCode service when the agent model changes.
+	 */
+	configureOllama: {
+		params: OllamaConfigureInput;
+		response: { ok: boolean; error?: string; outcome?: OllamaConfigureOutcome };
+	};
+	/** Ask the configured judge one canned question and time it. */
+	probeJudge: {
+		params: Record<string, never>;
+		response: JudgeProbeResult;
 	};
 	getGraphifyStatus: {
 		params: { detailed?: boolean };

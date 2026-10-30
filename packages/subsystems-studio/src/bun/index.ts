@@ -81,6 +81,7 @@ import {
 import {
 	autoAcceptProposalIfConfident,
 	evaluateProposalSecondOpinion,
+	probeJudge,
 } from "./jev-maintenance";
 import { buildProposalSourceContext } from "./proposal-source-context";
 import { listMaintainSessions } from "./maintain-sessions";
@@ -99,6 +100,12 @@ import { constructInventory, listConstructRepositories } from "./construct-inven
 import { searchConstructRepositories } from "./construct-repository-search";
 import { constructTimeline } from "./construct-timeline-proxy";
 import { assessConstructComplexity } from "./jev-complexity";
+import {
+	configureOllama,
+	ollamaStatus,
+	parseConfigureInput,
+	type SettingsHttpHandlers,
+} from "./settings-http";
 import {
 	getGraphifyStatus,
 	getGraphifyStatusDetailed,
@@ -160,6 +167,7 @@ import type {
 	SubsystemModelAuditReport,
 	SubsystemModelVerification,
 	SubsystemC4Source,
+	PartialViewerSettings,
 	ViewerMode,
 	ViewerSettings,
 } from "../shared/contract";
@@ -746,6 +754,9 @@ function ensurePermanentTab(id: string): void {
 		regularAuditIntervalMinutes: viewerSettings.regularAuditIntervalMinutes,
 		autoApplyAuditFixes: viewerSettings.autoApplyAuditFixes,
 		typesafeApiKey: viewerSettings.typesafeApiKey,
+		secondOpinionProvider: viewerSettings.secondOpinionProvider,
+		ollamaBaseUrl: viewerSettings.ollamaBaseUrl,
+		ollamaJudgeModel: viewerSettings.ollamaJudgeModel,
 		maintenanceRepoKey: viewerSettings.maintenanceRepoKey,
 		lastActiveTabId: viewerSettings.lastActiveTabId,
 	};
@@ -766,6 +777,13 @@ const detachedWindows = new Map<
 // must read it before their first await to place the tab in the asking window.
 let currentRequestWindowId: number | null = null;
 let viewerSettings: ViewerSettings = loadViewerSettings();
+
+/** Settings access shared by the loopback HTTP API and the renderer IPC. */
+const settingsHandlers: SettingsHttpHandlers = {
+	get: () => viewerSettings,
+	patch: (patch) => applySettingsPatch(patch),
+	isMaintaining: () => maintainingGraphIds.size > 0,
+};
 // Which tab the host suggests showing. Not authoritative — the renderer owns
 // the on-screen tab. Updated when the host creates a tab it wants visible, on
 // external activation, and (as a resume point) whenever the renderer reports a
@@ -1765,7 +1783,7 @@ const requests: RequestHandlers = {
 				readSubsystemSpan({ purl, file, startLine, endLine, contentHash }),
 			assessConstructComplexity: async (input) =>
 				assessConstructComplexity(input, {
-					apiKey: viewerSettings.typesafeApiKey ?? undefined,
+					settings: viewerSettings,
 				}),
 		readFile: async ({ tabId, path, repo }) => {
 			const tab = getTab(tabId);
@@ -1930,16 +1948,7 @@ const requests: RequestHandlers = {
 				return resolveUserIdentity(tourTab?.repoRoot);
 			},
 			getSettings: () => viewerSettings,
-			setSettings: ({ settings }) => {
-				viewerSettings = patchViewerSettings(viewerSettings, settings);
-				const prevSuggested = suggestedTabId;
-				syncPermanentTabs(viewerSettings);
-				regularAuditScheduler.sync(viewerSettings);
-				broadcastTabsChanged(
-					suggestedTabId !== prevSuggested ? suggestedTabId : undefined,
-				);
-				return { ok: true, settings: viewerSettings };
-			},
+			setSettings: ({ settings }) => ({ ok: true, settings: applySettingsPatch(settings) }),
 			getRegularAuditStatus: () => regularAuditScheduler.getStatus(),
 			getOpencodeServerStatus: async () => probeOpencodeServer(),
 			getServerSessions: async () => listRecentServerSessions(),
@@ -2676,7 +2685,7 @@ const requests: RequestHandlers = {
 							enabled: true,
 							threshold:
 								viewerSettings.autoAcceptSubsystemModelConfidenceThreshold,
-							apiKey: viewerSettings.typesafeApiKey ?? undefined,
+							settings: viewerSettings,
 							sourceContext,
 						},
 					);
@@ -2729,7 +2738,7 @@ const requests: RequestHandlers = {
 					? await buildProposalSourceContext(graph, existing)
 					: undefined;
 				const opinion = await evaluateProposalSecondOpinion(existing, {
-					apiKey: viewerSettings.typesafeApiKey ?? undefined,
+					settings: viewerSettings,
 					sourceContext,
 				});
 				const stored = await setProposalSecondOpinion(graphId, proposalId, opinion);
@@ -2781,6 +2790,25 @@ const requests: RequestHandlers = {
 					};
 				}
 			},
+			getOllamaStatus: async () => {
+				try {
+					return { ok: true, status: await ollamaStatus({ settings: settingsHandlers }) };
+				} catch (err) {
+					return { ok: false, error: err instanceof Error ? err.message : String(err) };
+				}
+			},
+			configureOllama: async (params) => {
+				try {
+					const { ok: _ok, ...outcome } = await configureOllama(
+						parseConfigureInput(params),
+						{ settings: settingsHandlers },
+					);
+					return { ok: true, outcome };
+				} catch (err) {
+					return { ok: false, error: err instanceof Error ? err.message : String(err) };
+				}
+			},
+			probeJudge: async () => probeJudge(viewerSettings),
 			getGraphifyStatus: async ({ detailed }) => {
 				const base = withGraphifyCliBusy(
 					cachedDetailedGraphifyStatus ?? getGraphifyStatus(),
@@ -4354,4 +4382,21 @@ startHttpServer(
 	},
 	async (sketchId) => deleteC4SketchAndCloseTabs(sketchId),
 	openRemoteModelsTab,
+	settingsHandlers,
 );
+
+/**
+ * Persist a settings patch and re-sync everything that reads settings
+ * (permanent tabs, the regular-audit scheduler). Shared by the renderer IPC
+ * and the loopback HTTP API so both paths behave identically.
+ */
+function applySettingsPatch(patch: PartialViewerSettings): ViewerSettings {
+	viewerSettings = patchViewerSettings(viewerSettings, patch);
+	const prevSuggested = suggestedTabId;
+	syncPermanentTabs(viewerSettings);
+	regularAuditScheduler.sync(viewerSettings);
+	broadcastTabsChanged(
+		suggestedTabId !== prevSuggested ? suggestedTabId : undefined,
+	);
+	return viewerSettings;
+}

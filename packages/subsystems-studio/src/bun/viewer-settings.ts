@@ -12,6 +12,7 @@ import { join } from "node:path";
 import {
 	DEFAULT_TAB_FLAGS,
 	type PartialViewerSettings,
+	type SecondOpinionProvider,
 	type ViewerSettings,
 } from "../shared/contract";
 
@@ -35,9 +36,37 @@ export function defaultViewerSettings(): ViewerSettings {
 		regularAuditIntervalMinutes: REGULAR_AUDIT_INTERVAL_DEFAULT_MINUTES,
 		autoApplyAuditFixes: true,
 		typesafeApiKey: null,
+		secondOpinionProvider: "typesafe",
+		ollamaBaseUrl: null,
+		ollamaJudgeModel: null,
 		maintenanceRepoKey: null,
 		lastActiveTabId: null,
 	};
+}
+
+export function coerceSecondOpinionProvider(
+	value: unknown,
+	fallback: SecondOpinionProvider = "typesafe",
+): SecondOpinionProvider {
+	return value === "ollama" || value === "typesafe" ? value : fallback;
+}
+
+/**
+ * Keep only the origin (scheme + host + port) of an Ollama URL, so the same
+ * value can be used for both `/api/*` and the OpenCode `/v1` baseURL.
+ * Anything that is not an http(s) URL becomes `null` (the default origin).
+ */
+export function coerceOllamaBaseUrl(value: unknown): string | null {
+	if (typeof value !== "string") return null;
+	const trimmed = value.trim();
+	if (!trimmed) return null;
+	try {
+		const url = new URL(trimmed);
+		if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+		return url.origin;
+	} catch {
+		return null;
+	}
 }
 
 function coerceBool(value: unknown, fallback: boolean): boolean {
@@ -129,6 +158,15 @@ function normalize(raw: unknown): ViewerSettings {
 			"typesafeApiKey" in obj
 				? coerceModelRef(obj["typesafeApiKey"])
 				: defaults.typesafeApiKey,
+		secondOpinionProvider: coerceSecondOpinionProvider(
+			obj["secondOpinionProvider"],
+			defaults.secondOpinionProvider,
+		),
+		ollamaBaseUrl: coerceOllamaBaseUrl(obj["ollamaBaseUrl"]),
+		ollamaJudgeModel:
+			"ollamaJudgeModel" in obj
+				? coerceModelRef(obj["ollamaJudgeModel"])
+				: defaults.ollamaJudgeModel,
 		maintenanceRepoKey:
 			"maintenanceRepoKey" in obj
 				? coerceModelRef(obj["maintenanceRepoKey"])
@@ -201,6 +239,21 @@ export function patchViewerSettings(
 			patch.typesafeApiKey !== undefined
 				? coerceModelRef(patch.typesafeApiKey)
 				: current.typesafeApiKey,
+		secondOpinionProvider:
+			patch.secondOpinionProvider !== undefined
+				? coerceSecondOpinionProvider(
+						patch.secondOpinionProvider,
+						current.secondOpinionProvider,
+					)
+				: current.secondOpinionProvider,
+		ollamaBaseUrl:
+			patch.ollamaBaseUrl !== undefined
+				? coerceOllamaBaseUrl(patch.ollamaBaseUrl)
+				: current.ollamaBaseUrl,
+		ollamaJudgeModel:
+			patch.ollamaJudgeModel !== undefined
+				? coerceModelRef(patch.ollamaJudgeModel)
+				: current.ollamaJudgeModel,
 		maintenanceRepoKey:
 			patch.maintenanceRepoKey !== undefined
 				? coerceModelRef(patch.maintenanceRepoKey)

@@ -95,7 +95,7 @@ describe("assessConstructComplexity", () => {
 		try {
 			const { opts, readSpan, fetcher } = setup();
 			const response = await assessConstructComplexity(input, { ...opts, apiKey: "" });
-			expect(response.error).toContain("Settings → Jev");
+			expect(response.error).toContain("Settings → Second opinion");
 			expect(readSpan).not.toHaveBeenCalled();
 			expect(fetcher).not.toHaveBeenCalled();
 		} finally {

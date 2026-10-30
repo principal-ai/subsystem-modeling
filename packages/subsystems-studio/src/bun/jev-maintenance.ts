@@ -1,8 +1,9 @@
 /**
  * Jev second-opinion gate for subsystem proposals.
  *
- * Calls the TypeSafe AI SystemOne endpoint with the proposal as state and
- * three atomic questions (accurate:noul, change_kind:choice, risk:score).
+ * Sends the proposal as state plus three atomic questions (accurate:noul,
+ * change_kind:choice, risk:score) to the configured judge — the hosted
+ * TypeSafe AI SystemOne endpoint or a local Ollama model (see `judge.ts`).
  * Fail-open: transport or parse errors are returned as an opinion with
  * `verdict: "uncertain"` plus `error`, never thrown, so the caller can
  * persist and display without blocking accept/reject.
@@ -15,35 +16,32 @@
  */
 
 import type {
+	JudgeProbeResult,
 	SubsystemModelProposal,
 	SubsystemModelProposalChange,
 	SubsystemModelSecondOpinion,
 	SubsystemModelSecondOpinionRequest,
 	SubsystemVerificationLane,
 } from "../shared/contract";
+import {
+	describeJudgeFailure,
+	resolveJudge,
+	type Judge,
+	type JudgeQuestions,
+	type JudgeSettings,
+} from "./judge";
 import { deriveProposalLane } from "./proposal-lane";
 import {
 	acceptSubsystemModelProposal,
 	setProposalSecondOpinion,
 } from "./proposal-store";
 
-export const JEV_SYSTEMONE_URL = "https://api.typesafe.ai/v1/systemone";
-/** Override with PRINCIPAL_JEV_MODEL (e.g. `jev-1.13.0`, `jev-preview`). */
-export const JEV_MODEL =
-	process.env["PRINCIPAL_JEV_MODEL"]?.trim() || "jev-latest";
-const JEV_TIMEOUT_MS = 15000;
-
-export const TYPESAFE_KEY_HELP =
-	"Missing Jev API key — add your TypeSafe AI key in Settings → Jev, set TYPESAFE_API_KEY, or get one at https://console.typesafe.ai/keys.";
-
-/** Env fallback for the TypeSafe AI key. */
-export function envTypesafeKey(): string | null {
-	const key =
-		process.env["TYPESAFE_API_KEY"]?.trim() ||
-		process.env["PRINCIPAL_JEV_API_KEY"]?.trim() ||
-		"";
-	return key || null;
-}
+export {
+	envTypesafeKey,
+	JEV_MODEL,
+	JEV_SYSTEMONE_URL,
+	TYPESAFE_KEY_HELP,
+} from "./judge";
 
 function clamp01(n: unknown): number {
 	if (typeof n !== "number" || !Number.isFinite(n)) return 0;
@@ -290,33 +288,35 @@ export function verdictFromAnswers(answers: JevAnswers): {
 	};
 }
 
-export async function evaluateProposalSecondOpinion(
-	proposal: SubsystemModelProposal,
-	opts?: {
-		model?: string;
-		endpoint?: string;
-		apiKey?: string;
-		sourceContext?: string;
-	},
-): Promise<SubsystemModelSecondOpinion> {
-	const source = (opts?.model ?? JEV_MODEL) as SubsystemModelSecondOpinion["source"];
-	const apiKey = opts?.apiKey?.trim() || envTypesafeKey();
-	if (!apiKey) {
-		return {
-			source,
-			checkedAt: new Date().toISOString(),
-			verdict: "uncertain",
-			confidence: 0,
-			error: TYPESAFE_KEY_HELP,
-		};
-	}
-	// Compose the exact body sent to Jev. Kept in a local so it can be both
-	// sent and persisted on the opinion (`request`) — the state is otherwise
-	// discarded after the call, leaving a score unexplainable after the fact.
-	const state = buildProposalState(proposal, {
-		sourceContext: opts?.sourceContext,
+/** How a caller selects the judge: a resolved instance, or settings to resolve one from. */
+export interface JudgeSelection {
+	/** Pre-built judge; wins over `settings`. */
+	judge?: Judge;
+	/** Viewer settings to pick the judge from (provider, key, Ollama model). */
+	settings?: Partial<JudgeSettings>;
+	/** Jev model override (TypeSafe provider only). */
+	model?: string;
+	/** Jev endpoint override (TypeSafe provider only). */
+	endpoint?: string;
+	/** Explicit TypeSafe key; wins over settings and env. */
+	apiKey?: string;
+}
+
+function selectJudge(opts: JudgeSelection | undefined): ReturnType<typeof resolveJudge> {
+	if (opts?.judge) return { ok: true, judge: opts.judge };
+	return resolveJudge(opts?.settings, {
+		apiKey: opts?.apiKey,
+		model: opts?.model,
+		endpoint: opts?.endpoint,
 	});
-	const questions = {
+}
+
+/** The three questions every proposal is asked, in Jev's question format. */
+export function proposalQuestions(
+	proposal: SubsystemModelProposal,
+	opts?: { sourceContext?: string },
+): JudgeQuestions {
+	return {
 		accurate: {
 			type: "noul",
 			instructions: accuracyInstruction(proposal),
@@ -333,68 +333,110 @@ export async function evaluateProposalSecondOpinion(
 			criteria: ["Safe", "Needs human", "Unsafe"],
 		},
 	};
+}
+
+export async function evaluateProposalSecondOpinion(
+	proposal: SubsystemModelProposal,
+	opts?: JudgeSelection & { sourceContext?: string },
+): Promise<SubsystemModelSecondOpinion> {
+	const selected = selectJudge(opts);
+	if (!selected.ok) {
+		return {
+			source: selected.source,
+			checkedAt: new Date().toISOString(),
+			verdict: "uncertain",
+			confidence: 0,
+			error: selected.error,
+		};
+	}
+	const judge = selected.judge;
+	const source = judge.source as SubsystemModelSecondOpinion["source"];
+	// Compose the exact body sent to the judge. Kept in a local so it can be
+	// both sent and persisted on the opinion (`request`) — the state is
+	// otherwise discarded after the call, leaving a score unexplainable after
+	// the fact.
+	const state = buildProposalState(proposal, {
+		sourceContext: opts?.sourceContext,
+	});
+	const questions = proposalQuestions(proposal, { sourceContext: opts?.sourceContext });
 	const request: SubsystemModelSecondOpinionRequest = {
 		model: source,
 		state,
 		questions,
 	};
-	const ctrl = new AbortController();
-	const timer = setTimeout(() => ctrl.abort(), JEV_TIMEOUT_MS);
-	try {
-		const res = await fetch(opts?.endpoint ?? JEV_SYSTEMONE_URL, {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${apiKey}`,
-				"Content-Type": "application/json",
-			},
-			signal: ctrl.signal,
-			body: JSON.stringify(request),
-		});
-		if (!res.ok) {
-			let detail = "";
-			try {
-				detail = ` — ${(await res.text()).slice(0, 200)}`;
-			} catch {
-				/* body unreadable */
-			}
-			return {
-				source,
-				checkedAt: new Date().toISOString(),
-				verdict: "uncertain",
-				confidence: 0,
-				error: `Jev HTTP ${res.status}${detail}`,
-			};
-		}
-		const body = (await res.json()) as { answers?: JevAnswers };
-		const answers = body.answers && typeof body.answers === "object" ? body.answers : null;
-		if (!answers) {
-			return {
-				source,
-				checkedAt: new Date().toISOString(),
-				verdict: "uncertain",
-				confidence: 0,
-				error: "Jev response had no answers",
-			};
-		}
-		const mapped = verdictFromAnswers(answers);
-		return {
-			source,
-			checkedAt: new Date().toISOString(),
-			...mapped,
-			request,
-		};
-	} catch (err) {
-		const msg = err instanceof Error ? err.message : String(err);
+	const res = await judge.ask({ state, questions });
+	if (!res.ok) {
 		return {
 			source,
 			checkedAt: new Date().toISOString(),
 			verdict: "uncertain",
 			confidence: 0,
-			error: msg.includes("abort") ? "Jev request timed out" : msg,
+			error: describeJudgeFailure(judge.name, res),
 		};
-	} finally {
-		clearTimeout(timer);
 	}
+	const mapped = verdictFromAnswers(res.answers);
+	return {
+		source,
+		checkedAt: new Date().toISOString(),
+		...mapped,
+		request,
+	};
+}
+
+const PROBE_STATE = [
+	"Proposal rationale: Source declares `export function add(a: number, b: number): number` at src/math.ts lines 1-3; declared return type is number.",
+	"Finding (signature_unconfirmed): Graphify has no signature edges.",
+	"Author: construct-verifier",
+	"Changes (1):",
+	'signature: undefined -> {"parameters":[{"name":"a","type":"number"},{"name":"b","type":"number"}],"returnType":"number"}',
+	"",
+	"Source under review:",
+	"export function add(a: number, b: number): number {",
+	"\treturn a + b;",
+	"}",
+].join("\n");
+
+/**
+ * Ask the configured judge one canned, unambiguous question so Settings can
+ * show whether it answers at all and how long it takes. Never persisted.
+ */
+export async function probeJudge(
+	settings: Partial<JudgeSettings>,
+): Promise<JudgeProbeResult> {
+	const selected = resolveJudge(settings);
+	if (!selected.ok) {
+		return { ok: false, error: selected.error, source: selected.source, provider: selected.provider, elapsedMs: 0 };
+	}
+	const judge = selected.judge;
+	const started = Date.now();
+	const res = await judge.ask({
+		state: PROBE_STATE,
+		questions: {
+			accurate: {
+				type: "noul",
+				instructions: "The proposed signature is an accurate, complete extraction of the function declaration in the source under review. Judge only whether the source supports it.",
+			},
+			risk: {
+				type: "score",
+				instructions: "Risk of auto-accepting this correction. Score Safe when the proposed signature matches the source.",
+				criteria: ["Safe", "Needs human", "Unsafe"],
+			},
+		},
+	});
+	const elapsedMs = Date.now() - started;
+	if (!res.ok) {
+		return { ok: false, error: describeJudgeFailure(judge.name, res), source: judge.source, provider: judge.provider, elapsedMs };
+	}
+	const mapped = verdictFromAnswers(res.answers);
+	return {
+		ok: true,
+		source: judge.source,
+		provider: judge.provider,
+		elapsedMs,
+		verdict: mapped.verdict,
+		confidence: mapped.confidence,
+		risk: mapped.risk,
+	};
 }
 
 /**
@@ -419,10 +461,9 @@ export function shouldAutoAcceptOnConfidence(
 export async function autoAcceptProposalIfConfident(
 	graphId: string,
 	proposal: SubsystemModelProposal,
-	opts: {
+	opts: JudgeSelection & {
 		enabled: boolean;
 		threshold: number;
-		apiKey?: string;
 		sourceContext?: string;
 	},
 ): Promise<{
@@ -435,6 +476,8 @@ export async function autoAcceptProposalIfConfident(
 	let opinion = current.secondOpinion;
 	if (!opinion || opinion.error) {
 		opinion = await evaluateProposalSecondOpinion(current, {
+			judge: opts.judge,
+			settings: opts.settings,
 			apiKey: opts.apiKey,
 			sourceContext: opts.sourceContext,
 		});

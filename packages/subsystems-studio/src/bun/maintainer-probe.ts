@@ -71,9 +71,18 @@ export function isModelUnusable(modelRef: string): boolean {
 }
 
 /** How long to wait for the Step-0 probe tool call. Free tiers are quicker to
- *  declare dead; credentialed models may take longer to cold-start. */
+ *  declare dead; credentialed models may take longer to cold-start; a local
+ *  Ollama model first has to load weights into memory and then read the brief
+ *  at local speed. */
 export function firstActivityTimeoutMsFor(modelRef: string): number {
 	const env = process.env["PRINCIPAL_STUDIO_FIRST_ACTIVITY_TIMEOUT_MS"];
 	if (env && /^\d+$/.test(env)) return Number(env);
-	return modelProviderOf(modelRef) === "opencode" ? 30_000 : 60_000;
+	switch (modelProviderOf(modelRef)) {
+		case "opencode":
+			return 30_000;
+		case "ollama":
+			return 180_000;
+		default:
+			return 60_000;
+	}
 }

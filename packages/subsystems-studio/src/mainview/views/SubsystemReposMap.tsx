@@ -33,6 +33,7 @@ import {
 	type RepoOverviewModel,
 	type RepoOverviewView,
 } from "@industry-theme/file-city-panel";
+import type { CityData } from "@principal-ai/file-city-builder";
 import type { CitySource } from "@principal-ai/file-city-react";
 import {
 	purlOwnerName,
@@ -162,6 +163,16 @@ function buildRepoDescriptors(
 	return order.map((k) => byKey.get(k)!);
 }
 
+/**
+ * A repo's checkout plus the city laid out from it. Built once when the tree
+ * arrives: the layout is the most expensive step in this view, and it depends
+ * only on the tree, never on which models reference the repo.
+ */
+interface RepoCity {
+	tree: FileTree;
+	city: CityData;
+}
+
 function normalizeRepoPath(path: string): string {
 	return path.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\//, "");
 }
@@ -225,7 +236,7 @@ export function SubsystemReposMap({
 }) {
 	const { theme } = useTheme();
 	const descriptors = useMemo(() => buildRepoDescriptors(graphs), [graphs]);
-	const [trees, setTrees] = useState<Map<string, FileTree>>(new Map());
+	const [trees, setTrees] = useState<Map<string, RepoCity>>(new Map());
 	const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set());
 
 	// The panel keys repos by `label` (owner/name); the host keys them by purl
@@ -259,9 +270,10 @@ export function SubsystemReposMap({
 					commitSha: "local",
 					branch: "local",
 				});
+				const city = buildCityDataFromContext({ fileTree: tree, lineCounts: null });
 				setTrees((prev) => {
 					const next = new Map(prev);
-					next.set(missing.repoKey, tree);
+					next.set(missing.repoKey, { tree, city });
 					return next;
 				});
 			} catch (err) {
@@ -283,9 +295,9 @@ export function SubsystemReposMap({
 			{ percent: number; referenced: number; total: number }
 		>();
 		for (const d of descriptors) {
-			const tree = trees.get(d.repoKey);
-			if (!tree) continue;
-			next.set(d.repoKey, coverageForRepo(d.referencedFiles, tree));
+			const entry = trees.get(d.repoKey);
+			if (!entry) continue;
+			next.set(d.repoKey, coverageForRepo(d.referencedFiles, entry.tree));
 		}
 		onFileCoverage(next);
 	}, [descriptors, trees, onFileCoverage]);
@@ -300,11 +312,10 @@ export function SubsystemReposMap({
 		const layout = repoGridLayout(ready.length);
 		const sources: CitySource[] = [];
 		ready.forEach((d, i) => {
-			const tree = trees.get(d.repoKey);
-			if (!tree) return;
-			const city = buildCityDataFromContext({ fileTree: tree, lineCounts: null });
+			const entry = trees.get(d.repoKey);
+			if (!entry) return;
 			sources.push({
-				cityData: city,
+				cityData: entry.city,
 				positionOffset: { x: 0, z: 0 },
 				gridCell: layout[i],
 				label: d.label,
@@ -331,7 +342,7 @@ export function SubsystemReposMap({
 		};
 	}, [descriptors, selectedLabel]);
 
-	const primaryTree = ready.length > 0 ? trees.get(ready[0]!.repoKey) ?? null : null;
+	const primaryTree = ready.length > 0 ? trees.get(ready[0]!.repoKey)?.tree ?? null : null;
 
 	const context = useMemo<PanelContextValue<FileCityGuidePanelContext>>(() => {
 		const fileTreeSlice: DataSlice<FileTree> = {

@@ -12,6 +12,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { handleRemoteModelRequest, type OpenRemoteModelsHandler } from "./remote-model-http";
+import { handleSettingsRequest, type SettingsHttpHandlers } from "./settings-http";
 import {
 	getGraphifyStatus,
 	installGraphify,
@@ -335,6 +336,7 @@ export async function handleSubsystemModelRequest(
 	onOpenC4Sketch?: OpenC4SketchHandler,
 	onDeleteC4Sketch?: DeleteC4SketchHandler,
 	onOpenRemoteModels?: OpenRemoteModelsHandler,
+	settings?: SettingsHttpHandlers,
 ): Promise<Response> {
 	const url = new URL(req.url);
 	const path = url.pathname;
@@ -343,13 +345,18 @@ export async function handleSubsystemModelRequest(
 	const remote = await handleRemoteModelRequest(req, onOpenRemoteModels);
 	if (remote) return remote;
 
+	if (settings) {
+		const configured = await handleSettingsRequest(req, { settings });
+		if (configured) return configured;
+	}
+
 	// CORS preflight
 	if (method === "OPTIONS") {
 		return new Response(null, {
 			status: 204,
 			headers: {
 				"Access-Control-Allow-Origin": "*",
-				"Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+				"Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
 				"Access-Control-Allow-Headers": "Content-Type",
 			},
 		});
@@ -580,7 +587,7 @@ export async function handleSubsystemModelRequest(
 				const gate = await autoAcceptProposalIfConfident(id, proposal, {
 					enabled: true,
 					threshold: settings.autoAcceptSubsystemModelConfidenceThreshold,
-					apiKey: settings.typesafeApiKey ?? undefined,
+					settings,
 					sourceContext,
 				});
 				proposal = gate.proposal;
@@ -812,6 +819,7 @@ export function startHttpServer(
 	onOpenC4Sketch?: OpenC4SketchHandler,
 	onDeleteC4Sketch?: DeleteC4SketchHandler,
 	onOpenRemoteModels?: OpenRemoteModelsHandler,
+	settings?: SettingsHttpHandlers,
 ): void {
 	onProposalsChanged = proposalsChanged ?? null;
 	server = Bun.serve({
@@ -822,7 +830,7 @@ export function startHttpServer(
 		// off mid-pass on larger models.
 		idleTimeout: 255,
 		async fetch(req) {
-			return handleSubsystemModelRequest(req, onOpenTab, onDeleteGraph, onOpenShowcase, maintain, onOpenC4, onOpenC4Sketch, onDeleteC4Sketch, onOpenRemoteModels);
+			return handleSubsystemModelRequest(req, onOpenTab, onDeleteGraph, onOpenShowcase, maintain, onOpenC4, onOpenC4Sketch, onDeleteC4Sketch, onOpenRemoteModels, settings);
 		},
 	});
 

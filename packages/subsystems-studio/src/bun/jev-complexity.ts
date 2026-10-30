@@ -1,10 +1,5 @@
 import type { StudioRequests } from "../shared/contract";
-import {
-	envTypesafeKey,
-	JEV_MODEL,
-	JEV_SYSTEMONE_URL,
-	TYPESAFE_KEY_HELP,
-} from "./jev-maintenance";
+import { resolveJudge, type Judge, type JudgeSettings } from "./judge";
 import { readSubsystemSpan } from "./verified-constructs";
 
 type Request = StudioRequests["assessConstructComplexity"];
@@ -38,72 +33,72 @@ function unitScore(value: unknown): value is number {
 export async function assessConstructComplexity(
 	input: Request["params"],
 	opts?: {
+		/** Pre-built judge; wins over `settings` / `apiKey`. */
+		judge?: Judge;
+		settings?: Partial<JudgeSettings>;
 		apiKey?: string;
 		fetch?: typeof fetch;
 		readSpan?: typeof readSubsystemSpan;
 	},
 ): Promise<Request["response"]> {
-	const apiKey = opts?.apiKey?.trim() || envTypesafeKey();
-	if (!apiKey) return { ok: false, error: TYPESAFE_KEY_HELP };
+	const selected = opts?.judge
+		? { ok: true as const, judge: opts.judge }
+		: resolveJudge(opts?.settings, { apiKey: opts?.apiKey, fetch: opts?.fetch });
+	if (!selected.ok) return { ok: false, error: selected.error };
+	const judge = selected.judge;
 
-	try {
-		const span = await (opts?.readSpan ?? readSubsystemSpan)(input);
-		if (!span.ok || span.text == null) {
-			return { ok: false, error: span.error ?? "Failed to read construct source." };
-		}
-		if (!span.verified) {
-			return { ok: false, error: "The source span has drifted. Re-verify the construct before assessing complexity." };
-		}
-		const response = await (opts?.fetch ?? fetch)(JEV_SYSTEMONE_URL, {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${apiKey}`,
-				"Content-Type": "application/json",
-			},
-			signal: AbortSignal.timeout(15_000),
-			body: JSON.stringify({
-				model: JEV_MODEL,
-				state: JSON.stringify({
-					file: input.file,
-					startLine: input.startLine,
-					endLine: input.endLine,
-					source: span.text,
-				}),
-				questions: {
-					complexity: {
-						type: "score",
-						instructions: COMPLEXITY_INSTRUCTION,
-						criteria: COMPLEXITY_CRITERIA,
-					},
-				},
-			}),
-		});
-		if (!response.ok) return { ok: false, error: `Jev HTTP ${response.status}` };
-
-		const body = record(await response.json());
-		const answer = record(record(body?.["answers"])?.["complexity"]);
-		const rawScore = answer?.["score"];
-		// Jev returns an expectation over zero-based rubric indices, not a
-		// probability: https://docs.typesafe.ai/primitives/score
-		const maxScore = COMPLEXITY_CRITERIA.length - 1;
-		if (typeof rawScore !== "number" || !Number.isFinite(rawScore) || rawScore < 0 || rawScore > maxScore) {
-			return { ok: false, error: `Jev returned no valid complexity score (expected 0–${maxScore}).` };
-		}
-		const confidence = answer?.["confidence"];
-		return {
-			ok: true,
-			result: {
-				score: rawScore / maxScore,
-				...(unitScore(confidence) ? { confidence } : {}),
-				model: JEV_MODEL,
-				contentHash: input.contentHash,
-				checkedAt: new Date().toISOString(),
-			},
-		};
-	} catch (error) {
-		// Never reflect transport errors, which may contain request details.
-		const timedOut = error instanceof Error &&
-			(error.name === "AbortError" || error.name === "TimeoutError");
-		return { ok: false, error: timedOut ? "Jev complexity request timed out." : "Jev complexity assessment failed. Please retry." };
+	const span = await (opts?.readSpan ?? readSubsystemSpan)(input);
+	if (!span.ok || span.text == null) {
+		return { ok: false, error: span.error ?? "Failed to read construct source." };
 	}
+	if (!span.verified) {
+		return { ok: false, error: "The source span has drifted. Re-verify the construct before assessing complexity." };
+	}
+	const response = await judge.ask({
+		state: JSON.stringify({
+			file: input.file,
+			startLine: input.startLine,
+			endLine: input.endLine,
+			source: span.text,
+		}),
+		questions: {
+			complexity: {
+				type: "score",
+				instructions: COMPLEXITY_INSTRUCTION,
+				criteria: COMPLEXITY_CRITERIA,
+			},
+		},
+	});
+	if (!response.ok) {
+		// Never reflect HTTP bodies or transport errors, which may contain
+		// request details.
+		switch (response.kind) {
+			case "http":
+				return { ok: false, error: `${judge.name} HTTP ${response.status}` };
+			case "timeout":
+				return { ok: false, error: `${judge.name} complexity request timed out.` };
+			default:
+				return { ok: false, error: `${judge.name} complexity assessment failed. Please retry.` };
+		}
+	}
+
+	const answer = record(response.answers["complexity"]);
+	const rawScore = answer?.["score"];
+	// Jev returns an expectation over zero-based rubric indices, not a
+	// probability: https://docs.typesafe.ai/primitives/score
+	const maxScore = COMPLEXITY_CRITERIA.length - 1;
+	if (typeof rawScore !== "number" || !Number.isFinite(rawScore) || rawScore < 0 || rawScore > maxScore) {
+		return { ok: false, error: `${judge.name} returned no valid complexity score (expected 0–${maxScore}).` };
+	}
+	const confidence = answer?.["confidence"];
+	return {
+		ok: true,
+		result: {
+			score: rawScore / maxScore,
+			...(unitScore(confidence) ? { confidence } : {}),
+			model: judge.source,
+			contentHash: input.contentHash,
+			checkedAt: new Date().toISOString(),
+		},
+	};
 }

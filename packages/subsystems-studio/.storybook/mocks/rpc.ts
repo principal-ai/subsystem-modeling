@@ -12,6 +12,7 @@
  * module's exports so any component that imports them still resolves.
  */
 import type {
+	OllamaConfigureOutcome,
 	PartialViewerSettings,
 	SubsystemComponent,
 	SubsystemModelProposal,
@@ -101,6 +102,9 @@ let viewerSettings: ViewerSettings = {
   regularAuditIntervalMinutes: 5,
   autoApplyAuditFixes: true,
   typesafeApiKey: null,
+  secondOpinionProvider: "typesafe",
+  ollamaBaseUrl: null,
+  ollamaJudgeModel: null,
   maintenanceRepoKey: "principal-ai/subsystem-modeling",
   lastActiveTabId: null,
 };
@@ -155,7 +159,7 @@ const request: RpcRequest = {
     const input = params as { file: string; contentHash: string };
     await new Promise((resolve) => setTimeout(resolve, 750));
     if (input.file === "error.ts") {
-      return { ok: false, error: "Missing Jev API key — add your TypeSafe AI key in Settings → Jev." };
+      return { ok: false, error: "Missing Jev API key — add your TypeSafe AI key in Settings → Second opinion." };
     }
     return {
       ok: true,
@@ -217,9 +221,20 @@ const request: RpcRequest = {
   // Maintainer model picker.
   getSubsystemMaintainerModels: async () => ({
     ok: true,
-    resolved: "opencode-go/deepseek-v4-flash",
-    source: "settings",
-    configured: "opencode-go/deepseek-v4-flash",
+    resolved: viewerSettings.subsystemMaintainerModel ?? "opencode/zen-free",
+    source: viewerSettings.subsystemMaintainerModel ? "settings" : "free",
+    configured: viewerSettings.subsystemMaintainerModel,
+    models: [
+      {
+        ref: "opencode-go/deepseek-v4-flash",
+        id: "deepseek-v4-flash",
+        providerID: "opencode-go",
+        name: "DeepSeek v4 Flash",
+      },
+      { ref: "opencode/zen-free", id: "zen-free", providerID: "opencode", name: "Zen Free" },
+      { ref: "anthropic/claude-sonnet-4", id: "claude-sonnet-4", providerID: "anthropic", name: "Claude Sonnet 4" },
+      ...opencodeOllamaModels.map((id) => ({ ref: `ollama/${id}`, id, providerID: "ollama", name: id })),
+    ],
     credentialedModels: [
       {
         ref: "opencode-go/deepseek-v4-flash",
@@ -240,9 +255,65 @@ const request: RpcRequest = {
       },
     ],
   }),
-  // Integration / CLI status pills.
+  // Ollama integration (Settings → Second opinion / Maintainer).
+  getOllamaStatus: async () => ({ ok: true, status: ollamaStatus() }),
+  configureOllama: async (params) => {
+    const input = (params as {
+      baseUrl?: string;
+      agentModel?: string;
+      judgeModel?: string | null;
+      secondOpinionProvider?: "typesafe" | "ollama";
+    } | undefined) ?? {};
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const applied: OllamaConfigureOutcome["applied"] = {};
+    if (input.baseUrl) {
+      viewerSettings = { ...viewerSettings, ollamaBaseUrl: input.baseUrl };
+      applied.baseUrl = input.baseUrl;
+    }
+    if (input.judgeModel !== undefined) {
+      viewerSettings = {
+        ...viewerSettings,
+        ollamaJudgeModel: input.judgeModel,
+        secondOpinionProvider: input.secondOpinionProvider ?? "ollama",
+      };
+      applied.judgeModel = input.judgeModel;
+      applied.secondOpinionProvider = viewerSettings.secondOpinionProvider;
+    }
+    if (input.agentModel) {
+      viewerSettings = { ...viewerSettings, subsystemMaintainerModel: `ollama/${input.agentModel}` };
+      opencodeOllamaModels = [...new Set([...opencodeOllamaModels, input.agentModel])];
+      applied.agentModel = input.agentModel;
+      applied.maintainerModel = `ollama/${input.agentModel}`;
+      applied.opencodeConfig = { path: OPENCODE_CONFIG_PATH, changed: true };
+      applied.opencodeRestarted = true;
+      applied.opencodeCatalogHasModel = true;
+    }
+    return { ok: true, outcome: { applied, warnings: [], status: ollamaStatus() } };
+  },
+  probeJudge: async () => {
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    const ollama = viewerSettings.secondOpinionProvider === "ollama";
+    return {
+      ok: true,
+      provider: viewerSettings.secondOpinionProvider,
+      source: ollama ? `ollama/${viewerSettings.ollamaJudgeModel ?? "?"}` : "jev-latest",
+      elapsedMs: ollama ? 14_200 : 1_800,
+      verdict: "accurate",
+      confidence: 0.96,
+      risk: "Safe",
+    };
+  },  // Integration / CLI status pills.
   getGraphifyStatus: async () => ({ installed: true, serving: true }),
-  getOpencodeV2Status: async () => ({ installed: true, running: true }),
+  getOpencodeV2Status: async () => ({
+    installed: true,
+    bin: "/Users/me/.opencode/bin/opencode2",
+    conventionalBin: "/Users/me/.opencode/bin/opencode2",
+    installCommand: "curl -fsSL https://opencode.ai/install | bash",
+    installedVersion: "1.2.3",
+    latestVersion: "1.2.3",
+    updateAvailable: false,
+    cliBusy: null,
+  }),
   getOpencodeServerStatus: async () => ({
     running: true,
     url: "http://127.0.0.1:4096",
@@ -261,7 +332,7 @@ const request: RpcRequest = {
   installGraphify: async () => ({ ok: true }),
   updateGraphify: async () => ({ ok: true }),
   uninstallGraphify: async () => ({ ok: true }),
-  installOpencodeV2: async () => ({ ok: true }),
+  installOpencodeV2: async () => ({ ok: true, status: await request["getOpencodeV2Status"]!() }),
   updateOpencodeV2: async () => ({ ok: true }),
   openExternal: async () => ({ ok: true }),
   updateStudio: async () => ({ ok: true }),
@@ -291,6 +362,38 @@ const request: RpcRequest = {
 };
 
 let mockOverview: unknown = null;
+const OPENCODE_CONFIG_PATH = "/Users/me/.config/opencode/opencode.json";
+let opencodeOllamaModels: string[] = [];
+const OLLAMA_MODELS = [
+  { name: "qwen3.6:27b", capabilities: ["completion", "tools", "thinking"], toolcall: true, family: "qwen3", parameterSize: "27B", contextLength: 262_144 },
+  { name: "qwen2.5-coder:7b", capabilities: ["completion", "tools"], toolcall: true, family: "qwen2", parameterSize: "7.6B", contextLength: 32_768 },
+  { name: "llama3.2:latest", capabilities: ["completion", "tools"], toolcall: true, family: "llama", parameterSize: "3.2B", contextLength: 131_072 },
+  { name: "nomic-embed-text:latest", capabilities: ["embedding"], toolcall: false, family: "nomic-bert", parameterSize: "137M" },
+];
+
+/** Reachable-server snapshot derived from the current mock settings. */
+function ollamaStatus() {
+  const judgeModel = viewerSettings.ollamaJudgeModel;
+  const judgeOllama = viewerSettings.secondOpinionProvider === "ollama";
+  return {
+    baseUrl: viewerSettings.ollamaBaseUrl ?? "http://localhost:11434",
+    reachable: true,
+    models: OLLAMA_MODELS,
+    judge: {
+      provider: viewerSettings.secondOpinionProvider,
+      model: judgeModel,
+      ready: judgeOllama ? Boolean(judgeModel && OLLAMA_MODELS.some((m) => m.name === judgeModel)) : Boolean(viewerSettings.typesafeApiKey),
+    },
+    agent: {
+      maintainerModel: viewerSettings.subsystemMaintainerModel,
+      opencode: {
+        configPath: OPENCODE_CONFIG_PATH,
+        provider: opencodeOllamaModels.length ? { baseUrl: "http://localhost:11434/v1", models: opencodeOllamaModels } : null,
+        defaultModel: opencodeOllamaModels.length ? `ollama/${opencodeOllamaModels[0]}` : null,
+      },
+    },
+  };
+}
 let mockRuns: unknown[] = [];
 let inventoryRepo: ConstructInventoryRepo | undefined;
 let inventoryLoadingResponses = 0;

@@ -212,6 +212,20 @@ function openedSortTime(graph: SubsystemModelSummary): number {
 	return Number.isFinite(opened) ? opened : 0;
 }
 
+/**
+ * Reuse `prev` when `next` holds the same elements in the same order.
+ * Filter/sort chains mint a fresh array every render; consumers memoized on
+ * the array reference (the repo map rebuilds every city from it) must only
+ * see a new reference when the contents actually differ.
+ */
+function sameElements<T>(prev: readonly T[] | null, next: readonly T[]): boolean {
+	if (!prev || prev.length !== next.length) return false;
+	for (let i = 0; i < next.length; i++) {
+		if (prev[i] !== next[i]) return false;
+	}
+	return true;
+}
+
 function SubsystemsTabHeader({
 	editedWindow,
 	onEditedWindowChange,
@@ -797,6 +811,8 @@ export function SubsystemModelsView({
 	const [combinedActive, setCombinedActive] = useState(false);
 	/** Repo City map replaces the file tree + model list. */
 	const [showMap, setShowMap] = useState(false);
+	/** Last `panelGraphs` handed to the map; reused while its contents hold. */
+	const panelGraphsRef = useRef<SubsystemModelSummary[] | null>(null);
 	/** Map mode: repo key → file coverage, filled as each city tree loads. */
 	const [fileCoverageByRepo, setFileCoverageByRepo] = useState<
 		ReadonlyMap<string, RepoFileCoverage>
@@ -1382,8 +1398,14 @@ export function SubsystemModelsView({
 			: fileVisibleGraphs.filter(inEditedWindow);
 	const sortedGraphs = applyListFilters(fileVisibleGraphs);
 	// The file panel ignores the open-file narrowing so the tree stays stable
-	// while previewing; it still follows the recency filter.
-	const panelGraphs = applyListFilters(visibleGraphs);
+	// while previewing; it still follows the recency filter. Identity-stable:
+	// hover, divider drags, and preview toggles re-render this view without
+	// changing the list, and the repo map keys every city build off this array.
+	const nextPanelGraphs = applyListFilters(visibleGraphs);
+	const panelGraphs = sameElements(panelGraphsRef.current, nextPanelGraphs)
+		? panelGraphsRef.current!
+		: nextPanelGraphs;
+	panelGraphsRef.current = panelGraphs;
 	/** The composed graph is showing, with the model list docked right. */
 	const combinedPane = combinedActive && focusedRepo != null;
 	/**

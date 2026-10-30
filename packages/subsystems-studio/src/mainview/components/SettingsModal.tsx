@@ -1,11 +1,11 @@
 /**
- * SettingsModal — viewer flags (default tabs, auditing, Jev). Opened from the
- * header Settings button. Flag
- * changes go host-side via setSettings so they persist and re-sync the strip.
+ * SettingsModal — viewer flags (default tabs, auditing, second opinion,
+ * maintainer). Opened from the header Settings button. Flag changes go
+ * host-side via setSettings so they persist and re-sync the strip.
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronRight, Gauge, KeyRound, SlidersHorizontal } from "lucide-react";
+import { Bot, ChevronRight, Gauge, Scale, SlidersHorizontal } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
 	DEFAULT_TAB_FLAGS,
@@ -13,6 +13,8 @@ import {
 	type ViewerSettings,
 } from "../../shared/contract";
 import { electrobun } from "../rpc";
+import { MaintainerPane } from "./MaintainerPane";
+import { SecondOpinionPane } from "./SecondOpinionPane";
 import { useEscapeToClose } from "./useEscapeToClose";
 
 const TAB_TOGGLES: Array<{
@@ -91,6 +93,9 @@ const FALLBACK_SETTINGS: ViewerSettings = {
 	regularAuditIntervalMinutes: 5,
 	autoApplyAuditFixes: true,
 	typesafeApiKey: null,
+	secondOpinionProvider: "typesafe",
+	ollamaBaseUrl: null,
+	ollamaJudgeModel: null,
 	maintenanceRepoKey: null,
 	lastActiveTabId: null,
 };
@@ -98,23 +103,9 @@ const FALLBACK_SETTINGS: ViewerSettings = {
 type SavingKey =
 	| keyof DefaultTabFlags
 	| "resetTabs"
-	| "autoAccept"
-	| "autoAcceptThreshold"
 	| "autoApplyAuditFixes"
 	| "regularAudit"
-	| "regularAuditInterval"
-	| "typesafeApiKey";
-
-const AUTO_ACCEPT_CONFIDENCE_OPTIONS = [
-	{ value: 0.5, label: "50% — lenient" },
-	{ value: 0.6, label: "60%" },
-	{ value: 0.7, label: "70%" },
-	{ value: 0.75, label: "75%" },
-	{ value: 0.8, label: "80%" },
-	{ value: 0.85, label: "85% — balanced (default)" },
-	{ value: 0.9, label: "90%" },
-	{ value: 0.95, label: "95% — strict" },
-] as const;
+	| "regularAuditInterval";
 
 /**
  * The audit findings that carry a deterministic one-click fix. Enumerated here
@@ -156,10 +147,17 @@ const SETTINGS_TABS = [
 	},
 	{
 		id: "jev",
-		label: "Jev (TypeSafe)",
-		icon: KeyRound,
+		label: "Second opinion",
+		icon: Scale,
 		description:
-			"Connect TypeSafe AI's Jev API to score correction proposals with an independent second opinion and gate auto-accept on confidence.",
+			"Pick the judge that scores correction proposals — TypeSafe's hosted Jev or a local Ollama model — and gate auto-accept on its confidence.",
+	},
+	{
+		id: "maintainer",
+		label: "Maintainer",
+		icon: Bot,
+		description:
+			"The OpenCode runtime Maintain agents run on, and which model they use: free tier, a catalog model, or local Ollama.",
 	},
 ] as const;
 
@@ -242,14 +240,6 @@ export function SettingsModal({
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 	const [settings, setSettings] = useState<ViewerSettings | null>(null);
 	const [savingKey, setSavingKey] = useState<SavingKey | null>(null);
-	const [typesafeKey, setTypesafeKey] = useState("");
-	const [typesafeKeyLoaded, setTypesafeKeyLoaded] = useState(false);
-	const [maintainerModels, setMaintainerModels] = useState<{
-		resolved: string;
-		source: string;
-		freeCount: number;
-	} | null>(null);
-	const [maintainerModelsError, setMaintainerModelsError] = useState<string | null>(null);
 	const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
 	const [narrow, setNarrow] = useState(() =>
 		typeof window !== "undefined"
@@ -274,30 +264,10 @@ export function SettingsModal({
 			.then((s) => {
 				if (!alive) return;
 				setSettings(s);
-				setTypesafeKey(s.typesafeApiKey ?? "");
-				setTypesafeKeyLoaded(true);
 			})
 			.catch(() => {
 				if (!alive) return;
 				setSettings(FALLBACK_SETTINGS);
-				setTypesafeKeyLoaded(true);
-			});
-		void electrobun.rpc!.request
-			.getSubsystemMaintainerModels({})
-			.then((res) => {
-				if (!alive) return;
-				if (!res.ok || !res.resolved) {
-					setMaintainerModelsError(res.error ?? "Failed to load the OpenCode model catalog");
-					return;
-				}
-				setMaintainerModels({
-					resolved: res.resolved,
-					source: res.source ?? "auto",
-					freeCount: res.freeModels?.length ?? 0,
-				});
-			})
-			.catch((err) => {
-				if (alive) setMaintainerModelsError(err instanceof Error ? err.message : String(err));
 			});
 		return () => {
 			alive = false;
@@ -359,29 +329,6 @@ export function SettingsModal({
 		}
 	}, [settings, savingKey]);
 
-	const toggleAutoAccept = useCallback(async () => {
-		if (!settings) return;
-		const nextValue = !settings.autoAcceptSubsystemModelProposals;
-		setSavingKey("autoAccept");
-		setSettings({
-			...settings,
-			autoAcceptSubsystemModelProposals: nextValue,
-		});
-		try {
-			const res = await electrobun.rpc!.request.setSettings({
-				settings: { autoAcceptSubsystemModelProposals: nextValue },
-			});
-			if (res.ok) setSettings(res.settings);
-		} catch {
-			setSettings({
-				...settings,
-				autoAcceptSubsystemModelProposals: !nextValue,
-			});
-		} finally {
-			setSavingKey(null);
-		}
-	}, [settings]);
-
 	const toggleAutoApplyAuditFixes = useCallback(async () => {
 		if (!settings) return;
 		const nextValue = !settings.autoApplyAuditFixes;
@@ -398,36 +345,6 @@ export function SettingsModal({
 			setSavingKey(null);
 		}
 	}, [settings]);
-
-	const setAutoAcceptThreshold = useCallback(
-		async (threshold: number) => {
-			if (!settings) return;
-			if (threshold === settings.autoAcceptSubsystemModelConfidenceThreshold)
-				return;
-			const prev = settings.autoAcceptSubsystemModelConfidenceThreshold;
-			setSavingKey("autoAcceptThreshold");
-			setSettings({
-				...settings,
-				autoAcceptSubsystemModelConfidenceThreshold: threshold,
-			});
-			try {
-				const res = await electrobun.rpc!.request.setSettings({
-					settings: {
-						autoAcceptSubsystemModelConfidenceThreshold: threshold,
-					},
-				});
-				if (res.ok) setSettings(res.settings);
-			} catch {
-				setSettings({
-					...settings,
-					autoAcceptSubsystemModelConfidenceThreshold: prev,
-				});
-			} finally {
-				setSavingKey(null);
-			}
-		},
-		[settings],
-	);
 
 	const toggleRegularAudit = useCallback(async () => {
 		if (!settings) return;
@@ -478,31 +395,6 @@ export function SettingsModal({
 		},
 		[settings],
 	);
-
-	const saveTypesafeKey = useCallback(async () => {
-		if (!settings) return;
-		const trimmed = typesafeKey.trim();
-		setSavingKey("typesafeApiKey");
-		try {
-			const res = await electrobun.rpc!.request.setSettings({
-				settings: { typesafeApiKey: trimmed.length > 0 ? trimmed : null },
-			});
-			if (res.ok) {
-				setSettings(res.settings);
-				setTypesafeKey(res.settings.typesafeApiKey ?? "");
-			}
-		} finally {
-			setSavingKey(null);
-		}
-	}, [settings, typesafeKey]);
-
-	const typesafeKeyDirty =
-		(typesafeKey.trim() || null) !== (settings?.typesafeApiKey ?? null);
-
-	// Auto-accept relies on Jev scoring, so it stays locked until a key is
-	// saved. (The host also falls back to TYPESAFE_API_KEY, but the renderer
-	// can't see that here.)
-	const hasTypesafeKey = Boolean(settings?.typesafeApiKey);
 
 	const tabsAtDefaults =
 		!!settings &&
@@ -898,43 +790,6 @@ export function SettingsModal({
 								<div
 									style={{
 										padding: "10px 12px",
-										borderRadius: 8,
-										background: theme.colors.background,
-										border: `1px solid ${theme.colors.border}`,
-										textAlign: "left",
-									}}
-								>
-									<span
-										style={{
-											display: "block",
-											fontSize: theme.fontSizes[1],
-											fontWeight: 600,
-											lineHeight: 1.3,
-										}}
-									>
-										Maintainer model
-									</span>
-									<span
-										style={{
-											display: "block",
-											fontSize: theme.fontSizes[0],
-											color: muted,
-											lineHeight: 1.45,
-											marginTop: 4,
-										}}
-									>
-										{maintainerModelsError ?? (maintainerModels
-											? `OpenCode catalog → ${maintainerModels.resolved} (${maintainerModels.source}${
-													maintainerModels.freeCount > 0
-														? ` · ${maintainerModels.freeCount} free found`
-														: ""
-												}). Choose a model when starting Maintain.`
-											: "Loading the OpenCode server model catalog…")}
-									</span>
-								</div>
-								<div
-									style={{
-										padding: "10px 12px",
 										marginTop: 8,
 										borderRadius: 8,
 										background: theme.colors.background,
@@ -1013,255 +868,11 @@ export function SettingsModal({
 						)}
 
 						{activeTab === "jev" && (
-							<>
-								<div
-									style={{
-										padding: "10px 12px",
-										marginBottom: 8,
-										borderRadius: 8,
-										background: theme.colors.background,
-										border: `1px solid ${theme.colors.border}`,
-									}}
-								>
-								<label
-									htmlFor="typesafe-api-key"
-									style={{
-										display: "block",
-										fontSize: theme.fontSizes[1],
-										fontWeight: 600,
-										lineHeight: 1.3,
-										marginBottom: 6,
-									}}
-								>
-									Jev API key (TypeSafe AI)
-								</label>
-								<div style={{ display: "flex", gap: 8 }}>
-									<input
-										id="typesafe-api-key"
-										type="password"
-										autoComplete="off"
-										spellCheck={false}
-										placeholder="sk-…"
-										value={typesafeKey}
-										disabled={
-											!typesafeKeyLoaded || savingKey === "typesafeApiKey"
-										}
-										onChange={(e) => setTypesafeKey(e.target.value)}
-										onKeyDown={(e) => {
-											if (e.key === "Enter" && typesafeKeyDirty) {
-												void saveTypesafeKey();
-											}
-										}}
-										style={{
-											flex: 1,
-											minWidth: 0,
-											padding: "6px 8px",
-											borderRadius: 6,
-											border: `1px solid ${theme.colors.border}`,
-											background: theme.colors.surface,
-											color: theme.colors.text,
-											fontFamily: theme.fonts.body,
-											fontSize: theme.fontSizes[1],
-										}}
-									/>
-									<button
-										type="button"
-										onClick={() => void saveTypesafeKey()}
-										disabled={
-											!typesafeKeyDirty || savingKey === "typesafeApiKey"
-										}
-										style={{
-											flexShrink: 0,
-											padding: "0 14px",
-											height: 32,
-											borderRadius: 6,
-											fontSize: theme.fontSizes[1],
-											fontWeight: 500,
-											fontFamily: theme.fonts.body,
-											background: typesafeKeyDirty
-												? theme.colors.primary
-												: theme.colors.surface,
-											color: typesafeKeyDirty
-												? theme.colors.background
-												: muted,
-											border: `1px solid ${
-												typesafeKeyDirty
-													? theme.colors.primary
-													: theme.colors.border
-											}`,
-											cursor:
-												typesafeKeyDirty &&
-												savingKey !== "typesafeApiKey"
-													? "pointer"
-													: "default",
-										}}
-									>
-										{savingKey === "typesafeApiKey" ? "Saving…" : "Save"}
-									</button>
-								</div>
-								<span
-									style={{
-										display: "block",
-										fontSize: theme.fontSizes[0],
-										color: muted,
-										lineHeight: 1.45,
-										marginTop: 8,
-									}}
-								>
-									{settings?.typesafeApiKey
-										? "A key is configured. "
-										: "No key configured — proposal scoring stays disabled until you add one. "}
-									Used for proposal second opinions via{" "}
-									<code>api.typesafe.ai/v1/systemone</code> (model{" "}
-									<code>jev-latest</code>). Stored locally; get a key at
-									console.typesafe.ai/keys. Falls back to the{" "}
-									<code>TYPESAFE_API_KEY</code> environment variable.
-								</span>
-								</div>
+							<SecondOpinionPane settings={settings} onSettings={setSettings} />
+						)}
 
-								<label
-									style={{
-										display: "flex",
-										alignItems: "center",
-										gap: 12,
-										padding: "10px 12px",
-										marginBottom: 8,
-										borderRadius: 8,
-										background: theme.colors.background,
-										border: `1px solid ${theme.colors.border}`,
-										cursor:
-											settings && hasTypesafeKey && savingKey !== "autoAccept"
-												? "pointer"
-												: "default",
-										opacity: settings && hasTypesafeKey ? 1 : 0.6,
-									}}
-								>
-									<input
-										type="checkbox"
-										checked={
-											settings?.autoAcceptSubsystemModelProposals ?? false
-										}
-										disabled={
-											!settings || !hasTypesafeKey || savingKey === "autoAccept"
-										}
-										onChange={() => void toggleAutoAccept()}
-										style={{
-											width: 16,
-											height: 16,
-											accentColor: theme.colors.primary,
-											cursor:
-												settings && hasTypesafeKey && savingKey !== "autoAccept"
-													? "pointer"
-													: "default",
-											flexShrink: 0,
-										}}
-									/>
-									<span style={{ minWidth: 0, flex: 1 }}>
-										<span
-											style={{
-												display: "block",
-												fontSize: theme.fontSizes[1],
-												fontWeight: 600,
-												lineHeight: 1.3,
-											}}
-										>
-											Auto-accept correction proposals
-										</span>
-										<span
-											style={{
-												display: "block",
-												fontSize: theme.fontSizes[0],
-												color: muted,
-												lineHeight: 1.4,
-												marginTop: 2,
-											}}
-										>
-											{hasTypesafeKey
-												? "Apply agent patches immediately when Jev confidence clears the bar below. Off = confirm each change."
-												: "Add and save a Jev API key above to enable auto-accept."}
-										</span>
-									</span>
-								</label>
-
-								<div
-									style={{
-										padding: "10px 12px",
-										marginBottom: 8,
-										borderRadius: 8,
-										background: theme.colors.background,
-										border: `1px solid ${theme.colors.border}`,
-										opacity:
-											!hasTypesafeKey ||
-											settings?.autoAcceptSubsystemModelProposals === false
-												? 0.55
-												: 1,
-									}}
-								>
-									<label
-										htmlFor="auto-accept-threshold"
-										style={{
-											display: "block",
-											fontSize: theme.fontSizes[1],
-											fontWeight: 600,
-											lineHeight: 1.3,
-											marginBottom: 6,
-										}}
-									>
-										Minimum Jev confidence to auto-accept
-									</label>
-									<select
-										id="auto-accept-threshold"
-										value={
-											settings?.autoAcceptSubsystemModelConfidenceThreshold ??
-											0.85
-										}
-										disabled={
-											!settings ||
-											!hasTypesafeKey ||
-											settings.autoAcceptSubsystemModelProposals === false ||
-											savingKey === "autoAcceptThreshold"
-										}
-										onChange={(e) =>
-											void setAutoAcceptThreshold(Number(e.target.value))
-										}
-										style={{
-											width: "100%",
-											padding: "6px 8px",
-											borderRadius: 6,
-											border: `1px solid ${theme.colors.border}`,
-											background: theme.colors.surface,
-											color: theme.colors.text,
-											fontFamily: theme.fonts.body,
-											fontSize: theme.fontSizes[1],
-											cursor:
-												settings &&
-												hasTypesafeKey &&
-												settings.autoAcceptSubsystemModelProposals
-													? "pointer"
-													: "default",
-										}}
-									>
-										{AUTO_ACCEPT_CONFIDENCE_OPTIONS.map((opt) => (
-											<option key={opt.value} value={opt.value}>
-												{opt.label}
-											</option>
-										))}
-									</select>
-									<span
-										style={{
-											display: "block",
-											fontSize: theme.fontSizes[0],
-											color: muted,
-											lineHeight: 1.45,
-											marginTop: 4,
-										}}
-									>
-										Proposals are scored by Jev before applying; only those at
-										or above this confidence auto-accept. Others stay pending.
-									</span>
-								</div>
-
-							</>
+						{activeTab === "maintainer" && (
+							<MaintainerPane settings={settings} onSettings={setSettings} />
 						)}
 					</div>
 				</div>

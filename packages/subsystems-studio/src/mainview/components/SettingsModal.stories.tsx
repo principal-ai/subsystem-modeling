@@ -15,11 +15,21 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {};
 
 /**
- * The Auditing pane — regular-audit enable + interval, the Maintainer model,
- * and "Surface one-click fixes during audit" with its expandable list of the
- * conditions that get a deterministic fix.
+ * The Auditing pane — regular-audit enable + interval and "Surface one-click
+ * fixes during audit" with its expandable list of the conditions that get a
+ * deterministic fix.
  */
 export const Auditing: Story = { args: { initialTab: "auditing" } };
 
-/** The Jev (TypeSafe) pane — the Jev API key and the proposal auto-accept gate. */
-export const Jev: Story = { args: { initialTab: "jev" } };
+/**
+ * The Second opinion pane — Jev | Ollama judge picker, the judge's key or
+ * model, a one-shot "Test the judge", and the proposal auto-accept gate.
+ */
+export const SecondOpinion: Story = { args: { initialTab: "jev" } };
+
+/**
+ * The Maintainer pane — OpenCode V2 install state plus the maintainer model
+ * choice: free tier, a catalog model, or a local Ollama model (with the
+ * server's availability shown inline).
+ */
+export const Maintainer: Story = { args: { initialTab: "maintainer" } };
