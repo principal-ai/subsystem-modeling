@@ -1,7 +1,8 @@
 /**
  * TabStrip — the tab bar above the active view. Renders permanent tabs
  * (Agent Sessions, Tours) plus per-tour tabs, with a close affordance on the
- * non-permanent ones.
+ * non-permanent ones. Non-permanent tabs can be dragged out of the window to
+ * open them in their own window.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -48,18 +49,72 @@ const KIND_ICONS: Partial<Record<TabSummary["kind"], LucideIcon>> = {
 	"opencode-v2": Terminal,
 };
 
+export interface TabDropPoint {
+	screenX: number;
+	screenY: number;
+}
+
+interface TabDrag {
+	tabId: string;
+	title: string;
+	outside: boolean;
+}
+
 export function TabStrip({
 	tabs,
 	activeTabId,
 	onSelect,
 	onClose,
+	onDetach,
 }: {
 	tabs: TabSummary[];
 	activeTabId: string | null;
 	onSelect: (id: string) => void;
 	onClose: (id: string) => void;
+	/** Drag a tab out of the window: called with the release point in screen
+	 *  coordinates. Omit to disable dragging. */
+	onDetach?: (id: string, dropPoint: TabDropPoint) => void;
 }) {
 	const { theme } = useTheme();
+	const [drag, setDrag] = useState<TabDrag | null>(null);
+	const dragRef = useRef<TabDrag | null>(null);
+	const dragImageRef = useRef<HTMLElement | null>(null);
+
+	const updateDrag = useCallback((next: TabDrag | null) => {
+		dragRef.current = next;
+		setDrag(next);
+	}, []);
+
+	// WebKit stops delivering drag events once the pointer leaves the window, so
+	// "outside" is inferred: a dragleave with no relatedTarget means the pointer
+	// left the document; any later dragover inside flips it back.
+	useEffect(() => {
+		if (!drag) return;
+		const onLeave = (e: DragEvent) => {
+			if (e.relatedTarget !== null) return;
+			const cur = dragRef.current;
+			if (cur && !cur.outside) updateDrag({ ...cur, outside: true });
+		};
+		const onOver = (e: DragEvent) => {
+			// Allow the tab to be dropped back where it came from without the
+			// "not allowed" cursor.
+			e.preventDefault();
+			const cur = dragRef.current;
+			if (cur?.outside) updateDrag({ ...cur, outside: false });
+		};
+		window.addEventListener("dragleave", onLeave);
+		window.addEventListener("dragover", onOver);
+		return () => {
+			window.removeEventListener("dragleave", onLeave);
+			window.removeEventListener("dragover", onOver);
+		};
+	}, [drag, updateDrag]);
+
+	const removeDragImage = useCallback(() => {
+		dragImageRef.current?.remove();
+		dragImageRef.current = null;
+	}, []);
+	useEffect(() => removeDragImage, [removeDragImage]);
 	// First pointer-down of a (potential) double-click: whether that tab was
 	// already active. The second pointer-down must not overwrite this — by then
 	// the first click has already activated the tab.
@@ -114,10 +169,11 @@ export function TabStrip({
 					tab.kind === "graphify" ||
 					tab.kind === "package-layers" ||
 					tab.kind === "opencode-v2";
-const canCopyPath =
+				const canCopyPath =
 					tab.kind === "subsystem-model" && typeof tab.path === "string";
-			const justCopied = copiedTabId === tab.id;
-			const Icon = KIND_ICONS[tab.kind] ?? FileText;
+				const canDetach = !isPermanent && onDetach !== undefined;
+				const justCopied = copiedTabId === tab.id;
+				const Icon = KIND_ICONS[tab.kind] ?? FileText;
 				return (
 					<div
 						key={tab.id}
@@ -139,6 +195,49 @@ const canCopyPath =
 							}
 						}}
 						onClick={() => onSelect(tab.id)}
+						draggable={canDetach}
+						onDragStart={(e) => {
+							if (!canDetach) return;
+							e.dataTransfer.setData("text/plain", tab.id);
+							e.dataTransfer.effectAllowed = "move";
+							// Drag a copy of the tab so the ghost is the full tab, not
+							// just the text the pointer happened to grab.
+							const source = e.currentTarget;
+							const ghost = source.cloneNode(true) as HTMLElement;
+							const rect = source.getBoundingClientRect();
+							Object.assign(ghost.style, {
+								position: "fixed",
+								top: "-1000px",
+								left: "-1000px",
+								width: `${rect.width}px`,
+								opacity: "0.9",
+								pointerEvents: "none",
+							});
+							document.body.appendChild(ghost);
+							removeDragImage();
+							dragImageRef.current = ghost;
+							e.dataTransfer.setDragImage(
+								ghost,
+								e.clientX - rect.left,
+								e.clientY - rect.top,
+							);
+							updateDrag({ tabId: tab.id, title: tab.title, outside: false });
+						}}
+						onDragEnd={(e) => {
+							const cur = dragRef.current;
+							removeDragImage();
+							updateDrag(null);
+							if (!cur || cur.tabId !== tab.id || !onDetach) return;
+							// dragend fires inside the window even when released outside
+							// it; the client point then lands past the viewport edge.
+							const outOfBounds =
+								e.clientX < 0 ||
+								e.clientY < 0 ||
+								e.clientX > window.innerWidth ||
+								e.clientY > window.innerHeight;
+							if (!cur.outside && !outOfBounds) return;
+							onDetach(tab.id, { screenX: e.screenX, screenY: e.screenY });
+						}}
 						onDoubleClick={() => {
 							const gesture = copyGestureRef.current;
 							const path = tab.path;
@@ -257,6 +356,35 @@ const canCopyPath =
 					</div>
 				);
 			})}
+			{drag?.outside && (
+				<div
+					style={{
+						position: "fixed",
+						inset: 0,
+						zIndex: 1000,
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
+						background: "rgba(0, 0, 0, 0.35)",
+						pointerEvents: "none",
+						fontFamily: theme.fonts.body,
+					}}
+				>
+					<div
+						style={{
+							padding: "12px 18px",
+							borderRadius: 8,
+							background: theme.colors.backgroundSecondary ?? theme.colors.background,
+							border: `1px solid ${theme.colors.border ?? "#444"}`,
+							color: theme.colors.text,
+							fontSize: theme.fontSizes[2],
+							boxShadow: "0 8px 24px rgba(0, 0, 0, 0.4)",
+						}}
+					>
+						Release to open “{drag.title}” in a new window
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }

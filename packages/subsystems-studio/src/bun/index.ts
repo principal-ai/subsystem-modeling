@@ -18,6 +18,7 @@ import {
 	ApplicationMenu,
 	BrowserView,
 	BrowserWindow,
+	Screen,
 	Utils,
 	type RPCSchema,
 } from "electrobun/bun";
@@ -32,6 +33,12 @@ import { handoffToRunning, startIpcServer, type LoadTourMessage } from "./ipc";
 import { startHttpServer } from "./http-server";
 import { remoteModelSources, remoteSourceErrorMessage } from "./remote-model-sources";
 import { resolveSandboxed } from "./sandboxed-path";
+import {
+	DETACHED_WINDOW_SIZE,
+	displayNearestPoint,
+	placeWindowAtDropPoint,
+	TabWindowRegistry,
+} from "./tab-windows";
 import { deleteSubsystemModel, getSubsystemModel, listSubsystemModels, purlRepoKey, resolveRepoRootForComponent, setSubsystemModelChangeListener, stampVerifiedCommits, startSubsystemModelDirWatcher, subsystemModelFilePath, touchSubsystemModelOpened, updateSubsystemModel } from "./subsystem-model-store";
 import { buildC4ProjectionForModel } from "./c4-projection";
 import { deleteC4Sketch, getC4Sketch, listC4Sketches } from "./c4-sketch-store";
@@ -278,13 +285,7 @@ function refreshInWorker(sessionIds: string[]): boolean {
 /** Push a host→renderer notification that these sessions' caches are fresh. */
 function broadcastSessionsUpdated(sessionIds: string[]): void {
 	if (sessionIds.length === 0) return;
-	try {
-		(rpc.send as unknown as Record<string, (payload: unknown) => void>)[
-			"sessionsUpdated"
-		]({ sessionIds });
-	} catch (err) {
-		console.warn(`[principal-studio] could not notify renderer of session updates: ${(err as Error).message}`);
-	}
+	sendToAllWindows("sessionsUpdated", { sessionIds });
 }
 
 /** Spawn the warm-up worker (once) and kick off a warmup pass. Fire-and-forget;
@@ -751,6 +752,18 @@ function ensurePermanentTab(id: string): void {
 }
 
 const tabs = new Map<string, TabState>();
+// Transient tabs can be dragged into their own window. Tabs not registered
+// here live in the main window; detached windows also keep their own
+// active-tab suggestion (the counterpart of `suggestedTabId` below).
+const tabWindows = new TabWindowRegistry();
+const detachedWindows = new Map<
+	number,
+	{ window: BrowserWindow; rpc: ReturnType<typeof createWindowRpc> }
+>();
+// The detached window whose RPC handler is currently running (null = main).
+// The per-window RPC wrapper sets it synchronously, so tab-creating handlers
+// must read it before their first await to place the tab in the asking window.
+let currentRequestWindowId: number | null = null;
 let viewerSettings: ViewerSettings = loadViewerSettings();
 // Which tab the host suggests showing. Not authoritative — the renderer owns
 // the on-screen tab. Updated when the host creates a tab it wants visible, on
@@ -769,6 +782,26 @@ syncPermanentTabs(viewerSettings);
 	}
 }
 let nextTabId = 1;
+
+/** Tab ids shown in the main window, in strip order. */
+function mainTabIds(): string[] {
+	return Array.from(tabs.keys()).filter((id) => tabWindows.windowOf(id) === null);
+}
+
+/** Suggest `id` on screen in whichever window hosts it. */
+function suggestTab(id: string): void {
+	const windowId = tabWindows.windowOf(id);
+	if (windowId === null) suggestedTabId = id;
+	else tabWindows.suggest(windowId, id);
+}
+
+/** Register a freshly minted tab in the window that asked for it. */
+function placeNewTab(id: string, windowId: number | null): void {
+	if (windowId !== null && detachedWindows.has(windowId)) {
+		tabWindows.assign(id, windowId);
+	}
+	suggestTab(id);
+}
 
 // Pre-load the payload so the renderer's first read is synchronous and any
 // parse error surfaces at boot rather than after the window is up.
@@ -1031,6 +1064,7 @@ async function openSubsystemModelTab(
 		live?: { sessionId: string; title?: string; agent?: string };
 	},
 ): Promise<string | null> {
+	const requestWindow = currentRequestWindowId;
 	// Fast path: already open — no I/O. Broadcast first so the tab switches
 	// immediately; stamp last-opened in the background. The detail view owns
 	// its Loading / not-found empty states and fills in via getSubsystemModel.
@@ -1050,7 +1084,7 @@ async function openSubsystemModelTab(
 				existing.liveTitle = focus.live.title;
 				existing.liveAgent = focus.live.agent;
 			}
-			suggestedTabId = existing.id;
+			suggestTab(existing.id);
 			console.log(`[principal-studio] subsystem-model tab ${existing.id} focused (already open): ${graphId}`);
 			broadcastTabsChanged(existing.id);
 			void touchSubsystemModelOpened(graphId).catch(() => {});
@@ -1103,7 +1137,7 @@ async function openSubsystemModelTab(
 				}
 			: {}),
 	});
-	suggestedTabId = id;
+	placeNewTab(id, requestWindow);
 	console.log(`[principal-studio] subsystem-model tab ${id} added: ${graphId}`);
 	broadcastTabsChanged(id);
 	// Fire-and-forget: the last-opened stamp (full re-read + record/index
@@ -1151,10 +1185,11 @@ async function openSubsystemC4Tab(
 	graphId: string,
 	source?: SubsystemC4Source,
 ): Promise<string | null> {
+	const requestWindow = currentRequestWindowId;
 	for (const existing of tabs.values()) {
 		if (existing.kind === "subsystem-c4" && existing.graphId === graphId) {
 			if (source !== undefined) existing.c4Source = source;
-			suggestedTabId = existing.id;
+			suggestTab(existing.id);
 			console.log(
 				`[principal-studio] subsystem-c4 tab ${existing.id} focused (already open): ${graphId}`,
 			);
@@ -1184,7 +1219,7 @@ async function openSubsystemC4Tab(
 		graphId,
 		...(source ? { c4Source: source } : {}),
 	});
-	suggestedTabId = id;
+	placeNewTab(id, requestWindow);
 	console.log(`[principal-studio] subsystem-c4 tab ${id} added: ${graphId}`);
 	broadcastTabsChanged(id);
 	void touchSubsystemModelOpened(graphId).catch(() => {});
@@ -1196,9 +1231,10 @@ async function openSubsystemC4Tab(
  * model; `modelId` optionally pins the model to ground it against.
  */
 async function openC4SketchTab(sketchId: string): Promise<string | null> {
+	const requestWindow = currentRequestWindowId;
 	for (const existing of tabs.values()) {
 		if (existing.kind === "c4-sketch" && existing.sketchId === sketchId) {
-			suggestedTabId = existing.id;
+			suggestTab(existing.id);
 			broadcastTabsChanged(existing.id);
 			return existing.id;
 		}
@@ -1213,7 +1249,7 @@ async function openC4SketchTab(sketchId: string): Promise<string | null> {
 		title: `C4 sketch · ${sketch.title}`,
 		sketchId,
 	});
-	suggestedTabId = id;
+	placeNewTab(id, requestWindow);
 	console.log(`[principal-studio] c4-sketch tab ${id} added: ${sketchId}`);
 	broadcastTabsChanged(id);
 	return id;
@@ -1695,10 +1731,7 @@ interface ResidentSession {
  */
 
 const requests: RequestHandlers = {
-			listTabs: () => ({
-				tabs: Array.from(tabs.values()).map(summarize),
-				suggestedActiveTabId: suggestedTabId,
-			}),
+			listTabs: () => listTabsFor(null),
 			getTab: ({ id }) => {
 				const tab = getTab(id);
 				if (!tab) {
@@ -1712,24 +1745,10 @@ const requests: RequestHandlers = {
 				}
 				return fullState(tab);
 			},
-			setActiveTab: ({ id }) => {
-				// The renderer owns the on-screen tab and switches instantly; this
-				// just records the switch as the host's resume suggestion (served
-				// back through listTabs if the webview reloads) and, for permanent
-				// tabs, persists it so the next launch reopens on it. No broadcast —
-				// the renderer already applied the change locally.
-				if (!tabs.has(id)) return { ok: false, error: `unknown tab: ${id}` };
-				suggestedTabId = id;
-				// Transient tabs (tours, models) do not survive a restart, so only
-				// permanent ones are worth restoring.
-				if (isPermanentTabId(id) && viewerSettings.lastActiveTabId !== id) {
-					viewerSettings = patchViewerSettings(viewerSettings, {
-						lastActiveTabId: id,
-					});
-				}
-				return { ok: true };
-			},
+			setActiveTab: ({ id }) => setActiveTabFor(null, id),
 			closeTab: ({ id }) => closeTabById(id),
+			detachTab: ({ id, dropPoint }) => detachTab(id, null, dropPoint),
+			attachTab: ({ id }) => attachTab(id),
 			readSubsystemFile: async ({ purl, file }) => {
 				const root = resolveRepoRootForComponent(purl);
 				if (!root) return { ok: false, error: "no local checkout for this repo" };
@@ -3150,101 +3169,45 @@ function broadcastGraphifyChanged(
 	payload: StudioMessages["graphifyChanged"],
 ): void {
 	constructInventory.invalidate(payload.purl);
-	try {
-		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
-			"graphifyChanged"
-		](payload);
-	} catch (err) {
-		console.warn(
-			`[principal-studio] could not notify renderer (graphifyChanged): ${(err as Error).message}`,
-		);
-	}
+	sendToAllWindows("graphifyChanged", payload);
 }
 
 function broadcastPackageLayersChanged(
 	payload: StudioMessages["packageLayersChanged"],
 ): void {
 	constructInventory.invalidate(payload.purl);
-	try {
-		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
-			"packageLayersChanged"
-		](payload);
-	} catch (err) {
-		console.warn(
-			`[principal-studio] could not notify renderer (packageLayersChanged): ${(err as Error).message}`,
-		);
-	}
+	sendToAllWindows("packageLayersChanged", payload);
 }
 
 function broadcastSubsystemModelChanged(
 	payload: StudioMessages["subsystemModelChanged"],
 ): void {
 	constructInventory.invalidate();
-	try {
-		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
-			"subsystemModelChanged"
-		](payload);
-	} catch (err) {
-		console.warn(
-			`[principal-studio] could not notify renderer (subsystemModelChanged): ${(err as Error).message}`,
-		);
-	}
+	sendToAllWindows("subsystemModelChanged", payload);
 }
 
 function broadcastSubsystemModelProposalsChanged(
 	payload: StudioMessages["subsystemModelProposalsChanged"],
 ): void {
-	try {
-		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
-			"subsystemModelProposalsChanged"
-		](payload);
-	} catch (err) {
-		console.warn(
-			`[principal-studio] could not notify renderer (subsystemModelProposalsChanged): ${(err as Error).message}`,
-		);
-	}
+	sendToAllWindows("subsystemModelProposalsChanged", payload);
 }
 
 function broadcastSubsystemModelRunsChanged(
 	payload: StudioMessages["subsystemModelRunsChanged"],
 ): void {
-	try {
-		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
-			"subsystemModelRunsChanged"
-		](payload);
-	} catch (err) {
-		console.warn(
-			`[principal-studio] could not notify renderer (subsystemModelRunsChanged): ${(err as Error).message}`,
-		);
-	}
+	sendToAllWindows("subsystemModelRunsChanged", payload);
 }
 
 function broadcastSubsystemModelMaintainChanged(
 	payload: StudioMessages["subsystemModelMaintainChanged"],
 ): void {
-	try {
-		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
-			"subsystemModelMaintainChanged"
-		](payload);
-	} catch (err) {
-		console.warn(
-			`[principal-studio] could not notify renderer (subsystemModelMaintainChanged): ${(err as Error).message}`,
-		);
-	}
+	sendToAllWindows("subsystemModelMaintainChanged", payload);
 }
 
 function broadcastRegularAuditChanged(
 	payload: StudioMessages["regularAuditChanged"],
 ): void {
-	try {
-		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
-			"regularAuditChanged"
-		](payload);
-	} catch (err) {
-		console.warn(
-			`[principal-studio] could not notify renderer (regularAuditChanged): ${(err as Error).message}`,
-		);
-	}
+	sendToAllWindows("regularAuditChanged", payload);
 }
 
 /** Graphs with an in-flight Maintain agent run. */
@@ -3562,71 +3525,31 @@ async function maintainSubsystemModelInBackground(
 function broadcastStudioVersionChanged(
 	payload: StudioMessages["studioVersionChanged"],
 ): void {
-	try {
-		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
-			"studioVersionChanged"
-		](payload);
-	} catch (err) {
-		console.warn(
-			`[principal-studio] could not notify renderer (studioVersionChanged): ${(err as Error).message}`,
-		);
-	}
+	sendToAllWindows("studioVersionChanged", payload);
 }
 
 function broadcastOpencodeV2Changed(
 	payload: StudioMessages["opencodeV2Changed"],
 ): void {
-	try {
-		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
-			"opencodeV2Changed"
-		](payload);
-	} catch (err) {
-		console.warn(
-			`[principal-studio] could not notify renderer (opencodeV2Changed): ${(err as Error).message}`,
-		);
-	}
+	sendToAllWindows("opencodeV2Changed", payload);
 }
 
 function broadcastOpencodeV2ProbeChanged(
 	payload: StudioMessages["opencodeV2ProbeChanged"],
 ): void {
-	try {
-		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
-			"opencodeV2ProbeChanged"
-		](payload);
-	} catch (err) {
-		console.warn(
-			`[principal-studio] could not notify renderer (opencodeV2ProbeChanged): ${(err as Error).message}`,
-		);
-	}
+	sendToAllWindows("opencodeV2ProbeChanged", payload);
 }
 
 function broadcastOpencodeLiveFeedChanged(
 	payload: StudioMessages["opencodeLiveFeedChanged"],
 ): void {
-	try {
-		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
-			"opencodeLiveFeedChanged"
-		](payload);
-	} catch (err) {
-		console.warn(
-			`[principal-studio] could not notify renderer (opencodeLiveFeedChanged): ${(err as Error).message}`,
-		);
-	}
+	sendToAllWindows("opencodeLiveFeedChanged", payload);
 }
 
 function broadcastMaintainLivePanelChanged(
 	payload: StudioMessages["maintainLivePanelChanged"],
 ): void {
-	try {
-		(rpc.send as unknown as Record<string, (p: unknown) => void>)[
-			"maintainLivePanelChanged"
-		](payload);
-	} catch (err) {
-		console.warn(
-			`[principal-studio] could not notify renderer (maintainLivePanelChanged): ${(err as Error).message}`,
-		);
-	}
+	sendToAllWindows("maintainLivePanelChanged", payload);
 }
 
 let liveFeedSubscribed = false;
@@ -3927,35 +3850,71 @@ function safeSubpath(subpath: string): string | null {
 	return parts.length > 0 ? parts.join("/") : null;
 }
 
-const rpc = BrowserView.defineRPC<StudioRPC>({
-	maxRequestTime: 5000,
-	handlers: {
-		requests,
-		messages: {},
-	},
-});
+/**
+ * Request handlers for one window. Detached windows see only their own tabs
+ * and stamp `currentRequestWindowId` for the duration of each handler's
+ * synchronous prefix, so tab-creating handlers place new tabs in the window
+ * that asked (see `placeNewTab`).
+ */
+function requestsForWindow(getWindowId: () => number | null): RequestHandlers {
+	const scoped: RequestHandlers = {
+		...requests,
+		listTabs: () => listTabsFor(getWindowId()),
+		setActiveTab: ({ id }) => setActiveTabFor(getWindowId(), id),
+		detachTab: ({ id, dropPoint }) => detachTab(id, getWindowId(), dropPoint),
+	};
+	const wrapped: Record<string, (params: unknown) => unknown> = {};
+	for (const [name, handler] of Object.entries(scoped) as [
+		string,
+		(params: unknown) => unknown,
+	][]) {
+		wrapped[name] = (params: unknown) => {
+			currentRequestWindowId = getWindowId();
+			try {
+				return handler(params);
+			} finally {
+				currentRequestWindowId = null;
+			}
+		};
+	}
+	return wrapped as unknown as RequestHandlers;
+}
+
+function createWindowRpc(getWindowId: () => number | null) {
+	return BrowserView.defineRPC<StudioRPC>({
+		maxRequestTime: 5000,
+		handlers: {
+			requests: requestsForWindow(getWindowId),
+			messages: {},
+		},
+	});
+}
+
+const rpc = createWindowRpc(() => null);
+
+/** Send a host→renderer message to the main window and every detached window. */
+function sendToAllWindows(message: keyof StudioMessages, payload: unknown): void {
+	const targets = [rpc, ...Array.from(detachedWindows.values(), (entry) => entry.rpc)];
+	for (const target of targets) {
+		try {
+			(target.send as unknown as Record<string, (p: unknown) => void>)[message](payload);
+		} catch (err) {
+			console.warn(
+				`[principal-studio] could not notify renderer (${message}): ${(err as Error).message}`,
+			);
+		}
+	}
+}
 
 /** Push live last-event updates for the watched opencode sessions to the
  *  renderer's server-session list. The listener comes from server-sessions.ts;
  *  this is the module-scoped sender wired in setServerEventWatch. */
 function broadcastServerEvents(sessions: ServerSessionRow[]): void {
-	try {
-		(rpc.send as unknown as Record<string, (payload: unknown) => void>)["serverEventsChanged"]({
-			sessions,
-		});
-	} catch (err) {
-		console.warn(`[principal-studio] could not notify renderer: ${(err as Error).message}`);
-	}
+	sendToAllWindows("serverEventsChanged", { sessions });
 }
 
 function broadcastTabsChanged(focusTabId?: string): void {
-	try {
-		(rpc.send as unknown as Record<string, (payload: unknown) => void>)[
-			"tabsChanged"
-		]({ focusTabId });
-	} catch (err) {
-		console.warn(`[principal-studio] could not notify renderer: ${(err as Error).message}`);
-	}
+	sendToAllWindows("tabsChanged", { focusTabId });
 }
 
 // ---------------------------------------------------------------------------
@@ -4063,15 +4022,199 @@ function closeTabById(id: string): { ok: boolean; error?: string } {
 		return { ok: false, error: "permanent tab cannot be closed" };
 	}
 	if (!tabs.has(id)) return { ok: false, error: `unknown tab: ${id}` };
+	const windowId = tabWindows.windowOf(id);
 	tabs.delete(id);
+	tabWindows.forget(id);
 	// If the renderer was on this tab, the renderer picks its own fallback on
 	// the next refresh. We only keep the host's resume suggestion valid.
-	if (suggestedTabId === id) {
-		const remaining = Array.from(tabs.keys());
-		suggestedTabId = remaining[remaining.length - 1] ?? LIBRARY_TAB_ID;
+	if (windowId === null) {
+		if (suggestedTabId === id) {
+			const remaining = mainTabIds();
+			suggestedTabId = remaining[remaining.length - 1] ?? LIBRARY_TAB_ID;
+		}
+	} else {
+		closeDetachedWindowIfEmpty(windowId);
 	}
 	broadcastTabsChanged();
 	return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Detached tab windows
+// ---------------------------------------------------------------------------
+
+/** Tabs and resume suggestion for one window (`null` = the main window). */
+function listTabsFor(windowId: number | null): StudioRequests["listTabs"]["response"] {
+	const visible = Array.from(tabs.values()).filter(
+		(tab) => tabWindows.windowOf(tab.id) === windowId,
+	);
+	return {
+		tabs: visible.map(summarize),
+		suggestedActiveTabId:
+			windowId === null
+				? suggestedTabId
+				: (tabWindows.suggestion(windowId) ?? visible[0]?.id ?? ""),
+		windowRole: windowId === null ? "main" : "detached",
+	};
+}
+
+function setActiveTabFor(
+	windowId: number | null,
+	id: string,
+): { ok: boolean; error?: string } {
+	// The renderer owns the on-screen tab and switches instantly; this just
+	// records the switch as the host's resume suggestion (served back through
+	// listTabs if the webview reloads) and, for permanent tabs, persists it so
+	// the next launch reopens on it. No broadcast — the renderer already
+	// applied the change locally.
+	if (!tabs.has(id)) return { ok: false, error: `unknown tab: ${id}` };
+	if (tabWindows.windowOf(id) !== windowId) {
+		return { ok: false, error: `tab ${id} is hosted by another window` };
+	}
+	if (windowId !== null) {
+		tabWindows.suggest(windowId, id);
+		return { ok: true };
+	}
+	suggestedTabId = id;
+	// Transient tabs (tours, models) do not survive a restart, so only
+	// permanent ones are worth restoring.
+	if (isPermanentTabId(id) && viewerSettings.lastActiveTabId !== id) {
+		viewerSettings = patchViewerSettings(viewerSettings, {
+			lastActiveTabId: id,
+		});
+	}
+	return { ok: true };
+}
+
+/** Frame for a new detached window: under the drop point on its display, or
+ *  offset from the main window when the request carried no point. */
+function detachedWindowFrame(
+	dropPoint: { screenX: number; screenY: number } | undefined,
+): { x: number; y: number; width: number; height: number } {
+	const point =
+		dropPoint &&
+		Number.isFinite(dropPoint.screenX) &&
+		Number.isFinite(dropPoint.screenY)
+			? { x: dropPoint.screenX, y: dropPoint.screenY }
+			: null;
+	const displays = Screen.getAllDisplays();
+	const display =
+		(point ? displayNearestPoint(displays, point) : null) ??
+		displays.find((d) => d.isPrimary) ??
+		displays[0] ??
+		Screen.getPrimaryDisplay();
+	if (point) return placeWindowAtDropPoint(point, DETACHED_WINDOW_SIZE, display.workArea);
+	const main = browserWindow.getFrame();
+	return placeWindowAtDropPoint(
+		{ x: main.x + main.width / 2, y: main.y + 80 },
+		DETACHED_WINDOW_SIZE,
+		display.workArea,
+	);
+}
+
+/**
+ * Move a transient tab into its own window. The host keeps owning the tab:
+ * only its window assignment changes, and every window re-reads its list on
+ * the broadcast. If the new webview fails to load nothing is lost — closing
+ * the window hands its tabs back to the main window.
+ */
+function detachTab(
+	id: string,
+	fromWindowId: number | null,
+	dropPoint?: { screenX: number; screenY: number },
+): { ok: boolean; windowId?: number; error?: string } {
+	if (isPermanentTabId(id)) {
+		return { ok: false, error: "permanent tab cannot be detached" };
+	}
+	const tab = tabs.get(id);
+	if (!tab) return { ok: false, error: `unknown tab: ${id}` };
+	if (tabWindows.windowOf(id) !== fromWindowId) {
+		return { ok: false, error: `tab ${id} is hosted by another window` };
+	}
+
+	const handle = { id: null as number | null };
+	const windowRpc = createWindowRpc(() => handle.id);
+	let window: BrowserWindow;
+	try {
+		window = new BrowserWindow({
+			title: tab.title,
+			url: "views://mainview/index.html#detached",
+			rpc: windowRpc,
+			frame: detachedWindowFrame(dropPoint),
+			activate: true,
+		});
+	} catch (err) {
+		return { ok: false, error: `could not open window: ${(err as Error).message}` };
+	}
+	handle.id = window.id;
+	detachedWindows.set(window.id, { window, rpc: windowRpc });
+	tabWindows.assign(id, window.id);
+	tabWindows.suggest(window.id, id);
+	if (fromWindowId === null) {
+		if (suggestedTabId === id) {
+			const remaining = mainTabIds();
+			suggestedTabId = remaining[remaining.length - 1] ?? LIBRARY_TAB_ID;
+		}
+	} else {
+		closeDetachedWindowIfEmpty(fromWindowId);
+	}
+
+	window.on("close", () => {
+		if (!detachedWindows.has(window.id)) return;
+		detachedWindows.delete(window.id);
+		// Whatever the window still hosted comes back to the main window.
+		const returned = tabWindows.closeWindow(window.id);
+		const focus = returned[0];
+		if (focus !== undefined) suggestedTabId = focus;
+		broadcastTabsChanged(focus);
+	});
+
+	console.log(`[principal-studio] tab ${id} detached into window ${window.id}`);
+	broadcastTabsChanged(id);
+	return { ok: true, windowId: window.id };
+}
+
+/** Move a detached tab back into the main window. */
+function attachTab(id: string): { ok: boolean; error?: string } {
+	if (!tabs.has(id)) return { ok: false, error: `unknown tab: ${id}` };
+	const fromWindowId = tabWindows.windowOf(id);
+	if (fromWindowId === null) return { ok: true };
+	tabWindows.release(id);
+	suggestedTabId = id;
+	closeDetachedWindowIfEmpty(fromWindowId);
+	broadcastTabsChanged(id);
+	try {
+		browserWindow.focus();
+	} catch (err) {
+		console.warn(`[principal-studio] could not focus window: ${(err as Error).message}`);
+	}
+	return { ok: true };
+}
+
+/** A detached window with no tabs left has nothing to show; close it. */
+function closeDetachedWindowIfEmpty(windowId: number): void {
+	if (tabWindows.tabsIn(windowId).length > 0) return;
+	const entry = detachedWindows.get(windowId);
+	if (!entry) return;
+	detachedWindows.delete(windowId);
+	tabWindows.closeWindow(windowId);
+	try {
+		entry.window.close();
+	} catch (err) {
+		console.warn(`[principal-studio] could not close window ${windowId}: ${(err as Error).message}`);
+	}
+}
+
+/** Bring forward whichever window hosts `tabId`. */
+function focusWindowForTab(tabId: string): void {
+	const windowId = tabWindows.windowOf(tabId);
+	const target =
+		(windowId === null ? null : detachedWindows.get(windowId)?.window) ?? browserWindow;
+	try {
+		target.focus();
+	} catch (err) {
+		console.warn(`[principal-studio] could not focus window: ${(err as Error).message}`);
+	}
 }
 
 // Application menu — without one macOS has no Cmd+Q binding and no way to
@@ -4154,11 +4297,7 @@ startIpcServer(async (msg) => {
 		if (msg.kind === "LOAD_SUBSYSTEM_GRAPH") {
 			const tabId = await openSubsystemModelTab(msg.graphId);
 			if (!tabId) return { ok: false, error: `unknown graph: ${msg.graphId}` };
-			try {
-				browserWindow.focus();
-			} catch (err) {
-				console.warn(`[principal-studio] could not focus window: ${(err as Error).message}`);
-			}
+			focusWindowForTab(tabId);
 			return { ok: true };
 		}
 		const tabId = addTabFromMessage(msg);
@@ -4188,11 +4327,7 @@ startHttpServer(
 	async (graphId) => {
 		const tabId = await openSubsystemModelTab(graphId);
 		if (!tabId) return { ok: false, error: `unknown graph: ${graphId}` };
-		try {
-			browserWindow.focus();
-		} catch (err) {
-			console.warn(`[principal-studio] could not focus window: ${(err as Error).message}`);
-		}
+		focusWindowForTab(tabId);
 		return { ok: true, tabId };
 	},
 	async (graphId) => deleteGraphAndCloseTabs(graphId),
@@ -4218,21 +4353,13 @@ startHttpServer(
 	async (graphId, source) => {
 		const tabId = await openSubsystemC4Tab(graphId, source);
 		if (!tabId) return { ok: false, error: `unknown graph: ${graphId}` };
-		try {
-			browserWindow.focus();
-		} catch (err) {
-			console.warn(`[principal-studio] could not focus window: ${(err as Error).message}`);
-		}
+		focusWindowForTab(tabId);
 		return { ok: true, tabId };
 	},
 	async (sketchId) => {
 		const tabId = await openC4SketchTab(sketchId);
 		if (!tabId) return { ok: false, error: `unknown sketch: ${sketchId}` };
-		try {
-			browserWindow.focus();
-		} catch (err) {
-			console.warn(`[principal-studio] could not focus window: ${(err as Error).message}`);
-		}
+		focusWindowForTab(tabId);
 		return { ok: true, tabId };
 	},
 	async (sketchId) => deleteC4SketchAndCloseTabs(sketchId),

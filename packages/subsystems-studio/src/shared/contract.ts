@@ -1860,6 +1860,9 @@ export type StudioRequests = {
 			 *  setActiveTab. The renderer owns the active tab; it applies this
 			 *  only as its initial/resume value (until the user clicks). */
 			suggestedActiveTabId: string;
+			/** Whether this webview is the main window or a detached tab window.
+			 *  Each window only sees the tabs it hosts. */
+			windowRole: "main" | "detached";
 		};
 	};
 	getTab: {
@@ -1871,6 +1874,21 @@ export type StudioRequests = {
 		response: { ok: boolean; error?: string };
 	};
 	closeTab: {
+		params: { id: string };
+		response: { ok: boolean; error?: string };
+	};
+	/** Move a transient tab into its own window. `dropPoint` (screen
+	 *  coordinates of a drag release) places the window under the cursor;
+	 *  without it the host picks a default frame. The host rebroadcasts
+	 *  tabsChanged to every window, so the tab leaves this strip and appears in
+	 *  the new one. */
+	detachTab: {
+		params: { id: string; dropPoint?: { screenX: number; screenY: number } };
+		response: { ok: boolean; windowId?: number; error?: string };
+	};
+	/** Move a detached tab back into the main window; its window closes once it
+	 *  hosts no tabs. */
+	attachTab: {
 		params: { id: string };
 		response: { ok: boolean; error?: string };
 	};

@@ -23,6 +23,7 @@ import type { TabState } from "./types";
 import { CenteredMessage } from "./ui";
 import { AppHeader } from "./components/AppHeader";
 import { TabStrip } from "./components/TabStrip";
+import type { TabDropPoint } from "./components/TabStrip";
 import { AgentSessionsOverviewView } from "./views/AgentSessions";
 import { LibraryView } from "./views/LibraryView";
 import { SubsystemModelsView } from "./views/SubsystemModelsView";
@@ -412,9 +413,76 @@ function KeptSubsystemModelTab({
 	);
 }
 
+type WindowRole = "main" | "detached";
+
+// Secondary windows load the same bundle with a `#detached` hash so the first
+// paint already omits the main-window header; listTabs confirms the role.
+function initialWindowRole(): WindowRole {
+	return window.location.hash === "#detached" ? "detached" : "main";
+}
+
+/** Slim header for a detached window: the tab's title and a way back. */
+function DetachedWindowBar({
+	title,
+	onMoveBack,
+}: {
+	title: string | undefined;
+	onMoveBack: (() => void) | null;
+}) {
+	const { theme } = useTheme();
+	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
+	return (
+		<div
+			style={{
+				display: "flex",
+				alignItems: "center",
+				gap: 12,
+				padding: "6px 12px",
+				borderBottom: `1px solid ${theme.colors.border ?? "#333"}`,
+				background: theme.colors.backgroundSecondary ?? theme.colors.background,
+				fontFamily: theme.fonts.body,
+				fontSize: theme.fontSizes[1],
+				color: muted,
+				flexShrink: 0,
+			}}
+		>
+			<span
+				style={{
+					flex: 1,
+					minWidth: 0,
+					overflow: "hidden",
+					textOverflow: "ellipsis",
+					whiteSpace: "nowrap",
+				}}
+			>
+				{title ?? "Detached window"}
+			</span>
+			<button
+				type="button"
+				disabled={onMoveBack === null}
+				onClick={() => onMoveBack?.()}
+				title="Move this tab back to the main window"
+				style={{
+					background: "transparent",
+					border: `1px solid ${theme.colors.border ?? "#444"}`,
+					borderRadius: 4,
+					color: onMoveBack ? theme.colors.text : muted,
+					cursor: onMoveBack ? "pointer" : "default",
+					fontFamily: theme.fonts.body,
+					fontSize: theme.fontSizes[1],
+					padding: "3px 10px",
+				}}
+			>
+				Move back to main window
+			</button>
+		</div>
+	);
+}
+
 export function App() {
 	const { theme } = useTheme();
 	const [tabs, setTabs] = useState<TabSummary[]>([]);
+	const [windowRole, setWindowRole] = useState<WindowRole>(initialWindowRole);
 	// The renderer owns the on-screen tab: clicks apply locally and instantly.
 	// The host only ever *suggests* a tab (boot/resume via listTabs, or a
 	// focusTabId on tabsChanged when it opens a tab / is externally activated).
@@ -487,6 +555,7 @@ export function App() {
 			try {
 				const result = await electrobun.rpc!.request.listTabs({});
 				setTabs(result.tabs);
+				setWindowRole(result.windowRole);
 				const current = activeTabIdRef.current;
 				const focusValid =
 					focusTabId !== undefined &&
@@ -587,6 +656,31 @@ export function App() {
 		[tabs, activeTabId],
 	);
 
+	// Drag-out: the host moves the tab to a new window and fires tabsChanged
+	// for every window, so this window's strip reconciles on the next refresh.
+	// Keep-mounted views are freed here because the tab leaves this window.
+	const onDetach = useCallback((id: string, dropPoint: TabDropPoint) => {
+		userChoseRef.current = true;
+		mountedStaticIds.current.delete(id);
+		mountedModelIds.current.delete(id);
+		void electrobun.rpc!.request
+			.detachTab({ id, dropPoint })
+			.then((res) => {
+				if (!res.ok) console.warn("[principal-studio] detachTab:", res.error);
+			})
+			.catch((err) => console.error("[principal-studio] detachTab failed:", err));
+	}, []);
+
+	const onMoveBack = useCallback((id: string) => {
+		mountedModelIds.current.delete(id);
+		void electrobun.rpc!.request
+			.attachTab({ id })
+			.then((res) => {
+				if (!res.ok) console.warn("[principal-studio] attachTab:", res.error);
+			})
+			.catch((err) => console.error("[principal-studio] attachTab failed:", err));
+	}, []);
+
 	// Cmd+1..8 switches to the Nth tab in strip order; Cmd+9 jumps to the
 	// last tab, matching browser convention.
 	useEffect(() => {
@@ -606,8 +700,9 @@ export function App() {
 	const libraryActive =
 		tabs.find((t) => t.id === activeTabId)?.kind === "library" ||
 		(tabs.length === 0 && activeTabId === "library");
+	const activeTab = tabs.find((t) => t.id === activeTabId);
 	// Subsystem-model tabs render from the keep-alive stack, not `ActiveTab`.
-	const activeTabKind = tabs.find((t) => t.id === activeTabId)?.kind;
+	const activeTabKind = activeTab?.kind;
 
 	return (
 		<div
@@ -621,12 +716,20 @@ export function App() {
 				overflow: "hidden",
 			}}
 		>
-			<AppHeader libraryActive={libraryActive} />
+			{windowRole === "detached" ? (
+				<DetachedWindowBar
+					title={activeTab?.title}
+					onMoveBack={activeTab ? () => onMoveBack(activeTab.id) : null}
+				/>
+			) : (
+				<AppHeader libraryActive={libraryActive} />
+			)}
 			<TabStrip
 				tabs={tabs}
 				activeTabId={activeTabId}
 				onSelect={onSelect}
 				onClose={onClose}
+				onDetach={onDetach}
 			/>
 			<div
 				style={{
