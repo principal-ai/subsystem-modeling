@@ -4138,7 +4138,11 @@ function detachTab(
 	try {
 		window = new BrowserWindow({
 			title: tab.title,
-			url: "views://mainview/index.html#detached",
+			// No URL fragment: this electrobun's views:// handler maps the whole
+			// URL to a file path, so "#detached" would 404. The role rides in
+			// via preload instead, so the first paint already omits the header.
+			url: "views://mainview/index.html",
+			preload: 'window.__studioWindowRole = "detached";',
 			rpc: windowRpc,
 			frame: detachedWindowFrame(dropPoint),
 			activate: true,

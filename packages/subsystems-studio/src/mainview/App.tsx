@@ -415,10 +415,12 @@ function KeptSubsystemModelTab({
 
 type WindowRole = "main" | "detached";
 
-// Secondary windows load the same bundle with a `#detached` hash so the first
-// paint already omits the main-window header; listTabs confirms the role.
+// Secondary windows load the same bundle with a preload script that stamps
+// `window.__studioWindowRole`, so the first paint already omits the
+// main-window header; listTabs confirms the role.
 function initialWindowRole(): WindowRole {
-	return window.location.hash === "#detached" ? "detached" : "main";
+	const role = (window as { __studioWindowRole?: unknown }).__studioWindowRole;
+	return role === "detached" ? "detached" : "main";
 }
 
 /** Slim header for a detached window: the tab's title and a way back. */
