@@ -36,7 +36,7 @@ const listeners = new Set<(status: RepoMonitorDiagnostics) => void>();
 
 /** The daemon bundle: staged into app/bun by electrobun.config.ts, else from node_modules (tests, scripts). */
 export function resolveDaemonEntryPath(): string | null {
-	const staged = join(import.meta.dir, "repo-monitor-daemon.js");
+	const staged = join(import.meta.dir, "repo-monitor-daemon.cjs");
 	if (existsSync(staged)) return staged;
 	try {
 		const pkg = createRequire(import.meta.url).resolve(

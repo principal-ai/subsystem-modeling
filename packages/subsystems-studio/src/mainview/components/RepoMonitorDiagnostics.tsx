@@ -362,8 +362,9 @@ export function RepoMonitorDiagnostics({
 					}}
 				>
 					<span>
-						No daemon answered on the socket. File trees fall back to Studio's own
-						walker: no .gitignore filtering, no git identity, no change watching.
+						No daemon answered on the socket. Studio has no other source of file
+						trees, so repositories cannot load until it is running. Check that
+						`node` is on PATH and see ~/.principal/logs/repo-monitor.log.
 					</span>
 					{diagnostics.error && (
 						<span style={{ color: theme.colors.error ?? "#e5534b" }}>{diagnostics.error}</span>

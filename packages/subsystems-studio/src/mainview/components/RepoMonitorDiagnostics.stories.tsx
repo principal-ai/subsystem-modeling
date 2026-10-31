@@ -139,7 +139,7 @@ export const Starting: Story = {
 	},
 };
 
-/** Nothing answers the socket; Studio is on its fallback walker. */
+/** Nothing answers the socket; file trees cannot load until it starts. */
 export const Unreachable: Story = {
 	args: {
 		diagnostics: {

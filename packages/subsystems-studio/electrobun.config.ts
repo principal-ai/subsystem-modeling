@@ -33,9 +33,11 @@ export default {
 			// scripts/build-analysis-worker.ts) loaded at runtime by path.
 			"artifacts/analysis-worker/construct-timeline-worker.js": "bun/construct-timeline-worker.js",
 			// Shared repository monitoring daemon, spawned under `node` by
-			// src/bun/repo-monitor.ts when no daemon is already running.
+			// src/bun/repo-monitor.ts when no daemon is already running. The bundle
+			// is CommonJS; the .cjs extension keeps Node from treating it as ESM when
+			// the nearest package.json (this one, in dev builds) says "type": "module".
 			"node_modules/@principal-ai/repository-monitoring-server/dist/daemon/repository-monitoring-daemon.js":
-				"bun/repo-monitor-daemon.js",
+				"bun/repo-monitor-daemon.cjs",
 			"src/mainview/index.html": "views/mainview/index.html",
 			"src/mainview/index.css": "views/mainview/index.css",
 			"src/mainview/agent-logos": "views/mainview/agent-logos",
