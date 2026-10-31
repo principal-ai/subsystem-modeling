@@ -359,6 +359,12 @@ export interface SubsystemComponentGraphProps {
   /** Pause between autoplay steps in ms. @default 2500 */
   trailAutoPlayIntervalMs?: number;
   /**
+   * Fires each time `autoPlayTrails` advances to a step, and with `null` when
+   * autoplay stops. Lets a host mirror the step highlight (dimming) in its own
+   * chrome around the graph.
+   */
+  onAutoPlayStep?: (ref: { trailId: string; stepIndex: number } | null) => void;
+  /**
    * When false, focusing a trail/step does not call `fitView`.
    * @default true
    */
@@ -653,7 +659,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   onSidebarTrailChange: (trailId: string | null) => void;
 }
 
-function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, refocusOnLayoutFlip = true, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, stepEmphasis, onRemoveStepEmphasis, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, interactive = true, canvasBackground = 'theme', onLayoutReady, onNodeRects, sidebarExtra, sidebarAfterDescription, issues, showIssues, filesActive, sidebarScope, onSidebarTrailChange, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
+function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, refocusOnLayoutFlip = true, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, stepEmphasis, onRemoveStepEmphasis, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, onAutoPlayStep, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, interactive = true, canvasBackground = 'theme', onLayoutReady, onNodeRects, sidebarExtra, sidebarAfterDescription, issues, showIssues, filesActive, sidebarScope, onSidebarTrailChange, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
   const { theme } = useTheme();
   const { fitView, fitBounds } = useReactFlow();
   const [descriptionOpen, setDescriptionOpen] = useState(false);
@@ -683,6 +689,8 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   onLayoutReadyRef.current = onLayoutReady;
   const onNodeRectsRef = useRef(onNodeRects);
   onNodeRectsRef.current = onNodeRects;
+  const onAutoPlayStepRef = useRef(onAutoPlayStep);
+  onAutoPlayStepRef.current = onAutoPlayStep;
   useEffect(() => {
     if (layoutReady) onLayoutReadyRef.current?.();
   }, [layoutReady]);
@@ -2448,6 +2456,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         setFocusedStepIndex(null);
         setHoveredTrailStep({ trailId: tl.id, stepIndex: stepIdx });
       }
+      onAutoPlayStepRef.current?.({ trailId: tl.id, stepIndex: stepIdx });
       stepIdx += 1;
       if (stepIdx >= tl.steps.length) {
         stepIdx = 0;
@@ -2464,6 +2473,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       setFocusedTrailId(null);
       setFocusedStepIndex(null);
       setAutoPlayFocus(null);
+      onAutoPlayStepRef.current?.(null);
     };
     return cleanup;
   }, [
