@@ -240,6 +240,35 @@ function RepoRow({
 	);
 }
 
+/** Shown before the first status reply; the host may be probing or spawning the daemon. */
+export function RepoMonitorChecking({ message = "Checking the repository monitor…" }: { message?: string }) {
+	const { theme } = useTheme();
+	return (
+		<div
+			style={{
+				display: "flex",
+				flexDirection: "column",
+				gap: 16,
+				padding: 16,
+				fontFamily: theme.fonts.body,
+				color: theme.colors.text,
+			}}
+		>
+			<span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: theme.fontSizes[3], fontWeight: 600 }}>
+				<Server size={16} style={{ color: theme.colors.primary }} />
+				Repository monitor
+				<span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: theme.fontSizes[1], fontWeight: 400, color: theme.colors.textSecondary }}>
+					<Loader2 size={12} className="principal-studio-spin" /> checking
+				</span>
+			</span>
+			<div style={{ fontSize: theme.fontSizes[1], color: theme.colors.textSecondary, display: "flex", gap: 6, alignItems: "center" }}>
+				<Loader2 size={12} className="principal-studio-spin" />
+				{message}
+			</div>
+		</div>
+	);
+}
+
 export function RepoMonitorDiagnostics({
 	diagnostics,
 	now = Date.now(),

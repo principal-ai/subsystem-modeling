@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import {
+	RepoMonitorChecking,
 	RepoMonitorDiagnostics,
 	type RepoMonitorRepoDiagnostics,
 } from "./RepoMonitorDiagnostics";
@@ -161,4 +162,9 @@ export const NeverStarted: Story = {
 /** Refresh in flight — the button spins and disables. */
 export const Refreshing: Story = {
 	args: { refreshing: true },
+};
+
+/** Before the first status reply arrives from the host. */
+export const Checking: Story = {
+	render: () => <RepoMonitorChecking />,
 };

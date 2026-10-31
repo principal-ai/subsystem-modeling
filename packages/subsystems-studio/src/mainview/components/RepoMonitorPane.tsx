@@ -7,12 +7,13 @@
 import { useCallback, useEffect, useState } from "react";
 import type { RepoMonitorDiagnostics as RepoMonitorDiagnosticsSnapshot } from "../../shared/contract";
 import { electrobun, repoMonitorChangeSubscribers } from "../rpc";
-import { RepoMonitorDiagnostics } from "./RepoMonitorDiagnostics";
+import { RepoMonitorChecking, RepoMonitorDiagnostics } from "./RepoMonitorDiagnostics";
 
 const POLL_MS = 5_000;
 
 export function RepoMonitorPane() {
 	const [diagnostics, setDiagnostics] = useState<RepoMonitorDiagnosticsSnapshot | null>(null);
+	const [statusError, setStatusError] = useState<string | null>(null);
 	const [refreshing, setRefreshing] = useState(false);
 	const [now, setNow] = useState(() => Date.now());
 
@@ -21,9 +22,11 @@ export function RepoMonitorPane() {
 		try {
 			const status = await electrobun.rpc!.request.getRepoMonitorStatus({});
 			setDiagnostics(status);
+			setStatusError(null);
 			setNow(Date.now());
 		} catch (err) {
 			console.error("[RepoMonitorPane] getRepoMonitorStatus failed:", err);
+			setStatusError(err instanceof Error ? err.message : String(err));
 		} finally {
 			setRefreshing(false);
 		}
@@ -56,7 +59,20 @@ export function RepoMonitorPane() {
 		[refresh],
 	);
 
-	if (!diagnostics) return null;
+	if (!diagnostics) {
+		if (statusError) {
+			return (
+				<RepoMonitorDiagnostics
+					diagnostics={{ state: "unreachable", socketPath: "unknown", error: `Status request failed: ${statusError}` }}
+					now={now}
+					refreshing={refreshing}
+					onRefresh={() => void refresh()}
+					onStart={() => void run(() => electrobun.rpc!.request.startRepoMonitor({}))}
+				/>
+			);
+		}
+		return <RepoMonitorChecking />;
+	}
 	return (
 		<RepoMonitorDiagnostics
 			diagnostics={diagnostics}
