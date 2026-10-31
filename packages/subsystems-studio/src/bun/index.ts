@@ -1495,37 +1495,6 @@ function subsystemTrailsFromModel(
 	return out;
 }
 
-async function walkFiles(
-	root: string,
-): Promise<Array<{ path: string; size: number }>> {
-	const out: Array<{ path: string; size: number }> = [];
-	async function walk(dir: string, rel: string): Promise<void> {
-		let entries;
-		try {
-			entries = await fs.readdir(dir, { withFileTypes: true });
-		} catch {
-			return;
-		}
-		for (const entry of entries) {
-			if (entry.name === ".git" || entry.name === "node_modules") continue;
-			if (entry.name.startsWith(".")) continue;
-			const full = join(dir, entry.name);
-			const relPath = rel ? `${rel}/${entry.name}` : entry.name;
-			if (entry.isDirectory()) {
-				await walk(full, relPath);
-			} else if (entry.isFile()) {
-				try {
-					const stat = await fs.stat(full);
-					out.push({ path: relPath, size: stat.size });
-				} catch {
-					// skip unreadable
-				}
-			}
-		}
-	}
-	await walk(root, "");
-	return out;
-}
 
 // ---------------------------------------------------------------------------
 // RPC schema + handlers
@@ -1848,9 +1817,9 @@ const requests: RequestHandlers = {
 				if (!walkPath) {
 					const tab = getTab(tabId);
 					if (!tab || !isTourTab(tab)) return { files: [] };
-					return { files: await listRepoFiles(tab.repoRoot, walkFiles) };
+					return { files: await listRepoFiles(tab.repoRoot) };
 				}
-				return { files: await listRepoFiles(walkPath, walkFiles) };
+				return { files: await listRepoFiles(walkPath) };
 			},
 			getRepoFileTree: async ({ purl }) => {
 				const root = resolveRepoRootForComponent(purl);
@@ -1858,7 +1827,7 @@ const requests: RequestHandlers = {
 					return { files: [], error: "no local checkout for this repo" };
 				}
 				try {
-					return { files: await listRepoFiles(root, walkFiles), repoRoot: root };
+					return { files: await listRepoFiles(root), repoRoot: root };
 				} catch (err) {
 					return { files: [], error: (err as Error).message };
 				}

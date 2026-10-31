@@ -11,10 +11,7 @@ import {
 	packageLayerCacheSlotDir,
 } from "./package-layer-store";
 import { cacheSlotKey } from "./graphify-store";
-import {
-	runPackageLayerDiscover,
-	walkRepoFiles,
-} from "./package-layer-runner";
+import { runPackageLayerDiscover } from "./package-layer-runner";
 import { registerProjectInAlexandria } from "./alexandria";
 
 // Repo → checkout resolution is Alexandria-backed; keep the registry in a temp
@@ -22,8 +19,12 @@ import { registerProjectInAlexandria } from "./alexandria";
 process.env["PRINCIPAL_ALEXANDRIA_HOME"] = mkdtempSync(
 	join(tmpdir(), "pkg-alexandria-"),
 );
-// Discovery must use the local walk here, not the user's repo monitor daemon.
-process.env["REPO_MONITOR_DISABLED"] = "1";
+// Discovery reads file trees from the repository monitor daemon. Point it at
+// a throwaway home and socket so the test spawns its own short-lived daemon
+// instead of touching the user's. (macOS caps socket paths; keep it short.)
+process.env["REPO_MONITOR_HOME"] = mkdtempSync(join(tmpdir(), "pkg-rm-"));
+process.env["REPO_MONITOR_SOCKET"] = join(tmpdir(), `pkg-rm-${process.pid}.sock`);
+process.env["REPO_MONITOR_IDLE_EXIT_MS"] = "1000";
 
 function initRepo(): string {
 	const dir = mkdtempSync(join(tmpdir(), "pkg-layers-"));
@@ -70,22 +71,6 @@ function initRepo(): string {
 	run(["commit", "-m", "init"]);
 	return dir;
 }
-
-describe("walkRepoFiles", () => {
-	test("finds package.json manifests and skips node_modules", async () => {
-		const dir = initRepo();
-		mkdirSync(join(dir, "node_modules", "lodash"), { recursive: true });
-		writeFileSync(
-			join(dir, "node_modules", "lodash", "package.json"),
-			JSON.stringify({ name: "lodash" }),
-		);
-		const files = await walkRepoFiles(dir);
-		const paths = files.map((f) => f.path);
-		expect(paths).toContain("package.json");
-		expect(paths).toContain("packages/core/package.json");
-		expect(paths.some((p) => p.startsWith("node_modules/"))).toBe(false);
-	});
-});
 
 describe("runPackageLayerDiscover", () => {
 	test("discovers root + workspace packages", async () => {

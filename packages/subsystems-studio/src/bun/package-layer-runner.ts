@@ -1,7 +1,8 @@
 /**
  * Discover package layers for a local checkout via codebase-composition.
  *
- * Builds a minimal FileTree (path list only) and runs
+ * Builds a minimal FileTree (path list only, from the repository monitor
+ * daemon unless the caller supplies one) and runs
  * PackageLayerModule.discoverPackages with an on-disk file reader.
  */
 
@@ -24,8 +25,8 @@ export interface RunPackageLayerDiscoverOptions {
 	/** Absolute path to the repo root to scan. */
 	repoRoot: string;
 	/**
-	 * Optional pre-built file list (relative paths). When omitted, walks the
-	 * tree skipping `.git`, `node_modules`, and other dot-directories.
+	 * Optional pre-built file list (relative paths). When omitted, the
+	 * repository monitor daemon's git-aware tree is used.
 	 */
 	files?: Array<{ path: string }>;
 }
@@ -48,48 +49,7 @@ export type PackageLayerDiscoverOutcome =
 	| RunPackageLayerDiscoverResult
 	| RunPackageLayerDiscoverFailure;
 
-const SKIP_DIR_NAMES = new Set([
-	".git",
-	"node_modules",
-	"dist",
-	"build",
-	".next",
-	".turbo",
-	"coverage",
-	"__pycache__",
-	"target",
-	"vendor",
-]);
 
-/**
- * Walk a repo for relative file paths (same skip rules as Studio getFileTree).
- */
-export async function walkRepoFiles(
-	root: string,
-): Promise<Array<{ path: string }>> {
-	const out: Array<{ path: string }> = [];
-	async function walk(dir: string, rel: string): Promise<void> {
-		let entries;
-		try {
-			entries = await fs.readdir(dir, { withFileTypes: true });
-		} catch {
-			return;
-		}
-		for (const entry of entries) {
-			if (SKIP_DIR_NAMES.has(entry.name)) continue;
-			if (entry.name.startsWith(".")) continue;
-			const full = join(dir, entry.name);
-			const relPath = rel ? `${rel}/${entry.name}` : entry.name;
-			if (entry.isDirectory()) {
-				await walk(full, relPath);
-			} else if (entry.isFile()) {
-				out.push({ path: relPath });
-			}
-		}
-	}
-	await walk(root, "");
-	return out;
-}
 
 export function buildPackageDiscoveryFileTree(
 	files: Array<{ path: string }>,
@@ -114,7 +74,7 @@ export async function runPackageLayerDiscover(
 	}
 
 	try {
-		const files = opts.files ?? (await listRepoFiles(repoRoot, walkRepoFiles));
+		const files = opts.files ?? (await listRepoFiles(repoRoot));
 		const fileTree = buildPackageDiscoveryFileTree(files);
 		const module = new PackageLayerModule();
 		const packages = await module.discoverPackages(

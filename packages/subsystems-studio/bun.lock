@@ -13,7 +13,7 @@
         "@principal-ai/codebase-composition": "0.2.58",
         "@principal-ai/principal-view-core": "^0.28.14",
         "@principal-ai/principal-view-react": "^0.15.10",
-        "@principal-ai/repository-monitoring-server": "^2.3.2",
+        "@principal-ai/repository-monitoring-server": "^2.3.3",
         "@principal-ai/subsystems-core": "^0.51.0",
         "@principal-ai/subsystems-react": "^0.56.19",
         "@react-spring/three": "^10.1.2",
@@ -393,7 +393,7 @@
 
     "@principal-ai/repository-monitoring": ["@principal-ai/repository-monitoring@0.1.13", "", { "dependencies": { "@parcel/watcher": "^2.5.6", "chokidar": "^3.6.0", "minimatch": "^9.0.4" }, "peerDependencies": { "typescript": "^5.9.3" } }, "sha512-V5/sOE8CcCNA5rObp1XKyN35cSJL+oKmKDFsN7RKS+ixWDewOSDbztmZ27og61hWqR3t2i45VO+lEJq90Kz1Fg=="],
 
-    "@principal-ai/repository-monitoring-server": ["@principal-ai/repository-monitoring-server@2.3.2", "", { "dependencies": { "@opentelemetry/api": "^1.9.0", "@opentelemetry/exporter-trace-otlp-http": "^0.200.0", "@opentelemetry/resources": "^2.0.0", "@opentelemetry/sdk-trace-node": "^2.0.0", "@opentelemetry/semantic-conventions": "^1.28.0", "@principal-ai/alexandria-core-library": "^0.7.0", "@principal-ai/codebase-composition": "^0.2.58", "@principal-ai/codebase-quality-lenses": "latest", "@principal-ai/repository-abstraction": "^0.5.7", "@principal-ai/repository-monitoring": "^0.1.12", "async-mutex": "^0.5.0", "electron-log": "^5.3.2", "globby": "^16.0.0", "minimatch": "^10.1.1", "uuid": "^9.0.0" }, "peerDependencies": { "electron": ">=28.0.0", "react": ">=18.0.0", "react-dom": ">=18.0.0" }, "optionalPeers": ["electron", "react", "react-dom"], "bin": { "repo-monitor-daemon": "dist/daemon/repository-monitoring-daemon.js" } }, "sha512-HH9KstWVjB3velSfAgZatzbtossyaoDCRfQlCik2TDyT/dOQDMNFYN8Xdi/l/kzaRolS2u1EHEaPAyzyOohrEw=="],
+    "@principal-ai/repository-monitoring-server": ["@principal-ai/repository-monitoring-server@2.3.3", "", { "dependencies": { "@opentelemetry/api": "^1.9.0", "@opentelemetry/exporter-trace-otlp-http": "^0.200.0", "@opentelemetry/resources": "^2.0.0", "@opentelemetry/sdk-trace-node": "^2.0.0", "@opentelemetry/semantic-conventions": "^1.28.0", "@principal-ai/alexandria-core-library": "^0.7.0", "@principal-ai/codebase-composition": "^0.2.58", "@principal-ai/codebase-quality-lenses": "latest", "@principal-ai/repository-abstraction": "^0.5.7", "@principal-ai/repository-monitoring": "^0.1.12", "async-mutex": "^0.5.0", "electron-log": "^5.3.2", "globby": "^16.0.0", "minimatch": "^10.1.1", "uuid": "^9.0.0" }, "peerDependencies": { "electron": ">=28.0.0", "react": ">=18.0.0", "react-dom": ">=18.0.0" }, "optionalPeers": ["electron", "react", "react-dom"], "bin": { "repo-monitor-daemon": "dist/daemon/repository-monitoring-daemon.js" } }, "sha512-HwrdXqb/kbc1q6duaRPUUmVsgQRZi5FFRmlWzkEvvv6vpqLnlcQwxf9AndKNvb8cN+qxR8WztqcBsqkMUvpnzg=="],
 
     "@principal-ai/subsystems-core": ["@principal-ai/subsystems-core@0.51.0", "", { "dependencies": { "better-sqlite3": "^13.0.0" }, "peerDependencies": { "@principal-ai/agent-monitoring": "^0.3.43" } }, "sha512-fVV6wKKHe6zAxBdHoT4FP1pr+7atk9xibmxz2pTRK2JpNFbjzJuWVyUF3StKL4h0x4oRRpbXWw+IBl+Shwextw=="],
 
@@ -2015,7 +2015,7 @@
 
     "@principal-ai/repository-monitoring-server/@opentelemetry/exporter-trace-otlp-http": ["@opentelemetry/exporter-trace-otlp-http@0.200.0", "", { "dependencies": { "@opentelemetry/core": "2.0.0", "@opentelemetry/otlp-exporter-base": "0.200.0", "@opentelemetry/otlp-transformer": "0.200.0", "@opentelemetry/resources": "2.0.0", "@opentelemetry/sdk-trace-base": "2.0.0" }, "peerDependencies": { "@opentelemetry/api": "^1.3.0" } }, "sha512-Goi//m/7ZHeUedxTGVmEzH19NgqJY+Bzr6zXo1Rni1+hwqaksEyJ44gdlEMREu6dzX1DlAaH/qSykSVzdrdafA=="],
 
-    "@principal-ai/repository-monitoring-server/@opentelemetry/resources": ["@opentelemetry/resources@2.5.0", "", { "dependencies": { "@opentelemetry/core": "2.5.0", "@opentelemetry/semantic-conventions": "^1.29.0" }, "peerDependencies": { "@opentelemetry/api": ">=1.3.0 <1.10.0" } }, "sha512-F8W52ApePshpoSrfsSk1H2yJn9aKjCrbpQF1M9Qii0GHzbfVeFUB+rc3X4aggyZD8x9Gu3Slua+s6krmq6Dt8g=="],
+    "@principal-ai/repository-monitoring-server/@opentelemetry/resources": ["@opentelemetry/resources@2.12.0", "", { "dependencies": { "@opentelemetry/core": "2.12.0", "@opentelemetry/semantic-conventions": "^1.29.0" }, "peerDependencies": { "@opentelemetry/api": ">=1.3.0 <1.10.0" } }, "sha512-+rSRoOdln6NhXTVcBdHSlZxJDNzwxadeweK2ltZO3tVtfp6aklABc06xclDk6ovRR+EiGgIcSbh/6NgjFhnb3A=="],
 
     "@principal-ai/repository-monitoring-server/uuid": ["uuid@9.0.1", "", { "bin": { "uuid": "dist/bin/uuid" } }, "sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA=="],
 
@@ -2245,7 +2245,7 @@
 
     "@principal-ai/repository-monitoring-server/@opentelemetry/exporter-trace-otlp-http/@opentelemetry/sdk-trace-base": ["@opentelemetry/sdk-trace-base@2.0.0", "", { "dependencies": { "@opentelemetry/core": "2.0.0", "@opentelemetry/resources": "2.0.0", "@opentelemetry/semantic-conventions": "^1.29.0" }, "peerDependencies": { "@opentelemetry/api": ">=1.3.0 <1.10.0" } }, "sha512-qQnYdX+ZCkonM7tA5iU4fSRsVxbFGml8jbxOgipRGMFHKaXKHQ30js03rTobYjKjIfnOsZSbHKWF0/0v0OQGfw=="],
 
-    "@principal-ai/repository-monitoring-server/@opentelemetry/resources/@opentelemetry/core": ["@opentelemetry/core@2.5.0", "", { "dependencies": { "@opentelemetry/semantic-conventions": "^1.29.0" }, "peerDependencies": { "@opentelemetry/api": ">=1.0.0 <1.10.0" } }, "sha512-ka4H8OM6+DlUhSAZpONu0cPBtPPTQKxbxVzC4CzVx5+K4JnroJVBtDzLAMx4/3CDTJXRvVFhpFjtl4SaiTNoyQ=="],
+    "@principal-ai/repository-monitoring-server/@opentelemetry/resources/@opentelemetry/core": ["@opentelemetry/core@2.12.0", "", { "dependencies": { "@opentelemetry/semantic-conventions": "^1.29.0" }, "peerDependencies": { "@opentelemetry/api": ">=1.0.0 <1.10.0" } }, "sha512-1HsSAuvT4/my0QrXWsyXFdWjKaPeCHsismKZgEEIb8NK13LP6DrMRlsUbvD/0F9mDWK3xDom9AMv3IscxgOnOQ=="],
 
     "@principal-ai/repository-monitoring/minimatch/brace-expansion": ["brace-expansion@2.1.7", "", { "dependencies": { "balanced-match": "^1.0.0" } }, "sha512-uZbew1NqdmPDTMJ8ah1y+b+9QEJrfkXFk3RcTQw3X0jW/xRUvFKsg1CfQdSYGdTbXZWExtU3J3ccxtnfw1Fi0g=="],
 

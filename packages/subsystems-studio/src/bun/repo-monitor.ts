@@ -6,11 +6,11 @@
  * the client probes `~/.principal/repo-monitor.sock` and spawns the daemon
  * bundle staged next to this file when nothing answers.
  *
- * The daemon is a best-effort accelerator: every reader passes a local
- * fallback (`listRepoFiles(root, walkFiles)`), so a missing `node`, an
- * unbuildable daemon or a protocol mismatch degrades to the old in-process walk
- * instead of breaking a tab. Failures back off for a minute to keep the
- * fallback path fast.
+ * The daemon is the only source of file trees: there is no in-process walk to
+ * fall back to, so a missing `node`, an unbuildable daemon or a protocol
+ * mismatch surfaces as an error in the tab that asked. After a failure the
+ * client backs off briefly so repeated readers fail fast with the same reason
+ * instead of each waiting out a spawn attempt.
  */
 
 import { existsSync, readdirSync } from "node:fs";
@@ -25,9 +25,7 @@ import {
 export type RepoFile = { path: string; size: number };
 
 const LOG = "[principal-studio] repo-monitor:";
-/** Kill switch for tests and debugging: every reader takes its fallback. */
-const isDisabled = () => process.env["REPO_MONITOR_DISABLED"] === "1";
-const RETRY_AFTER_FAILURE_MS = 60_000;
+const RETRY_AFTER_FAILURE_MS = 10_000;
 
 let client: RepoMonitorClient | null = null;
 let unavailableUntil = 0;
@@ -94,7 +92,7 @@ function nvmNodes(home: string): string[] {
 
 function markUnavailable(reason: string): void {
 	unavailableUntil = Date.now() + RETRY_AFTER_FAILURE_MS;
-	if (reason !== lastFailure) console.warn(`${LOG} unavailable, using local walk: ${reason}`);
+	if (reason !== lastFailure) console.error(`${LOG} unavailable: ${reason}`);
 	lastFailure = reason;
 }
 
@@ -134,7 +132,7 @@ async function publishStatus(): Promise<void> {
 
 /** Connected client, or null when the daemon cannot be reached right now. */
 export async function ensureRepoMonitor(): Promise<RepoMonitorClient | null> {
-	if (isDisabled() || Date.now() < unavailableUntil) return null;
+	if (Date.now() < unavailableUntil) return null;
 	const c = getClient();
 	if (!c) return null;
 	if (c.state === "connected") return c;
@@ -149,34 +147,19 @@ export async function ensureRepoMonitor(): Promise<RepoMonitorClient | null> {
 }
 
 /**
- * Relative file paths (with sizes) under `root`, from the daemon's git-aware,
- * cached tree when available; otherwise from `fallback`.
+ * Relative file paths (with sizes) under `root` from the daemon's git-aware,
+ * cached tree. Throws when the daemon is unavailable or cannot read the repo.
  */
-export async function listRepoFiles(
-	root: string,
-	fallback: (root: string) => Promise<Array<{ path: string; size?: number }>>,
-): Promise<RepoFile[]> {
+export async function listRepoFiles(root: string): Promise<RepoFile[]> {
 	const c = await ensureRepoMonitor();
-	if (!c) return walkLocally(root, fallback);
-	try {
-		if (!registered.has(root)) {
-			await c.request({ type: "register", path: root });
-			registered.add(root);
-		}
-		const tree = await c.request({ type: "getFileTree", path: root });
-		if (!tree) return walkLocally(root, fallback);
-		return tree.allFiles.map((f) => ({ path: f.path, size: f.size ?? 0 }));
-	} catch (err) {
-		console.warn(`${LOG} getFileTree failed for ${root}: ${(err as Error).message}`);
-		return walkLocally(root, fallback);
+	if (!c) throw new Error(`repository monitor unavailable: ${lastFailure ?? "not connected"}`);
+	if (!registered.has(root)) {
+		await c.request({ type: "register", path: root });
+		registered.add(root);
 	}
-}
-
-async function walkLocally(
-	root: string,
-	fallback: (root: string) => Promise<Array<{ path: string; size?: number }>>,
-): Promise<RepoFile[]> {
-	return (await fallback(root)).map((f) => ({ path: f.path, size: f.size ?? 0 }));
+	const tree = await c.request({ type: "getFileTree", path: root });
+	if (!tree) throw new Error(`repository monitor returned no file tree for ${root}`);
+	return tree.allFiles.map((f) => ({ path: f.path, size: f.size ?? 0 }));
 }
 
 export async function getRepoMonitorStatus(): Promise<RepoMonitorDiagnostics> {
