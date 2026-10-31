@@ -1,6 +1,6 @@
 /**
  * Session-processing pipeline — the shared core the host's RPC path and the
- * (future) background warm-up worker both call.
+ * on-demand session worker both call.
  *
  * Everything here is deliberately free of electrobun imports: reading raw
  * sources (opencode sqlite + durable transcripts), normalizing/accumulating,
@@ -867,9 +867,7 @@ export type BuiltSessionEvents =
 	| { ok: false; error: string };
 
 /** Host → worker control messages. */
-export type SessionWarmupMessage =
-	| { type: "warmup"; days: number }
-	| { type: "refresh"; sessionIds: string[] };
+export type SessionWarmupMessage = { type: "refresh"; sessionIds: string[] };
 
 /** Worker → host status messages. Event timelines never cross the bridge — the
  *  worker writes the shared disk cache and the host reads it, so this channel

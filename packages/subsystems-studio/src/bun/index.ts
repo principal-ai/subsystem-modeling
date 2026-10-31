@@ -197,8 +197,9 @@ import { createMaintenanceOutcomeSender } from "./maintenance-outcome-delivery";
  * (trimmed) session event timelines, keyed by sessionId. The Agent Sessions
  * window is small and trimmed rows are compact (timestamp + accumulated, no
  * raw/normalized payloads), so a window-sized cap is fine. Serves
- * getSessionEvents / getAgentSessionsOverview with zero I/O; hydrated from the
- * disk cache at boot and promoted on every fresh build.
+ * getSessionEvents / getAgentSessionsOverview with zero I/O; filled lazily
+ * from the disk cache / pipeline on first read and promoted on every fresh
+ * build.
  */
 const residentEvents = new Map<string, ResidentSession>();
 const RESIDENT_CAP = 512;
@@ -246,26 +247,22 @@ async function buildSessionEvents(
 }
 
 // ---------------------------------------------------------------------------
-// Background warm-up (Bun.Worker)
+// Session re-processing worker (Bun.Worker)
 //
-// Warm the recent session window at boot so even a cold cache is pre-built,
-// WITHOUT touching this host's single-threaded event loop — in-process warm-up
-// starved the webview's initial RPCs (listTabs timed out → the tab strip never
-// populated). The worker is a separate thread running `session-pipeline.ts`
-// directly; it writes the shared disk cache and the host reads it, so the only
-// cross-thread traffic is control signals (postMessage), never event payloads.
+// Agent Sessions is an opt-in tab, so nothing here runs unless that view is
+// open and asks for a live refresh of a growing session. The worker is then
+// spawned on demand and re-processes that session WITHOUT touching this host's
+// single-threaded event loop — in-process processing starved the webview's
+// RPCs (listTabs timed out → the tab strip never populated). It runs
+// `session-pipeline.ts` directly; it writes the shared disk cache and the host
+// reads it, so the only cross-thread traffic is control signals (postMessage),
+// never event payloads. There is deliberately no boot-time warm-up pass.
 //
 // The worker is its own build artifact: `bun build` doesn't emit sibling
 // chunks for `new Worker(new URL(...))`, so dev resolves the `.ts` source and
 // the packaged app resolves the compiled `session-warmup-worker.js` staged
 // next to `index.js` by scripts/stage-bundle.ts.
 // ---------------------------------------------------------------------------
-
-function warmupDays(): number {
-	const raw = (process.env as Record<string, string | undefined>)["PRINCIPAL_STUDIO_WARMUP_DAYS"];
-	const n = raw ? parseInt(raw, 10) : NaN;
-	return Number.isFinite(n) && n > 0 ? n : 7;
-}
 
 function warmupWorkerURL(): URL {
 	// Dev runs the host as .ts; packaged builds run it as .js. The worker
@@ -282,12 +279,14 @@ let warmupWorker: Worker | null = null;
 // pushes `sessionsUpdated` so the renderer re-fetches.
 const requestedLiveRefresh = new Set<string>();
 
-/** Ask the worker to re-process a set of sessions off-loop. Returns false when
- *  no worker is running (caller falls back to inline processing). */
+/** Ask the worker to re-process a set of sessions off-loop, spawning it on
+ *  first use. Returns false when no worker could be started (caller falls back
+ *  to inline processing). */
 function refreshInWorker(sessionIds: string[]): boolean {
-	if (!warmupWorker) return false;
+	const worker = ensureSessionWorker();
+	if (!worker) return false;
 	for (const id of sessionIds) requestedLiveRefresh.add(id);
-	warmupWorker.postMessage({ type: "refresh", sessionIds });
+	worker.postMessage({ type: "refresh", sessionIds });
 	return true;
 }
 
@@ -297,10 +296,9 @@ function broadcastSessionsUpdated(sessionIds: string[]): void {
 	sendToAllWindows("sessionsUpdated", { sessionIds });
 }
 
-/** Spawn the warm-up worker (once) and kick off a warmup pass. Fire-and-forget;
- *  the worker does the heavy pipeline work off this host's event loop. */
-function startWarmupWorker(): void {
-	if (warmupWorker) return;
+/** Spawn the session worker on first use. Returns null when it cannot start. */
+function ensureSessionWorker(): Worker | null {
+	if (warmupWorker) return warmupWorker;
 	try {
 		const worker = new Worker(warmupWorkerURL());
 		warmupWorker = worker;
@@ -315,18 +313,19 @@ function startWarmupWorker(): void {
 					broadcastSessionsUpdated([msg.sessionId]);
 				}
 			} else if (msg.type === "done") {
-				console.log(`[principal-studio] warmup worker: ${msg.processed}/${msg.total} sessions ready`);
+				console.log(`[principal-studio] session worker: ${msg.processed}/${msg.total} sessions refreshed`);
 			} else if (msg.type === "error") {
-				console.warn(`[principal-studio] warmup worker error: ${msg.message}`);
+				console.warn(`[principal-studio] session worker error: ${msg.message}`);
 			}
 		});
 		worker.addEventListener("error", (err: ErrorEvent) => {
-			console.warn(`[principal-studio] warmup worker failed: ${err.message}`);
+			console.warn(`[principal-studio] session worker failed: ${err.message}`);
 			warmupWorker = null;
 		});
-		worker.postMessage({ type: "warmup", days: warmupDays() });
+		return worker;
 	} catch (err) {
-		console.warn(`[principal-studio] could not start warmup worker: ${(err as Error).message}`);
+		console.warn(`[principal-studio] could not start session worker: ${(err as Error).message}`);
+		return null;
 	}
 }
 
@@ -4024,12 +4023,6 @@ const browserWindow = new BrowserWindow({
 // instead push it into the borderless macOS fullscreen space, which isn't what
 // we want for a windowed viewer.
 browserWindow.maximize();
-
-// Spawn the background warm-up worker (off this host's event loop) so the
-// recent window's disk cache is pre-built before the user opens Agent
-// Sessions. The worker thread never starves the webview's initial RPCs — the
-// tab strip populates normally while warm-up runs in parallel.
-startWarmupWorker();
 
 function closeTabById(id: string): { ok: boolean; error?: string } {
 	if (isPermanentTabId(id)) {
