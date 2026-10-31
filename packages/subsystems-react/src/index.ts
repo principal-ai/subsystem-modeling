@@ -104,7 +104,7 @@ export type { UseElkLayoutOptions, UseElkLayoutResult } from './hooks/useElkLayo
 
 // Subsystem component graph
 export { SubsystemComponentGraph } from './subsystem/SubsystemComponentGraph';
-export type { SubsystemComponentGraphProps, TrailViewerContext } from './subsystem/SubsystemComponentGraph';
+export type { SubsystemComponentGraphProps, SubsystemNodeRect, TrailViewerContext } from './subsystem/SubsystemComponentGraph';
 export { SymbolFocusedView } from './subsystem/SymbolFocusedView';
 export type { SymbolFocusedViewProps } from './subsystem/SymbolFocusedView';
 export { SubsystemModelTransition } from './subsystem/SubsystemModelTransition';

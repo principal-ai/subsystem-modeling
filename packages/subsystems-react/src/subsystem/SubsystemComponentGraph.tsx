@@ -83,7 +83,7 @@ import {
 import { GraphLayoutCover } from './GraphLayoutCover';
 import { SubsystemFileTree } from './SubsystemFileTree';
 import { buildTrailSidebarScope, type TrailSidebarScope } from './trailSidebarScope';
-import { GRAPH_CANVAS_CLASS, GRAPH_NAV_PROPS, GraphChrome, GraphLayerStyle, LAYOUT_FLIP_CLASS, LAYOUT_FLIP_EDGE_MS, LAYOUT_FLIP_NODE_MS } from './graphChrome';
+import { GRAPH_CANVAS_CLASS, GRAPH_NAV_PROPS, STATIC_NAV_PROPS, GraphChrome, GraphLayerStyle, LAYOUT_FLIP_CLASS, LAYOUT_FLIP_EDGE_MS, LAYOUT_FLIP_NODE_MS } from './graphChrome';
 import { ComponentDeclaration } from './ComponentDeclaration';
 import type { ComponentVerificationState } from './ComponentDeclaration';
 import type { DeclarationSymbolRef, SymbolInspection } from './symbolRefs';
@@ -190,6 +190,15 @@ function writeViewState(
   } catch {
     // Best-effort: private mode / quota — view state is non-critical.
   }
+}
+
+/** Screen-space rectangle of a component node, relative to the graph canvas box. */
+export interface SubsystemNodeRect {
+  alias: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export interface SubsystemComponentGraphProps {
@@ -382,6 +391,32 @@ export interface SubsystemComponentGraphProps {
   onDescriptionOpenChange?: (open: boolean) => void;
   /** Rendered over the graph canvas only (not the title/legend sidebar). */
   canvasOverlay?: ReactNode;
+  /**
+   * When false the canvas is a static picture: no pan, scroll, pinch, or
+   * selection, and the Controls widget is hidden. For hero / presentation
+   * embeds that drive the graph programmatically (`autoPlayTrails`).
+   * @default true
+   */
+  interactive?: boolean;
+  /**
+   * `theme` (default) paints the canvas with the theme background and the dot
+   * grid. `transparent` leaves both out so the host can place the graph over
+   * its own backdrop; the startup cover becomes a fade-in of the canvas.
+   * @default 'theme'
+   */
+  canvasBackground?: 'theme' | 'transparent';
+  /**
+   * Fires once each time the layout settles (measured ELK pass committed, or
+   * its fallback). Use to sequence host animations after the nodes are in
+   * their final slots.
+   */
+  onLayoutReady?: () => void;
+  /**
+   * Reports the on-screen rectangle of every component node, in CSS px
+   * relative to the graph canvas box. Fires when layout settles and whenever
+   * the viewport pans or zooms. Lets a host draw into or out of the nodes.
+   */
+  onNodeRects?: (rects: SubsystemNodeRect[]) => void;
   /**
    * Live agent-run events to show in a collapsible half-height panel over the
    * graph canvas. Omit (or pass null) to hide it.
@@ -618,7 +653,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   onSidebarTrailChange: (trailId: string | null) => void;
 }
 
-function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, refocusOnLayoutFlip = true, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, stepEmphasis, onRemoveStepEmphasis, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, sidebarExtra, sidebarAfterDescription, issues, showIssues, filesActive, sidebarScope, onSidebarTrailChange, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
+function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, refocusOnLayoutFlip = true, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, stepEmphasis, onRemoveStepEmphasis, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, interactive = true, canvasBackground = 'theme', onLayoutReady, onNodeRects, sidebarExtra, sidebarAfterDescription, issues, showIssues, filesActive, sidebarScope, onSidebarTrailChange, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
   const { theme } = useTheme();
   const { fitView, fitBounds } = useReactFlow();
   const [descriptionOpen, setDescriptionOpen] = useState(false);
@@ -640,6 +675,35 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     absoluteRects: new Map(),
   });
   const [layoutReady, setLayoutReady] = useState(false);
+  const transparentCanvas = canvasBackground === 'transparent';
+
+  // Host notifications. Refs keep the callbacks out of effect deps so an
+  // inline arrow from the host does not re-fire them each render.
+  const onLayoutReadyRef = useRef(onLayoutReady);
+  onLayoutReadyRef.current = onLayoutReady;
+  const onNodeRectsRef = useRef(onNodeRects);
+  onNodeRectsRef.current = onNodeRects;
+  useEffect(() => {
+    if (layoutReady) onLayoutReadyRef.current?.();
+  }, [layoutReady]);
+  useEffect(() => {
+    const cb = onNodeRectsRef.current;
+    if (!cb || !layoutReady) return;
+    const rects: SubsystemNodeRect[] = [];
+    for (const n of built.nodes) {
+      if (n.type === 'subsystem-group') continue;
+      const r = built.absoluteRects.get(n.id);
+      if (!r) continue;
+      rects.push({
+        alias: n.id,
+        x: r.x * viewport.zoom + viewport.x,
+        y: r.y * viewport.zoom + viewport.y,
+        width: r.width * viewport.zoom,
+        height: r.height * viewport.zoom,
+      });
+    }
+    cb(rects);
+  }, [built, viewport, layoutReady]);
 
   // --- Layout direction -----------------------------------------------------
   // The graph owns direction unless the host passes `layoutDirection`. A change
@@ -3144,6 +3208,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         // refit. Seed the new instance with the viewport the old one had.
         defaultViewport={viewport}
         {...GRAPH_NAV_PROPS}
+        {...(interactive ? null : STATIC_NAV_PROPS)}
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
         onEdgeClick={onEdgeClick}
@@ -3156,10 +3221,15 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
           height: '100%',
           flex: 1,
           minHeight: 0,
-          background: theme.colors.background,
+          background: transparentCanvas ? 'transparent' : theme.colors.background,
+          // Transparent hosts have nothing behind the canvas for the opaque
+          // startup cover to match, so the canvas itself fades in instead.
+          ...(transparentCanvas
+            ? { opacity: layoutReady || layoutFlipping ? 1 : 0, transition: 'opacity 240ms ease' }
+            : null),
         }}
       >
-        <GraphChrome />
+        <GraphChrome showBackground={!transparentCanvas} showControls={interactive} />
       </ReactFlow>
       {!hideLayoutToggle && (
         <button
@@ -3450,7 +3520,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       {/* Startup cover — hides measurement, layout swap, and camera settle.
           Kept away during a direction flip: the flip is meant to be watched,
           and the cover would swallow the node slide. */}
-      <GraphLayoutCover revealed={layoutReady || layoutFlipping} />
+      {!transparentCanvas && <GraphLayoutCover revealed={layoutReady || layoutFlipping} />}
       {canvasOverlay}
       {liveEvents ? <MaintainLivePanel {...liveEvents} /> : null}
       </div>

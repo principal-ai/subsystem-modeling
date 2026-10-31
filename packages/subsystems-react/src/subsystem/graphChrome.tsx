@@ -71,12 +71,29 @@ export function GraphLayerStyle() {
   return <style>{GRAPH_LAYER_CSS}</style>;
 }
 
+/**
+ * Overrides for a non-interactive (presentation) canvas; spread after
+ * `GRAPH_NAV_PROPS`. Leaves `nodesDraggable` etc. as the shared defaults.
+ */
+export const STATIC_NAV_PROPS = {
+  panOnDrag: false,
+  panOnScroll: false,
+  zoomOnScroll: false,
+  zoomOnPinch: false,
+  zoomOnDoubleClick: false,
+  elementsSelectable: false,
+  preventScrolling: false,
+} satisfies Partial<ReactFlowProps>;
+
 /** Background dots + zoom/fit/interactive widget; render inside `<ReactFlow>`. */
-export function GraphChrome() {
+export function GraphChrome({
+  showBackground = true,
+  showControls = true,
+}: { showBackground?: boolean; showControls?: boolean } = {}) {
   return (
     <>
-      <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-      <Controls showZoom showFitView showInteractive />
+      {showBackground && <Background variant={BackgroundVariant.Dots} gap={16} size={1} />}
+      {showControls && <Controls showZoom showFitView showInteractive />}
     </>
   );
 }
