@@ -32,6 +32,10 @@ export default {
 			// The parse-heavy analysis worker is a second bundle (see
 			// scripts/build-analysis-worker.ts) loaded at runtime by path.
 			"artifacts/analysis-worker/construct-timeline-worker.js": "bun/construct-timeline-worker.js",
+			// Shared repository monitoring daemon, spawned under `node` by
+			// src/bun/repo-monitor.ts when no daemon is already running.
+			"node_modules/@principal-ai/repository-monitoring-server/dist/daemon/repository-monitoring-daemon.js":
+				"bun/repo-monitor-daemon.js",
 			"src/mainview/index.html": "views/mainview/index.html",
 			"src/mainview/index.css": "views/mainview/index.css",
 			"src/mainview/agent-logos": "views/mainview/agent-logos",

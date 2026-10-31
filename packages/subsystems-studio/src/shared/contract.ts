@@ -32,6 +32,11 @@ import type {
 	SymbolInspection,
 } from "@principal-ai/subsystems-react";
 import type { SubsystemComponentRemoval } from "@principal-ai/subsystems-core";
+// Type-only: the shared repository monitoring daemon's diagnostics snapshot
+// (Settings → Repository monitor). The host talks to the daemon; the renderer
+// only sees this shape.
+import type { RepoMonitorDiagnostics } from "@principal-ai/repository-monitoring-server/client";
+export type { RepoMonitorDiagnostics };
 import type { RemoteModel, RemoteModelPage, RemoteModelSource, RemoteModelSourceInput } from "./remote-models";
 import type {
 	ConstructTimelineMeta,
@@ -2983,6 +2988,26 @@ export type StudioRequests = {
 		params: { active: boolean };
 		response: { ok: boolean };
 	};
+	/** Snapshot of the shared repository monitoring daemon (Settings → Repository monitor). */
+	getRepoMonitorStatus: {
+		params: Record<string, never>;
+		response: RepoMonitorDiagnostics;
+	};
+	/** Connect to the daemon, spawning one when none is running. */
+	startRepoMonitor: {
+		params: Record<string, never>;
+		response: { ok: boolean; error?: string; status: RepoMonitorDiagnostics };
+	};
+	/** Ask the daemon to exit and spawn a fresh one. Other clients reconnect on their own. */
+	restartRepoMonitor: {
+		params: Record<string, never>;
+		response: { ok: boolean; error?: string; status: RepoMonitorDiagnostics };
+	};
+	/** Drop and rebuild every cache slice the daemon holds for one repo. */
+	rebuildRepoMonitorRepo: {
+		params: { path: string };
+		response: { ok: boolean; error?: string };
+	};
 }
 
 /** Host → renderer notifications. Keyed by message name. */
@@ -3108,6 +3133,8 @@ export type StudioMessages = {
 	};
 	/** Host regular-audit scheduler status changed (enable/interval/tick/running). */
 	regularAuditChanged: RegularAuditStatus;
+	/** The repository monitoring daemon connected, dropped or changed state. */
+	repoMonitorChanged: RepoMonitorDiagnostics;
 	/** npm latest check finished (or failed). Header Update button should refresh. */
 	studioVersionChanged: {
 		status: StudioVersionStatus;

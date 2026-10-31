@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Bot, ChevronRight, Gauge, Scale, SlidersHorizontal } from "lucide-react";
+import { Bot, ChevronRight, Gauge, Scale, Server, SlidersHorizontal } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
 	DEFAULT_TAB_FLAGS,
@@ -14,6 +14,7 @@ import {
 } from "../../shared/contract";
 import { electrobun } from "../rpc";
 import { MaintainerPane } from "./MaintainerPane";
+import { RepoMonitorPane } from "./RepoMonitorPane";
 import { SecondOpinionPane } from "./SecondOpinionPane";
 import { useEscapeToClose } from "./useEscapeToClose";
 
@@ -158,6 +159,13 @@ const SETTINGS_TABS = [
 		icon: Bot,
 		description:
 			"The OpenCode runtime Maintain agents run on, and which model they use: free tier, a catalog model, or local Ollama.",
+	},
+	{
+		id: "repoMonitor",
+		label: "Repository monitor",
+		icon: Server,
+		description:
+			"The shared daemon that owns git-aware file trees, watchers and caches for every repo Studio and the Principal desktop app open.",
 	},
 ] as const;
 
@@ -874,6 +882,8 @@ export function SettingsModal({
 						{activeTab === "maintainer" && (
 							<MaintainerPane settings={settings} onSettings={setSettings} />
 						)}
+
+						{activeTab === "repoMonitor" && <RepoMonitorPane />}
 					</div>
 				</div>
 

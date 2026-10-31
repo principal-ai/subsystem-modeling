@@ -14,6 +14,7 @@
 import type {
 	OllamaConfigureOutcome,
 	PartialViewerSettings,
+	RepoMonitorDiagnostics,
 	SubsystemComponent,
 	SubsystemModelProposal,
 	ViewerSettings,
@@ -69,6 +70,7 @@ export const subsystemModelProposalsChangeSubscribers = new Set<unknown>();
 export const subsystemModelMaintainChangeSubscribers = new Set<unknown>();
 export const subsystemModelRunsChangeSubscribers = new Set<unknown>();
 export const regularAuditChangeSubscribers = new Set<unknown>();
+export const repoMonitorChangeSubscribers = new Set<unknown>();
 
 export function refreshLibrary(): void {}
 
@@ -359,7 +361,65 @@ const request: RpcRequest = {
     nextAuditAt: new Date(Date.now() + 5 * 60_000).toISOString(),
   }),
   writeClipboard: async () => ({ ok: true }),
+  // Settings → Repository monitor.
+  getRepoMonitorStatus: async () => repoMonitorStatus,
+  startRepoMonitor: async () => {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    repoMonitorStatus = runningRepoMonitor();
+    return { ok: true, status: repoMonitorStatus };
+  },
+  restartRepoMonitor: async () => {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const fresh = runningRepoMonitor();
+    if (fresh.state === "running") {
+      fresh.startedAt = Date.now();
+      fresh.pid = 48213;
+    }
+    repoMonitorStatus = fresh;
+    return { ok: true, status: repoMonitorStatus };
+  },
+  rebuildRepoMonitorRepo: async () => ({ ok: true }),
 };
+
+function runningRepoMonitor(): RepoMonitorDiagnostics {
+  const now = Date.now();
+  return {
+    state: "running",
+    socketPath: "/Users/me/.principal/repo-monitor.sock",
+    pid: 48201,
+    version: "2.3.2",
+    protocolVersion: 1,
+    startedAt: now - 47 * 60_000,
+    owner: "studio",
+    clients: 2,
+    watcherImpl: "parcel",
+    watcherFallbackReason: null,
+    memoryBytes: 182 * 1024 * 1024,
+    cpuMs: 12_400,
+    repos: [
+      {
+        path: "/Users/me/Developer/principal-ai/subsystem-modeling",
+        isWatching: true,
+        watchingMode: "minimal",
+        watchReferenceCount: 2,
+        fsMonitorEnabled: true,
+        slices: {
+          fileTree: { updatedAt: now - 3_000, version: 4, sha: "d1c016f86cbf", count: 1842, building: false },
+          packages: { updatedAt: now - 180_000, version: 1, count: 5, building: false },
+          gitStatus: { updatedAt: now - 3_000, version: 9, sha: "d1c016f86cbf", building: false },
+          gitRemote: { updatedAt: now - 140 * 60_000, version: 1, building: false },
+        },
+      },
+    ],
+  };
+}
+
+let repoMonitorStatus: RepoMonitorDiagnostics = runningRepoMonitor();
+
+/** Shape the Settings → Repository monitor pane for a story. */
+export function mockRepoMonitorStatus(status: RepoMonitorDiagnostics): void {
+  repoMonitorStatus = status;
+}
 
 let mockOverview: unknown = null;
 const OPENCODE_CONFIG_PATH = "/Users/me/.config/opencode/opencode.json";

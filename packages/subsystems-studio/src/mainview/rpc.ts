@@ -113,6 +113,11 @@ export const regularAuditChangeSubscribers = new Set<
 	(payload: StudioMessages["regularAuditChanged"]) => void
 >();
 
+/** Repository monitoring daemon status push (`repoMonitorChanged`). */
+export const repoMonitorChangeSubscribers = new Set<
+	(payload: StudioMessages["repoMonitorChanged"]) => void
+>();
+
 const rpc = Electroview.defineRPC<StudioRPC>({
 	// S3 source validation can read several pages before finding model previews.
 	maxRequestTime: 120000,
@@ -167,6 +172,9 @@ const rpc = Electroview.defineRPC<StudioRPC>({
 			},
 			regularAuditChanged: (payload) => {
 				for (const fn of regularAuditChangeSubscribers) fn(payload);
+			},
+			repoMonitorChanged: (payload) => {
+				for (const fn of repoMonitorChangeSubscribers) fn(payload);
 			},
 		},
 	},

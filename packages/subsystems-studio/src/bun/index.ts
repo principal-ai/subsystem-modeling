@@ -143,6 +143,15 @@ import { repoHistoryBounds } from "./git-repo";
 import { buildMaintenanceOverview } from "./maintenance-overview";
 import { ensurePackageLayers, listPackageLayers, listPackageLayerRepos } from "./package-layer-store";
 import {
+	getRepoMonitorStatus,
+	listRepoFiles,
+	onRepoMonitorChanged,
+	rebuildRepoMonitorRepo,
+	restartRepoMonitor,
+	shutdownRepoMonitor,
+	startRepoMonitor,
+} from "./repo-monitor";
+import {
 	walkTours,
 	resolveLocalRepoIdentity,
 	resolveUserIdentity,
@@ -1839,9 +1848,9 @@ const requests: RequestHandlers = {
 				if (!walkPath) {
 					const tab = getTab(tabId);
 					if (!tab || !isTourTab(tab)) return { files: [] };
-					return { files: await walkFiles(tab.repoRoot) };
+					return { files: await listRepoFiles(tab.repoRoot, walkFiles) };
 				}
-				return { files: await walkFiles(walkPath) };
+				return { files: await listRepoFiles(walkPath, walkFiles) };
 			},
 			getRepoFileTree: async ({ purl }) => {
 				const root = resolveRepoRootForComponent(purl);
@@ -1849,7 +1858,7 @@ const requests: RequestHandlers = {
 					return { files: [], error: "no local checkout for this repo" };
 				}
 				try {
-					return { files: await walkFiles(root), repoRoot: root };
+					return { files: await listRepoFiles(root, walkFiles), repoRoot: root };
 				} catch (err) {
 					return { files: [], error: (err as Error).message };
 				}
@@ -1950,6 +1959,10 @@ const requests: RequestHandlers = {
 			setSettings: ({ settings }) => ({ ok: true, settings: applySettingsPatch(settings) }),
 			getRegularAuditStatus: () => regularAuditScheduler.getStatus(),
 			getOpencodeServerStatus: async () => probeOpencodeServer(),
+			getRepoMonitorStatus: async () => getRepoMonitorStatus(),
+			startRepoMonitor: async () => startRepoMonitor(),
+			restartRepoMonitor: async () => restartRepoMonitor(),
+			rebuildRepoMonitorRepo: async ({ path }) => rebuildRepoMonitorRepo(path),
 			getServerSessions: async () => listRecentServerSessions(),
 			setServerEventWatch: async ({ active }) => {
 				setServerEventWatch(active, active ? broadcastServerEvents : undefined);
@@ -3238,6 +3251,12 @@ function broadcastRegularAuditChanged(
 	sendToAllWindows("regularAuditChanged", payload);
 }
 
+function broadcastRepoMonitorChanged(
+	payload: StudioMessages["repoMonitorChanged"],
+): void {
+	sendToAllWindows("repoMonitorChanged", payload);
+}
+
 /** Graphs with an in-flight Maintain agent run. */
 const maintainingGraphIds = new Set<string>();
 
@@ -4331,6 +4350,8 @@ const maintenanceOutcomeSender = createMaintenanceOutcomeSender({
 });
 maintenanceOutcomeSender.start();
 setSubsystemModelChangeListener(broadcastSubsystemModelChanged);
+onRepoMonitorChanged(broadcastRepoMonitorChanged);
+process.on("exit", () => void shutdownRepoMonitor());
 void startSubsystemModelDirWatcher().then(() => {
 	console.log("[principal-studio] watching ~/.principal/subsystem-models for changes");
 });

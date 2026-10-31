@@ -13,6 +13,7 @@ import {
 	type FileTree,
 	type PackagesSliceData,
 } from "@principal-ai/codebase-composition";
+import { listRepoFiles } from "./repo-monitor";
 
 /** Minimal FileTree shape PackageLayerModule reads (`allFiles[].path`). */
 export interface PackageDiscoveryFileTree {
@@ -113,7 +114,7 @@ export async function runPackageLayerDiscover(
 	}
 
 	try {
-		const files = opts.files ?? (await walkRepoFiles(repoRoot));
+		const files = opts.files ?? (await listRepoFiles(repoRoot, walkRepoFiles));
 		const fileTree = buildPackageDiscoveryFileTree(files);
 		const module = new PackageLayerModule();
 		const packages = await module.discoverPackages(

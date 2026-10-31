@@ -22,6 +22,8 @@ import { registerProjectInAlexandria } from "./alexandria";
 process.env["PRINCIPAL_ALEXANDRIA_HOME"] = mkdtempSync(
 	join(tmpdir(), "pkg-alexandria-"),
 );
+// Discovery must use the local walk here, not the user's repo monitor daemon.
+process.env["REPO_MONITOR_DISABLED"] = "1";
 
 function initRepo(): string {
 	const dir = mkdtempSync(join(tmpdir(), "pkg-layers-"));
