@@ -38,7 +38,7 @@
   },
   "devDependencies": {
     "@excalidraw/excalidraw": "^0.18.0",
-    "@industry-theme/file-city-panel": "^0.10.2",
+    "@industry-theme/file-city-panel": "^0.10.3",
     "@pierre/diffs": "^1.6.2",
     "@principal-ade/dynamic-file-tree": "^0.3.0",
     "@principal-ade/industry-theme": "^0.1.25",
@@ -47,7 +47,7 @@
     "@principal-ade/utcp-panel-event": "^0.1.0",
     "@principal-ai/alexandria-core-library": "^0.7.1",
     "@principal-ai/file-city-builder": "^0.5.5",
-    "@principal-ai/file-city-react": "^0.6.4",
+    "@principal-ai/file-city-react": "^0.6.5",
     "@principal-ai/logo-component": "^0.1.23",
     "@principal-ai/repository-abstraction": "^0.5.7",
     "@storybook/addon-docs": "10.1.2",
