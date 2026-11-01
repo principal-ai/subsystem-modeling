@@ -37,6 +37,7 @@ import {
   packageColor,
   FOLDER_FRAME_COLOR,
   isFolderFrame,
+  isCardFrame,
   type SubsystemGraphNodeData,
   type SubsystemGroupNodeData,
   type SubsystemGraphEdge,
@@ -45,7 +46,19 @@ import {
 import { componentColor } from '../pierre/constructColors';
 import { resolvePierreSyntaxThemeName } from '../pierre/pierreSyntaxTheme';
 import { ISSUE_KIND_ICON, ISSUE_RUNG_ICON } from './IssueList';
-import { Package, Search } from 'lucide-react';
+import {
+  CARD_GAP,
+  CARD_PAD_X,
+  CARD_PAD_Y,
+  ContainerCardHeader,
+  NODE_H,
+  NODE_W,
+  TOGGLE_INSET,
+  TOGGLE_SIZE,
+} from './containerCard';
+import { MORPH_MS } from './graphMorph';
+import { technologyBrand } from './techIcons';
+import { AppWindow, Component, Database, Maximize2, Minimize2, Package, Search } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export const CONSTRUCT_LABEL: Record<string, string> = {
@@ -555,11 +568,166 @@ export function SubsystemComponentNode(props: NodeProps<Node<SubsystemGraphNodeD
 }
 
 /**
- * Boundary frame — a React Flow parent node for a process or module region.
- * Members render inside via `parentId`; this draws the labeled container only
- * (no handles, no selection). Border color derives from the region key.
+ * Boundary frame — a React Flow parent node for a process, package or module
+ * region. Members render inside via `parentId`; this draws the container only
+ * (no handles, no selection).
+ *
+ * Two chromes. A process or package is a container in the C4 sense, so it draws
+ * as a container *card*: filled body, and the same header a `C4NodeCard` wears —
+ * label, kind glyph, technology row, member count. A module or directory is a
+ * code folder, not a container, so it keeps the bare dashed frame with a
+ * collapsible path badge.
  */
 export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData, 'subsystem-group'>>) {
+  const region = props.data.region;
+  if (!region) return null;
+  return isCardFrame(region) ? <CardFrame {...props} /> : <BadgeFrame {...props} />;
+}
+
+/**
+ * The container-card chrome for a process / package frame.
+ *
+ * Colour follows the technology when we hold its mark (the C4 card's rule), so a
+ * Bun process and a React renderer read apart at a glance; a region with no known
+ * technology keeps the per-key hash, which is what keeps several unstated
+ * processes distinguishable. Dash and radius keep the component graph's own
+ * encoding: a process is a deployment unit (solid, slight radius), a package is
+ * code organisation (dashed, rounded).
+ */
+function CardFrame(props: NodeProps<Node<SubsystemGroupNodeData, 'subsystem-group'>>) {
+  const { theme } = useTheme();
+  const { data, width, height, selected } = props as unknown as {
+    data: SubsystemGroupNodeData;
+    width?: number;
+    height?: number;
+    selected?: boolean;
+  };
+  const region = data.region;
+  const brand = technologyBrand(region.technology);
+  // Explicit host override wins; then the technology's brand hue; then the hash.
+  const color = data.color ?? brand?.color ?? packageColor(region.key);
+  const dimmed = data.dimmed === true;
+  const hidden = (data as { hidden?: boolean }).hidden === true;
+  const collapsed = data.collapsed === true;
+  const isPackage = region.kind === 'package' || region.chrome === 'package';
+  const frameStyle = !isPackage || selected ? 'solid' : 'dashed';
+  const frameRadius = isPackage ? 12 : 4;
+  const containerKind = region.containerKind ?? 'application';
+  const Icon = isPackage ? Package : containerKind === 'data-store' ? Database : AppWindow;
+  // The technology row falls back to the kind so it is never blank — the same
+  // fallback the C4 card uses.
+  const topLabel = region.technology ?? (isPackage ? 'package' : containerKind);
+  const ToggleIcon = collapsed ? Maximize2 : Minimize2;
+
+  return (
+    <div
+      title={region.description}
+      style={{
+        position: 'relative',
+        width: width ?? (collapsed ? NODE_W : 400),
+        height: height ?? (collapsed ? NODE_H : 300),
+        boxSizing: 'border-box',
+        borderRadius: frameRadius,
+        border: `2px ${frameStyle} ${color}`,
+        background: theme.colors.backgroundSecondary ?? theme.colors.background,
+        boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+        opacity: hidden ? 0 : dimmed ? 0.35 : 1,
+        // React Flow snaps the wrapper to the new size; this box eases between
+        // the open frame and the closed card so the toggle reads as a grow /
+        // shrink rather than a swap.
+        transition: `opacity 150ms ease, width ${MORPH_MS}ms ease, height ${MORPH_MS}ms ease`,
+        pointerEvents: 'none',
+        fontFamily: theme.fonts.body,
+      }}
+    >
+      {/* The header sits in the band ELK reserved above the members
+          (`OPEN_HEADER_PAD`), inset by the card's own padding. */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: CARD_GAP,
+          padding: `${CARD_PAD_Y}px ${CARD_PAD_X}px`,
+          boxSizing: 'border-box',
+        }}
+      >
+        <ContainerCardHeader
+          label={region.label}
+          Icon={Icon}
+          iconLabel={isPackage ? 'package' : containerKind}
+          color={color}
+          topLabel={topLabel}
+          brand={brand}
+          hasTechRow
+          count={{ value: region.memberAliases.length, Icon: Component }}
+        />
+      </div>
+      {data.onToggleCollapse && (
+        <button
+          type="button"
+          className="nodrag nopan"
+          onClick={(e) => {
+            e.stopPropagation();
+            data.onToggleCollapse?.();
+          }}
+          onDoubleClick={(e) => e.stopPropagation()}
+          aria-label={collapsed ? 'Show members' : 'Hide members'}
+          aria-pressed={collapsed}
+          style={{
+            position: 'absolute',
+            right: TOGGLE_INSET,
+            bottom: TOGGLE_INSET,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: TOGGLE_SIZE,
+            height: TOGGLE_SIZE,
+            padding: 0,
+            borderRadius: 4,
+            border: `1px solid ${color}`,
+            background: theme.colors.backgroundSecondary ?? theme.colors.background,
+            color,
+            cursor: 'pointer',
+            lineHeight: 1,
+            pointerEvents: 'auto',
+          }}
+        >
+          <ToggleIcon size={13} strokeWidth={2.25} />
+        </button>
+      )}
+      {data.issue && ISSUE_KIND_ICON[data.issue.kind] && (
+        <IssueChip
+          color={
+            data.issue.severity === 'error'
+              ? (theme.colors.error ?? '#e5534b')
+              : (theme.colors.warning ?? '#d4a017')
+          }
+          Icon={ISSUE_KIND_ICON[data.issue.kind]!}
+          count={data.issue.count}
+          anchor={{ right: -9, bottom: -8 }}
+        />
+      )}
+      {/* A closed card is an edge endpoint: the lines its members carried roll
+          up onto it, and React Flow needs a handle on each end to draw them. */}
+      {collapsed && (
+        <>
+          <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
+          <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+        </>
+      )}
+    </div>
+  );
+}
+/**
+ * The bare-frame chrome for a module / directory region: dashed border,
+ * transparent body, and a path badge astride the top edge that collapses a long
+ * path to `first/…/last` and expands on click.
+ */
+function BadgeFrame(props: NodeProps<Node<SubsystemGroupNodeData, 'subsystem-group'>>) {
   const { theme } = useTheme();
   const { data, width, height, selected } = props as unknown as {
     data: SubsystemGroupNodeData;
@@ -572,54 +740,27 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
   // (directory, or a module whose key names a folder) share one neutral hue;
   // everything else hashes per key.
   const color =
-    data.color ??
-    (isFolderFrame(region ?? undefined)
-      ? FOLDER_FRAME_COLOR
-      : packageColor(region?.key ?? 'process'));
+    data.color ?? (isFolderFrame(region) ? FOLDER_FRAME_COLOR : packageColor(region.key));
   const dimmed = data.dimmed === true;
   const hidden = (data as { hidden?: boolean }).hidden === true;
-  // Label is the region identity alone (path / process key / owner/name).
-  // Kind is carried by frame chrome (square = process; rounded = module/package)
-  // — don't prefix `module ·` / `package ·` or the path reads twice.
-  const label = region?.label ?? '';
+  // Label is the region identity alone (the path). Kind is carried by the
+  // frame chrome — don't prefix `module ·` or the path reads twice.
+  const label = region.label;
   const [expandedLabel, setExpandedLabel] = useState<string | null>(null);
-  // Directory frames (path-derived nesting) render like modules — dashed,
-  // collapsible path badge.
-  const isModule = region?.kind === 'module' || region?.kind === 'directory';
-  // Runtime chrome asserts "deployment unit" — a process region the host
-  // marked `chrome: 'package'` groups code organisation instead (a library,
-  // an area, a proposal) and forgoes it, drawing like a package frame.
-  // Presentation only: `kind` still says process, so ids and issue targets
-  // key off the claim unchanged.
-  const isProcess = region?.kind === 'process' && region?.chrome !== 'package';
-  // A frame renders as a package boundary two ways: it IS a package (repo
-  // identity from `purl`) or the host demoted a process claim to package
-  // chrome (a library, an area, a proposal). Both wear the Package glyph, so
-  // "code organisation, not a deployment unit" reads off the canvas instead
-  // of hiding in the shared rounded/dashed chrome.
-  const isPackageFrame = region?.kind === 'package' || region?.chrome === 'package';
-  const expanded = isModule && expandedLabel === label;
+  const expanded = expandedLabel === label;
   const availableBadgeWidth = Math.max(0, (width ?? 400) - MODULE_BADGE_INSET * 2 - 4);
-  const collapsedLabel = isModule ? moduleBadgeLabel(label, availableBadgeWidth) : label;
+  const collapsedLabel = moduleBadgeLabel(label, availableBadgeWidth);
   // A module badge is collapsible while something collapsed, and stays
   // togglable while expanded (so the full path can collapse back).
-  const canToggle = isModule && (expanded || collapsedLabel !== label);
+  const canToggle = expanded || collapsedLabel !== label;
   // Hover affords clickability by revealing more of the path — the badge
   // widens to fit real text (never stretched), hinting before the click.
   const [hover, setHover] = useState(false);
-  const hoveredLabel =
-    isModule && canToggle ? moduleBadgeHoverLabel(label, availableBadgeWidth) : label;
-  const frameRadius = isProcess ? 0 : 12;
-  const badgeRadius = isProcess ? 0 : 4;
+  const hoveredLabel = canToggle ? moduleBadgeHoverLabel(label, availableBadgeWidth) : label;
   const badgeBg = theme.colors.backgroundSecondary ?? theme.colors.background;
-  // Processes are deployment units — solid frame. Modules/packages stay dashed
-  // until selected.
-  const frameStyle = isProcess || selected ? 'solid' : 'dashed';
-  // Process keeps a tinted fill; module / package bodies stay transparent so
-  // nested frames don't stack washes.
-  const frameFill = isProcess ? `${color}14` : 'transparent';
-
-  if (!region) return null;
+  // Code folders stay dashed until selected; the body is transparent so nested
+  // frames don't stack washes.
+  const frameStyle = selected ? 'solid' : 'dashed';
 
   return (
     <div
@@ -628,21 +769,20 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
         width: width ?? 400,
         height: height ?? 300,
         boxSizing: 'border-box',
-        borderRadius: frameRadius,
+        borderRadius: 12,
         border: `2px ${frameStyle} ${color}`,
-        background: frameFill,
+        background: 'transparent',
         opacity: hidden ? 0 : dimmed ? 0.35 : 1,
         transition: 'opacity 150ms ease',
         pointerEvents: 'none',
       }}
     >
       <div
-        className={isModule ? 'nodrag nopan' : undefined}
+        className="nodrag nopan"
         role={canToggle ? 'button' : undefined}
         tabIndex={canToggle && !hidden ? 0 : undefined}
         aria-expanded={canToggle ? expanded : undefined}
         aria-label={canToggle ? `${expanded ? 'Collapse' : 'Expand'} module path: ${label}` : undefined}
-        title={isProcess ? 'Double-click to focus this process' : undefined}
         onMouseEnter={canToggle ? () => setHover(true) : undefined}
         onMouseLeave={canToggle ? () => setHover(false) : undefined}
         onClick={canToggle ? (event) => {
@@ -661,33 +801,26 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
         } : undefined}
         style={{
           position: 'absolute',
-          // Process: the tab sits flush over the frame's top border (`top:
-          // -2` — the frame border is 2px) and carries its own full border, so
-          // the two read as one piece. Module/package are centred astride the
-          // top edge like component badges. Always set left/transform
-          // explicitly — React Flow reuses group DOM nodes and `undefined`
-          // does not clear a prior value.
-          top: isProcess ? -2 : 0,
-          left: isProcess ? '50%' : 12,
-          transform: isProcess ? 'translateX(-50%)' : 'translateY(-50%)',
+          // Centred astride the top edge like component badges. Always set
+          // left/transform explicitly — React Flow reuses group DOM nodes and
+          // `undefined` does not clear a prior value.
+          top: 0,
+          left: 12,
+          transform: 'translateY(-50%)',
           zIndex: canToggle ? 10 : undefined,
           // Width is explicit while collapsible so hover-reveal of more path
           // text animates; the cap keeps both states inside the frame.
           width:
-            isModule && canToggle && !expanded
+            canToggle && !expanded
               ? hover
                 ? Math.min(availableBadgeWidth, moduleBadgeWidth(hoveredLabel))
                 : Math.min(availableBadgeWidth, moduleBadgeWidth(collapsedLabel))
               : undefined,
           transition: 'width 140ms ease, box-shadow 120ms ease',
-          cursor: canToggle || isProcess ? 'pointer' : undefined,
+          cursor: canToggle ? 'pointer' : undefined,
           // The trailing halo squares the rounded corners back off in the fill
           // colour, so an edge crossing a corner can't show through the notch.
-          // Square (process) badges have no notch, and the halo would erase the
-          // frame border they now sit flush on, so they skip it.
-          boxShadow: isProcess
-            ? undefined
-            : `${canToggle && hover ? `0 2px 10px ${color}55, ` : ''}0 0 0 1.5px ${badgeBg}`,
+          boxShadow: `${canToggle && hover ? `0 2px 10px ${color}55, ` : ''}0 0 0 1.5px ${badgeBg}`,
           fontFamily: theme.fonts.monospace,
           fontSize: theme.fontSizes[3],
           fontWeight: 700,
@@ -695,42 +828,20 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
           color,
           background: badgeBg,
           border: `2px solid ${color}`,
-          borderTopWidth: 2,
-          borderRadius: badgeRadius,
+          borderRadius: 4,
           padding: '3px 9px',
           whiteSpace: 'nowrap',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           boxSizing: 'border-box',
           pointerEvents: hidden ? 'none' : 'auto',
-          ...(isModule
-            ? {
-                // Cap the collapsed badge at the frame's inner width so it
-                // never spills past the module — it gets the `…`/click-to-
-                // expand treatment instead. Expanding lifts the cap so the
-                // full path grows the badge past the frame's edge.
-                maxWidth: expanded ? undefined : availableBadgeWidth,
-              }
-            : undefined),
-          ...(isPackageFrame
-            ? {
-                // Icon + key on one row: the Package glyph leads the label
-                // so package chrome reads as code organisation at a glance.
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5,
-              }
-            : undefined),
+          // Cap the collapsed badge at the frame's inner width so it never
+          // spills past the module — it gets the `…`/click-to-expand treatment
+          // instead. Expanding lifts the cap so the full path grows the badge
+          // past the frame's edge.
+          maxWidth: expanded ? undefined : availableBadgeWidth,
         }}
       >
-        {isPackageFrame && (
-          <Package
-            size={13}
-            strokeWidth={2}
-            aria-hidden="true"
-            style={{ flexShrink: 0 }}
-          />
-        )}
         {canToggle ? (
           <span style={{ whiteSpace: 'nowrap' }}>
             {expanded ? label : hover ? hoveredLabel : collapsedLabel}
@@ -756,7 +867,6 @@ export function SubsystemGroupNode(props: NodeProps<Node<SubsystemGroupNodeData,
     </div>
   );
 }
-
 /** `#rrggbb` + alpha → `#rrggbbaa`. Used to dim a stroke/marker by color so
  *  each opacity gets its own SVG marker id — path `opacity` leaks across every
  *  edge that shares a `url(#marker)` (the focused edge's arrowhead dims). */

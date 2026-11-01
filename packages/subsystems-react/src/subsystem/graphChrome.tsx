@@ -31,15 +31,18 @@ export const GRAPH_NAV_PROPS = {
 } satisfies Partial<ReactFlowProps>;
 
 /**
- * React Flow mounts its edge SVG (`.react-flow__edges`) and node layer
- * (`.react-flow__nodes`) as sibling containers inside the viewport, both at
- * `z-index: auto`, and leans on DOM order (edges first, nodes second) to keep
- * nodes on top. Nodes carry an inline `z-index: 0`, which on its own does not
- * reliably beat the edge layer, so an edge routing into a boundary frame's top
- * border paints *over* that frame's label. Lift the whole node layer above the
- * edge layer once for every graph that spreads `GRAPH_NAV_PROPS`.
+ * Class on every canvas that spreads `GRAPH_NAV_PROPS`; scopes `GRAPH_LAYER_CSS`
+ * so it only touches our canvases.
  *
- * Scoped by `GRAPH_CANVAS_CLASS` so it only touches our canvases.
+ * Paint order rides React Flow's own per-element z-indices. The viewport is one
+ * stacking context holding the edge layer (one absolutely positioned `<svg>` per
+ * edge, `z-index` = the deepest nested endpoint's depth) and the node layer
+ * (each node `z-index` = its nesting depth, a child always one above its
+ * parent). Neither layer may be lifted as a whole: a boundary frame is a filled
+ * container card, so a line between two members has to paint *above* the frame
+ * that holds them yet *below* the member cards — and that is exactly the
+ * interleave the per-element indices give (edge depth ≥ frame depth, and at
+ * equal depth the node layer wins by DOM order).
  */
 export const GRAPH_CANVAS_CLASS = 'subsystem-graph-canvas';
 
@@ -60,7 +63,6 @@ export const LAYOUT_FLIP_EDGE_MS = 180;
 export const LAYOUT_FLIP_NODE_MS = 320;
 
 export const GRAPH_LAYER_CSS = `
-.${GRAPH_CANVAS_CLASS} .react-flow__nodes { z-index: 1; }
 .${GRAPH_CANVAS_CLASS} .react-flow__edges { transition: opacity ${LAYOUT_FLIP_EDGE_MS}ms ease; }
 .${LAYOUT_FLIP_CLASS} .react-flow__edges { opacity: 0; }
 .${LAYOUT_FLIP_CLASS} .react-flow__node { transition: transform ${LAYOUT_FLIP_NODE_MS}ms cubic-bezier(0.4, 0, 0.2, 1); }

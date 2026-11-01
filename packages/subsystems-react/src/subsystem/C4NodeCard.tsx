@@ -15,16 +15,29 @@
 import { useTheme } from '@principal-ade/industry-theme';
 import { AppWindow, Component, Database, Maximize2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { TechMark, technologyBrand } from './techIcons';
+import { technologyBrand } from './techIcons';
 import type { C4Element } from './c4';
+import {
+  CARD_GAP,
+  CARD_PAD_Y,
+  ContainerCardHeader,
+  LABEL_SLOT_H,
+  NODE_H,
+  NODE_W,
+  TECH_SLOT_H,
+  TOGGLE_INSET,
+  TOGGLE_SIZE,
+} from './containerCard';
 
-/**
- * Card box for a container: a wide rectangle. A container carries four things
- * at once (technology row, label, description, and the notation gap it still
- * has), and a strip would force the last two to wrap hard.
- */
-export const NODE_W = 250;
-export const NODE_H = 150;
+// The card metrics live in `containerCard` so the component graph's frames can
+// share them; re-exported here so the C4 canvas keeps one import.
+export {
+  NODE_H,
+  NODE_W,
+  OPEN_FOOTER_PAD,
+  OPEN_HEADER_PAD,
+  OPEN_SIDE_PAD,
+} from './containerCard';
 
 /**
  * A component has to *read* as a square, and equal sides do not manage that.
@@ -70,28 +83,6 @@ export function nodeSize(node: C4Element): { width: number; height: number } {
 }
 
 /**
- * Fixed label slot, so the description below sits at the same y on every card
- * even when a label is one line rather than two.
- */
-const LABEL_SLOT_H = 40;
-
-/**
- * The technology row's height, pinned for the same reason as the label slot: the
- * row is a line of text plus an optional 16px brand mark, so its natural height
- * depends on which of those are present. Pinning it makes the card's chrome a
- * known quantity, which is what lets `descriptionLineBudget` below say how many
- * description lines fit — and lets the footer pad and the header pad agree about
- * where the card's content actually ends.
- */
-const TECH_SLOT_H = 18;
-
-/** The card's own vertical padding (`padding: '10px 12px'`). */
-const CARD_PAD_Y = 10;
-
-/** The card's flex `gap`, between each of its rows. */
-const CARD_GAP = 3;
-
-/**
  * Space a component card reserves above and below the constructs nested inside
  * it when it is grown (a component with constructs becomes an ELK parent, the
  * same way an opened container does). A component has no technology row and no
@@ -102,37 +93,6 @@ export const COMPONENT_FOOTER_PAD = CARD_PAD_Y;
 
 /** The description's line height, as a multiple of its font size. */
 const DESC_LINE_HEIGHT = 1.35;
-
-/**
- * Breathing room between a grown container's own chrome and the components nested
- * inside it.
- *
- * The description is hidden while grown, so the components land where the
- * description would have been — immediately under the technology row. Without
- * this the gap is the width of one row gap, which reads as the components being
- * crowded against the header while the sides and footer sit `OPEN_SIDE_PAD` away.
- * This is not chrome: nothing is drawn in it.
- */
-const OPEN_HEADER_AIR = 16;
-
-/**
- * Space a *grown* container reserves above its nested components: the card's own
- * padding, its label slot, its technology row, the gaps between them, and a little
- * air. The description is hidden while grown, so it is not part of this.
- *
- * Derived from the same constants the card is built from, rather than written as
- * a literal, so it cannot drift from `descriptionLineBudget` — which subtracts
- * exactly this chrome (and no air) to decide how much description a closed card
- * can show. Those two disagreeing is how a card ends up taller than the box ELK
- * laid out for it.
- *
- * The graph hands this to ELK as the compound parent's top padding rather than
- * nudging the children down itself — so the parent's size and the children's
- * placement are still one ELK fit, not our arithmetic layered on top of it.
- */
-export const OPEN_HEADER_PAD =
-  CARD_PAD_Y * 2 + LABEL_SLOT_H + CARD_GAP + TECH_SLOT_H + CARD_GAP + OPEN_HEADER_AIR;
-
 /**
  * How many description lines fit in a card of this height before the drawn box
  * would grow past the box the layout reserved for it.
@@ -172,39 +132,6 @@ export function descriptionLineBudget(opts: {
     : CARD_PAD_Y;
   return Math.max(0, Math.floor((reservedHeight - topChrome - bottomChrome) / lineHeight));
 }
-
-/**
- * The drill-down affordance, in the card's own box. Extracted from the button's
- * style so the reserved footer below cannot drift from the thing it is reserving
- * for — the two numbers are the same number.
- */
-const TOGGLE_SIZE = 22;
-const TOGGLE_INSET = 6;
-
-/**
- * Space a *grown* container reserves below its nested components, so the last row
- * does not sit under the collapse affordance.
- *
- * The toggle is absolutely positioned, so it takes no space in the card's flow and
- * ELK knows nothing about it: without this the parent is fitted to its children
- * alone and the final row is drawn straight through the button. Reserving the
- * toggle's own reach plus a little air keeps that an ELK fit too, rather than
- * something we nudge afterwards.
- */
-export const OPEN_FOOTER_PAD = TOGGLE_INSET + TOGGLE_SIZE + 8;
-
-/**
- * Space a *grown* container reserves to the left and right of its nested
- * components.
- *
- * Deliberately the footer's number rather than its own: the nested cards should
- * sit in one uniform inset, not a wider one at the bottom than at the sides. Both
- * are wider than the card's own 12px text inset — the label and technology row are
- * the container's chrome and sit flush with its padding, while the nested cards
- * are separate boxes it contains, and at the same inset they read as part of that
- * chrome rather than held inside it.
- */
-export const OPEN_SIDE_PAD = OPEN_FOOTER_PAD;
 
 type Theme = ReturnType<typeof useTheme>['theme'];
 
@@ -511,112 +438,17 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
         fontFamily: theme.fonts.body,
       }}
     >
-      {/* The label row: the kind mark, then the name. Two lines rather than an
-          ellipsis — a truncated label hides the very thing that distinguishes
-          two containers from each other. The fixed height reserves both lines
-          even for a one-line label, so the subtitle below sits at the same y on
-          every card. */}
-      <span
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: centered ? 'center' : 'space-between',
-          gap: 6,
-          height: LABEL_SLOT_H,
-          // Without this the slot shrinks when the content exceeds the card's fixed
-          // height, and `descriptionLineBudget`'s chrome stops being the chrome —
-          // measured at 39.11px instead of 40 the moment the description ran long.
-          flexShrink: 0,
-          minWidth: 0,
-        }}
-      >
-        <span
-          style={{
-            fontFamily: theme.fonts.body,
-            fontWeight: 600,
-            fontSize: theme.fontSizes[2],
-            color: theme.colors.text,
-            lineHeight: 1.25,
-            maxHeight: LABEL_SLOT_H,
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-            textAlign: centered ? 'center' : 'left',
-            minWidth: 0,
-          }}
-        >
-          {node.label}
-        </span>
-        {Icon && (
-          <span
-            aria-label={node.kind === 'container' ? node.containerKind : node.kind}
-            style={{
-              display: 'inline-flex',
-              flexShrink: 0,
-              color: style.color,
-              // Nudge down so the glyph optically centres on the first text line.
-              marginTop: 3,
-            }}
-          >
-            <Icon size={16} strokeWidth={2.25} />
-          </span>
-        )}
-      </span>
-      {/* The technology row: the brand mark when we hold the official one, then
-          the technology. For a container, right-aligned, the number of members
-          it groups. The kind itself stays on the shape, confirmation on the
-          border (see `nodeShape`, `nodeStyle`). */}
-      <span
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: centered ? 'center' : 'space-between',
-          gap: 6,
-          fontFamily: theme.fonts.monospace,
-          fontSize: theme.fontSizes[0],
-          color: muted,
-          letterSpacing: 0.5,
-          textTransform: 'uppercase',
-          minWidth: 0,
-          // Pinned, like the label slot above it: an empty row would otherwise be
-          // zero-height and the description budget would have to guess which cards
-          // have a technology row. Empty stays zero — a person has no technology.
-          ...(hasTechRow ? { height: TECH_SLOT_H, flexShrink: 0 } : {}),
-        }}
-      >
-        {topLabel && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-            {brand && <TechMark brand={brand} />}
-            <span
-              style={{
-                fontWeight: 600,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                minWidth: 0,
-              }}
-            >
-              {topLabel}
-            </span>
-          </span>
-        )}
-        {node.kind === 'container' && (
-          <span
-            style={{
-              flexShrink: 0,
-              letterSpacing: 0,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-            }}
-          >
-            {componentCount}
-            <Component size={12} strokeWidth={2.25} />
-          </span>
-        )}
-      </span>
-      {showDescription && subtitle && descLines > 0 && (
+      <ContainerCardHeader
+        label={node.label}
+        Icon={Icon}
+        iconLabel={node.kind === 'container' ? node.containerKind : node.kind}
+        color={style.color}
+        topLabel={topLabel}
+        brand={brand}
+        hasTechRow={hasTechRow}
+        count={node.kind === 'container' ? { value: componentCount, Icon: Component } : undefined}
+        centered={centered}
+      />      {showDescription && subtitle && descLines > 0 && (
         <span
           style={{
             fontFamily: theme.fonts.monospace,

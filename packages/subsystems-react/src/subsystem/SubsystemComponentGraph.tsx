@@ -32,12 +32,15 @@ import {
   applyNodeChanges,
 } from '@xyflow/react';
 import { useTheme } from '@principal-ade/industry-theme';
-import { ArrowDown, ArrowRight, Files, Route, Unlink, X } from 'lucide-react';
+import { ArrowDown, ArrowRight, Boxes, Files, Route, Unlink, X } from 'lucide-react';
 import { IndustryMarkdownSlide } from 'themed-markdown';
 import {
   buildSubsystemGraph,
   deriveGraphEdges,
+  buildBoundaryLayoutGroups,
+  isCardFrame,
   isConstructsOnlyModel,
+  packageColor,
   moduleGroupNodeId,
   processGroupNodeId,
   isTrailMechanism,
@@ -52,11 +55,16 @@ import {
   type SubsystemEdgeView,
   type SubsystemLayoutDirection,
   type SubsystemGraphifyRelation,
+  type SubsystemGroupNodeData,
   type SubsystemNodeIssue,
+  type SubsystemProcessRegion,
+  type SubsystemRegionDetails,
   type SubsystemRegionIssue,
   type SubsystemTrail,
 } from './model';
 import { ConstructsCatalog } from './ConstructsCatalog';
+import { ContainersPanel, type ContainerListItem } from './ContainersPanel';
+import { technologyBrand } from './techIcons';
 import type { SubsystemOpenFileOptions } from './sourceSpan';
 import {
   SubsystemAgentsPanel,
@@ -161,6 +169,9 @@ interface PersistedViewState {
   diagnosticsTab?: 'issues' | 'agents';
   /** Flow direction chosen with the canvas toggle, restored on the next visit. */
   layoutDirection?: SubsystemLayoutDirection;
+  /** Whether card frames default to closed, and the frames toggled away from that default. */
+  framesCollapsed?: boolean;
+  toggledFrames?: string[];
 }
 
 const VIEW_STATE_PREFIX = 'principal.subsystems.viewState.';
@@ -190,6 +201,16 @@ function writeViewState(
   } catch {
     // Best-effort: private mode / quota — view state is non-critical.
   }
+}
+
+/**
+ * Whether an edge is one of `set`. A line a collapsed frame rolled up stands in
+ * for each edge it absorbed, so it matches when any of those ids is in the set.
+ */
+function edgeMatches(set: ReadonlySet<string>, e: Edge): boolean {
+  if (set.has(e.id)) return true;
+  const ids = (e.data as { rolledUpIds?: string[] } | undefined)?.rolledUpIds;
+  return ids?.some((id) => set.has(id)) === true;
 }
 
 /** Screen-space rectangle of a component node, relative to the graph canvas box. */
@@ -546,6 +567,23 @@ export interface SubsystemComponentGraphProps {
    * membership are unchanged. See `BoundaryFrameOptions.codeProcessKeys`.
    */
   codeProcessKeys?: ReadonlySet<string>;
+  /**
+   * C4 facts for boundary regions, keyed by region key (the `process` value
+   * or the package purl key): technology, description, container sort. A
+   * process or package frame draws them in its header the way a C4 container
+   * card does — hosts pass what their accepted C4 container states. Regions
+   * not named here derive a technology from their members' `framework`.
+   * See `BoundaryFrameOptions.regionDetails`.
+   */
+  regionDetails?: Readonly<Record<string, SubsystemRegionDetails>>;
+  /**
+   * Whether process / package frames start closed: drawn as a container card
+   * with its members folded away and their lines rolled up onto it, the way a
+   * C4 container view reads. The user opens frames from the card, by
+   * double-click, or from the Containers list; a `persistKey` remembers the
+   * result. Default true; pass `false` to start with every frame laid out.
+   */
+  defaultFramesCollapsed?: boolean;
 }
 
 const nodeTypes: NodeTypes = {
@@ -655,11 +693,12 @@ const TrailDrawerContent = memo(function TrailDrawerContent({
 interface InnerProps extends SubsystemComponentGraphProps {
   measured: { w: number; h: number } | null;
   filesActive: boolean;
+  containersActive: boolean;
   sidebarScope: TrailSidebarScope;
   onSidebarTrailChange: (trailId: string | null) => void;
 }
 
-function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, refocusOnLayoutFlip = true, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, stepEmphasis, onRemoveStepEmphasis, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, onAutoPlayStep, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, interactive = true, canvasBackground = 'theme', onLayoutReady, onNodeRects, sidebarExtra, sidebarAfterDescription, issues, showIssues, filesActive, sidebarScope, onSidebarTrailChange, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
+function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, refocusOnLayoutFlip = true, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, stepEmphasis, onRemoveStepEmphasis, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, onAutoPlayStep, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, interactive = true, canvasBackground = 'theme', onLayoutReady, onNodeRects, sidebarExtra, sidebarAfterDescription, issues, showIssues, filesActive, sidebarScope, onSidebarTrailChange, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, regionDetails, defaultFramesCollapsed = true, containersActive, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
   const { theme } = useTheme();
   const { fitView, fitBounds } = useReactFlow();
   const [descriptionOpen, setDescriptionOpen] = useState(false);
@@ -736,6 +775,38 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   const [layoutTrailId, setLayoutTrailId] = useState<string | null>(null);
   const [committedTrailId, setCommittedTrailId] = useState<string | null>(null);
 
+  // Closed container cards. A frame folds its members away and rolls their
+  // lines up onto the card; opening it again lays the members back out. Each
+  // toggle is a layout flip like a direction change: ELK re-runs behind the
+  // edge fade while the frames slide to their new slots.
+  // Stored as a default plus exceptions so "close all" needs no knowledge of
+  // which frames the layout will produce: `framesCollapsed` is the default
+  // every card frame takes, `toggledGroupIds` the frames flipped away from it.
+  const [framesCollapsed, setFramesCollapsed] = useState<boolean>(
+    () => persisted.framesCollapsed ?? defaultFramesCollapsed,
+  );
+  const [toggledGroupIds, setToggledGroupIds] = useState<ReadonlySet<string>>(
+    () => new Set(persisted.toggledFrames ?? []),
+  );
+  const [committedCollapsed, setCommittedCollapsed] = useState<{
+    framesCollapsed: boolean;
+    toggled: ReadonlySet<string>;
+  }>({ framesCollapsed, toggled: toggledGroupIds });
+  const toggleCollapsed = useCallback((groupId: string) => {
+    setToggledGroupIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  }, []);
+  const setAllFramesCollapsed = useCallback((collapsed: boolean) => {
+    setFramesCollapsed(collapsed);
+    setToggledGroupIds(new Set());
+  }, []);
+  const collapsedKey = `${framesCollapsed ? 'closed' : 'open'}:${Array.from(toggledGroupIds).sort().join(',')}`;
+  const committedCollapsedKey = `${committedCollapsed.framesCollapsed ? 'closed' : 'open'}:${Array.from(committedCollapsed.toggled).sort().join(',')}`;
+
   const changeLayoutDirection = useCallback(
     (next: SubsystemLayoutDirection) => {
       if (next === requestedDirection) return;
@@ -753,8 +824,8 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     }
   }, [trails, layoutTrailId]);
 
-  const requestedLayoutKey = `${requestedDirection}|${layoutTrailId ?? ''}`;
-  const committedLayoutKey = `${committedDirection}|${committedTrailId ?? ''}`;
+  const requestedLayoutKey = `${requestedDirection}|${layoutTrailId ?? ''}|${collapsedKey}`;
+  const committedLayoutKey = `${committedDirection}|${committedTrailId ?? ''}|${committedCollapsedKey}`;
 
   // Beat 1: request → fade the edges out, then commit the direction / focus
   // (which re-runs ELK). Reduced-motion users get the new layout immediately.
@@ -781,6 +852,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     if (reduceMotion) {
       setCommittedDirection(requestedDirection);
       setCommittedTrailId(layoutTrailId);
+      setCommittedCollapsed({ framesCollapsed, toggled: toggledGroupIds });
       return;
     }
     flipSawPendingLayoutRef.current = false;
@@ -789,6 +861,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       flipFadeTimerRef.current = null;
       setCommittedDirection(requestedDirection);
       setCommittedTrailId(layoutTrailId);
+      setCommittedCollapsed({ framesCollapsed, toggled: toggledGroupIds });
     }, LAYOUT_FLIP_EDGE_MS);
     return () => {
       if (flipFadeTimerRef.current != null) {
@@ -802,6 +875,8 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     refocusOnLayoutFlip,
     requestedDirection,
     layoutTrailId,
+    framesCollapsed,
+    toggledGroupIds,
   ]);
 
   // Beat 3: the committed layout has settled → the node slide is over, fade
@@ -843,6 +918,10 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     if (!persistKey) return;
     writeViewState(persistKey, { layoutDirection: requestedDirection });
   }, [persistKey, requestedDirection]);
+  useEffect(() => {
+    if (!persistKey) return;
+    writeViewState(persistKey, { framesCollapsed, toggledFrames: Array.from(toggledGroupIds) });
+  }, [persistKey, framesCollapsed, toggledGroupIds]);
 
   // Safety net: never leave the canvas edge-less if a layout pass stalls
   // (measurement never lands, ELK hangs). The edges come back; the layout
@@ -1119,13 +1198,15 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         components: layoutDoc.components,
         trails: layoutDoc.trails,
         graphifyRelations: layoutRelations,
-      }),
-    [layoutDoc, layoutRelations],
+      }) + `|collapsed:${committedCollapsedKey}`,
+    [layoutDoc, layoutRelations, committedCollapsedKey],
   );
   const layoutDocRef = useRef(layoutDoc);
   const layoutRelationsRef = useRef(layoutRelations);
+  const committedCollapsedRef = useRef(committedCollapsed);
   layoutDocRef.current = layoutDoc;
   layoutRelationsRef.current = layoutRelations;
+  committedCollapsedRef.current = committedCollapsed;
 
   // Track measured dimensions from React Flow's dimension changes.
   // These arrive as { type: 'dimensions', id, dimensions } in onNodesChange.
@@ -1152,6 +1233,9 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       orderByLine,
       layoutDirection: committedDirection,
       codeProcessKeys,
+      regionDetails,
+      collapsedGroupIds: committedCollapsedRef.current.toggled,
+      cardFramesCollapsed: committedCollapsedRef.current.framesCollapsed,
     })
       .then(({ nodes, edges: e, absoluteRects }) => {
         if (!alive) return;
@@ -1201,7 +1285,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     const gen = ++pass2GenRef.current;
     void buildSubsystemGraph(
       layoutDoc,
-      { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights, showSingletonFrames, moduleNesting, graphifyRelations: layoutRelations, orderByLine, layoutDirection: committedDirection, codeProcessKeys },
+      { maxNodeWidth, showEdgeLabels, measuredWidths, measuredHeights, showSingletonFrames, moduleNesting, graphifyRelations: layoutRelations, orderByLine, layoutDirection: committedDirection, codeProcessKeys, regionDetails, collapsedGroupIds: committedCollapsed.toggled, cardFramesCollapsed: committedCollapsed.framesCollapsed },
     )
       .then(({ nodes, edges: e, absoluteRects }) => {
         if (gen !== pass2GenRef.current) return;
@@ -1214,7 +1298,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         // Reveal Pass 1 layout rather than leaving the cover up forever.
         setLayoutReady(true);
       });
-  }, [built.nodes, layoutDoc, layoutRelations, orderByLine, maxNodeWidth, showEdgeLabels, moduleNesting, committedDirection]);
+  }, [built.nodes, layoutDoc, layoutRelations, orderByLine, maxNodeWidth, showEdgeLabels, moduleNesting, committedDirection, committedCollapsed]);
 
   // After Pass 1 commits, try Pass 2 immediately with retained measurements.
   // Same-id live updates often get no new React Flow `dimensions` events, so
@@ -1647,7 +1731,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     if (!edgeIds) return null;
     const ids = new Set<string>();
     for (const e of baseEdges) {
-      if (!edgeIds.has(e.id)) continue;
+      if (!edgeMatches(edgeIds, e)) continue;
       ids.add(e.source);
       ids.add(e.target);
     }
@@ -1725,8 +1809,10 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       // Boundary frames follow their members: hidden when no member is
       // visible, dimmed when members are dimmed. Never selectable.
       if (n.type === 'subsystem-group') {
-        const region = (n.data as { region?: { key?: string; memberAliases?: string[] } } | undefined)?.region;
-        const memberAliases = region?.memberAliases ?? [];
+        const region = (n.data as { region?: SubsystemProcessRegion } | undefined)?.region;
+        // A collapsed card is an edge endpoint in its own right, so its own id
+        // joins its members' when deciding whether the frame is on an open flow.
+        const memberAliases = [n.id, ...(region?.memberAliases ?? [])];
         // `brightNodeIds` is the focused step's endpoints. It has to be a
         // spotlight member as well as a bright set: without an expanded flow
         // there is no opened set, so dimming has to be driven from the
@@ -1755,6 +1841,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
             ...(color != null && { color }),
             ...(dimmed && { dimmed: true }),
             ...(regionIssue && { issue: regionIssue }),
+            ...(region && isCardFrame(region) && { onToggleCollapse: () => toggleCollapsed(n.id) }),
           },
         };
       }
@@ -1795,7 +1882,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         },
       };
     });
-  }, [xyflowNodesBase, openFile, selected, focusNodeIds, openedNodeIds, brightNodeIds, previewNodeIds, issueFocusNodeIds, issueBadgeByAlias, regionIssueByNodeId, boundaryColors]);
+  }, [xyflowNodesBase, openFile, selected, focusNodeIds, openedNodeIds, brightNodeIds, previewNodeIds, issueFocusNodeIds, issueBadgeByAlias, regionIssueByNodeId, boundaryColors, toggleCollapsed]);
 
   const baseNodesKey = useMemo(() => nodes.map((n) => n.id).sort().join(','), [nodes]);
   const baseEdgesKey = useMemo(
@@ -1829,16 +1916,18 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       }
       return isTrailMechanism(mechanism);
     };
+    const inSet = (set: ReadonlySet<string> | null | undefined, e: Edge): boolean =>
+      set != null && edgeMatches(set, e);
     if (openedEdgeIds || focusEdgeIds || previewEdgeIds || issueFocusEdgeIds) {
       return baseEdges.map((e) => {
         const vis = flowElementVisibility({
-          inOpened: openedEdgeIds?.has(e.id) === true,
-          inSelected: focusEdgeIds?.has(e.id) === true,
+          inOpened: inSet(openedEdgeIds, e),
+          inSelected: inSet(focusEdgeIds, e),
           anyOpened: openedEdgeIds != null,
           anySelected: focusEdgeIds != null,
         });
         const dimSource = previewEdgeIds ?? issueFocusEdgeIds;
-        const dimmed = dimSource ? vis.hidden || !dimSource.has(e.id) : vis.dimmed;
+        const dimmed = dimSource ? vis.hidden || !inSet(dimSource, e) : vis.dimmed;
         const hidden = vis.hidden || !edgeInView(e);
         return { ...paint(e, dimmed), hidden };
       });
@@ -1988,8 +2077,14 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       // Boundary frame → frame its members on the canvas; double-click again to
       // zoom back out. User-initiated, so it ignores the trail zoom gate.
       if (node.type === 'subsystem-group') {
-        const key =
-          (node.data as { region?: { key?: string } } | undefined)?.region?.key;
+        const region = (node.data as { region?: SubsystemProcessRegion } | undefined)?.region;
+        // Card frames (process / package) grow and shrink on double-click, the
+        // way a C4 container does; module frames keep the zoom-to-frame.
+        if (region && isCardFrame(region)) {
+          toggleCollapsed(node.id);
+          return;
+        }
+        const key = region?.key;
         if (!key) return;
         if (focusedBoundaryKey === key) {
           setFocusedBoundaryKey(null);
@@ -2083,7 +2178,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       const nodeIds = new Set<string>();
       const points: { x: number; y: number }[] = [];
       for (const e of baseEdges) {
-        if (!ids.has(e.id)) continue;
+        if (!edgeMatches(ids, e)) continue;
         nodeIds.add(e.source);
         nodeIds.add(e.target);
         const pts = (e.data as { elkPathPoints?: { x: number; y: number }[] } | undefined)
@@ -2194,6 +2289,67 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       );
     },
     [rectForNode, fitBounds, trailFocusDurationMs],
+  );
+
+  // The Containers list: every card frame in the laid-out graph, parents before
+  // their children, with the colour the canvas draws it in. Rows keep the
+  // grouping's declaration order — the layout moves closed cards after open
+  // frames, and a row must not jump when its frame is toggled.
+  const containerOrder = useMemo(() => {
+    const ids = buildBoundaryLayoutGroups(
+      { components },
+      { showSingletonFrames, moduleNesting, codeProcessKeys },
+    ).map((g) => g.id);
+    return new Map(ids.map((id, i) => [id, i]));
+  }, [components, showSingletonFrames, moduleNesting, codeProcessKeys]);
+  const containerItems = useMemo((): ContainerListItem[] => {
+    const frames = built.nodes
+      .filter(
+        (n): n is typeof n & { data: SubsystemGroupNodeData } =>
+          n.type === 'subsystem-group' &&
+          isCardFrame((n.data as SubsystemGroupNodeData).region),
+      )
+      .sort(
+        (a, b) =>
+          (containerOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+          (containerOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+      );
+    const byId = new Map(frames.map((n) => [n.id, n]));
+    const children = new Map<string | undefined, typeof frames>();
+    for (const n of frames) {
+      const parent = n.parentId && byId.has(n.parentId) ? n.parentId : undefined;
+      const list = children.get(parent) ?? [];
+      list.push(n);
+      children.set(parent, list);
+    }
+    const out: ContainerListItem[] = [];
+    const walk = (parent: string | undefined, depth: number) => {
+      for (const n of children.get(parent) ?? []) {
+        const region = n.data.region;
+        out.push({
+          id: n.id,
+          region,
+          collapsed: n.data.collapsed === true,
+          depth,
+          color:
+            boundaryColors?.[region.key] ??
+            technologyBrand(region.technology)?.color ??
+            packageColor(region.key),
+        });
+        walk(n.id, depth + 1);
+      }
+    };
+    walk(undefined, 0);
+    return out;
+  }, [built.nodes, boundaryColors, containerOrder]);
+  const focusContainer = useCallback(
+    (id: string) => {
+      const item = containerItems.find((c) => c.id === id);
+      if (!item) return;
+      setFocusedBoundaryKey(item.region.key);
+      requestAnimationFrame(() => fitNodeRects(new Set([id]), 0.25));
+    },
+    [containerItems, fitNodeRects],
   );
 
   // Zoom back out to the full diagram after the last expanded trail
@@ -2780,7 +2936,12 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
           midX: d?.labelX ?? 0,
           midY: d?.labelY ?? 0,
           pathLength: d?.pathLength ?? 0,
-          stepNos: selectedFlowStepNos?.get(e.id),
+          // A rolled-up line numbers every step it absorbed.
+          stepNos: selectedFlowStepNos
+            ? [e.id, ...((d as { rolledUpIds?: string[] } | undefined)?.rolledUpIds ?? [])]
+                .flatMap((id) => selectedFlowStepNos.get(id) ?? [])
+                .sort((a, b) => a - b)
+            : undefined,
           stepIssue,
         };
       });
@@ -2814,9 +2975,9 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   // the same facts the sidebar renders.
   const sidebarVisible =
     !hideSidebar &&
-    (description || filesActive || issuesActive || sidebarExtra || sidebarAfterDescription ||
+    (description || filesActive || containersActive || issuesActive || sidebarExtra || sidebarAfterDescription ||
       hasTrails);
-  const sidebarBodyVisible = hasTrails || filesActive || issuesActive;
+  const sidebarBodyVisible = hasTrails || filesActive || containersActive || issuesActive;
   const sidebarTabs: GraphSidebarTab[] | undefined = issuesActive && !sidebarTrail
     ? agentsPanel
       ? [
@@ -2891,6 +3052,15 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         onExpandedCategoriesChange={handleExpandedCategoriesChange}
       />
     )
+  ) : containersActive ? (
+    <ContainersPanel
+      containers={containerItems}
+      activeId={containerItems.find((c) => c.region.key === focusedBoundaryKey)?.id ?? null}
+      onFocus={focusContainer}
+      onToggle={toggleCollapsed}
+      onOpenAll={() => setAllFramesCollapsed(false)}
+      onCloseAll={() => setAllFramesCollapsed(true)}
+    />
   ) : filesActive ? treePaths.entries.length === 0 ? (
     <div style={{ padding: 16, color: theme.colors.textSecondary }}>No files for this trail.</div>
   ) : (
@@ -3553,6 +3723,17 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
     [props.components, props.trails, props.issues, sidebarTrailId],
   );
   const fileCount = sidebarScope.treePaths.entries.length;
+  // Card frames the layout will draw — the same grouping `buildSubsystemGraph`
+  // runs, so the count matches the canvas.
+  const containerCount = useMemo(
+    () =>
+      buildBoundaryLayoutGroups(
+        { components: props.components },
+        { showSingletonFrames: props.showSingletonFrames ?? true, moduleNesting: props.moduleNesting, codeProcessKeys: props.codeProcessKeys },
+      ).filter((g) => isCardFrame(g.region)).length,
+    [props.components, props.showSingletonFrames, props.moduleNesting, props.codeProcessKeys],
+  );
+  const [containersOpen, setContainersOpen] = useState(false);
   const trailViewLabel = sidebarScope.trail ? 'Trail' : 'Trails';
   const trailCount = props.trails?.length ?? 0;
   const hasFiles = fileCount > 0 || sidebarScope.trail != null;
@@ -3576,9 +3757,11 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
   const issuesRequested = props.showIssues ?? diagnosticsOpen;
   const issuesActive = hasIssues && issuesRequested;
   const filesActive = filesOpen && hasFiles && !issuesActive;
-  const selectSidebarView = (view: 'trails' | 'files' | 'issues') => {
+  const containersActive = containersOpen && containerCount > 0 && !issuesActive && !filesActive;
+  const selectSidebarView = (view: 'trails' | 'files' | 'containers' | 'issues') => {
     const nextIssuesActive = view === 'issues';
     setFilesOpen(view === 'files');
+    setContainersOpen(view === 'containers');
     if (nextIssuesActive !== issuesRequested) {
       if (props.showIssues === undefined) setDiagnosticsOpen(nextIssuesActive);
       props.diagnostic?.onToggle?.();
@@ -3679,12 +3862,26 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
                 borderRadius: 6,
               }}
             >
+              {containerCount > 0 && (
+                <button
+                  type="button"
+                  aria-label={`Containers (${containerCount} ${containerCount === 1 ? 'container' : 'containers'})`}
+                  title="Show containers"
+                  aria-pressed={containersActive}
+                  onClick={() => selectSidebarView('containers')}
+                  style={viewButtonStyle(containersActive)}
+                >
+                  <Boxes size={14} aria-hidden />
+                  <span>Containers</span>
+                  <span style={{ fontWeight: 600, marginLeft: 4 }}>{containerCount}</span>
+                </button>
+              )}
               <button
                 type="button"
                 aria-label={sidebarScope.trail ? 'Trail' : `Trails (${trailCount} ${trailCount === 1 ? 'trail' : 'trails'})`}
-                aria-pressed={!filesActive && !issuesActive}
+                aria-pressed={!filesActive && !containersActive && !issuesActive}
                 onClick={() => selectSidebarView('trails')}
-                style={viewButtonStyle(!filesActive && !issuesActive)}
+                style={viewButtonStyle(!filesActive && !containersActive && !issuesActive)}
               >
                 <Route size={14} aria-hidden />
                 <span>{trailViewLabel}</span>
@@ -3737,7 +3934,7 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
           />
         ) : (
           <ReactFlowProvider>
-            <Inner {...props} showIssues={issuesActive} filesActive={filesActive} measured={size}
+            <Inner {...props} showIssues={issuesActive} filesActive={filesActive} containersActive={containersActive} measured={size}
               sidebarScope={sidebarScope} onSidebarTrailChange={setSidebarTrailId} />
           </ReactFlowProvider>
         )}

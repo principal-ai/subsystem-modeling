@@ -299,7 +299,10 @@ export type {
   SubsystemDeclarationProvenance,
   SubsystemSignatureClaim,
   SubsystemSignatureParameter,
+  SubsystemProcessRegion,
+  SubsystemRegionDetails,
 } from './subsystem/model';
+export { isCardFrame, deriveRegionTechnology, collapseBoundaryGroups } from './subsystem/model';
 // --- C4 projection -----------------------------------------------------
 export { C4Graph } from './subsystem/C4Graph';
 export type { C4GraphProps } from './subsystem/C4Graph';
@@ -325,6 +328,8 @@ export { C4NodeCard, nodeStyle, nodeSubtitle, nodeTag, nodeKindIcon, nodeTopLabe
 export { TechMark, technologyBrand, TECH_BRANDS } from './subsystem/techIcons';
 export type { TechBrand } from './subsystem/techIcons';
 export type { C4NodeCardProps, NodeStyle, NodeShape, C4ShapeKind } from './subsystem/C4NodeCard';
+export { ContainerCardHeader, OPEN_HEADER_PAD, OPEN_SIDE_PAD, OPEN_FOOTER_PAD } from './subsystem/containerCard';
+export type { ContainerCardHeaderProps } from './subsystem/containerCard';
 // --- C4 elements: authored, not derived -------------------------------
 export {
   labelFromPurl,

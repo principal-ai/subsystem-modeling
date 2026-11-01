@@ -25,6 +25,8 @@ import type {
   SubsystemConstructDeclaration,
 } from '@principal-ai/subsystems-core';
 import { purlOwnerName, purlRepoKey } from './paths';
+import { technologyBrand } from './techIcons';
+import { NODE_H, NODE_W, OPEN_HEADER_PAD, OPEN_SIDE_PAD } from './containerCard';
 
 /**
  * Structured declaration shape — the document's own contract, re-exported from
@@ -463,6 +465,68 @@ export interface SubsystemProcessRegion {
    * membership still read the claim as a process region.
    */
   chrome?: 'package';
+  /**
+   * The technology the boundary is built with (Bun, React, Postgres…), for the
+   * frame's technology row — the same slot a C4 container card fills. Host-
+   * supplied through `BoundaryFrameOptions.regionDetails`, or derived from the
+   * members' `framework` when the host says nothing.
+   */
+  technology?: string;
+  /** One-line responsibility, the way C4 asks every container to state one. */
+  description?: string;
+  /**
+   * A process frame's sort — application or data store — which picks the kind
+   * glyph on its header. Defaults to `application`.
+   */
+  containerKind?: 'application' | 'data-store';
+}
+
+/**
+ * Host-supplied C4 facts about a boundary region, keyed by region key in
+ * `BoundaryFrameOptions.regionDetails`. Everything is optional: a host that
+ * accepted a C4 container for a process passes what the container states.
+ */
+export type SubsystemRegionDetails = Pick<
+  SubsystemProcessRegion,
+  'technology' | 'description' | 'containerKind'
+>;
+
+/**
+ * Whether a frame draws as a container *card* — header rows (label, kind glyph,
+ * technology, member count), filled body — rather than as a bare dashed frame
+ * with a path badge. Process and package boundaries are containers in the C4
+ * sense; module and directory frames are code folders and keep the badge.
+ */
+export function isCardFrame(
+  region: Pick<SubsystemProcessRegion, 'kind' | 'chrome'>,
+): boolean {
+  return region.kind === 'process' || region.kind === 'package' || region.chrome === 'package';
+}
+
+/**
+ * The technology a region is built with, read off its members when the host
+ * states none: the most common member `framework` we hold an official mark for.
+ * A region whose members name no known framework stays unstated, so the header
+ * falls back to the kind rather than inventing a technology.
+ */
+export function deriveRegionTechnology(
+  members: readonly Pick<SubsystemComponent, 'framework'>[],
+): string | undefined {
+  const counts = new Map<string, number>();
+  for (const m of members) {
+    const brand = technologyBrand(m.framework);
+    if (!brand) continue;
+    counts.set(brand.name, (counts.get(brand.name) ?? 0) + 1);
+  }
+  let best: string | undefined;
+  let bestCount = 0;
+  for (const [name, count] of counts) {
+    if (count > bestCount) {
+      best = name;
+      bestCount = count;
+    }
+  }
+  return best;
 }
 
 /** Options for which boundary frames are kept. */
@@ -497,8 +561,15 @@ export interface BoundaryFrameOptions {
    * only — region identity and issue targeting are unchanged.
    */
   codeProcessKeys?: ReadonlySet<string>;
+  /**
+   * C4 facts for boundary regions, keyed by region key (the `process` value or
+   * the package purl key): technology, description, container sort. A card
+   * frame draws them in its header the way a C4 container card does. Regions
+   * not named here derive a technology from their members' `framework` and
+   * otherwise state nothing.
+   */
+  regionDetails?: Readonly<Record<string, SubsystemRegionDetails>>;
 }
-
 /** React Flow id for a process boundary group node. */
 export function processGroupNodeId(processKey: string): string {
   return `process:${processKey}`;
@@ -1213,6 +1284,13 @@ export interface SubsystemGroupNodeData extends Record<string, unknown> {
   color?: string;
   /** Boundary diagnostics badge — see `SubsystemRegionIssue`. */
   issue?: SubsystemRegionIssue;
+  /**
+   * Drawn as a closed container card: members folded away, lines rolled up onto
+   * it. Set by the layout when the frame is in `collapsedGroupIds`.
+   */
+  collapsed?: boolean;
+  /** Open or close this frame — the header's grow/shrink affordance. */
+  onToggleCollapse?: () => void;
 }
 
 export type SubsystemGraphNode =
@@ -1234,6 +1312,14 @@ export interface SubsystemGraphEdgeData extends Record<string, unknown> {
   /** True while another edge is selected — render this edge (and its label)
    *  dimmed to focus the selected relationship. */
   dimmed?: boolean;
+  /**
+   * How many edges this line stands for, when a collapsed frame rolled them up
+   * (one line per source/target/mechanism). Absent on an ordinary edge.
+   */
+  rolledUp?: number;
+  /** Ids of the edges a rolled-up line stands for, so trail-step highlighting
+   *  can still light the line when one of them is the focused step. */
+  rolledUpIds?: string[];
   /** ELK-computed label midpoint (from the actual edge path, not node centers). */
   labelX?: number;
   labelY?: number;
@@ -1913,6 +1999,145 @@ export function elkDirectionFor(
 }
 
 /**
+ * Fold the collapsed boundary frames down to cards.
+ *
+ * A collapsed frame stops being an ELK parent and becomes a leaf the size of a
+ * container card (`NODE_W` × `NODE_H`). Its members — and every frame nested
+ * inside it — leave the graph, and the edges that touched them are re-targeted
+ * at the card: one line per (source, target, mechanism), so a frame with a
+ * dozen calls into another reads as one `calls` line rather than a dozen. A
+ * line that starts and ends inside the same collapsed frame folds into nothing.
+ *
+ * Only card frames (process / package) collapse; a module or directory id in
+ * `collapsedIds` is ignored. A frame nested inside a collapsed frame is swallowed
+ * by it, whatever its own state — the outer card is the only thing drawn.
+ *
+ * Pure: hands back new arrays and leaves the inputs alone.
+ */
+export function collapseBoundaryGroups(
+  nodes: readonly SubsystemGraphNode[],
+  edges: readonly SubsystemGraphEdge[],
+  groups: readonly BoundaryLayoutGroup[],
+  collapsedIds: ReadonlySet<string>,
+): {
+  nodes: SubsystemGraphNode[];
+  edges: SubsystemGraphEdge[];
+  groups: BoundaryLayoutGroup[];
+  /** The regions folded to cards, for callers that list every region drawn. */
+  collapsedRegions: SubsystemProcessRegion[];
+} {
+  const byId = new Map(groups.map((g) => [g.id, g]));
+  const childrenOf = new Map<string, BoundaryLayoutGroup[]>();
+  for (const g of groups) {
+    if (!g.parentId) continue;
+    const list = childrenOf.get(g.parentId) ?? [];
+    list.push(g);
+    childrenOf.set(g.parentId, list);
+  }
+  const isInsideCollapsed = (g: BoundaryLayoutGroup): boolean => {
+    let p = g.parentId ? byId.get(g.parentId) : undefined;
+    while (p) {
+      if (collapsedIds.has(p.id) && isCardFrame(p.region)) return true;
+      p = p.parentId ? byId.get(p.parentId) : undefined;
+    }
+    return false;
+  };
+  // The outermost collapsed card frames: the ones actually drawn as cards.
+  const roots = groups.filter(
+    (g) => collapsedIds.has(g.id) && isCardFrame(g.region) && !isInsideCollapsed(g),
+  );
+  if (roots.length === 0) {
+    return { nodes: [...nodes], edges: [...edges], groups: [...groups], collapsedRegions: [] };
+  }
+
+  // alias (or swallowed group id) → the card that now stands for it.
+  const foldedInto = new Map<string, string>();
+  const removedGroupIds = new Set<string>();
+  for (const root of roots) {
+    const stack = [root];
+    while (stack.length > 0) {
+      const g = stack.pop()!;
+      removedGroupIds.add(g.id);
+      foldedInto.set(g.id, root.id);
+      for (const alias of g.memberAliases) foldedInto.set(alias, root.id);
+      for (const child of childrenOf.get(g.id) ?? []) stack.push(child);
+    }
+  }
+
+  const keptGroups: BoundaryLayoutGroup[] = groups
+    .filter((g) => !removedGroupIds.has(g.id))
+    .map((g) => {
+      // A kept frame that held members of a collapsed card now holds the card.
+      const members: string[] = [];
+      const seen = new Set<string>();
+      for (const alias of g.memberAliases) {
+        const id = foldedInto.get(alias) ?? alias;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        members.push(id);
+      }
+      return { ...g, memberAliases: members };
+    });
+
+  const cards: SubsystemGraphNode[] = roots.map((root) => ({
+    id: root.id,
+    type: 'subsystem-group' as const,
+    position: { x: 0, y: 0 },
+    width: NODE_W,
+    height: NODE_H,
+    ...(root.parentId && !removedGroupIds.has(root.parentId) ? { parentId: root.parentId } : {}),
+    data: { region: root.region, collapsed: true },
+    draggable: false,
+  }));
+  const keptNodes = nodes.filter((n) => !foldedInto.has(n.id));
+
+  // Re-target and fold the edges. First occurrence keeps its id when neither
+  // endpoint moved, so an untouched edge stays addressable by its original id
+  // (trail-step highlighting keys off it).
+  const folded = new Map<string, SubsystemGraphEdge>();
+  const out: SubsystemGraphEdge[] = [];
+  for (const e of edges) {
+    const source = foldedInto.get(e.source) ?? e.source;
+    const target = foldedInto.get(e.target) ?? e.target;
+    if (source === target && (foldedInto.has(e.source) || foldedInto.has(e.target))) continue;
+    const moved = source !== e.source || target !== e.target;
+    if (!moved) {
+      out.push(e);
+      continue;
+    }
+    const mechanism = e.data?.mechanism ?? 'uses';
+    const key = `${source}\0${target}\0${mechanism}`;
+    const existing = folded.get(key);
+    if (existing) {
+      const refs = [...(existing.data?.refs ?? []), ...(e.data?.refs ?? [])];
+      const prev = existing.data as SubsystemGraphEdgeData;
+      existing.data = {
+        ...prev,
+        refs: refs.length > 0 ? [...new Set(refs)] : undefined,
+        rolledUp: (prev.rolledUp ?? 1) + 1,
+        rolledUpIds: [...(prev.rolledUpIds ?? []), e.id],
+      };
+      continue;
+    }
+    const rolled: SubsystemGraphEdge = {
+      ...e,
+      id: derivedGraphEdgeId(source, target, mechanism as SubsystemEdgeMechanism),
+      source,
+      target,
+      data: { ...(e.data as SubsystemGraphEdgeData), rolledUp: 1, rolledUpIds: [e.id] },
+    };
+    folded.set(key, rolled);
+    out.push(rolled);
+  }
+
+  return {
+    nodes: [...keptNodes, ...cards],
+    edges: out,
+    groups: keptGroups,
+    collapsedRegions: roots.map((r) => r.region),
+  };
+}
+/**
  * Build the full React Flow graph (nodes + edges) using **ELK auto-layout** to
  * position every node (including external stub targets), so the graph is
  * layered with minimized crossings.
@@ -1943,6 +2168,15 @@ export async function buildSubsystemGraph(
      * @default 'horizontal'
      */
     layoutDirection?: SubsystemLayoutDirection;
+    /**
+     * Boundary group node ids (see `boundaryGroupNodeId`) drawn collapsed — as a
+     * container card with its members folded away and their lines rolled up
+     * onto it. Only card frames (process / package) collapse. With
+     * `cardFramesCollapsed`, the set lists the frames drawn *open* instead.
+     */
+    collapsedGroupIds?: ReadonlySet<string>;
+    /** Start every card frame collapsed; `collapsedGroupIds` then names the exceptions. */
+    cardFramesCollapsed?: boolean;
   } & BoundaryFrameOptions = {},
 ): Promise<{
   nodes: SubsystemGraphNode[];
@@ -1967,6 +2201,9 @@ export async function buildSubsystemGraph(
     orderByLine = false,
     layoutDirection = 'horizontal',
     codeProcessKeys,
+    regionDetails,
+    collapsedGroupIds,
+    cardFramesCollapsed = false,
   } = opts;
   const frameOpts: BoundaryFrameOptions = {
     showSingletonFrames,
@@ -1987,7 +2224,28 @@ export async function buildSubsystemGraph(
       }
     }
   }
-  const regions = layoutGroups.map((g) => g.region);
+  // Card frames carry C4 facts in their header. The host's word wins; a region
+  // it says nothing about reads its technology off its members.
+  {
+    const componentByAlias = new Map(doc.components.map((c) => [c.alias, c]));
+    for (const g of layoutGroups) {
+      if (!isCardFrame(g.region)) continue;
+      const details = regionDetails?.[g.region.key];
+      const technology =
+        details?.technology ??
+        deriveRegionTechnology(
+          g.region.memberAliases
+            .map((alias) => componentByAlias.get(alias))
+            .filter((c): c is SubsystemComponent => c != null),
+        );
+      g.region = {
+        ...g.region,
+        ...(technology != null && { technology }),
+        ...(details?.description != null && { description: details.description }),
+        ...(details?.containerKind != null && { containerKind: details.containerKind }),
+      };
+    }
+  }
   const regionIds = new Set(layoutGroups.map((g) => g.id));
   const byAlias = new Map(doc.components.map((c) => [c.alias, c]));
 
@@ -2061,6 +2319,24 @@ export async function buildSubsystemGraph(
     }
   }
 
+  // Fold the collapsed frames to cards before layout: their members leave the
+  // graph and their lines roll up onto the card, so ELK lays out what is drawn.
+  let collapsedRegions: SubsystemProcessRegion[] = [];
+  const toggled = collapsedGroupIds ?? new Set<string>();
+  const collapsedSet = new Set(
+    layoutGroups
+      .filter((g) => isCardFrame(g.region) && toggled.has(g.id) !== cardFramesCollapsed)
+      .map((g) => g.id),
+  );
+  if (collapsedSet.size > 0) {
+    const folded = collapseBoundaryGroups(nodes, edges, layoutGroups, collapsedSet);
+    nodes.splice(0, nodes.length, ...folded.nodes);
+    edges.splice(0, edges.length, ...folded.edges);
+    layoutGroups.splice(0, layoutGroups.length, ...folded.groups);
+    collapsedRegions = folded.collapsedRegions;
+  }
+  const regions = [...layoutGroups.map((g) => g.region), ...collapsedRegions];
+
   // Same-layer order follows the trails: a component ranks by the first step
   // that mentions it, so a trail reads top-to-bottom (or left-to-right) as it
   // fans out. Components no trail touches follow in declaration order.
@@ -2106,18 +2382,31 @@ export async function buildSubsystemGraph(
         preserveNodePositions: false,
         orderByLine,
         edgeLabels: showEdgeLabels === false ? { enabled: false } : { enabled: true, placement: 'CENTER' },
-        groups: layoutGroups.map((g) => ({
-          id: g.id,
-          memberIds: g.memberAliases,
-          parentId: g.parentId,
-          // Modules collapse a long path to `first/…/last`, so they only need
-          // room for the collapsed badge. Processes/packages never collapse:
-          // size the frame to hold the full centered label plus padding.
-          minWidth:
-            g.region.kind === 'module' || g.region.kind === 'directory'
-              ? moduleMinWidthForBadge(g.region.label)
-              : boundaryMinWidthForBadge(g.region.label),
-        })),
+        groups: layoutGroups.map((g) =>
+          isCardFrame(g.region)
+            ? {
+                id: g.id,
+                memberIds: g.memberAliases,
+                parentId: g.parentId,
+                // A card frame wraps its label to two lines, so it needs no more
+                // width than the container card it is drawn as.
+                minWidth: NODE_W,
+                // Reserve the header rows above the members and the card inset
+                // around them — the same chrome a grown C4 container reserves,
+                // so ELK's fit already clears it.
+                padTop: OPEN_HEADER_PAD,
+                padBottom: OPEN_SIDE_PAD,
+                padX: OPEN_SIDE_PAD,
+              }
+            : {
+                id: g.id,
+                memberIds: g.memberAliases,
+                parentId: g.parentId,
+                // Modules collapse a long path to `first/…/last`, so they only
+                // need room for the collapsed badge.
+                minWidth: moduleMinWidthForBadge(g.region.label),
+              },
+        ),
         // Honour `showSingletonFrames`: a one-member process or module is
         // still a real boundary. `buildBoundaryLayoutGroups` already made
         // those regions claim their members, so keeping them here cannot
@@ -2147,9 +2436,10 @@ export async function buildSubsystemGraph(
         else if (g.region.kind === 'process') processGroupNodes.push(group);
         else moduleGroupNodes.push(group);
       }
-      // Clear leaf parentIds that point at groups ELK dropped.
+      // Clear leaf parentIds that point at groups ELK dropped (components and
+      // collapsed cards alike).
       for (const n of result.nodes as SubsystemGraphNode[]) {
-        if (n.type !== 'subsystem-component') continue;
+        if (n.type !== 'subsystem-component' && !(n.data as SubsystemGroupNodeData).collapsed) continue;
         const parentId = (n as { parentId?: string }).parentId;
         if (parentId && !builtGroupIds.has(parentId)) {
           delete (n as { parentId?: string }).parentId;

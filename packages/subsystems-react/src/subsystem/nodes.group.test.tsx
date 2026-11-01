@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { Window } from 'happy-dom';
-import { cleanup, render } from '@testing-library/react/pure';
+import { cleanup, fireEvent, render } from '@testing-library/react/pure';
+import { ReactFlowProvider } from '@xyflow/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemGroupNode } from './nodes';
 
@@ -32,16 +33,21 @@ const region = {
 };
 
 function renderGroup(data: Record<string, unknown>) {
+  // A collapsed card mounts React Flow handles, which need the flow store.
   return render(
     createElement(
-      ThemeProvider,
-      { theme: defaultEditorTheme },
-      createElement(SubsystemGroupNode as never, {
-        data,
-        width: 200,
-        height: 120,
-        selected: false,
-      } as never),
+      ReactFlowProvider,
+      null,
+      createElement(
+        ThemeProvider,
+        { theme: defaultEditorTheme },
+        createElement(SubsystemGroupNode as never, {
+          data,
+          width: 200,
+          height: 120,
+          selected: false,
+        } as never),
+      ),
     ),
   );
 }
@@ -64,15 +70,16 @@ describe('SubsystemGroupNode frame color', () => {
 });
 
 describe('SubsystemGroupNode chrome', () => {
-  // Runtime chrome asserts "deployment unit": square, solid, tinted. A
-  // process region the host marked `chrome: 'package'` groups code
-  // organisation instead — a library, an area, a proposal — and draws as a
-  // package boundary: rounded, dashed, transparent.
+  // A process or package is a container in the C4 sense, so it draws as a
+  // container card: filled body, header rows. Runtime chrome (a plain process)
+  // is solid with a slight radius; a process the host marked `chrome: 'package'`
+  // groups code organisation — a library, an area, a proposal — and draws as a
+  // package boundary: rounded, dashed.
   test('a plain process region wears runtime chrome', () => {
     const { container } = renderGroup({ region });
     const frame = container.querySelector('div') as HTMLElement;
     expect(frame.style.border).toContain('solid');
-    expect(frame.style.borderRadius).toBe('0px');
+    expect(frame.style.borderRadius).toBe('4px');
     expect(frame.style.background).not.toBe('transparent');
   });
 
@@ -83,18 +90,89 @@ describe('SubsystemGroupNode chrome', () => {
     const frame = container.querySelector('div') as HTMLElement;
     expect(frame.style.border).toContain('dashed');
     expect(frame.style.borderRadius).toBe('12px');
-    expect(frame.style.background).toBe('transparent');
   });
 
   test('chrome does not change the region identity the frame renders', () => {
     const { container } = renderGroup({
       region: { ...region, chrome: 'package' },
     });
-    // The badge still reads the label — kind is chrome's business alone.
+    // The header still reads the label — kind is chrome's business alone.
     expect(container.textContent).toContain('booking-web/server');
+  });
+
+  test('a module region keeps the bare dashed frame and path badge', () => {
+    const { container } = renderGroup({
+      region: {
+        kind: 'module',
+        key: 'src/bun/index.ts',
+        label: 'src/bun/index.ts',
+        memberAliases: ['a', 'b'],
+      },
+    });
+    const frame = container.querySelector('div') as HTMLElement;
+    expect(frame.style.border).toContain('dashed');
+    expect(frame.style.background).toBe('transparent');
+    // The badge may collapse a long path to `first/…/last` at this width.
+    expect(container.textContent).toContain('index.ts');
   });
 });
 
+describe('SubsystemGroupNode card header', () => {
+  // The header is the C4 container card's: label, kind glyph, technology row
+  // with the member count. A frame with no stated technology falls back to its
+  // kind so the row is never blank.
+  test('a process header carries the member count and the application glyph', () => {
+    const { container } = renderGroup({ region });
+    expect(container.textContent).toContain('2');
+    expect(container.querySelector('.lucide-app-window')).not.toBeNull();
+    expect(container.textContent).toContain('application');
+  });
+
+  test('a data-store process wears the database glyph', () => {
+    const { container } = renderGroup({ region: { ...region, containerKind: 'data-store' } });
+    expect(container.querySelector('.lucide-database')).not.toBeNull();
+    expect(container.querySelector('.lucide-app-window')).toBeNull();
+  });
+
+  test('a stated technology fills the technology row and colours the frame', () => {
+    const { container } = renderGroup({ region: { ...region, technology: 'Bun' } });
+    expect(container.textContent).toContain('Bun');
+    const frame = container.querySelector('div') as HTMLElement;
+    // Bun's brand hue, not the key hash.
+    expect(frame.style.border).toContain('#fbf0df');
+    // The official mark rides the row.
+    expect(container.querySelector('[aria-label="Bun"]')).not.toBeNull();
+  });
+
+  test('an unknown technology keeps the hashed frame colour', () => {
+    const { container } = renderGroup({
+      region: { ...region, key: 'booking-web/client', technology: 'COBOL' },
+    });
+    const frame = container.querySelector('div') as HTMLElement;
+    expect(frame.style.border).toContain('#ff6b35');
+    expect(container.textContent).toContain('COBOL');
+  });
+
+  test('an explicit data.color still beats the technology hue', () => {
+    const { container } = renderGroup({ region: { ...region, technology: 'Bun' }, color: '#d9a441' });
+    const frame = container.querySelector('div') as HTMLElement;
+    expect(frame.style.border).toContain('#d9a441');
+  });
+
+  test('a package header falls back to "package" and wears the glyph', () => {
+    const { container } = renderGroup({
+      region: {
+        kind: 'package',
+        key: 'pkg:github/acme/app',
+        label: 'acme/app',
+        memberAliases: ['a', 'b', 'c'],
+      },
+    });
+    expect(container.textContent).toContain('package');
+    expect(container.textContent).toContain('3');
+    expect(container.querySelector('.lucide-package')).not.toBeNull();
+  });
+});
 describe('SubsystemGroupNode package glyph', () => {
   // A frame that renders as a package boundary wears the Package glyph: a
   // real package (purl repo identity) or a process claim the host demoted to
@@ -209,5 +287,36 @@ describe('SubsystemGroupNode boundary badge', () => {
     });
     // The kind has a dedicated frame icon, so the lucide icon carries the class.
     expect(container.querySelector('.lucide-circle-ellipsis')).not.toBeNull();
+  });
+});
+
+describe('SubsystemGroupNode collapse toggle', () => {
+  test('no toggle without a callback', () => {
+    const { container } = renderGroup({ region });
+    expect(container.querySelector('button')).toBeNull();
+  });
+
+  test('open frame offers "Hide members" and fires the toggle', () => {
+    let toggled = 0;
+    const { container } = renderGroup({ region, onToggleCollapse: () => { toggled += 1; } });
+    const btn = container.querySelector('button') as HTMLButtonElement;
+    expect(btn.getAttribute('aria-label')).toBe('Hide members');
+    expect(btn.className).toContain('nodrag');
+    fireEvent.click(btn);
+    expect(toggled).toBe(1);
+  });
+
+  test('collapsed card offers "Show members" and grows handles for its lines', () => {
+    const { container } = renderGroup({ region, collapsed: true, onToggleCollapse: () => {} });
+    const btn = container.querySelector('button') as HTMLButtonElement;
+    expect(btn.getAttribute('aria-label')).toBe('Show members');
+    expect(btn.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelectorAll('.react-flow__handle').length).toBe(2);
+    expect(container.querySelector('.lucide-maximize-2')).not.toBeNull();
+  });
+
+  test('an open card has no handles — its members carry the lines', () => {
+    const { container } = renderGroup({ region });
+    expect(container.querySelectorAll('.react-flow__handle').length).toBe(0);
   });
 });
