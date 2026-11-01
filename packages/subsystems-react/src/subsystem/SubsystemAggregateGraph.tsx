@@ -13,7 +13,7 @@
  * renders in a side panel.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Edge,
   Handle,
@@ -80,6 +80,21 @@ export interface SubsystemAggregateGraphProps {
   title?: string;
   onSelectFrame?: (id: string | null) => void;
   onOpenFile?: (path: string) => void;
+  /**
+   * Fires once per layout pass with how long ELK took and what it laid out.
+   * Diagnostic: lets a host separate layout cost from React render cost.
+   */
+  onLayoutComplete?: (info: AggregateLayoutInfo) => void;
+}
+
+export interface AggregateLayoutInfo {
+  /** Wall time of `computeElkLayout`, in ms. */
+  layoutMs: number;
+  nodes: number;
+  edges: number;
+  groups: number;
+  /** ELK failed and the grid fallback was used. */
+  fallback: boolean;
 }
 
 const NODE_W = 232;
@@ -196,7 +211,7 @@ function AggregateHubNodeView(
 
 function AggregateFrameNodeView(
   props: NodeProps<
-    Node<{ frame: AggregateFrameNode; selected: boolean; dimmed: boolean; nested?: boolean }>
+    Node<{ frame: AggregateFrameNode; selected: boolean; nested?: boolean }>
   >,
 ) {
   const { theme } = useTheme();
@@ -237,8 +252,7 @@ function AggregateFrameNodeView(
           data.selected ? theme.colors.primary : (theme.colors.border ?? '#333')
         }`,
         boxShadow: boundaryStyled ? 'none' : '0 1px 4px rgba(0,0,0,0.25)',
-        opacity: data.dimmed ? 0.35 : 1,
-        transition: 'opacity 120ms ease, border-color 120ms ease',
+        transition: 'border-color 120ms ease',
         cursor: 'pointer',
         fontFamily: theme.fonts.body,
       }}
@@ -293,6 +307,23 @@ function AggregateFrameNodeView(
   );
 }
 
+const AGGREGATE_CLASS = 'subsystem-aggregate-graph';
+
+/**
+ * Focus dimming lives in CSS keyed off a `data-dimmed` attribute that the
+ * canvas toggles on React Flow's node/edge wrappers directly. Hovering one
+ * frame changes the dim state of nearly every other node and edge, so routing
+ * it through React props re-rendered the whole canvas (~200 nodes, ~400 SVG
+ * edges) on each mouse move; attribute toggles cost a fraction of that and
+ * produce no React commit at all.
+ */
+const AGGREGATE_FOCUS_CSS = `
+.${AGGREGATE_CLASS} .react-flow__node { transition: opacity 120ms ease; }
+.${AGGREGATE_CLASS} .react-flow__node[data-dimmed="true"] { opacity: 0.35; }
+.${AGGREGATE_CLASS} .react-flow__edge { opacity: 0.9; }
+.${AGGREGATE_CLASS} .react-flow__edge[data-dimmed="true"] { opacity: 0.12; }
+`;
+
 const nodeTypes = {
   'aggregate-frame': AggregateFrameNodeView,
   'aggregate-frame-group': AggregateFrameGroupView,
@@ -306,6 +337,7 @@ function Inner({
   title,
   onSelectFrame,
   onOpenFile,
+  onLayoutComplete,
 }: SubsystemAggregateGraphProps) {
   const { theme } = useTheme();
   const { fitView } = useReactFlow();
@@ -315,8 +347,10 @@ function Inner({
   const [ready, setReady] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focusedBoundaryId, setFocusedBoundaryId] = useState<string | null>(null);
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [legendOpen, setLegendOpen] = useState(true);
+  const hostRef = useRef<HTMLDivElement>(null);
+  // Hover is deliberately not React state: see AGGREGATE_FOCUS_CSS.
+  const hoveredRef = useRef<string | null>(null);
 
   const layoutKey = useMemo(
     () =>
@@ -373,7 +407,7 @@ function Inner({
         width: NODE_W,
         height: NODE_H,
         ...(f.group ? { parentId: groupIdFor(f.group.kind, f.group.key) } : {}),
-        data: { frame: f, selected: false, dimmed: false },
+        data: { frame: f, selected: false },
       })),
       ...hubs.map((h) => ({
         id: h.id,
@@ -414,11 +448,24 @@ function Inner({
         },
         data: { edge: e },
       }));
+    const layoutStart = performance.now();
+    const report = (fallback: boolean) =>
+      onLayoutComplete?.({
+        layoutMs: performance.now() - layoutStart,
+        nodes: rfNodes.length,
+        edges: rfEdges.length,
+        groups: groups.length,
+        fallback,
+      });
     void computeElkLayout(rfNodes, rfEdges, {
       direction: 'RIGHT',
       // Reposition (never keep the placeholder grid) and lay out compound
       // process frames.
       preserveNodePositions: false,
+      // Frames are fixed-size boxes with no edge labels, so the extra sweeps
+      // buy nothing visible; ELK's default is ~3.5x faster at this scale.
+      thoroughness: 7,
+      edgeLabels: { enabled: false },
       groups,
       // Every process and external boundary is real, including one holding a
       // single frame — a quiet process still has components in it, and
@@ -465,6 +512,7 @@ function Inner({
         setNodes([...shells, ...leaves]);
         setRfEdges(rfEdges);
         setReady(true);
+        report(false);
         requestAnimationFrame(() => fitView({ padding: 0.15 }));
       })
       .catch((err) => {
@@ -473,6 +521,7 @@ function Inner({
         setNodes(rfNodes);
         setRfEdges(rfEdges);
         setReady(true);
+        report(true);
         requestAnimationFrame(() => fitView({ padding: 0.15 }));
       });
     return () => {
@@ -481,36 +530,83 @@ function Inner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layoutKey]);
 
-  // A boundary is a container, not an endpoint: edges reference frame/hub
-  // ids, never the group shell's. Hovering one therefore needs its own rule.
-  // Treating the shell as the focus put *nothing* in its neighbour set, so the
-  // boundary's own contents were the ones that dimmed. Instead: keep every node
-  // lit and dim only the edges that do not touch the boundary.
-  const boundaryMembers = useMemo(() => {
-    const focus = hoveredId ?? selectedId;
-    if (!focus) return null;
-    if (nodes.find((n) => n.id === focus)?.type !== 'aggregate-frame-group') {
-      return null;
-    }
-    const members = new Set<string>();
-    for (const n of nodes) {
-      if ((n as { parentId?: string }).parentId === focus) members.add(n.id);
-    }
-    return members;
-  }, [hoveredId, selectedId, nodes]);
+  // Edge wrappers only expose their id in the DOM; endpoints come from here.
+  const edgeEndsRef = useRef(new Map<string, { source: string; target: string }>());
+  useEffect(() => {
+    edgeEndsRef.current = new Map(rfEdges.map((e) => [e.id, { source: e.source, target: e.target }]));
+  }, [rfEdges]);
 
-  const neighborIds = useMemo(() => {
-    // Boundary hover owns its own dimming (edges only) — no node focus set.
-    if (boundaryMembers) return null;
-    const focus = hoveredId ?? selectedId;
-    if (!focus) return null;
-    const set = new Set<string>([focus]);
-    for (const e of edges) {
-      if (e.from === focus) set.add(e.to);
-      if (e.to === focus) set.add(e.from);
-    }
-    return set;
-  }, [hoveredId, selectedId, edges, boundaryMembers]);
+  /**
+   * Which nodes/edges a focus (hover, else selection) keeps lit.
+   *
+   * A boundary is a container, not an endpoint: edges reference frame/hub
+   * ids, never the group shell's. Hovering one therefore needs its own rule:
+   * keep every node lit and dim only the edges not wholly inside it (treating
+   * the shell as a plain focus put *nothing* in its neighbour set, so the
+   * boundary's own contents were the ones that dimmed). Otherwise dim
+   * everything outside the focused node's neighbourhood.
+   */
+  const applyFocus = useCallback(
+    (focus: string | null) => {
+      const host = hostRef.current;
+      if (!host) return;
+      let nodeDim: ((id: string) => boolean) | null = null;
+      let edgeDim: ((source: string, target: string) => boolean) | null = null;
+      if (focus) {
+        const focusNode = nodes.find((n) => n.id === focus);
+        if (focusNode?.type === 'aggregate-frame-group') {
+          const members = new Set<string>();
+          for (const n of nodes) {
+            if ((n as { parentId?: string }).parentId === focus) members.add(n.id);
+          }
+          edgeDim = (a, b) => !(members.has(a) && members.has(b));
+        } else {
+          const near = new Set<string>([focus]);
+          for (const e of edges) {
+            if (e.from === focus) near.add(e.to);
+            if (e.to === focus) near.add(e.from);
+          }
+          nodeDim = (id) => !near.has(id);
+          edgeDim = (a, b) => !(near.has(a) && near.has(b));
+        }
+      }
+      for (const el of Array.from(host.querySelectorAll<HTMLElement>('.react-flow__node'))) {
+        const id = el.dataset.id ?? '';
+        const dim = nodeDim ? nodeDim(id) : false;
+        if (dim) el.dataset.dimmed = 'true';
+        else delete el.dataset.dimmed;
+      }
+      const ends = edgeEndsRef.current;
+      for (const el of Array.from(host.querySelectorAll<SVGGElement>('.react-flow__edge'))) {
+        const e = ends.get(el.dataset.id ?? '');
+        const dim = e && edgeDim ? edgeDim(e.source, e.target) : false;
+        if (dim) el.dataset.dimmed = 'true';
+        else delete el.dataset.dimmed;
+      }
+    },
+    [nodes, edges],
+  );
+
+  // Re-apply after layout (fresh DOM), after a selection change, and whenever
+  // the data the focus sets are derived from changes.
+  useEffect(() => {
+    applyFocus(hoveredRef.current ?? selectedId);
+  }, [applyFocus, selectedId, rfEdges]);
+
+  const displayNodes = useMemo(
+    () =>
+      nodes.map((n) => ({
+        ...n,
+        data: {
+          ...(n.data as object),
+          selected: selectedId === n.id,
+          // Surviving parentId means ELK built this node's process frame —
+          // the node renders nested, so a process box drops its redundant name.
+          nested: (n as { parentId?: string }).parentId != null,
+        },
+      })),
+    [nodes, selectedId],
+  );
 
   const selected = selectedId ? (frames.find((f) => f.id === selectedId) ?? null) : null;
 
@@ -557,59 +653,31 @@ function Inner({
     [focusedBoundaryId, fitView, nodes],
   );
 
-  const displayNodes = useMemo(
-    () =>
-      nodes.map((n) => ({
-        ...n,
-        data: {
-          ...(n.data as object),
-          selected: selectedId === n.id,
-          // Boundary hover dims everything outside the boundary; otherwise
-          // dim anything outside the focused node's neighbourhood.
-          dimmed: boundaryMembers
-            ? !boundaryMembers.has(n.id)
-            : neighborIds
-              ? !neighborIds.has(n.id)
-              : false,
-          // Surviving parentId means ELK built this node's process frame —
-          // the node renders nested, so a process box drops its redundant name.
-          nested: (n as { parentId?: string }).parentId != null,
-        },
-      })),
-    [nodes, selectedId, neighborIds, boundaryMembers],
-  );
-
-  const displayEdges = useMemo(
-    () =>
-      rfEdges.map((e) => {
-        // Hovering a boundary keeps only the edges wholly inside it lit — a
-        // boundary-crossing edge has an endpoint outside, so it dims with the
-        // rest. Otherwise fall back to the node-focus rule.
-        const dimmed = boundaryMembers
-          ? !(boundaryMembers.has(e.source) && boundaryMembers.has(e.target))
-          : neighborIds != null &&
-            !(neighborIds.has(e.source) && neighborIds.has(e.target));
-        return {
-          ...e,
-          style: { ...(e.style as object), opacity: dimmed ? 0.12 : 0.9 },
-        };
-      }),
-    [rfEdges, neighborIds, boundaryMembers],
-  );
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', background: theme.colors.background }}>
+    <div
+      ref={hostRef}
+      className={AGGREGATE_CLASS}
+      style={{ position: 'relative', width: '100%', height: '100%', background: theme.colors.background }}
+    >
       <GraphLayerStyle />
+      <style>{AGGREGATE_FOCUS_CSS}</style>
       <ReactFlow
         nodes={displayNodes}
-        edges={displayEdges}
+        edges={rfEdges}
         nodeTypes={nodeTypes}
         className={GRAPH_CANVAS_CLASS}
         {...GRAPH_NAV_PROPS}
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
-        onNodeMouseEnter={(_e, node) => setHoveredId(node.id)}
-        onNodeMouseLeave={() => setHoveredId(null)}
+        onNodeMouseEnter={(_e, node) => {
+          hoveredRef.current = node.id;
+          applyFocus(node.id);
+        }}
+        onNodeMouseLeave={() => {
+          hoveredRef.current = null;
+          applyFocus(selectedId);
+        }}
         onPaneClick={() => {
           setSelectedId(null);
           setFocusedBoundaryId(null);

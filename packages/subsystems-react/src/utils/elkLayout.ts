@@ -101,6 +101,18 @@ export interface ElkLayoutOptions {
   direction?: 'RIGHT' | 'LEFT' | 'DOWN' | 'UP';
 
   /**
+   * ELK layered `thoroughness` (1-100): how many crossing-minimization sweeps
+   * the layered algorithm runs. Cost grows roughly linearly with it and it
+   * dominates layout time on large graphs — a 219-node / 415-edge frame graph
+   * lays out in ~240ms at ELK's own default of 7 versus ~840ms at 50. The
+   * default here stays high because the component graph's edge routing was
+   * tuned against it; coarse canvases with fixed-size nodes and no labels
+   * should pass something lower.
+   * @default 50
+   */
+  thoroughness?: number;
+
+  /**
    * Order same-layer nodes by their source line (ascending) instead of leaving
    * it to the crossing-minimizer. Nodes must carry a `data.component.line`
    * (used when set; nodes without one keep ELK's neutral ordering). A
@@ -499,6 +511,7 @@ export function getElkOptions(options: ElkLayoutOptions): LayoutOptions {
     edgeLabels,
     direction = 'RIGHT',
     orderByLine = false,
+    thoroughness = 50,
   } = options;
 
   const baseOptions: LayoutOptions = {
@@ -527,8 +540,9 @@ export function getElkOptions(options: ElkLayoutOptions): LayoutOptions {
     'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
     // Merge edges going same direction for cleaner routing
     'elk.layered.mergeEdges': 'true',
-    // Higher thoroughness = better edge routing (1-100)
-    'elk.layered.thoroughness': '50',
+    // Higher thoroughness = better edge routing (1-100); see the option doc
+    // for the cost trade-off.
+    'elk.layered.thoroughness': String(thoroughness),
   };
 
   // Line order also wants model order respected where positions tie.

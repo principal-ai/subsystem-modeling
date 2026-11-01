@@ -119,6 +119,7 @@ export type {
   AggregateFrameMember,
   AggregateFrameEdge,
   AggregateHub,
+  AggregateLayoutInfo,
 } from './subsystem/SubsystemAggregateGraph';
 export { ConstructsCatalog } from './subsystem/ConstructsCatalog';
 export type { ConstructsCatalogProps } from './subsystem/ConstructsCatalog';
