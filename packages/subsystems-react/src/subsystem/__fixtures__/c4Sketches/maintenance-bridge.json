@@ -1,0 +1,778 @@
+{
+	"id": "c4s-mvobno49-5atptc",
+	"title": "Subsystem maintenance progress bridge",
+	"repoKeys": [
+		"pkg:github/principal-ai/subsystem-modeling",
+		"pkg:github/CopilotKit/openbot"
+	],
+	"model": {
+		"view": "container",
+		"system": {
+			"id": "system:maintenance-progress-bridge",
+			"label": "Subsystem maintenance progress bridge"
+		},
+		"nodes": [
+			{
+				"kind": "container",
+				"id": "container:studio-ui",
+				"label": "Subsystems Studio renderer",
+				"containerKind": "application",
+				"technology": "React + Electrobun",
+				"description": "Maintenance runs view: start, pause, inspect agents, and the intent-only Open in Studio target.",
+				"state": "proposed"
+			},
+			{
+				"kind": "container",
+				"id": "container:studio-host",
+				"label": "Subsystems Studio host",
+				"containerKind": "application",
+				"technology": "Bun + Electrobun",
+				"description": "Maintenance driver, sequence orchestration, status response, run log, saved audit, snapshot composition, and completion sender.",
+				"process": "subsystems-studio/host",
+				"state": "proposed"
+			},
+			{
+				"kind": "container",
+				"id": "container:studio-store",
+				"label": "Studio local store",
+				"containerKind": "data-store",
+				"technology": "JSON on disk",
+				"description": "Subsystem models, maintenance run log, audit reports, proposals, and the durable sender checkpoint.",
+				"state": "proposed"
+			},
+			{
+				"kind": "container",
+				"id": "container:openbot-app",
+				"label": "OpenBot app",
+				"containerKind": "application",
+				"technology": "React 19 + Vite",
+				"description": "The Principal conversation surface: progress card, stacked agent-run cards, audit lanes, and the fixture playground.",
+				"process": "openbot/browser",
+				"state": "proposed"
+			},
+			{
+				"kind": "container",
+				"id": "container:openbot-server",
+				"label": "OpenBot server",
+				"containerKind": "application",
+				"technology": "Bun + Hono",
+				"description": "Governed read adapter, permission-checked card binding, signed trigger ingress, responsibility ingest, shared work queue, governed turn, audit, and delivery.",
+				"process": "openbot/server",
+				"state": "proposed"
+			},
+			{
+				"kind": "container",
+				"id": "container:openbot-postgres",
+				"label": "OpenBot PostgreSQL",
+				"containerKind": "data-store",
+				"technology": "PostgreSQL 17 + pgvector",
+				"description": "Registered responsibilities/triggers, shared work_items leases, channels, and audit rows.",
+				"process": "openbot/postgres",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:studio-driver",
+				"label": "Maintenance driver",
+				"container": "container:studio-host",
+				"technology": "Bun",
+				"description": "Background maintenance driver that starts and sequences a maintenance run.",
+				"members": [
+					"studio-driver"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:studio-sequence",
+				"label": "Sequence orchestration",
+				"container": "container:studio-host",
+				"technology": "Bun",
+				"description": "Stage routing, agent runs, completion outcome, and run-scoped lifecycle.",
+				"members": [
+					"studio-sequence"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:studio-status",
+				"label": "Status response",
+				"container": "container:studio-host",
+				"technology": "Hono HTTP",
+				"description": "The existing Studio status endpoint; the authoritative snapshot is an extension, not a parallel transport.",
+				"members": [
+					"studio-status"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:studio-run-event",
+				"label": "Run lifecycle events",
+				"container": "container:studio-host",
+				"technology": "Bun",
+				"description": "Run started, agent ended, parent ended, and outcome transitions.",
+				"members": [
+					"studio-run-event"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:studio-snapshot",
+				"label": "Authoritative snapshot",
+				"container": "container:studio-host",
+				"technology": "Bun",
+				"description": "Whole-run identity, ordered stages, per-agent counts, revision/observation time, and the independent saved audit.",
+				"members": [
+					"sequence-snapshot"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:studio-sender",
+				"label": "Signed completion sender",
+				"container": "container:studio-host",
+				"technology": "Bun + HTTP",
+				"description": "Posts a stable signed sequence transition to the registered OpenBot webhook, never from the payload's authority.",
+				"members": [
+					"studio-outcome-event",
+					"studio-emitter"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:studio-webhook-retry",
+				"label": "Delivery retry checkpoint",
+				"container": "container:studio-host",
+				"technology": "Bun + durable state",
+				"description": "Bounded durable retry for the sender; stable delivery identity across retries.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:studio-run-log",
+				"label": "Agent-run log",
+				"container": "container:studio-host",
+				"technology": "Bun",
+				"description": "Per-run persistence: run/session identity, agent, layer, timestamps, status, and per-agent proposal attribution.",
+				"members": [
+					"studio-run-log"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:studio-audit",
+				"label": "Saved audit",
+				"container": "container:studio-host",
+				"technology": "Bun",
+				"description": "Independent audit result, freshness, and the four lane statuses. Never inferred from stage completion.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:studio-model-store",
+				"label": "Subsystem models",
+				"container": "container:studio-store",
+				"technology": "JSON on disk",
+				"description": "The model document and its title.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:studio-run-store",
+				"label": "Run + audit store",
+				"container": "container:studio-store",
+				"technology": "JSON on disk",
+				"description": "Durable maintenance run log and audit reports, recoverable across restarts.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:studio-maintenance-view",
+				"label": "Maintenance view",
+				"container": "container:studio-ui",
+				"technology": "React",
+				"description": "Starts and watches a maintenance run; the source of the Open in Studio intent.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:conversation",
+				"label": "Principal conversation",
+				"container": "container:openbot-app",
+				"technology": "React + WebSocket",
+				"description": "The configured conversation surface where the card is bound and the completed summary lands.",
+				"members": [
+					"principal-channel",
+					"channel-events-client"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:progress-card",
+				"label": "Maintenance progress card",
+				"container": "container:openbot-app",
+				"technology": "React",
+				"description": "Pure presenter: heading, run state, four audit lanes, and terminal outcome.",
+				"members": [
+					"progress-card"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:agent-runs",
+				"label": "Agent-run cards",
+				"container": "container:openbot-app",
+				"technology": "React",
+				"description": "Chronological cards, oldest first, keyed by runId; per-card proposal counts and UTC times.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:audit-lanes",
+				"label": "Audit-lane presenter",
+				"container": "container:openbot-app",
+				"technology": "React",
+				"description": "Construct, static topology, dynamic topology, and trail icons; missing lane data is distinct from not verified.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:playground",
+				"label": "Fixture playground",
+				"container": "container:openbot-app",
+				"technology": "React",
+				"description": "Development-only fixture preview. No Studio requests, model polling, webhooks, or real actions.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:openbot-adapter",
+				"label": "Studio read adapter",
+				"container": "container:openbot-server",
+				"technology": "Bun + HTTP",
+				"description": "Reads the richer Studio status response, validates it, and preserves revision, unknown counts, and freshness.",
+				"members": [
+					"status-reader"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:openbot-binding",
+				"label": "Card binding",
+				"container": "container:openbot-server",
+				"technology": "Bun + permissions",
+				"description": "Binds the card into the Principal conversation with trusted owner/Bot/channel context and permission-checked reads.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:openbot-trigger",
+				"label": "Trigger ingress",
+				"container": "container:openbot-server",
+				"technology": "Hono + signed webhook",
+				"description": "Authenticated registered trigger. Resolves target from trusted registration, never from the payload.",
+				"members": [
+					"responsibility-ingress",
+					"trigger-delivery"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:openbot-responsibility",
+				"label": "Responsibility ingest",
+				"container": "container:openbot-server",
+				"technology": "Bun + PostgreSQL",
+				"description": "Registered responsibility store, filters, and wiring into the shared queue.",
+				"members": [
+					"responsibility-store",
+					"responsibility-engine",
+					"followup-delivery"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:openbot-work-queue",
+				"label": "Shared work queue",
+				"container": "container:openbot-server",
+				"technology": "PostgreSQL skip locked",
+				"description": "Leased work_items shared with routines and handoffs; the queue decides which replica runs the turn.",
+				"members": [
+					"work-queue",
+					"headless-runner",
+					"origin-context",
+					"channel-events"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:openbot-governed-turn",
+				"label": "Governed turn",
+				"container": "container:openbot-server",
+				"technology": "CopilotKit runtime",
+				"description": "An ordinary, recorded Principal turn with existing admission, grants, pause behavior, and thread locking.",
+				"members": [
+					"headless-runner"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:openbot-audit",
+				"label": "Audit rows",
+				"container": "container:openbot-server",
+				"technology": "PostgreSQL",
+				"description": "Every permitted, refused, and failed action, including delivery and turn decisions.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:openbot-delivery",
+				"label": "Configured delivery",
+				"container": "container:openbot-server",
+				"technology": "OpenBot delivery",
+				"description": "Posts the reporting-only summary to the configured conversation/channel. No new notification framework.",
+				"members": [
+					"followup-delivery"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:openbot-work-items",
+				"label": "work_items",
+				"container": "container:openbot-postgres",
+				"technology": "PostgreSQL",
+				"description": "Leased queue rows and attempt history for routine, responsibility, and handoff work.",
+				"members": [
+					"followup-queue"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:openbot-responsibility-store",
+				"label": "Registered triggers",
+				"container": "container:openbot-postgres",
+				"technology": "PostgreSQL",
+				"description": "The deployment-approved responsibility/trigger registration and its model/outcome filters.",
+				"state": "proposed"
+			},
+			{
+				"kind": "external-system",
+				"id": "external:principal-bot",
+				"label": "Principal Bot",
+				"technology": "OpenBot Bot profile",
+				"description": "The Bot identity that posts the governed follow-up turn.",
+				"members": [
+					"principal-bot"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "external-system",
+				"id": "external:principal-channel",
+				"label": "Configured Principal conversation",
+				"technology": "OpenBot channel / Slack / Teams",
+				"description": "The trusted conversation target. Owner, Bot, channel, thread, and filters come from registration.",
+				"members": [
+					"principal-channel"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "external-system",
+				"id": "external:intelligence",
+				"label": "CopilotKit Intelligence",
+				"technology": "Managed API + WebSocket",
+				"description": "Durable thread history and memory for the governed turn.",
+				"state": "proposed"
+			},
+			{
+				"kind": "external-system",
+				"id": "external:model-provider",
+				"label": "Model provider",
+				"technology": "OpenAI / Anthropic / Google API",
+				"description": "The deployment-supplied model credential used by the ordinary governed turn.",
+				"state": "proposed"
+			},
+			{
+				"kind": "person",
+				"id": "person:maintainer",
+				"label": "Maintainer",
+				"description": "Starts a Studio maintenance run and reads the progress card in the Principal conversation.",
+				"state": "proposed"
+			},
+			{
+				"kind": "person",
+				"id": "person:admin",
+				"label": "Deployment administrator",
+				"description": "Approves the webhook/responsibility registration and the configured target. This feature adds no grants or acceptance authority.",
+				"state": "proposed"
+			}
+		],
+		"edges": [
+			{
+				"id": "e:maintainer-studio-ui",
+				"source": "person:maintainer",
+				"target": "container:studio-ui",
+				"label": "starts",
+				"protocol": "Studio RPC",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:maintainer-openbot-app",
+				"source": "person:maintainer",
+				"target": "container:openbot-app",
+				"label": "reads",
+				"protocol": "Principal conversation",
+				"mechanisms": [
+					"reads"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:studio-ui-host",
+				"source": "container:studio-ui",
+				"target": "container:studio-host",
+				"label": "RPC",
+				"protocol": "Electrobun RPC",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:studio-host-store",
+				"source": "container:studio-host",
+				"target": "container:studio-store",
+				"label": "files",
+				"protocol": "JSON files",
+				"mechanisms": [
+					"reads",
+					"writes"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:openbot-app-server",
+				"source": "container:openbot-app",
+				"target": "container:openbot-server",
+				"label": "HTTPS",
+				"protocol": "HTTPS · card read + conversation",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:openbot-server-studio",
+				"source": "container:openbot-server",
+				"target": "container:studio-host",
+				"label": "status",
+				"protocol": "HTTPS · GET maintenance status snapshot",
+				"mechanisms": [
+					"reads"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:openbot-app-studio-open",
+				"source": "container:openbot-app",
+				"target": "container:studio-ui",
+				"label": "Open in Studio",
+				"protocol": "intent-only callback · future authorized host",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:studio-host-openbot-webhook",
+				"source": "container:studio-host",
+				"target": "container:openbot-server",
+				"label": "signed webhook",
+				"protocol": "HTTPS · registered trigger",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:openbot-server-postgres",
+				"source": "container:openbot-server",
+				"target": "container:openbot-postgres",
+				"label": "SQL",
+				"protocol": "PostgreSQL wire",
+				"mechanisms": [
+					"reads",
+					"writes"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:openbot-server-intelligence",
+				"source": "container:openbot-server",
+				"target": "external:intelligence",
+				"label": "thread",
+				"protocol": "Intelligence API + realtime gateway",
+				"mechanisms": [
+					"reads",
+					"writes"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:openbot-server-model",
+				"source": "container:openbot-server",
+				"target": "external:model-provider",
+				"label": "LLM API",
+				"protocol": "HTTPS · provider API",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:openbot-server-channel",
+				"source": "container:openbot-server",
+				"target": "external:principal-channel",
+				"label": "delivery",
+				"protocol": "OpenBot delivery · configured channel",
+				"mechanisms": [
+					"writes"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:openbot-server-bot",
+				"source": "container:openbot-server",
+				"target": "external:principal-bot",
+				"label": "acts as",
+				"protocol": "Bot profile and grants",
+				"mechanisms": [
+					"reads"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:admin-openbot-server",
+				"source": "person:admin",
+				"target": "container:openbot-server",
+				"label": "registers",
+				"protocol": "Deployment approval",
+				"mechanisms": [
+					"writes"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:studio-driver-sequence",
+				"source": "component:studio-driver",
+				"target": "component:studio-sequence",
+				"label": "runs",
+				"protocol": "in-process",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:studio-sequence-run-log",
+				"source": "component:studio-sequence",
+				"target": "component:studio-run-log",
+				"label": "writes",
+				"protocol": "in-process",
+				"mechanisms": [
+					"writes"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:studio-status-snapshot",
+				"source": "component:studio-status",
+				"target": "component:studio-snapshot",
+				"label": "reads",
+				"protocol": "in-process",
+				"mechanisms": [
+					"reads"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:studio-snapshot-run-log",
+				"source": "component:studio-snapshot",
+				"target": "component:studio-run-log",
+				"label": "stages",
+				"protocol": "in-process",
+				"mechanisms": [
+					"reads"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:studio-snapshot-audit",
+				"source": "component:studio-snapshot",
+				"target": "component:studio-audit",
+				"label": "lanes",
+				"protocol": "in-process",
+				"mechanisms": [
+					"reads"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:studio-sender-run-log",
+				"source": "component:studio-sender",
+				"target": "component:studio-run-log",
+				"label": "outcome",
+				"protocol": "in-process",
+				"mechanisms": [
+					"reads"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:studio-sender-retry",
+				"source": "component:studio-sender",
+				"target": "component:studio-webhook-retry",
+				"label": "retries",
+				"protocol": "in-process",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:adapter-binding",
+				"source": "component:openbot-adapter",
+				"target": "component:openbot-binding",
+				"label": "binds",
+				"protocol": "in-process",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:binding-card",
+				"source": "component:openbot-binding",
+				"target": "component:progress-card",
+				"label": "renders",
+				"protocol": "trusted context",
+				"mechanisms": [
+					"writes"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:conversation-card",
+				"source": "component:conversation",
+				"target": "component:progress-card",
+				"label": "shows",
+				"protocol": "conversation",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:card-agent-runs",
+				"source": "component:progress-card",
+				"target": "component:agent-runs",
+				"label": "stacks",
+				"protocol": "in-process",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:card-audit-lanes",
+				"source": "component:progress-card",
+				"target": "component:audit-lanes",
+				"label": "lanes",
+				"protocol": "in-process",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:trigger-responsibility",
+				"source": "component:openbot-trigger",
+				"target": "component:openbot-responsibility",
+				"label": "ingest",
+				"protocol": "in-process",
+				"mechanisms": [
+					"writes"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:responsibility-queue",
+				"source": "component:openbot-responsibility",
+				"target": "component:openbot-work-queue",
+				"label": "enqueue",
+				"protocol": "PostgreSQL",
+				"mechanisms": [
+					"writes"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:queue-turn",
+				"source": "component:openbot-work-queue",
+				"target": "component:openbot-governed-turn",
+				"label": "claims",
+				"protocol": "work_items lease",
+				"mechanisms": [
+					"reads",
+					"writes"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:turn-audit",
+				"source": "component:openbot-governed-turn",
+				"target": "component:openbot-audit",
+				"label": "records",
+				"protocol": "PostgreSQL",
+				"mechanisms": [
+					"writes"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:turn-delivery",
+				"source": "component:openbot-governed-turn",
+				"target": "component:openbot-delivery",
+				"label": "delivers",
+				"protocol": "in-process",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			}
+		]
+	},
+	"author": "opencode",
+	"notes": "Top-down C4 sketch for topic topic-1792962278647-rghcszfxe: Studio → OpenBot maintenance progress card and signed completion delivery. The linked model is the existing reuse-first bridge proposal, not live integration evidence.",
+	"createdAt": "2026-10-25T21:10:30.873Z",
+	"updatedAt": "2026-10-25T21:10:30.873Z",
+	"description": "A Studio → OpenBot bridge hypothesis: maintenance progress cards in the renderer, signed completion delivery from the host, and both sides’ stores and services."
+}

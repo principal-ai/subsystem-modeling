@@ -23,7 +23,7 @@ import type { SubsystemComponent, SubsystemGraphNode } from '../../../subsystem/
  * accessor shows the accessor's name instead of the state's.
  */
 const meta = {
-  title: 'Canvases/Subsystem/StoreValueType',
+  title: 'Canvases/Subsystem/UI Isolation/StoreValueType',
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],
   decorators: [

@@ -6,7 +6,7 @@ import type { SubsystemComponent } from '../../../subsystem/model';
 import { graphSpecFromSteps } from './fixtures';
 
 const meta = {
-  title: 'Canvases/Subsystem/Modules',
+  title: 'Canvases/Subsystem/Views/Modules',
   component: SubsystemComponentGraph,
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],

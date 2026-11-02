@@ -12,7 +12,7 @@ import resolveSource from '../../../graphify/resolve.ts?raw';
 import { readerDetail } from './fixtures';
 
 const meta = {
-  title: 'Canvases/Subsystem/DetailPanel',
+  title: 'Canvases/Subsystem/Views/DetailPanel',
   component: SubsystemComponentGraph,
   parameters: {
     layout: 'fullscreen',

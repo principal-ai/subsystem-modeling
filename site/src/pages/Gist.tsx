@@ -96,6 +96,7 @@ export function Gist() {
                 trails={state.document.trails}
                 title={state.document.title}
                 description={state.document.description}
+                notes={state.document.notes}
                 showEdgeLabels
                 {...(githubRenderers ?? {})}
               />

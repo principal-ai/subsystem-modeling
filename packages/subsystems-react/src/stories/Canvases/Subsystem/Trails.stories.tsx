@@ -8,7 +8,7 @@ import { PierreTrailCodeView } from '../../../pierre';
 import type { TrailViewerContext } from '../../../subsystem/SubsystemComponentGraph';
 
 const meta = {
-  title: 'Canvases/Subsystem/Trails',
+  title: 'Canvases/Subsystem/Views/Trails',
   component: SubsystemComponentGraph,
   parameters: {
     layout: 'fullscreen',
@@ -194,7 +194,8 @@ function TrailsDemo() {
         components={drawingComponents}
         trails={drawingTrails}
         title="drawing-files flow"
-        description="Three trails over one graph — opening, saving, and deleting a drawing. The sidebar's **Trails** panel lists each step by **symbol**; clicking a step focuses that step and scrolls the bottom CodeView to that snippet."
+        description="Three trails over one graph — opening, saving, and deleting a drawing."
+        notes="The sidebar's **Trails** panel lists each step by **symbol**; clicking a step focuses that step and scrolls the bottom CodeView to that snippet."
         renderTrailViewer={renderTrailViewer}
         renderFileViewer={(file, opts) => (
           <div
@@ -411,7 +412,8 @@ function ClickableConstructsDemo() {
           trails={clickableTrails}
           initialTrailId="tl-load"
           title="clickable constructs"
-          description="A trail step's line is an edge to a construct. Tokens that name the step's `from`/`to` components are clickable and open that construct's declaration line in the file drawer — including a **method** endpoint (click `list` to jump to `DrawingStore.list`)."
+          description="A trail step's line is an edge to a construct."
+          notes="Tokens that name the step's `from`/`to` components are clickable and open that construct's declaration line in the file drawer — including a **method** endpoint (click `list` to jump to `DrawingStore.list`)."
           renderTrailViewer={renderTrailViewer}
           onFileSelect={setOpened}
           renderFileViewer={(file, opts) => (

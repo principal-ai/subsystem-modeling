@@ -3,10 +3,25 @@ import { useTheme } from '@principal-ade/industry-theme';
 import { X } from 'lucide-react';
 import { IndustryMarkdownSlide } from 'themed-markdown';
 
-export function DescriptionOverlay({ description, onClose }: {
+export interface DescriptionOverlayProps {
+  /** Full Markdown shown in the dialog. */
   description: string;
   onClose: () => void;
-}) {
+  /** Dialog heading. Defaults to `Overview`. */
+  title?: string;
+  /** Accessible name for the dialog. */
+  ariaLabel?: string;
+  /** Prefix for the Markdown slide ids (keeps duplicate headings unique). */
+  slideIdPrefix?: string;
+}
+
+export function DescriptionOverlay({
+  description,
+  onClose,
+  title = 'Overview',
+  ariaLabel = 'Description',
+  slideIdPrefix = 'description-desc-overlay',
+}: DescriptionOverlayProps) {
   const { theme } = useTheme();
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -21,7 +36,7 @@ export function DescriptionOverlay({ description, onClose }: {
   return (
     <div
       role="dialog"
-      aria-label="Subsystem description"
+      aria-label={ariaLabel}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.stopPropagation();
@@ -54,7 +69,7 @@ export function DescriptionOverlay({ description, onClose }: {
           textTransform: 'uppercase',
           color: theme.colors.textSecondary,
         }}>
-          Overview
+          {title}
         </h3>
         <button
           ref={closeRef}
@@ -82,7 +97,7 @@ export function DescriptionOverlay({ description, onClose }: {
         <div style={{ lineHeight: 1.7 }}>
           <IndustryMarkdownSlide
             content={description}
-            slideIdPrefix="subsystem-desc-overlay"
+            slideIdPrefix={slideIdPrefix}
             slideIndex={0}
             isVisible
             theme={theme}

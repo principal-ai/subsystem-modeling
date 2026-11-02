@@ -488,7 +488,10 @@ export interface AutoRePinOutcome {
 export interface StoredSubsystemModel {
 	id: string;
 	title: string;
+	/** Short sidebar blurb, capped by the host at 200 characters. */
 	description?: string;
+	/** Extended Markdown notes, opened from the description's `Show more`. */
+	notes?: string;
 	components: SubsystemComponent[];
 	/** Ordered runtime trails (one per flow). */
 	trails?: SubsystemTrail[];
@@ -568,7 +571,10 @@ export interface SubsystemModelFileRef {
 export interface SubsystemModelSummary {
 	id: string;
 	title: string;
+	/** Short sidebar blurb, capped by the host at 200 characters. */
 	description?: string;
+	/** Extended Markdown notes, opened from the description's `Show more`. */
+	notes?: string;
 	componentCount: number;
 	edgeCount: number;
 	createdAt: string;
@@ -2194,6 +2200,7 @@ export type StudioRequests = {
 			patch: {
 				title?: string;
 				description?: string;
+				notes?: string;
 				trails?: SubsystemTrail[];
 			};
 		};

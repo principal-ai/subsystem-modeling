@@ -8,6 +8,9 @@
 
 import type { C4Model } from './c4';
 
+/** Maximum length of an authored sketch description (short sidebar blurb). */
+export const C4_SKETCH_DESCRIPTION_MAX = 200;
+
 /**
  * A C4 sketch — an authored, unverified architecture hypothesis.
  *
@@ -22,9 +25,19 @@ export interface C4Sketch {
   title: string;
   /** Repos the sketch claims to describe; can be empty for greenfield. */
   repoKeys: string[];
+  /**
+   * Short description shown at the top of the sidebar. At most
+   * {@link C4_SKETCH_DESCRIPTION_MAX} characters; hosts reject longer values.
+   */
+  description?: string;
   /** Authored nodes + edges. */
   model: C4Model;
   author?: string;
+  /**
+   * Extended Markdown notes about the sketch. The sidebar shows the short
+   * `description` (or a clamped preview of these notes when it is absent);
+   * `More` opens the full document in an Overview overlay.
+   */
   notes?: string;
   createdAt: string;
   updatedAt: string;

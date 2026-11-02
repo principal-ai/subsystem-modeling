@@ -72,6 +72,7 @@ export function RemoteSubsystemGraph({ model, onRefresh }: { model: RemoteModel;
 					trails={model.document.trails}
 					title={model.document.title}
 					description={model.document.description}
+					notes={model.document.notes}
 					persistKey={`remote:${model.source.id}:${model.key}`}
 					renderFileViewer={renderFileViewer}
 					renderTrailViewer={renderTrailViewer}

@@ -736,6 +736,7 @@ export function SubsystemModelView({
 					</button>
 				}
 				description={graph.description}
+				notes={graph.notes}
 				renderFileViewer={renderFileViewer}
 				renderTrailViewer={renderTrailViewer}
 				onInspectSymbol={onInspectSymbol}

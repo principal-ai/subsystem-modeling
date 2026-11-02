@@ -129,6 +129,37 @@ describe("subsystemModelFilePath", () => {
 	});
 });
 
+describe("description / notes", () => {
+	test("trims and keeps a short description plus extended notes", async () => {
+		const created = await createSubsystemModel({
+			title: "notes",
+			description: "  Short blurb.  ",
+			notes: "## Overview\n\nLonger context.",
+			components: [],
+		});
+		expect(created.description).toBe("Short blurb.");
+		expect(created.notes).toBe("## Overview\n\nLonger context.");
+	});
+
+	test("caps an overlong description and clears either field with a blank patch", async () => {
+		const created = await createSubsystemModel({
+			title: "notes-cap",
+			description: "x".repeat(201),
+			notes: "body",
+			components: [],
+		});
+		expect(created.description).toHaveLength(200);
+		expect(created.description?.endsWith("…")).toBe(true);
+
+		const updated = await updateSubsystemModel(created.id, {
+			description: "  ",
+			notes: "",
+		});
+		expect(updated?.description).toBeUndefined();
+		expect(updated?.notes).toBeUndefined();
+	});
+});
+
 describe("resolveRepoRootForComponent", () => {
 	test("resolves a component purl to its Alexandria checkout", () => {
 		expect(resolveRepoRootForComponent("pkg:github/a/repo-a#src/x.ts")).toBe(repoA);

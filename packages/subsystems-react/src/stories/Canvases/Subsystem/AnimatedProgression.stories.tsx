@@ -14,7 +14,7 @@ import type { SubsystemComponent, SubsystemTrail } from '../../../subsystem/mode
  */
 
 const meta = {
-  title: 'Canvases/Subsystem/Animated progression',
+  title: 'Canvases/Subsystem/Graphs/Animated progression',
   component: SubsystemComponentGraph,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof SubsystemComponentGraph>;

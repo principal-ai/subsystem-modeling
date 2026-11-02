@@ -24,7 +24,7 @@ globals.matchMedia = dom.matchMedia.bind(dom);
 
 afterEach(cleanup);
 
-function renderGraph(description: string | undefined) {
+function renderGraph(description: string | undefined, notes?: string) {
   return render(createElement(
     ThemeProvider,
     { theme: defaultEditorTheme },
@@ -39,38 +39,48 @@ function renderGraph(description: string | undefined) {
         steps: [{ from: 'entry', to: 'store', mechanism: 'calls' }],
       }],
       description,
+      notes,
     }),
   ));
 }
 
 describe('subsystem description overlay', () => {
   for (const closeWithEscape of [false, true]) {
-    test(`More opens the full markdown over the graph and closes with ${closeWithEscape ? 'Escape' : 'the close button'}`, () => {
-      const description = `${'A long description. '.repeat(50)}\n\n**Final detail**`;
-      const view = renderGraph(description);
+    test(`More opens the full notes over the graph and closes with ${closeWithEscape ? 'Escape' : 'the close button'}`, () => {
+      const notes = `${'A long note. '.repeat(50)}\n\n**Final detail**`;
+      const view = renderGraph('Short description.', notes);
       const more = view.getByRole('button', { name: 'Read full description' });
       more.focus();
       fireEvent.click(more);
-      const overlay = view.getByRole('dialog', { name: 'Subsystem description' });
-      expect(overlay.textContent).toContain('A long description. '.repeat(50).trim());
+      const overlay = view.getByRole('dialog', { name: 'Subsystem notes' });
+      expect(overlay.textContent).toContain('A long note. '.repeat(50).trim());
       expect(overlay.querySelector('strong')?.textContent).toBe('Final detail');
+      expect(overlay.textContent).not.toContain('Short description.');
       expect(overlay.style.position).toBe('absolute');
       expect(overlay.parentElement?.contains(view.getByLabelText('Resize sidebar'))).toBe(false);
       expect(more.getAttribute('aria-expanded')).toBe('true');
+      expect(more.textContent).toBe('Close');
       const close = view.getByRole('button', { name: 'Close description' });
       expect(document.activeElement).toBe(close);
       if (closeWithEscape) fireEvent.keyDown(close, { key: 'Escape' });
       else fireEvent.click(close);
       expect(view.queryByRole('dialog')).toBeNull();
       expect(more.getAttribute('aria-expanded')).toBe('false');
+      expect(more.textContent).toBe('Show more');
       expect(document.activeElement).toBe(more);
       expect(view.getByText('Request flow')).toBeTruthy();
     });
   }
 
-  test('does not offer More when there is no description', () => {
-    const view = renderGraph(undefined);
+  test('does not offer More when there are no notes', () => {
+    const view = renderGraph('Short description only.');
     expect(view.queryByRole('button', { name: 'Read full description' })).toBeNull();
+    expect(view.queryByRole('dialog')).toBeNull();
+  });
+
+  test('falls back to a clamped notes preview when there is no description', () => {
+    const view = renderGraph(undefined, `${'A long note. '.repeat(50)}\n\n**Final detail**`);
+    expect(view.getByRole('button', { name: 'Read full description' })).toBeTruthy();
     expect(view.queryByRole('dialog')).toBeNull();
   });
 });

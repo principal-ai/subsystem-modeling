@@ -413,7 +413,8 @@ function CatalogDemo({
         <ConstructsCatalog
           components={comps}
           title="Notes intake — constructs"
-          description="Nothing is selected, so every construct is listed and searchable; pick a file on the left to narrow. Every file stacks under one combined header (path + a description toggle for the whole stack), each declaration labeling the line that holds the construct in a file-like gutter; external constructs get a header naming their kind with the body naming the construct. Click the header or a line to open the file."
+          description="Nothing is selected, so every construct is listed and searchable; pick a file on the left to narrow."
+          notes="Every file stacks under one combined header (path + a notes link for the whole stack), each declaration labeling the line that holds the construct in a file-like gutter; external constructs get a header naming their kind with the body naming the construct. Click the header or a line to open the file."
           hideSidebar={hideSidebar}
           onSelect={(id) => setSelected(id)}
           renderFileViewer={renderFileViewer}

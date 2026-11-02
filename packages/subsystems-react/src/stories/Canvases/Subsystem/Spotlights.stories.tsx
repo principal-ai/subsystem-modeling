@@ -17,7 +17,7 @@ import { resolvePierreSyntaxThemeName } from '../../../pierre/pierreSyntaxTheme'
 import { useTheme } from '@principal-ade/industry-theme';
 
 const meta = {
-  title: 'Canvases/Subsystem/Spotlights',
+  title: 'Canvases/Subsystem/UI Isolation/Spotlights',
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],
   decorators: [

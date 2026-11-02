@@ -25,6 +25,17 @@ describe("toPortableDocument", () => {
 		expect(portable.verifiedAtCommits).toEqual({ "pkg:github/a/b": "def" });
 	});
 
+	test("keeps the description / notes split", () => {
+		const portable = toPortableDocument({
+			title: "t",
+			components: [],
+			description: "Short blurb.",
+			notes: "## Extended\n\nLonger context.",
+		} as unknown as Parameters<typeof toPortableDocument>[0]);
+		expect(portable.description).toBe("Short blurb.");
+		expect(portable.notes).toBe("## Extended\n\nLonger context.");
+	});
+
 	test("still drops store metadata", () => {
 		const portable = toPortableDocument({
 			title: "t",
@@ -44,6 +55,12 @@ describe("subsystem-model schema", () => {
 	test("declares the per-purl commit maps", () => {
 		expect(schema.properties.createdAtCommits).toBeDefined();
 		expect(schema.properties.verifiedAtCommits).toBeDefined();
+	});
+
+	test("caps the short description and declares extended notes", () => {
+		const description = schema.properties.description as { maxLength?: number };
+		expect(description.maxLength).toBe(200);
+		expect(schema.properties.notes).toBeDefined();
 	});
 
 	test("declares a content-addressed source span", () => {

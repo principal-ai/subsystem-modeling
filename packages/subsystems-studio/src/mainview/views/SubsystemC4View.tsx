@@ -99,7 +99,7 @@ export function SubsystemC4View({
 	const draft = projection.source === "draft";
 	const badgeColor = draft ? "#e3b341" : "#2da44e";
 	const counts = projection.counts;
-	const description = draft
+	const sourceNote = draft
 		? `Draft projection derived from process keys — not accepted.${counts.unassignedComponents > 0 ? ` ${counts.unassignedComponents} component${counts.unassignedComponents === 1 ? "" : "s"} with no process.` : ""}`
 		: `Accepted containers from the element store.${counts.unbackedProcesses > 0 ? ` ${counts.unbackedProcesses} process key${counts.unbackedProcesses === 1 ? "" : "s"} not accepted.` : ""}`;
 
@@ -120,11 +120,13 @@ export function SubsystemC4View({
 				trails={graph.trails ?? []}
 				memberships={projection.memberships}
 				title={graph.title}
-				description={description}
+				description={graph.description}
+				notes={graph.notes}
 				persistKey={graphId}
 				headerActions={
 					<>
 						<span
+							title={sourceNote}
 							style={{
 								display: "inline-flex",
 								alignItems: "center",

@@ -8,7 +8,7 @@ import type { GraphifyComponentDetail } from '../../../graphify';
 import { investigateOnlyComponents, investigateOnlyTrails } from './fixtures';
 
 const meta = {
-  title: 'Canvases/Subsystem/Appearance',
+  title: 'Canvases/Subsystem/Views/Appearance',
   component: SubsystemComponentGraph,
   parameters: {
     layout: 'fullscreen',

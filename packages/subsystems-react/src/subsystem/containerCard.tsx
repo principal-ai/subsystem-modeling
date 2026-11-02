@@ -118,6 +118,8 @@ export interface ContainerCardHeaderProps {
   iconLabel?: string;
   /** The border colour; the glyph takes it so the two read as one accent. */
   color: string;
+  /** Override for the kind glyph colour; defaults to `color`. */
+  iconColor?: string;
   /** The technology row's text. Empty hides the text but not the row. */
   topLabel?: string;
   /** The official technology mark, when we hold one. */
@@ -146,6 +148,7 @@ export function ContainerCardHeader({
   Icon,
   iconLabel,
   color,
+  iconColor,
   topLabel,
   brand,
   hasTechRow,
@@ -199,7 +202,7 @@ export function ContainerCardHeader({
             style={{
               display: 'inline-flex',
               flexShrink: 0,
-              color,
+              color: iconColor ?? color,
               // Nudge down so the glyph optically centres on the first text line.
               marginTop: 3,
             }}

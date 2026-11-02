@@ -5,7 +5,7 @@ import { C4NodeCard, NODE_W, NODE_H } from '../../../subsystem/C4NodeCard';
 import type { C4Container, C4Component } from '../../../subsystem/c4';
 
 const meta = {
-  title: 'Canvases/C4/C4CardGrow',
+  title: 'Canvases/C4/UI Isolation/C4CardGrow',
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],
   decorators: [

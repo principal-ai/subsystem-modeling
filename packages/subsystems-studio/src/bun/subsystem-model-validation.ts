@@ -23,6 +23,7 @@ const DOCUMENT_KEYS = [
   "$schema",
   "title",
   "description",
+  "notes",
   "components",
   "trails",
 ] as const;

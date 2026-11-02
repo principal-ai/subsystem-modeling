@@ -7,7 +7,7 @@ import type { SubsystemComponent, SubsystemComponentEdge } from '../../../subsys
 import { components, graphSpecFromSteps } from './fixtures';
 
 const meta = {
-  title: 'Canvases/Subsystem/Basics',
+  title: 'Canvases/Subsystem/Views/Basics',
   component: SubsystemComponentGraph,
   parameters: {
     layout: 'fullscreen',

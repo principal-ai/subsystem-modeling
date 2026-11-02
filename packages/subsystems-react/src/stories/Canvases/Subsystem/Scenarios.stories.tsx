@@ -12,7 +12,7 @@ import type { GraphifyComponentDetail } from '../../../graphify';
 import { components, graphSpecFromSteps } from './fixtures';
 
 const meta = {
-  title: 'Canvases/Subsystem/Scenarios',
+  title: 'Canvases/Subsystem/Views/Scenarios',
   component: SubsystemComponentGraph,
   parameters: {
     layout: 'fullscreen',
@@ -149,7 +149,8 @@ function MultiRepoDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         title="Type-ref resolution across repos"
-        description="Two repos → two file trees. Each tree is scoped to its repo's files and headed by the owner avatar + repo name. Cross-repo edges land on external stubs."
+        description="Two repos → two file trees."
+        notes="Each tree is scoped to its repo's files and headed by the owner avatar + repo name. Cross-repo edges land on external stubs."
         components={multiRepoComponents}
         trails={multiRepoEdges.trails}
       />
@@ -382,7 +383,8 @@ function AccessSurfacesDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         title="Access surfaces, roles, and process boundaries"
-        description="Two process regions (host, renderer) + boundary entries; agents and the external service float outside every boundary. Hover for the role badge; click the store to drill into its state-only detail."
+        description="Two process regions (host, renderer) + boundary entries; agents and the external service float outside every boundary."
+        notes="Hover for the role badge; click the store to drill into its state-only detail."
         components={accessSurfaceComponents}
         trails={accessSurfaceEdges.trails}
         onSelect={(id) => setSelected(id)}
@@ -1128,7 +1130,8 @@ function TypeFamilySpectrumDemo() {
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <SubsystemComponentGraph
         title="Type-family — what a type can hold"
-        description="Structured buckets: callable signature (generics + params), interface properties, enum members, union, plain alias reference. `rhs` = verbatim escape hatch for shapes that don't fit (mapped/conditional/template-literal). Click each to see the declaration."
+        description="Structured buckets: callable signature (generics + params), interface properties, enum members, union, plain alias reference."
+        notes="`rhs` = verbatim escape hatch for shapes that don't fit (mapped/conditional/template-literal). Click each to see the declaration."
         components={typeSpectrumComponents}
         trails={typeSpectrumEdges.trails}
         onSelect={(id) => setSelected(id)}

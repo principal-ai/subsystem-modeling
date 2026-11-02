@@ -93,6 +93,62 @@ describe("c4 sketch store", () => {
 		expect(sketch!.author).toBe("agent");
 	});
 
+	test("description is trimmed and capped at 200 characters", async () => {
+		const created = await createC4Sketch({
+			title: "Acme architecture",
+			model: MODEL,
+			description: "  A short, authored blurb.  ",
+		});
+		expect(created.ok).toBe(true);
+		if (!created.ok) return;
+
+		const stored = await getC4Sketch(created.sketch.id);
+		expect((stored as { description?: string } | null)?.description).toBe(
+			"A short, authored blurb.",
+		);
+
+		const atLimit = await createC4Sketch({
+			title: "At the limit",
+			model: MODEL,
+			description: "x".repeat(200),
+		});
+		expect(atLimit.ok).toBe(true);
+
+		const tooLong = await createC4Sketch({
+			title: "Too long",
+			model: MODEL,
+			description: "x".repeat(201),
+		});
+		expect(tooLong.ok).toBe(false);
+		if (!tooLong.ok) expect(tooLong.error).toContain("200 characters");
+	});
+
+	test("update can replace and clear the description", async () => {
+		const created = await createC4Sketch({
+			title: "Acme architecture",
+			model: MODEL,
+			description: "First blurb.",
+		});
+		expect(created.ok).toBe(true);
+		if (!created.ok) return;
+
+		const updated = await updateC4Sketch(created.sketch.id, {
+			description: " Second blurb. ",
+		});
+		expect(updated.ok).toBe(true);
+		if (updated.ok) {
+			expect((updated.sketch as { description?: string }).description).toBe(
+				"Second blurb.",
+			);
+		}
+
+		const cleared = await updateC4Sketch(created.sketch.id, { description: "" });
+		expect(cleared.ok).toBe(true);
+		if (cleared.ok) {
+			expect((cleared.sketch as { description?: string }).description).toBeUndefined();
+		}
+	});
+
 	test("list returns summaries filtered by repo key", async () => {
 		await createC4Sketch({
 			title: "One",

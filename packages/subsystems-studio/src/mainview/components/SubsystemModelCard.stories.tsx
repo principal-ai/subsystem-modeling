@@ -84,6 +84,13 @@ const DESCRIPTION =
 /** The base model plus a description — the split body's left column. */
 const WITH_DESC: SubsystemModelSummary = { ...BASE, description: DESCRIPTION };
 
+/** A short description plus extended notes behind `Show more`. */
+const WITH_NOTES: SubsystemModelSummary = {
+	...WITH_DESC,
+	notes:
+		"## Overview\n\nCard capture, refunds, and the webhook surface that reconciles them.\n\n### Why it matters\n\nThe list row keeps the short description visible and opens this document on demand.",
+};
+
 const meta = {
 	title: "Subsystem Tab/SubsystemModelCard",
 	component: SubsystemModelCard,
@@ -127,6 +134,11 @@ export const DescriptionAndTrails: Story = {
  *  empty note right. */
 export const DescriptionOnly: Story = {
 	args: { graph: { ...WITH_DESC, trails: [] }, rowExpanded: true },
+};
+
+/** Expanded with extended notes — `Show more` opens the full document. */
+export const DescriptionAndNotes: Story = {
+	args: { graph: { ...WITH_NOTES, trails: [] }, rowExpanded: true },
 };
 
 /** The row's own disclosure is open with no description — the trail list takes

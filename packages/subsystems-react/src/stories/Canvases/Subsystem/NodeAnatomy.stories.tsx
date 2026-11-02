@@ -24,7 +24,7 @@ import type {
  * still proposals.
  */
 const meta = {
-  title: 'Canvases/Subsystem/NodeAnatomy',
+  title: 'Canvases/Subsystem/UI Isolation/NodeAnatomy',
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],
   decorators: [

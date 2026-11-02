@@ -68,10 +68,19 @@ export function technologyBrand(technology: string | undefined): TechBrand | und
 }
 
 /** A brand mark sized to the top row. Full-colour, not tinted by state. */
-export function TechMark({ brand, size = 14 }: { brand: TechBrand; size?: number }) {
+export function TechMark({
+  brand,
+  size = 14,
+  showTitle = true,
+}: {
+  brand: TechBrand;
+  size?: number;
+  /** Render the attribution tooltip. Off inside rows that already explain themselves. */
+  showTitle?: boolean;
+}) {
   return (
     <span
-      title={`${brand.name} — ${brand.source}`}
+      {...(showTitle ? { title: `${brand.name} — ${brand.source}` } : {})}
       aria-label={brand.name}
       style={{ display: 'inline-flex', width: size, height: size, flexShrink: 0 }}
       // The SVG is a static, vendored string — never user input.

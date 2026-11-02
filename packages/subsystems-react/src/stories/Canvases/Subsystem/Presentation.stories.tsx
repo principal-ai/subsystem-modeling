@@ -16,7 +16,7 @@ import type { SubsystemComponent, SubsystemTrail } from '../../../subsystem/mode
  * mismatch between the rects and the rendered nodes is visible at a glance.
  */
 const meta = {
-  title: 'Canvases/Subsystem/Presentation',
+  title: 'Canvases/Subsystem/Graphs/Presentation',
   component: SubsystemComponentGraph,
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],

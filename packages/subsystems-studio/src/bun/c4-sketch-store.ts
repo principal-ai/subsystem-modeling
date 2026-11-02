@@ -25,6 +25,17 @@ import type {
 	C4SketchSummary as ContractSketchSummary,
 } from "../shared/contract";
 
+/**
+ * Keep in sync with `C4_SKETCH_DESCRIPTION_MAX` in
+ * `@principal-ai/subsystems-react`. Declared locally because the studio
+ * compiles against the installed react package, which catches up on the next
+ * react release.
+ */
+const SKETCH_DESCRIPTION_MAX = 200;
+
+/** Stored sketch with the description field ahead of the next react release. */
+type StoredC4Sketch = C4Sketch & { description?: string };
+
 const ROOT = join(homedir(), ".principal", "c4-sketches");
 
 /** Root home for the store; tests override with `PRINCIPAL_C4_SKETCHES_HOME`. */
@@ -38,6 +49,8 @@ export interface C4SketchCreateInput {
 	repoKeys?: string[];
 	model: C4Model;
 	author?: string;
+	/** Short sidebar description; at most SKETCH_DESCRIPTION_MAX characters. */
+	description?: string;
 	notes?: string;
 }
 
@@ -46,6 +59,8 @@ export interface C4SketchPatch {
 	repoKeys?: string[];
 	model?: C4Model;
 	author?: string;
+	/** Short sidebar description; at most SKETCH_DESCRIPTION_MAX characters. */
+	description?: string;
 	notes?: string;
 }
 
@@ -237,6 +252,15 @@ function normalizeModel(model: C4Model): C4Model {
 	};
 }
 
+function descriptionProblem(value: unknown): string | null {
+	if (value === undefined) return null;
+	if (typeof value !== "string") return "description must be a string";
+	if (value.trim().length > SKETCH_DESCRIPTION_MAX) {
+		return `description must be at most ${SKETCH_DESCRIPTION_MAX} characters`;
+	}
+	return null;
+}
+
 function validateCreate(input: C4SketchCreateInput): string[] {
 	const problems: string[] = [];
 	if (typeof input.title !== "string" || !input.title.trim()) {
@@ -245,6 +269,8 @@ function validateCreate(input: C4SketchCreateInput): string[] {
 	if (input.repoKeys !== undefined && !isStringArray(input.repoKeys)) {
 		problems.push("repoKeys must be an array of strings");
 	}
+	const description = descriptionProblem(input.description);
+	if (description) problems.push(description);
 	problems.push(...validateC4SketchModel(input.model));
 	return problems;
 }
@@ -257,11 +283,13 @@ function validatePatch(patch: C4SketchPatch): string[] {
 	if (patch.repoKeys !== undefined && !isStringArray(patch.repoKeys)) {
 		problems.push("repoKeys must be an array of strings");
 	}
+	const description = descriptionProblem(patch.description);
+	if (description) problems.push(description);
 	if (patch.model !== undefined) problems.push(...validateC4SketchModel(patch.model));
 	return problems;
 }
 
-async function readSketch(id: string, root?: string): Promise<C4Sketch | null> {
+async function readSketch(id: string, root?: string): Promise<StoredC4Sketch | null> {
 	try {
 		const raw = await fs.readFile(sketchPath(id, root), "utf8");
 		const parsed = JSON.parse(raw) as C4Sketch;
@@ -338,12 +366,15 @@ export async function createC4Sketch(
 	const problems = validateCreate(input);
 	if (problems.length > 0) return { ok: false, error: problems.join("; ") };
 	const now = new Date().toISOString();
-	const sketch: C4Sketch = {
+	const sketch: StoredC4Sketch = {
 		id: newSketchId(),
 		title: input.title.trim(),
 		repoKeys: dedupe(input.repoKeys ?? []),
 		model: normalizeModel(input.model),
 		...(input.author?.trim() ? { author: input.author.trim() } : {}),
+		...(input.description?.trim()
+			? { description: input.description.trim() }
+			: {}),
 		...(input.notes?.trim() ? { notes: input.notes.trim() } : {}),
 		createdAt: now,
 		updatedAt: now,
@@ -361,7 +392,7 @@ export async function updateC4Sketch(
 	if (problems.length > 0) return { ok: false, error: problems.join("; ") };
 	const existing = await readSketch(id, root);
 	if (!existing) return { ok: false, error: `unknown sketch: ${id}` };
-	const sketch: C4Sketch = {
+	const sketch: StoredC4Sketch = {
 		...existing,
 		...(patch.title !== undefined ? { title: patch.title.trim() } : {}),
 		...(patch.repoKeys !== undefined ? { repoKeys: dedupe(patch.repoKeys) } : {}),
@@ -375,6 +406,11 @@ export async function updateC4Sketch(
 			? patch.notes.trim()
 				? { notes: patch.notes.trim() }
 				: { notes: undefined }
+			: {}),
+		...(patch.description !== undefined
+			? patch.description.trim()
+				? { description: patch.description.trim() }
+				: { description: undefined }
 			: {}),
 		updatedAt: new Date().toISOString(),
 	};

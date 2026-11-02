@@ -155,7 +155,7 @@ const entityGraph = graphSpecFromSteps([
 ]);
 
 const meta = {
-  title: 'Canvases/Subsystem/CustomEntities',
+  title: 'Canvases/Subsystem/Views/CustomEntities',
   component: SubsystemComponentGraph,
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],
@@ -176,7 +176,8 @@ export const NovaTechWorkRequests: Story = {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         title="Custom entities — NovaTech work-request chain"
-        description="Persons, an agent, and a queue as `custom_entity` nodes (badge = entityKind). Actors keep the themed coral; the agent and queue wear authored `color` overrides. Click a node for its declaration — `entity 'Name' — kind` plus authored `attributes` (key: value)."
+        description="Persons, an agent, and a queue as `custom_entity` nodes (badge = entityKind)."
+        notes="Actors keep the themed coral; the agent and queue wear authored `color` overrides. Click a node for its declaration — `entity 'Name' — kind` plus authored `attributes` (key: value)."
         components={components}
         trails={entityGraph.trails}
       />

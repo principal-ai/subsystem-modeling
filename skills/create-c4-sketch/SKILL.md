@@ -73,6 +73,7 @@ an existing container id.
   "title": "Acme widget architecture",
   "repoKeys": ["pkg:github/acme/widget"],
   "author": "agent",
+  "description": "Host, worker, and the GitHub integration they expect to call.",
   "notes": "## About\n\nThis sketch describes the **host** and **worker** and their expected interactions.",
   "model": {
     "view": "container",
@@ -135,8 +136,11 @@ an existing container id.
   `rejected`.
 - `technology` is usually expected by C4, but a sketch may leave it blank when
   unknown. The card shows what is missing.
-- `notes` is Markdown and renders in the left **About** panel via the industry
-  themed markdown component. Omit it or leave it empty to hide the panel.
+- `description` is the short sidebar blurb: plain text or light Markdown, at
+  most **200 characters**. It renders at the top of the left sidebar.
+- `notes` is the extended Markdown document. When set, the description's
+  **More** link opens it in an **Overview** overlay. Omit `description` and the
+  sidebar falls back to a clamped preview of `notes`.
 
 ### Edge rules
 
@@ -164,9 +168,13 @@ curl -sS -X POST "$STUDIO/api/c4-sketches/<id>/open" \
 
 The sketch tab shows:
 
-- full-width header with the title, `SKETCH` badge, **Open all**, **Collapse all**
+- full-width header with the title, `SKETCH` badge, and any host actions
+- the left sidebar with the short `description` at the top and a **Containers**
+  section below it (row click opens/frames a container; trailing control
+  toggles it; **Open all** / **Close all** in the section header)
 - the authored C4 canvas (containers start collapsed)
-- if `notes` is set, a left **About** panel rendering it as Markdown
+- if `notes` is set, **More** under the description opens the full Markdown in
+  an **Overview** overlay
 
 ## 5. Read, update, list, delete
 
@@ -179,8 +187,9 @@ curl -sS -X PUT "$STUDIO/api/c4-sketches/<id>" \
 curl -sS -X DELETE "$STUDIO/api/c4-sketches/<id>" | jq
 ```
 
-`PUT` accepts `title`, `repoKeys`, `model`, `author`, and `notes`; omitted fields
-are left alone. Replacing `model` replaces the whole authored graph.
+`PUT` accepts `title`, `repoKeys`, `model`, `author`, `description`, and
+`notes`; omitted fields are left alone. Replacing `model` replaces the whole
+authored graph. `description` is validated at 200 characters.
 
 ## Rules
 
@@ -202,5 +211,6 @@ are left alone. Replacing `model` replaces the whole authored graph.
 |---|---|
 | `curl: (7) Failed to connect` | Studio's HTTP server is not running. Launch Studio. |
 | `400 invalid ...` | A node/edge reference is missing or malformed. Fix ids first. |
+| `400 description must be at most 200 characters` | Shorten the top-level `description`; move the detail into `notes`. |
 | `404 Sketch not found` | Unknown sketch id. |
 | `400 model.nodes must be an array` | The `model` object is incomplete. |

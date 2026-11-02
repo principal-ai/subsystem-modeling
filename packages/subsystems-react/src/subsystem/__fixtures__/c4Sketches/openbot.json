@@ -1,0 +1,887 @@
+{
+	"id": "c4s-mvo9rstp-g2i006",
+	"title": "OpenBot architecture",
+	"repoKeys": [
+		"pkg:github/CopilotKit/openbot"
+	],
+	"model": {
+		"view": "container",
+		"system": {
+			"id": "system:openbot",
+			"label": "OpenBot",
+			"repoKey": "pkg:github/CopilotKit/openbot"
+		},
+		"nodes": [
+			{
+				"kind": "container",
+				"id": "container:app",
+				"label": "OpenBot app",
+				"containerKind": "application",
+				"technology": "React 19 + Vite + TanStack Router",
+				"description": "Channels, Bot chat, live screen, activity, settings, and admin pages. Port 3010.",
+				"process": "openbot/browser",
+				"state": "proposed"
+			},
+			{
+				"kind": "container",
+				"id": "container:server",
+				"label": "OpenBot server",
+				"containerKind": "application",
+				"technology": "Bun + Hono + CopilotKit runtime",
+				"description": "API, auth, policy, audit, channels, coworkers, plugins, components, AG-UI runtime, and the computer gateway. Port 3001.",
+				"process": "openbot/server",
+				"state": "proposed"
+			},
+			{
+				"kind": "container",
+				"id": "container:worker",
+				"label": "Routines worker",
+				"containerKind": "application",
+				"technology": "Bun",
+				"description": "Sweeps work_items for due routines and hands each run to the server. No public port.",
+				"state": "proposed"
+			},
+			{
+				"kind": "container",
+				"id": "container:supervisor",
+				"label": "Computer supervisor",
+				"containerKind": "application",
+				"technology": "Bun + Docker Engine API",
+				"description": "The only process holding the Docker socket. Ensures, stops, resets, and lists one computer per Bot. Port 4300 (host 4500).",
+				"state": "proposed"
+			},
+			{
+				"kind": "container",
+				"id": "container:agent-computer",
+				"label": "Bot computer",
+				"containerKind": "application",
+				"technology": "Chromium + Bun",
+				"description": "One container per Bot: Chromium, /workspace, browser profile, screenshots, snapshots, file tools, shell, and egress filter. Port 4100.",
+				"state": "proposed"
+			},
+			{
+				"kind": "container",
+				"id": "container:agent-bot",
+				"label": "Built-in AG-UI Bot",
+				"containerKind": "application",
+				"technology": "Bun + OpenAI chat completions",
+				"description": "Proof-of-concept Bot loop. Publishes no tools of its own; tools arrive from the surface. Port 4200.",
+				"state": "proposed"
+			},
+			{
+				"kind": "container",
+				"id": "container:agent-langgraph",
+				"label": "LangGraph AG-UI Bot",
+				"containerKind": "application",
+				"technology": "LangGraph + AG-UI",
+				"description": "Framework Bot exposing the same AG-UI contract. Port 4201.",
+				"state": "proposed"
+			},
+			{
+				"kind": "container",
+				"id": "container:agent-harness",
+				"label": "Picked harness Bot",
+				"containerKind": "application",
+				"technology": "One of the agent-<framework> images",
+				"description": "The framework harness chosen during setup, behind the harness compose profile. Port 4202.",
+				"state": "proposed"
+			},
+			{
+				"kind": "container",
+				"id": "container:postgres",
+				"label": "PostgreSQL + pgvector",
+				"containerKind": "data-store",
+				"technology": "PostgreSQL 17 + pgvector",
+				"description": "Product data, policy, audit, credentials, grants, channels, components, and the work queue. Port 5432.",
+				"process": "openbot/postgres",
+				"state": "proposed"
+			},
+			{
+				"kind": "container",
+				"id": "container:desktop",
+				"label": "OpenBot desktop",
+				"containerKind": "application",
+				"technology": "Tauri 2 + React",
+				"description": "Desktop shell for setup, harness/provider selection, organization sign-in, and local endpoints.",
+				"state": "proposed"
+			},
+			{
+				"kind": "container",
+				"id": "container:mobile",
+				"label": "OpenBot mobile",
+				"containerKind": "application",
+				"technology": "Expo 55 + React Native",
+				"description": "Mobile client for channels, notifications, routines, and authentication.",
+				"state": "proposed"
+			},
+			{
+				"kind": "container",
+				"id": "container:spire",
+				"label": "SPIRE (optional)",
+				"containerKind": "application",
+				"technology": "SPIFFE / SPIRE",
+				"description": "Optional workload identity. Registers one entry per Bot and gives each computer an SVID.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:server-runtime",
+				"label": "CopilotKit runtime & turn runner",
+				"container": "container:server",
+				"technology": "CopilotKit + AG-UI",
+				"description": "Resolves the actor and coworker, runs the turn, and streams results back to the app and Intelligence.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:server-gateway",
+				"label": "Computer gateway",
+				"container": "container:server",
+				"technology": "Bun + CEL",
+				"description": "The only action boundary: resolve target, evaluate policy, write audit, then call the computer.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:server-policy",
+				"label": "Action policy",
+				"container": "container:server",
+				"technology": "CEL + fail-closed",
+				"description": "Deny before allow; a missing or broken policy permits nothing. Inspects tool, target, page, file, MCP, and initiator.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:server-audit",
+				"label": "Audit trail",
+				"container": "container:server",
+				"technology": "PostgreSQL",
+				"description": "Every permitted, refused, and failed action; refusals name the rule that caused them.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:server-auth",
+				"label": "Auth & identity",
+				"container": "container:server",
+				"technology": "better-auth + SCIM/SSO",
+				"description": "Google, Microsoft, Okta, SAML/OIDC, SCIM, roles, sessions, and desktop sign-in.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:server-channels",
+				"label": "Channels & threads",
+				"container": "container:server",
+				"technology": "Hono + Intelligence",
+				"description": "One conversation per coworker, group threads, memberships, attachments, and live channel events.",
+				"members": [
+					"channel-events"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:server-agents",
+				"label": "Coworkers & handoffs",
+				"container": "container:server",
+				"technology": "Bun + AG-UI",
+				"description": "Bot profiles, endpoints, lifecycle, wake-up, escalation, and durable handoffs to another Bot.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:server-plugins",
+				"label": "MCP & connectors",
+				"container": "container:server",
+				"technology": "MCP + Composio + Arcade",
+				"description": "Plugin catalogue, grants, shared accounts, and the MCP tool surface a Bot is allowed to see.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:server-components",
+				"label": "Components registry",
+				"container": "container:server",
+				"technology": "React + sandboxed components",
+				"description": "Compiled and sandboxed UI components, publish state, per-Bot withholding, and data-function grants.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:server-approvals",
+				"label": "Approvals & questions",
+				"container": "container:server",
+				"technology": "Bun + queue",
+				"description": "Person approvals, questions, resume sweeps, and approved-action execution.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:server-responsibilities",
+				"label": "Responsibilities",
+				"container": "container:server",
+				"technology": "Bun + queue",
+				"description": "Standing goals, triggers, leased runs, and follow-up delivery.",
+				"members": [
+					"responsibility-engine",
+					"responsibility-store",
+					"responsibility-ingress",
+					"trigger-delivery",
+					"followup-delivery"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:server-work",
+				"label": "Work queue & routines",
+				"container": "container:server",
+				"technology": "PostgreSQL work_items",
+				"description": "Leased queue for routine fires, responsibilities, handoffs, and idle-computer culling.",
+				"members": [
+					"work-queue",
+					"headless-runner",
+					"channel-events",
+					"origin-context"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:server-principal-studio",
+				"label": "Principal Studio bridge",
+				"container": "container:server",
+				"technology": "Bun + HTTP",
+				"description": "Progress bridge between Subsystems Studio maintenance runs and OpenBot responsibilities.",
+				"members": [
+					"status-reader"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:app-channels",
+				"label": "Channels & live screen",
+				"container": "container:app",
+				"technology": "React + WebSocket",
+				"description": "Composer, transcript, live browser screen, activity, and approvals.",
+				"members": [
+					"channel-events-client",
+					"principal-channel"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:app-bots",
+				"label": "Bots & roster",
+				"container": "container:app",
+				"technology": "React + TanStack",
+				"description": "Bot list, profile, responsibilities, memory, reach, and approvals pages.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:app-admin",
+				"label": "Admin surfaces",
+				"container": "container:app",
+				"technology": "React",
+				"description": "Computers, boundaries, credentials, identity providers, plugins, skills, people, and audit.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:app-components",
+				"label": "Component gallery",
+				"container": "container:app",
+				"technology": "React + A2UI",
+				"description": "Compiled gallery components and the sandboxed component renderer.",
+				"members": [
+					"existing-model-cards",
+					"progress-card"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:computer-browser",
+				"label": "Chromium runtime",
+				"container": "container:agent-computer",
+				"technology": "Playwright + screencast",
+				"description": "Browser sessions, navigation, snapshots, cookies, profiles, and live screencast.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:computer-workspace",
+				"label": "Workspace & shell",
+				"container": "container:agent-computer",
+				"technology": "Bun + /workspace",
+				"description": "File read/write/list and shell commands, scoped to the Bot's workspace volume.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:computer-egress",
+				"label": "Egress filter",
+				"container": "container:agent-computer",
+				"technology": "Proxy + network policy",
+				"description": "Applies the Bot's network policy before anything leaves; cloud metadata is always refused.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:computer-control",
+				"label": "Human control",
+				"container": "container:agent-computer",
+				"technology": "WebSocket handover",
+				"description": "Help requests, control taken/released, and refusing Bot actions while a person drives.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:supervisor-docker",
+				"label": "Computer lifecycle",
+				"container": "container:supervisor",
+				"technology": "Docker API",
+				"description": "Ensure, stop, reset, and list; names derive from the Bot id and nothing else is expressible.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:supervisor-identity",
+				"label": "SPIFFE registration",
+				"container": "container:supervisor",
+				"technology": "SPIRE agent socket",
+				"description": "Registers one entry per Bot before handing out a computer.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:worker-routines",
+				"label": "Routine sweep",
+				"container": "container:worker",
+				"technology": "Bun + work_items",
+				"description": "Offers due routines, claims work, and dispatches the run to the server with a 202 contract.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:bot-loop",
+				"label": "AG-UI Bot loop",
+				"container": "container:agent-bot",
+				"technology": "OpenAI chat completions",
+				"description": "Streams a reply, ends on a tool call, and lets the surface run the tool.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:langgraph-agent",
+				"label": "LangGraph agent",
+				"container": "container:agent-langgraph",
+				"technology": "LangGraph + AG-UI",
+				"description": "Framework implementation of the same Bot behavior.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:harness-agent",
+				"label": "Picked harness",
+				"container": "container:agent-harness",
+				"technology": "Framework-specific",
+				"description": "Whichever agent framework the deployment selected during setup.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:postgres-schema",
+				"label": "Product schema",
+				"container": "container:postgres",
+				"technology": "Drizzle + SQL",
+				"description": "Agents, profiles, channels, grants, policy, audit, credentials, and components.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:postgres-queue",
+				"label": "Work queue",
+				"container": "container:postgres",
+				"technology": "PostgreSQL skip locked",
+				"description": "Leased work_items shared by routines, responsibilities, handoffs, and culling.",
+				"members": [
+					"followup-queue"
+				],
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:desktop-setup",
+				"label": "Desktop setup",
+				"container": "container:desktop",
+				"technology": "Tauri + React",
+				"description": "Harness/provider picker, organization sign-in, and local endpoint configuration.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:mobile-client",
+				"label": "Mobile client",
+				"container": "container:mobile",
+				"technology": "Expo Router",
+				"description": "Channels, notifications, routines, and secure authentication.",
+				"state": "proposed"
+			},
+			{
+				"kind": "component",
+				"id": "component:spire-identity",
+				"label": "SPIRE identity plane",
+				"container": "container:spire",
+				"technology": "SPIFFE",
+				"description": "SVID issuance and trust-domain registration for computers.",
+				"state": "proposed"
+			},
+			{
+				"kind": "external-system",
+				"id": "external:intelligence",
+				"label": "CopilotKit Intelligence",
+				"technology": "Managed API + WebSocket",
+				"description": "Durable threads, memory, and the realtime gateway.",
+				"state": "proposed"
+			},
+			{
+				"kind": "external-system",
+				"id": "external:model-provider",
+				"label": "Model provider",
+				"technology": "OpenAI / Anthropic / Google API",
+				"description": "LLM inference. The deployment supplies the credential; no model ships in the box.",
+				"state": "proposed"
+			},
+			{
+				"kind": "external-system",
+				"id": "external:identity-provider",
+				"label": "Company identity provider",
+				"technology": "OIDC / SAML",
+				"description": "Google, Microsoft, Okta, or a registered SAML/OIDC provider routed by email domain.",
+				"state": "proposed"
+			},
+			{
+				"kind": "external-system",
+				"id": "external:docker",
+				"label": "Docker engine",
+				"technology": "Docker Engine API",
+				"description": "Creates and runs the per-Bot computer containers.",
+				"state": "proposed"
+			},
+			{
+				"kind": "external-system",
+				"id": "external:composio",
+				"label": "Composio",
+				"technology": "MCP / API",
+				"description": "Brokers hundreds of app connectors behind one account.",
+				"state": "proposed"
+			},
+			{
+				"kind": "external-system",
+				"id": "external:mcp-servers",
+				"label": "MCP servers",
+				"technology": "MCP",
+				"description": "Google Drive, Notion, Parallel, Exa, Firecrawl, and custom MCP servers.",
+				"state": "proposed"
+			},
+			{
+				"kind": "external-system",
+				"id": "external:messaging",
+				"label": "Messaging providers",
+				"technology": "Slack / Teams / Twilio",
+				"description": "Delivers Bot updates and conversations outside the app.",
+				"state": "proposed"
+			},
+			{
+				"kind": "external-system",
+				"id": "external:web",
+				"label": "Public web",
+				"technology": "HTTPS",
+				"description": "Sites a Bot browses through its computer's egress filter.",
+				"state": "proposed"
+			},
+			{
+				"kind": "person",
+				"id": "person:member",
+				"label": "Team member",
+				"description": "Uses channels, Bots, routines, approvals, and the live screen.",
+				"state": "proposed"
+			},
+			{
+				"kind": "person",
+				"id": "person:admin",
+				"label": "Deployment administrator",
+				"description": "Configures policy, credentials, identity providers, plugins, and components.",
+				"state": "proposed"
+			}
+		],
+		"edges": [
+			{
+				"id": "e:member-app",
+				"source": "person:member",
+				"target": "container:app",
+				"label": "HTTPS",
+				"protocol": "HTTPS · browser",
+				"mechanisms": [
+					"uses"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:member-desktop",
+				"source": "person:member",
+				"target": "container:desktop",
+				"label": "HTTPS",
+				"protocol": "HTTPS · desktop",
+				"mechanisms": [
+					"uses"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:member-mobile",
+				"source": "person:member",
+				"target": "container:mobile",
+				"label": "HTTPS",
+				"protocol": "HTTPS · mobile",
+				"mechanisms": [
+					"uses"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:admin-app",
+				"source": "person:admin",
+				"target": "container:app",
+				"label": "HTTPS",
+				"protocol": "HTTPS · admin",
+				"mechanisms": [
+					"uses"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:app-server",
+				"source": "container:app",
+				"target": "container:server",
+				"label": "HTTP",
+				"protocol": "HTTPS · JSON API",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:app-server-ws",
+				"source": "container:app",
+				"target": "container:server",
+				"label": "WebSocket",
+				"protocol": "WebSocket · live channel and screen",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:desktop-server",
+				"source": "container:desktop",
+				"target": "container:server",
+				"label": "HTTP",
+				"protocol": "HTTPS · setup and sign-in",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:mobile-server",
+				"source": "container:mobile",
+				"target": "container:server",
+				"label": "HTTP",
+				"protocol": "HTTPS · channels and routines",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:server-postgres",
+				"source": "container:server",
+				"target": "container:postgres",
+				"label": "SQL",
+				"protocol": "PostgreSQL wire",
+				"mechanisms": [
+					"reads",
+					"writes"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:server-intelligence",
+				"source": "container:server",
+				"target": "external:intelligence",
+				"label": "HTTPS/WS",
+				"protocol": "Intelligence API + realtime gateway",
+				"mechanisms": [
+					"reads",
+					"writes"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:server-agent-bot",
+				"source": "container:server",
+				"target": "container:agent-bot",
+				"label": "AG-UI",
+				"protocol": "AG-UI · SSE/HTTP",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:server-agent-langgraph",
+				"source": "container:server",
+				"target": "container:agent-langgraph",
+				"label": "AG-UI",
+				"protocol": "AG-UI · SSE/HTTP",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:server-agent-harness",
+				"source": "container:server",
+				"target": "container:agent-harness",
+				"label": "AG-UI",
+				"protocol": "AG-UI · SSE/HTTP",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:server-supervisor",
+				"source": "container:server",
+				"target": "container:supervisor",
+				"label": "HTTP",
+				"protocol": "HTTPS · ensure/stop/reset/list",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:server-computer",
+				"source": "container:server",
+				"target": "container:agent-computer",
+				"label": "HTTP",
+				"protocol": "HTTPS · policy push + gateway actions",
+				"mechanisms": [
+					"calls",
+					"writes"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:supervisor-docker",
+				"source": "container:supervisor",
+				"target": "external:docker",
+				"label": "Docker API",
+				"protocol": "Docker Engine API",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:supervisor-computer",
+				"source": "container:supervisor",
+				"target": "container:agent-computer",
+				"label": "creates",
+				"protocol": "Docker container lifecycle",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:supervisor-spire",
+				"source": "container:supervisor",
+				"target": "container:spire",
+				"label": "register",
+				"protocol": "SPIRE registration API",
+				"mechanisms": [
+					"writes"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:computer-spire",
+				"source": "container:agent-computer",
+				"target": "container:spire",
+				"label": "SVID",
+				"protocol": "SPIFFE workload API",
+				"mechanisms": [
+					"reads"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:computer-web",
+				"source": "container:agent-computer",
+				"target": "external:web",
+				"label": "HTTPS",
+				"protocol": "HTTPS · browser and shell via egress filter",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:bot-model",
+				"source": "container:agent-bot",
+				"target": "external:model-provider",
+				"label": "LLM API",
+				"protocol": "HTTPS · OpenAI chat completions",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:langgraph-model",
+				"source": "container:agent-langgraph",
+				"target": "external:model-provider",
+				"label": "LLM API",
+				"protocol": "HTTPS · provider API",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:harness-model",
+				"source": "container:agent-harness",
+				"target": "external:model-provider",
+				"label": "LLM API",
+				"protocol": "HTTPS · provider API",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:server-idp",
+				"source": "container:server",
+				"target": "external:identity-provider",
+				"label": "OIDC/SAML",
+				"protocol": "OIDC / SAML / SCIM",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:server-composio",
+				"source": "container:server",
+				"target": "external:composio",
+				"label": "MCP/API",
+				"protocol": "Composio broker",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:server-mcp",
+				"source": "container:server",
+				"target": "external:mcp-servers",
+				"label": "MCP",
+				"protocol": "MCP · stdio or HTTP",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:server-messaging",
+				"source": "container:server",
+				"target": "external:messaging",
+				"label": "HTTP",
+				"protocol": "Slack / Teams / Twilio APIs",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:worker-postgres",
+				"source": "container:worker",
+				"target": "container:postgres",
+				"label": "SQL",
+				"protocol": "PostgreSQL wire · work_items",
+				"mechanisms": [
+					"reads",
+					"writes"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:worker-server",
+				"source": "container:worker",
+				"target": "container:server",
+				"label": "HTTP",
+				"protocol": "HTTPS · dispatch routine run (202)",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:runtime-gateway",
+				"source": "component:server-runtime",
+				"target": "component:server-gateway",
+				"label": "tool call",
+				"protocol": "in-process",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:gateway-policy",
+				"source": "component:server-gateway",
+				"target": "component:server-policy",
+				"label": "evaluate",
+				"protocol": "in-process CEL",
+				"mechanisms": [
+					"calls"
+				],
+				"count": 1
+			},
+			{
+				"id": "e:gateway-audit",
+				"source": "component:server-gateway",
+				"target": "component:server-audit",
+				"label": "record",
+				"protocol": "PostgreSQL",
+				"mechanisms": [
+					"writes"
+				],
+				"count": 1
+			}
+		]
+	},
+	"author": "opencode",
+	"notes": "Top-down C4 sketch authored from the OpenBot README, docs/architecture.md, package layout, and docker-compose services.",
+	"createdAt": "2026-10-25T20:17:44.365Z",
+	"updatedAt": "2026-10-25T20:17:44.365Z",
+	"description": "Top-down architecture for OpenBot: browser and server containers, routines and computer workers, agent bots, PostgreSQL + pgvector, and the desktop and mobile clients."
+}

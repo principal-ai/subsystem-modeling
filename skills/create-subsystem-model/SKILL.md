@@ -68,7 +68,8 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
 {
   "$schema": "https://principal-ai.dev/schemas/subsystem-model.schema.json",   // optional
   "title": "Subsystems Studio session service",        // required
-  "description": "Optional one-liner.",
+  "description": "Short sidebar blurb (max 200 chars).",
+  "notes": "## Overview\n\nExtended Markdown context, opened from **Show more** in the sidebar.",
   "components": [                                  // required
     {
       "alias": "session-service",                  // model-local, unique; edges point here
@@ -117,7 +118,13 @@ Rules:
 
 - `file` paths MUST be repo-root-relative (each file is resolved against its
   own repo's checkout); `purl` subpaths carry the same path after `#`.
-- Portable documents carry only `$schema` / `title` / `description` /
+- `description` is the short sidebar blurb: plain text or light Markdown, at
+  most **200 characters**. It renders at the top of the model sidebar and in
+  the Subsystems list details. Longer context belongs in `notes`.
+- `notes` is the extended Markdown document. When set, the description's
+  **Show more** link opens it in an **Overview** overlay. Omit `description`
+  and the sidebar falls back to a clamped preview of `notes`.
+- Portable documents carry only `$schema` / `title` / `description` / `notes` /
   `components` / `trails`. Repo identity lives on each
   component's `purl` and each trail step's `purl` — there is no stored
   `repo` field. Local checkouts are
@@ -428,10 +435,13 @@ While Subsystems Studio is running, the HTTP bridge still supports update/delete
 
 ```bash
 curl -s -X PUT http://127.0.0.1:3045/api/subsystem-model/<id> \
-  -H 'Content-Type: application/json' -d '{"description":"updated"}'
+  -H 'Content-Type: application/json' \
+  -d '{"description":"Short update","notes":"## Updated\n\nNew context."}'
 curl -s -X DELETE http://127.0.0.1:3045/api/subsystem-model/<id>
 ```
 
 Prefer PUT over delete-and-recreate so ids and timestamps stay stable. DELETE
 also closes any tabs rendering the model. To add trails to an existing model,
-PUT `{ "trails": [ ... ] }` (or updated `module` / `process` frames).
+PUT `{ "trails": [ ... ] }` (or updated `module` / `process` frames). `PUT`
+accepts `title`, `description`, `notes`, `components`, and `trails`; omitted
+fields are left alone. `description` is validated at 200 characters.

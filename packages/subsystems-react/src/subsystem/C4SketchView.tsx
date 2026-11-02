@@ -10,9 +10,13 @@ import { useCallback, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useTheme } from '@principal-ade/industry-theme';
 import { PencilRuler } from 'lucide-react';
-import { IndustryMarkdownSlide } from 'themed-markdown';
 import { C4Graph } from './C4Graph';
+import { C4ContainersPanel } from './C4ContainersPanel';
+import { DescriptionOverlay } from './DescriptionOverlay';
+import { DescriptionPreview } from './DescriptionPreview';
 import { GraphWithSidebar } from './GraphWithSidebar';
+import type { C4Component, C4Container } from './c4';
+import { C4_SKETCH_DESCRIPTION_MAX } from './c4Sketch';
 import type { C4Sketch } from './c4Sketch';
 
 export interface C4SketchViewProps {
@@ -51,6 +55,25 @@ export function C4SketchView({
     [onOpenContainerIdsChange, openContainerIds],
   );
 
+  /** The container last activated from the sidebar — the camera target. */
+  const [focus, setFocus] = useState<{ id: string } | null>(null);
+
+  const containers = useMemo(() => {
+    const components = sketch.model.nodes.filter(
+      (node): node is C4Component => node.kind === 'component',
+    );
+    return sketch.model.nodes
+      .filter((node): node is C4Container => node.kind === 'container')
+      .map((container) => ({
+        container,
+        open: resolvedOpenIds.includes(container.id),
+        members: components.filter(
+          (component) =>
+            (component.container ?? component.parentId) === container.id,
+        ),
+      }));
+  }, [sketch.model.nodes, resolvedOpenIds]);
+
   const model = useMemo(
     () => ({ ...sketch.model, openContainerIds: resolvedOpenIds }),
     [resolvedOpenIds, sketch.model],
@@ -58,16 +81,18 @@ export function C4SketchView({
 
   const toggleContainer = useCallback(
     (id: string) => {
-      setOpenIds(
-        resolvedOpenIds.includes(id)
-          ? resolvedOpenIds.filter((openId) => openId !== id)
-          : [...resolvedOpenIds, id].sort(),
-      );
+      if (resolvedOpenIds.includes(id)) {
+        setOpenIds(resolvedOpenIds.filter((openId) => openId !== id));
+        setFocus((prev) => (prev?.id === id ? null : prev));
+      } else {
+        setOpenIds([...resolvedOpenIds, id].sort());
+      }
     },
     [resolvedOpenIds, setOpenIds],
   );
 
   const openAll = useCallback(() => {
+    setFocus(null);
     setOpenIds(
       sketch.model.nodes
         .filter((node) => node.kind === 'container')
@@ -76,33 +101,48 @@ export function C4SketchView({
     );
   }, [setOpenIds, sketch.model.nodes]);
 
-  const collapseAll = useCallback(() => setOpenIds([]), [setOpenIds]);
+  const collapseAll = useCallback(() => {
+    setFocus(null);
+    setOpenIds([]);
+  }, [setOpenIds]);
 
+  /** Row click: toggle the container's internals and frame it (dropdown). */
+  const activateContainer = useCallback(
+    (id: string) => {
+      if (resolvedOpenIds.includes(id)) {
+        setOpenIds(resolvedOpenIds.filter((openId) => openId !== id));
+        setFocus((prev) => (prev?.id === id ? null : prev));
+      } else {
+        setFocus({ id });
+        setOpenIds([...resolvedOpenIds, id].sort());
+      }
+    },
+    [resolvedOpenIds, setOpenIds],
+  );
+
+  /** Select-only row (no components to expand): just frame the container. */
+  const selectContainer = useCallback((id: string) => setFocus({ id }), []);
+
+  const [notesOpen, setNotesOpen] = useState(false);
+  const rawDescription = sketch.description?.trim();
+  // The store caps the authored description; trim defensively for other hosts.
+  const description =
+    rawDescription && rawDescription.length > C4_SKETCH_DESCRIPTION_MAX
+      ? `${rawDescription.slice(0, C4_SKETCH_DESCRIPTION_MAX - 1)}…`
+      : rawDescription;
   const notes = sketch.notes?.trim();
-  const notesPanel = notes ? (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div
-        style={{
-          fontSize: 10,
-          fontFamily: theme.fonts.monospace,
-          letterSpacing: 0.4,
-          color: theme.colors.textSecondary,
-        }}
-      >
-        ABOUT
-      </div>
-      <IndustryMarkdownSlide
-        content={notes}
-        slideIdPrefix={`c4-sketch-notes-${sketch.id}`}
-        slideIndex={0}
-        isVisible={true}
-        theme={theme}
-        disableScroll={true}
-        disableBasePadding
-        enableKeyboardScrolling={false}
-        autoFocusOnVisible={false}
-      />
-    </div>
+  // The short description owns the top-left slot; a legacy sketch with only
+  // notes falls back to a clamped preview of them.
+  const preview = description || notes;
+  const descriptionPanel = preview ? (
+    <DescriptionPreview
+      content={preview}
+      clamp={!description}
+      open={notesOpen}
+      onOpen={notes ? () => setNotesOpen(true) : undefined}
+      onClose={notes ? () => setNotesOpen(false) : undefined}
+      slideIdPrefix={`c4-sketch-description-${sketch.id}`}
+    />
   ) : null;
 
   return (
@@ -181,61 +221,43 @@ export function C4SketchView({
           }}
         >
           {headerActions}
-          <button
-            type="button"
-            onClick={openAll}
-            style={smallButton(theme, { width: 132 })}
-          >
-            Open all
-          </button>
-          <button
-            type="button"
-            onClick={collapseAll}
-            style={smallButton(theme, { width: 132 })}
-          >
-            Collapse all
-          </button>
         </div>
       </header>
 
       <div style={{ flex: 1, minHeight: 0 }}>
         <GraphWithSidebar
-          hidden={!notes}
-          stretchHeader
           defaultWidth={320}
           minWidth={240}
           maxWidth={480}
           persistKey={persistKey ?? `c4-sketch-notes-${sketch.id}`}
-          header={notesPanel}
+          header={descriptionPanel}
+          sidebarBody={
+            <C4ContainersPanel
+              containers={containers}
+              activeId={focus?.id ?? null}
+              onActivate={activateContainer}
+              onSelect={selectContainer}
+              onOpenAll={openAll}
+              onCloseAll={collapseAll}
+            />
+          }
         >
-          <C4Graph model={model} onToggleContainer={toggleContainer} />
+          {notes && notesOpen && (
+            <DescriptionOverlay
+              description={notes}
+              title="Overview"
+              ariaLabel="Sketch notes"
+              slideIdPrefix={`c4-sketch-notes-overlay-${sketch.id}`}
+              onClose={() => setNotesOpen(false)}
+            />
+          )}
+          <C4Graph
+            model={model}
+            onToggleContainer={toggleContainer}
+            containerFocus={focus}
+          />
         </GraphWithSidebar>
       </div>
     </div>
   );
-}
-
-function smallButton(
-  theme: ReturnType<typeof useTheme>['theme'],
-  opts: { width?: number } = {},
-) {
-  return {
-    flexShrink: 0,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    ...(opts.width ? { width: opts.width } : {}),
-    height: 34,
-    padding: '0 10px',
-    boxSizing: 'border-box',
-    whiteSpace: 'nowrap',
-    borderRadius: 6,
-    border: `1px solid ${theme.colors.border}`,
-    background: 'transparent',
-    color: theme.colors.textSecondary,
-    fontFamily: theme.fonts.body,
-    fontSize: theme.fontSizes[1],
-    cursor: 'pointer',
-  } as const;
 }

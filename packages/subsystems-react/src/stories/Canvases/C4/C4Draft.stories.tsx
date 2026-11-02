@@ -12,7 +12,7 @@ import {
 } from '../../../subsystem/__fixtures__/c4Drilldown';
 
 const meta = {
-  title: 'Canvases/C4/C4Draft',
+  title: 'Canvases/C4/Graphs/C4Draft',
   component: C4Graph,
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],

@@ -61,19 +61,39 @@ describe('subsystem graph sidebar', () => {
     expect(content?.textContent).not.toContain('Request subsystem');
   });
 
-  test('truncates the description without scrolling and offers the full description', () => {
+  test('shows the short description unclamped and without a notes link', () => {
     const body = renderGraph();
-    const description = body.querySelector('[style*="-webkit-line-clamp:6"]') as HTMLElement;
-    expect(description).not.toBeNull();
-    expect(description.textContent).toContain('Always visible description.');
-    expect(description.style.overflow).toBe('hidden');
-    expect(description.style.maxHeight).toBe('9em');
+    const description = body.querySelector('[style*="-webkit-line-clamp:6"]') as HTMLElement | null;
+    expect(description).toBeNull();
+    expect(body.textContent).toContain('Always visible description.');
+    expect(body.querySelector('button[aria-label="Read full description"]')).toBeNull();
+    expect(body.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  test('offers the extended notes from the short description', () => {
+    const body = renderGraph({
+      notes: '## Extended\n\nLonger **context**.',
+    });
+    expect(body.textContent).toContain('Always visible description.');
+    expect(body.textContent).not.toContain('Longer context.');
     const more = body.querySelector('button[aria-label="Read full description"]');
-    expect(more?.textContent).toBe('More');
+    expect(more?.textContent).toBe('Show more');
     expect(more?.getAttribute('aria-haspopup')).toBe('dialog');
     expect(more?.getAttribute('aria-expanded')).toBe('false');
     expect(body.querySelector('[role="dialog"]')).toBeNull();
-    expect(body.querySelector('[style*="max-height:30%"]')).toBeNull();
+  });
+
+  test('falls back to a clamped notes preview when there is no description', () => {
+    const body = renderGraph({
+      description: undefined,
+      notes: '## Extended\n\nLonger **context**.',
+    });
+    const preview = body.querySelector('[style*="-webkit-line-clamp:6"]') as HTMLElement;
+    expect(preview).not.toBeNull();
+    expect(preview.textContent).toContain('Extended');
+    expect(preview.style.overflow).toBe('hidden');
+    expect(preview.style.maxHeight).toBe('9em');
+    expect(body.querySelector('button[aria-label="Read full description"]')?.textContent).toBe('Show more');
   });
 
   test('keeps the Files button in the header when no name is provided', () => {

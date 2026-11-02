@@ -29,6 +29,42 @@ describe('findSubsystemModelProblems', () => {
     ).toEqual([]);
   });
 
+  test('accepts a short description plus extended notes', () => {
+    expect(
+      findSubsystemModelProblems({
+        title: 'Checkout',
+        description: 'Short blurb.',
+        notes: '## Overview\n\nLonger context.',
+        components: [
+          {
+            alias: 'api',
+            name: 'checkoutApi',
+            construct: 'function',
+            file: 'src/api.ts',
+            purl: 'pkg:github/you/app',
+          },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  test('rejects a description longer than 200 characters', () => {
+    const problems = findSubsystemModelProblems({
+      title: 'Checkout',
+      description: 'x'.repeat(201),
+      components: [
+        {
+          alias: 'api',
+          name: 'checkoutApi',
+          construct: 'function',
+          file: 'src/api.ts',
+          purl: 'pkg:github/you/app',
+        },
+      ],
+    });
+    expect(problems.join(' ')).toContain('200');
+  });
+
   test('rejects an unknown construct (schema)', () => {
     const problems = findSubsystemModelProblems({
       title: 'x',

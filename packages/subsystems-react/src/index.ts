@@ -311,12 +311,22 @@ export { C4ProjectionView } from './subsystem/C4ProjectionView';
 export type { C4ProjectionViewProps } from './subsystem/C4ProjectionView';
 export { C4SketchView } from './subsystem/C4SketchView';
 export type { C4SketchViewProps } from './subsystem/C4SketchView';
+export { C4ContainersPanel } from './subsystem/C4ContainersPanel';
+export type {
+  C4ContainerListItem,
+  C4ContainersPanelProps,
+} from './subsystem/C4ContainersPanel';
+export { DescriptionPreview } from './subsystem/DescriptionPreview';
+export type { DescriptionPreviewProps } from './subsystem/DescriptionPreview';
+export { DescriptionOverlay } from './subsystem/DescriptionOverlay';
+export type { DescriptionOverlayProps } from './subsystem/DescriptionOverlay';
 export type {
   C4Sketch,
   C4SketchSummary,
   SubsystemC4Source,
   SubsystemC4Projection,
 } from './subsystem/c4Sketch';
+export { C4_SKETCH_DESCRIPTION_MAX } from './subsystem/c4Sketch';
 export {
   deriveLitC4Edges,
   deriveTrailPlayerElements,

@@ -22,7 +22,7 @@ import {
  * a claim and watch what the keys do.
  */
 const meta = {
-  title: 'Canvases/Subsystem/Step emphasis',
+  title: 'Canvases/Subsystem/Views/Step emphasis',
   component: SubsystemComponentGraph,
   parameters: {
     layout: 'fullscreen',

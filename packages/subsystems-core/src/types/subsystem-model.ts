@@ -502,6 +502,9 @@ export interface SubsystemTrail {
  */
 export type PurlCommit = string;
 
+/** Maximum length of a model's authored description (short sidebar blurb). */
+export const SUBSYSTEM_MODEL_DESCRIPTION_MAX = 200;
+
 export interface SubsystemModelDocument {
   /**
    * Optional pointer to the JSON Schema that describes this file. Lets editors
@@ -510,7 +513,18 @@ export interface SubsystemModelDocument {
   $schema?: string;
 
   title: string;
+  /**
+   * Short description shown at the top of a model's sidebar. At most
+   * {@link SUBSYSTEM_MODEL_DESCRIPTION_MAX} characters; hosts reject longer
+   * values and point authors at `notes` instead.
+   */
   description?: string;
+  /**
+   * Extended Markdown notes about the model. The sidebar shows the short
+   * `description` (or a clamped preview of these notes when it is absent);
+   * `More` opens the full document in an Overview overlay.
+   */
+  notes?: string;
   components: SubsystemComponent[];
   /** Runtime trails (ordered steps with sites). */
   trails?: SubsystemTrail[];
@@ -570,6 +584,7 @@ export function toPortableDocument(
   };
   if (doc.$schema) out.$schema = doc.$schema;
   if (doc.description) out.description = doc.description;
+  if (doc.notes) out.notes = doc.notes;
   if (doc.trails) out.trails = doc.trails;
   if (doc.createdAtCommits) out.createdAtCommits = doc.createdAtCommits;
   if (doc.verifiedAtCommits) out.verifiedAtCommits = doc.verifiedAtCommits;

@@ -9,7 +9,8 @@ import type { SubsystemOpenFileOptions } from '../../../subsystem/sourceSpan';
 import type { GraphifyComponentDetail } from '../../../graphify';
 
 const meta = {
-  title: 'Canvases/Subsystem/Constructs',
+  title: 'Canvases/Subsystem/Views/Constructs',
+  excludeStories: ['CatalogDemo'],
   component: SubsystemComponentGraph,
   parameters: {
     layout: 'fullscreen',
@@ -248,7 +249,7 @@ function renderFileViewer(file: string, opts?: SubsystemOpenFileOptions) {
   );
 }
 
-function CatalogDemo({ hideSidebar = false }: { hideSidebar?: boolean }) {
+export function CatalogDemo({ hideSidebar = false }: { hideSidebar?: boolean }) {
   const [selected, setSelected] = useState<string | null>(null);
   return (
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -272,9 +273,4 @@ function CatalogDemo({ hideSidebar = false }: { hideSidebar?: boolean }) {
 /** Homepage-style embed: list of constructs on the left, signature on the right. */
 export const Catalog: Story = {
   render: () => <CatalogDemo />,
-};
-
-/** Same catalog, no title chrome — the shape the home-page constructs layer uses. */
-export const CatalogEmbed: Story = {
-  render: () => <CatalogDemo hideSidebar />,
 };

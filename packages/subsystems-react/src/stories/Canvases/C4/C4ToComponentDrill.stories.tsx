@@ -12,7 +12,7 @@ import {
 } from '../../../subsystem/__fixtures__/c4Drilldown';
 
 const meta = {
-  title: 'Canvases/C4/C4ToComponentDrill',
+  title: 'Canvases/C4/Views/C4ToComponentDrill',
   component: C4ProjectionView,
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],

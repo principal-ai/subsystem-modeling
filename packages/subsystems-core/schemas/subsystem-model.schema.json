@@ -21,7 +21,12 @@
     },
     "description": {
       "type": "string",
-      "description": "Optional one-liner about the subsystem."
+      "maxLength": 200,
+      "description": "Short sidebar blurb about the subsystem. At most 200 characters; extended detail belongs in `notes`."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Extended Markdown notes about the model. The sidebar shows the short `description` (or a clamped preview of these notes when it is absent); `More` opens the full document in an Overview overlay."
     },
     "components": {
       "type": "array",

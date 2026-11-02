@@ -379,6 +379,13 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
   const shape = nodeShape(node);
   const Icon = nodeKindIcon(node);
   const brand = technologyBrand(nodeTechnology(node));
+  // An unbranded container's border is the muted theme border — fine for a
+  // hairline, too dark for the glyph and the box accent. Keep a selected card's
+  // accent, and otherwise give the whole card a legible neutral.
+  const accentColor =
+    node.kind === 'container' && !brand && !selected
+      ? theme.colors.textSecondary
+      : style.color;
   const topLabel = nodeTopLabel(node);
   const subtitle = nodeSubtitle(node);
 
@@ -432,7 +439,7 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
         padding: pillInset ? '10px 30px' : '10px 12px',
         borderRadius: shape.radius,
         background: theme.colors.backgroundSecondary ?? theme.colors.background,
-        border: `${style.width}px ${style.dash} ${style.color}`,
+        border: `${style.width}px ${style.dash} ${accentColor}`,
         boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
         cursor: onClick ? 'pointer' : 'default',
         fontFamily: theme.fonts.body,
@@ -442,7 +449,8 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
         label={node.label}
         Icon={Icon}
         iconLabel={node.kind === 'container' ? node.containerKind : node.kind}
-        color={style.color}
+        color={accentColor}
+        iconColor={accentColor}
         topLabel={topLabel}
         brand={brand}
         hasTechRow={hasTechRow}
@@ -494,9 +502,9 @@ export function C4NodeCard({ node, selected = false, handles, onClick, component
             height: TOGGLE_SIZE,
             padding: 0,
             borderRadius: 4,
-            border: `1px solid ${style.color}`,
+            border: `1px solid ${accentColor}`,
             background: theme.colors.backgroundSecondary ?? theme.colors.background,
-            color: style.color,
+            color: accentColor,
             cursor: 'pointer',
             lineHeight: 1,
           }}

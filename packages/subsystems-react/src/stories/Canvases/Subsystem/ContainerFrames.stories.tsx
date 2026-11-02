@@ -6,7 +6,7 @@ import type { SubsystemComponent } from '../../../subsystem/model';
 import { components, graphSpecFromSteps } from './fixtures';
 
 const meta = {
-  title: 'Canvases/Subsystem/ContainerFrames',
+  title: 'Canvases/Subsystem/Views/ContainerFrames',
   component: SubsystemComponentGraph,
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],
@@ -81,7 +81,8 @@ export const ProcessCards: Story = {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         title="Container frames"
-        description="Process frames draw as container cards. The host states Bun through `regionDetails` and takes the Bun hue; the renderer derives React from its members' `framework`; the database is a data store and wears the database glyph."
+        description="Process frames draw as container cards."
+        notes="The host states Bun through `regionDetails` and takes the Bun hue; the renderer derives React from its members' `framework`; the database is a data store and wears the database glyph."
         components={containerComponents}
         trails={containerEdges.trails}
         regionDetails={{
@@ -105,7 +106,8 @@ export const UnstatedTechnology: Story = {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         title="Unstated technology"
-        description="No `regionDetails`: frames with no known member framework fall back to their kind in the technology row and keep the per-key hue, so several unstated processes stay distinguishable."
+        description="No `regionDetails`: frames with no known member framework fall back to their kind in the technology row and keep the per-key hue."
+        notes="Several unstated processes stay distinguishable."
         components={containerComponents}
         trails={containerEdges.trails}
       />
@@ -118,7 +120,8 @@ export const StartOpen: Story = {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         title="Start open"
-        description="Frames start closed by default; `defaultFramesCollapsed={false}` lays every process frame out from the start. Close one from its card, by double-click, or from the Containers list in the sidebar switch."
+        description="Frames start closed by default; `defaultFramesCollapsed={false}` lays every process frame out from the start."
+        notes="Close one from its card, by double-click, or from the Containers list in the sidebar switch."
         components={containerComponents}
         trails={containerEdges.trails}
         defaultFramesCollapsed={false}

@@ -6,7 +6,7 @@ import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGr
 import { components, graphSpecFromSteps } from './fixtures';
 
 const meta = {
-  title: 'Canvases/Subsystem/GraphTitle',
+  title: 'Canvases/Subsystem/Views/GraphTitle',
   component: SubsystemComponentGraph,
   parameters: {
     layout: 'fullscreen',
@@ -35,24 +35,6 @@ const graphOnlyEdges = graphSpecFromSteps([
   ['entry', 'store', 'writes'],
   ['entry', 'stripe', 'calls'],
 ]);
-
-function GraphOnly() {
-  return (
-    <div style={{ width: '100%', height: '100vh' }}>
-      <SubsystemComponentGraph
-        components={graphOnlyComponents}
-        trails={graphOnlyEdges.trails}
-        graphTitle="Checkout"
-        hideSidebar
-      />
-    </div>
-  );
-}
-
-/** The hero configuration: no sidebar, subsystem name as a canvas chip. */
-export const GraphOnlyWithTitle: Story = {
-  render: () => <GraphOnly />,
-};
 
 /** Full-width name header above the graph and its description/trails sidebar. */
 export const WithSidebar: Story = {

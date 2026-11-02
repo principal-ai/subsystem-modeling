@@ -7,7 +7,7 @@ import type { SubsystemEdgeView, SubsystemGraphifyRelation } from '../../../subs
 import { components, trailFromSteps } from './fixtures';
 
 const meta = {
-  title: 'Canvases/Subsystem/EdgeViews',
+  title: 'Canvases/Subsystem/Views/EdgeViews',
   component: SubsystemComponentGraph,
   parameters: {
     layout: 'fullscreen',
@@ -121,7 +121,8 @@ function EdgeViewDemo() {
           graphifyRelations={labelViewGraphify}
           trails={labelViewTrails}
           title="edge views"
-          description="The graphify and trail edge sources are disjoint and never shown together. Toggle the view: **Graphify** draws `svc --references--> reader`; **Trails** draws `svc --calls--> reader`. The model is the same either way."
+          description="The graphify and trail edge sources are disjoint and never shown together."
+          notes="Toggle the view: **Graphify** draws `svc --references--> reader`; **Trails** draws `svc --calls--> reader`. The model is the same either way."
           showEdgeLabels={showEdgeLabels}
           edgeView={view}
         />

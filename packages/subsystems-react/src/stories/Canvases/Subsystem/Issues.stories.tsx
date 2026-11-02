@@ -3,14 +3,15 @@ import React, { useMemo, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider, defaultEditorTheme } from '@principal-ade/industry-theme';
 import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGraph';
-import { SubsystemIssueList, issueCategory, type SubsystemIssue, type SubsystemIssueCategory } from '../../../subsystem/IssueList';
+import { issueCategory, type SubsystemIssue, type SubsystemIssueCategory } from '../../../subsystem/IssueList';
 import { verifyProcessBoundaries, verificationIssues } from '../../../subsystem/c4Evidence';
 import { getSubsystemRegions, type SubsystemComponent, type SubsystemTrail } from '../../../subsystem/model';
 import type { C4Container } from '../../../subsystem/c4';
 import { components, graphSpecFromSteps } from './fixtures';
+import { ISSUES } from './issuesFixtures';
 
 const meta = {
-  title: 'Canvases/Subsystem/Issues',
+  title: 'Canvases/Subsystem/Views/Issues',
   component: SubsystemComponentGraph,
   parameters: {
     layout: 'fullscreen',
@@ -27,142 +28,6 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const ISSUES: SubsystemIssue[] = [
-  {
-    id: 'i1',
-    severity: 'error',
-    kind: 'missing_file',
-    message: 'File src/checkout/cartStore.ts is not present on disk (repo pkg:github/you/your-app).',
-    target: { kind: 'component', id: 'store', label: 'cartStore' },
-    fix: { label: 'Use graphify file' },
-  },
-  {
-    id: 'i2',
-    severity: 'error',
-    kind: 'construct_mismatch',
-    message: 'Claimed function but graphify infers class.',
-    target: { kind: 'component', id: 'entry', label: 'checkoutApi' },
-  },
-  {
-    id: 'i3',
-    severity: 'info',
-    kind: 'signature_unconfirmed',
-    message: 'Named parameter types are not present in the graphify cache.',
-    target: { kind: 'component', id: 'entry', label: 'checkoutApi' },
-  },
-  {
-    id: 'i5',
-    severity: 'info',
-    kind: 'boundary_module_file_mismatch',
-    message: 'Module "src/checkout" contains a file outside its declared root.',
-    target: { kind: 'module', id: 'src/checkout', label: 'src/checkout' },
-  },
-  {
-    id: 'i6',
-    severity: 'info',
-    kind: 'trail',
-    message: 'Step 2 references a line that moved (was :42).',
-    target: {
-      kind: 'step',
-      id: 'story-steps',
-      label: 'Story steps',
-      detail: 'step 2',
-      stepIndex: 1,
-    },
-  },
-  {
-    id: 'i20',
-    severity: 'error',
-    kind: 'step_span_unconfirmed',
-    message: 'Trail "Story steps" step 1: step span not captured (entry → store via writes)',
-    target: {
-      kind: 'step',
-      id: 'story-steps',
-      label: 'Story steps',
-      detail: 'step 1',
-      stepIndex: 0,
-    },
-  },
-  {
-    id: 'i21',
-    severity: 'info',
-    kind: 'step_span_stale',
-    message: 'Trail "Story steps" step 2: step span changed since verification (lines 42-44 in src/checkout/api.ts)',
-    target: {
-      kind: 'step',
-      id: 'story-steps',
-      label: 'Story steps',
-      detail: 'step 2',
-      stepIndex: 1,
-    },
-  },
-  {
-    id: 'i7',
-    severity: 'info',
-    kind: 'boundary_process_nest_disagree',
-    message:
-      'module "src/host/main.ts" members claim different processes: "host", "renderer"',
-    target: { kind: 'module', id: 'src/host/main.ts', label: 'src/host/main.ts' },
-  },
-  {
-    id: 'i17',
-    severity: 'error',
-    kind: 'symbol_ambiguous',
-    message: 'Multiple Graphify nodes match readSession (3 candidates)',
-    target: { kind: 'component', id: 'session-reader', label: 'SessionReader' },
-  },
-  {
-    id: 'i18',
-    severity: 'error',
-    kind: 'symbol_unmatched',
-    message: 'No Graphify node matches symbol persistSession in src/session/SessionStore.ts',
-    target: { kind: 'component', id: 'session-store', label: 'SessionStore' },
-  },
-  {
-    id: 'i9',
-    severity: 'info',
-    kind: 'construct_span_stale',
-    message: 'Declaration moved since capture — recorded start line 42, now 57.',
-    target: { kind: 'component', id: 'session-store', label: 'SessionStore' },
-    fix: { label: 'Re-pin declaration' },
-  },
-  {
-    id: 'i10',
-    severity: 'info',
-    kind: 'construct_unconfirmed',
-    message: 'Graphify anchored the node but left the construct unclassified (interface vs type alias).',
-    target: { kind: 'component', id: 'host-info', label: 'HostInfo' },
-  },
-  {
-    id: 'i22',
-    severity: 'error',
-    kind: 'construct_span_unconfirmed',
-    message: 'HostInfo has no captured source span — its declaration extent is unpinned until an agent proposes start/end lines.',
-    target: { kind: 'component', id: 'host-info', label: 'HostInfo' },
-  },
-  {
-    id: 'i11',
-    severity: 'error',
-    kind: 'signature_mismatch',
-    message: 'Claimed (req: HostInfo) => Session; Graphify has (string) => void.',
-    target: { kind: 'component', id: 'entry', label: 'checkoutApi' },
-  },
-  {
-    id: 'i13',
-    severity: 'info',
-    kind: 'repo_unresolved',
-    message: 'Repo pkg:github/acme/worker is not available locally — clone it to verify its components',
-    target: { kind: 'repo', id: 'pkg:github/acme/worker', label: 'pkg:github/acme/worker' },
-  },
-  {
-    id: 'i19',
-    severity: 'info',
-    kind: 'graphify_unavailable',
-    message: 'Graphify cache missing for pkg:github/you/your-app — build it to verify constructs and anchors',
-    target: { kind: 'repo', id: 'pkg:github/you/your-app', label: 'pkg:github/you/your-app' },
-  },
-  ];
-
 const graphComponents = components([
   ['entry', 'checkoutApi', 'function', 'src/checkout/api.ts', 'pkg:github/you/your-app', 'Handles cart requests.', 'checkoutApi'],
   ['store', 'cartStore', 'store', 'src/checkout/cartStore.ts', 'pkg:github/you/your-app', 'Retained cart state.', 'cartStore'],
@@ -173,28 +38,6 @@ const graphEdges = graphSpecFromSteps([
   ['entry', 'store', 'writes'],
   ['entry', 'stripe', 'calls'],
 ]);
-
-/** The catalogue, grouped by verification layer. */
-export const List: Story = {
-  render: () => (
-    <div style={{ display: 'flex', flexDirection: 'column', width: 380, height: '100vh', borderRight: '1px solid #333' }}>
-      <SubsystemIssueList
-        issues={ISSUES}
-        onSelectIssue={() => {}}
-        onApplyFix={() => {}}
-      />
-    </div>
-  ),
-};
-
-/** All four layers clean — the happy state. */
-export const AllGood: Story = {
-  render: () => (
-    <div style={{ display: 'flex', flexDirection: 'column', width: 380, height: '100vh', borderRight: '1px solid #333' }}>
-      <SubsystemIssueList issues={[]} />
-    </div>
-  ),
-};
 
 /** In place: diagnostics active, so the sidebar bottom panel is the issue list. */
 export const GraphWithIssues: Story = {
@@ -219,74 +62,6 @@ export const GraphWithIssues: Story = {
 };
 
 /** Trail step verification findings — unconfirmed and stale call sites. */
-const TRAIL_STEP_ISSUES: SubsystemIssue[] = [
-  {
-    id: 'ts1',
-    severity: 'info',
-    kind: 'step_span_unconfirmed',
-    message: 'Trail "Add to Cart" step 1: call site not verified (addToCart → cartStore via writes)',
-    target: {
-      kind: 'step',
-      id: 'add-to-cart',
-      label: 'Add to Cart',
-      detail: 'step 1',
-      stepIndex: 0,
-    },
-  },
-  {
-    id: 'ts2',
-    severity: 'info',
-    kind: 'step_span_unconfirmed',
-    message: 'Trail "Add to Cart" step 2: call site not verified (cartStore → inventoryService via calls)',
-    target: {
-      kind: 'step',
-      id: 'add-to-cart',
-      label: 'Add to Cart',
-      detail: 'step 2',
-      stepIndex: 1,
-    },
-  },
-  {
-    id: 'ts3',
-    severity: 'info',
-    kind: 'step_span_stale',
-    message: 'Trail "Checkout" step 1: call site changed since verification (lines 42-44 in src/checkout/api.ts)',
-    target: {
-      kind: 'step',
-      id: 'checkout',
-      label: 'Checkout',
-      detail: 'step 1',
-      stepIndex: 0,
-    },
-  },
-  {
-    id: 'ts4',
-    severity: 'info',
-    kind: 'step_span_stale',
-    message: 'Trail "Checkout" step 3: call site changed since verification (lines 78-82 in src/checkout/api.ts)',
-    target: {
-      kind: 'step',
-      id: 'checkout',
-      label: 'Checkout',
-      detail: 'step 3',
-      stepIndex: 2,
-    },
-  },
-];
-
-/** Trail step verification: shows unconfirmed and stale call site findings. */
-export const TrailStepVerification: Story = {
-  render: () => (
-    <div style={{ display: 'flex', flexDirection: 'column', width: 380, height: '100vh', borderRight: '1px solid #333' }}>
-      <SubsystemIssueList
-        issues={TRAIL_STEP_ISSUES}
-        focusCategory="trail"
-        onSelectIssue={() => {}}
-      />
-    </div>
-  ),
-};
-
 /** Trail step verification badges on graph edges. */
 const stepVerificationComponents = components([
   ['api', 'checkoutApi', 'function', 'src/checkout/api.ts', 'pkg:github/you/your-app', 'Handles cart requests.', 'checkoutApi'],
@@ -454,7 +229,8 @@ export const GraphWithProcessVerification: Story = {
       <div style={{ width: '100%', height: '100vh' }}>
         <SubsystemComponentGraph
           title="Process verification"
-          description="Each process boundary's C4 verification status flows through the diagnostics pipeline as a dynamic-topology finding: **unclaimed** (no container), **awaiting decision** (an agent scaffold), or **rejected** — one per boundary that is not verified, badged on the frame and listed in the sidebar. A verified boundary reports nothing: the audit reports absence only, and silence is the good state. The cards' fixes drive the element store — propose an unclaimed boundary, accept the proposed one — and the badge clears when the decision lands."
+          description="Each process boundary's C4 verification status flows through the diagnostics pipeline as a dynamic-topology finding."
+          notes="**Unclaimed** (no container), **awaiting decision** (an agent scaffold), or **rejected** — one per boundary that is not verified, badged on the frame and listed in the sidebar. A verified boundary reports nothing: the audit reports absence only, and silence is the good state. The cards' fixes drive the element store — propose an unclaimed boundary, accept the proposed one — and the badge clears when the decision lands."
           components={processComponents}
           trails={processEdges.trails}
           issues={issues}

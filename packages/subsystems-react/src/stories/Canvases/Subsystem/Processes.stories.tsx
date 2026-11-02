@@ -5,7 +5,7 @@ import { SubsystemComponentGraph } from '../../../subsystem/SubsystemComponentGr
 import { components, graphSpecFromSteps } from './fixtures';
 
 const meta = {
-  title: 'Canvases/Subsystem/Processes',
+  title: 'Canvases/Subsystem/Views/Processes',
   component: SubsystemComponentGraph,
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],
@@ -67,7 +67,8 @@ export const ProcessBoundaries: Story = {
     <div style={{ width: '100%', height: '100vh' }}>
       <SubsystemComponentGraph
         title="Process boundaries"
-        description="Host and renderer each render in their own ELK-aware boundary frame. The worker process holds a single node and still gets a frame (singleton frames default on). The telemetry service has no `process` and sits outside every boundary."
+        description="Host and renderer each render in their own ELK-aware boundary frame."
+        notes="The worker process holds a single node and still gets a frame (singleton frames default on). The telemetry service has no `process` and sits outside every boundary."
         components={processComponents}
         trails={processEdges.trails}
       />

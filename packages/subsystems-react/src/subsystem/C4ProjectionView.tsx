@@ -14,9 +14,12 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useTheme } from '@principal-ade/industry-theme';
-import { IndustryMarkdownSlide } from 'themed-markdown';
+import { SUBSYSTEM_MODEL_DESCRIPTION_MAX } from '@principal-ai/subsystems-core';
 import { C4Graph } from './C4Graph';
 import type { C4ConstructGraph, C4GraphProps } from './C4Graph';
+import { C4ContainersPanel } from './C4ContainersPanel';
+import { DescriptionOverlay } from './DescriptionOverlay';
+import { DescriptionPreview } from './DescriptionPreview';
 import { GraphWithSidebar } from './GraphWithSidebar';
 import { TrailStepsNav } from './TrailStepsNav';
 import {
@@ -24,7 +27,7 @@ import {
   deriveTrailPlayerElements,
 } from './c4TrailFocus';
 import { deriveGraphEdges, trailStepGraphEdgeId } from './model';
-import type { C4Element, C4Model } from './c4';
+import type { C4Component, C4Container, C4Element, C4Model } from './c4';
 import type { SubsystemComponent, SubsystemTrail } from './model';
 import type { TrailComponentLabels } from './trailStepDisplay';
 
@@ -39,8 +42,18 @@ export interface C4ProjectionViewProps {
   memberships: Readonly<Record<string, readonly string[]>>;
   /** Sidebar heading. Falls back to the system label. */
   title?: string;
-  /** Optional Markdown description under the heading. */
+  /**
+   * Short description shown under the heading. At most 200 characters;
+   * extended detail belongs in `notes`.
+   */
   description?: string;
+  /**
+   * Extended Markdown notes about the model. When set, the description's
+   * `Show more` link opens the full document in an Overview overlay. Omit
+   * `description` and the sidebar falls back to a clamped preview of these
+   * notes.
+   */
+  notes?: string;
   /** Extra controls in the sidebar header (source badge, refresh, …). */
   headerActions?: ReactNode;
   /**
@@ -198,6 +211,7 @@ export function C4ProjectionView({
   memberships,
   title,
   description,
+  notes,
   headerActions,
   openContainerIds,
   onOpenContainerIdsChange,
@@ -210,6 +224,18 @@ export function C4ProjectionView({
   style,
 }: C4ProjectionViewProps) {
   const { theme } = useTheme();
+  const [notesOpen, setNotesOpen] = useState(false);
+  const rawDescription = description?.trim();
+  // The host caps the authored description; trim defensively for other hosts.
+  const shortDescription =
+    rawDescription && rawDescription.length > SUBSYSTEM_MODEL_DESCRIPTION_MAX
+      ? `${rawDescription.slice(0, SUBSYSTEM_MODEL_DESCRIPTION_MAX - 1)}…`
+      : rawDescription;
+  const extendedNotes = notes?.trim();
+  // The short description owns the header; a legacy model with only notes
+  // falls back to a clamped preview of them.
+  const descriptionPreview = shortDescription || extendedNotes;
+  const hasNotes = Boolean(extendedNotes);
   const [internalOpenIds, setInternalOpenIds] = useState<string[]>(() =>
     [...(openContainerIds ?? model.openContainerIds ?? [])].sort(),
   );
@@ -234,6 +260,27 @@ export function C4ProjectionView({
     stepIndex: number;
   } | null>(null);
   const trailOpenedRef = useRef<Set<string>>(new Set());
+
+  /** Sidebar section: the container overview or the trails. */
+  const [sidebarTab, setSidebarTab] = useState<'containers' | 'trails'>('containers');
+  /** Container last activated from the sidebar — the camera target. */
+  const [containerFocus, setContainerFocus] = useState<{ id: string } | null>(null);
+
+  const containerItems = useMemo(() => {
+    const components = model.nodes.filter(
+      (node): node is C4Component => node.kind === 'component',
+    );
+    return model.nodes
+      .filter((node): node is C4Container => node.kind === 'container')
+      .map((container) => ({
+        container,
+        open: resolvedOpenIds.includes(container.id),
+        members: components.filter(
+          (component) =>
+            (component.container ?? component.parentId) === container.id,
+        ),
+      }));
+  }, [model.nodes, resolvedOpenIds]);
 
   const parents = useMemo(() => parentIdsOf(model), [model]);
   const allElementIds = useMemo(
@@ -297,6 +344,7 @@ export function C4ProjectionView({
       setFocusedTrailId(trailId);
       setHoveredStep(null);
       setOpenIds(next);
+      setContainerFocus(null);
       onTrailSelect?.({ trailId });
     },
     [containers, onTrailSelect, resolvedOpenIds, setOpenIds],
@@ -315,13 +363,67 @@ export function C4ProjectionView({
 
   const toggleContainer = useCallback(
     (id: string) => {
-      setOpenIds(
-        resolvedOpenIds.includes(id)
-          ? resolvedOpenIds.filter((openId) => openId !== id)
-          : [...resolvedOpenIds, id].sort(),
-      );
+      if (resolvedOpenIds.includes(id)) {
+        setOpenIds(resolvedOpenIds.filter((openId) => openId !== id));
+        setContainerFocus((prev) => (prev?.id === id ? null : prev));
+      } else {
+        setOpenIds([...resolvedOpenIds, id].sort());
+      }
     },
     [resolvedOpenIds, setOpenIds],
+  );
+
+  /**
+   * Sidebar row click: drop any trail focus (whose opened containers were a
+   * previous frame), then toggle the picked container (dropdown) and frame it.
+   */
+  const activateContainer = useCallback(
+    (id: string) => {
+      const opened = trailOpenedRef.current;
+      const clearing = focusedTrailId != null;
+      const base = clearing
+        ? resolvedOpenIds.filter((openId) => !opened.has(openId))
+        : resolvedOpenIds;
+      if (clearing) {
+        trailOpenedRef.current = new Set();
+        setFocusedTrailId(null);
+        setHoveredStep(null);
+        setFocusedStep(null);
+        onTrailSelect?.(null);
+      }
+      if (base.includes(id)) {
+        setOpenIds(base.filter((openId) => openId !== id));
+        setContainerFocus((prev) => (prev?.id === id ? null : prev));
+      } else {
+        setContainerFocus({ id });
+        setOpenIds([...base, id].sort());
+      }
+    },
+    [focusedTrailId, onTrailSelect, resolvedOpenIds, setOpenIds],
+  );
+
+  /**
+   * Select-only row (no components to expand): drop any trail focus, keep the
+   * open set as it is, and frame the container.
+   */
+  const selectContainer = useCallback(
+    (id: string) => {
+      const opened = trailOpenedRef.current;
+      const clearing = focusedTrailId != null;
+      const base = clearing
+        ? resolvedOpenIds.filter((openId) => !opened.has(openId))
+        : resolvedOpenIds;
+      if (clearing) {
+        trailOpenedRef.current = new Set();
+        setFocusedTrailId(null);
+        setHoveredStep(null);
+        setFocusedStep(null);
+        onTrailSelect?.(null);
+        if (base.length !== resolvedOpenIds.length) setOpenIds(base);
+      }
+      setContainerFocus({ id });
+    },
+    [focusedTrailId, onTrailSelect, resolvedOpenIds, setOpenIds],
   );
 
   const activeStep = focusedStep ?? hoveredStep;
@@ -408,6 +510,7 @@ export function C4ProjectionView({
   );
 
   const openAll = useCallback(() => {
+    setContainerFocus(null);
     setOpenIds(
       model.nodes
         .filter((node) => node.kind === 'container')
@@ -417,23 +520,19 @@ export function C4ProjectionView({
   }, [model, setOpenIds]);
 
   const collapseAll = useCallback(() => {
+    setContainerFocus(null);
     setOpenIds([]);
   }, [setOpenIds]);
 
-  const sidebarHeader = description ? (
-    <div style={{ fontSize: theme.fontSizes[0], lineHeight: 1.5 }}>
-      <IndustryMarkdownSlide
-        content={description}
-        slideIdPrefix="c4-projection-desc"
-        slideIndex={0}
-        isVisible={true}
-        theme={theme}
-        disableScroll={true}
-        disableBasePadding
-        enableKeyboardScrolling={false}
-        autoFocusOnVisible={false}
-      />
-    </div>
+  const sidebarHeader = descriptionPreview ? (
+    <DescriptionPreview
+      content={descriptionPreview}
+      clamp={!shortDescription}
+      open={hasNotes && notesOpen}
+      onOpen={hasNotes ? () => setNotesOpen(true) : undefined}
+      onClose={hasNotes ? () => setNotesOpen(false) : undefined}
+      slideIdPrefix="c4-projection-desc"
+    />
   ) : null;
 
   return (
@@ -482,16 +581,6 @@ export function C4ProjectionView({
           }}
         >
           {headerActions}
-          <button type="button" onClick={openAll} style={smallButton(theme)}>
-            Open all
-          </button>
-          <button
-            type="button"
-            onClick={collapseAll}
-            style={smallButton(theme)}
-          >
-            Collapse all
-          </button>
         </div>
       </header>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -502,7 +591,18 @@ export function C4ProjectionView({
           maxWidth={480}
           headerMaxHeight="30%"
           header={sidebarHeader}
+          tabs={
+            trails.length > 0
+              ? [
+                  { id: 'containers', label: 'Containers' },
+                  { id: 'trails', label: 'Trails' },
+                ]
+              : undefined
+          }
+          activeTab={trails.length > 0 ? sidebarTab : undefined}
+          onTabChange={(id) => setSidebarTab(id as 'containers' | 'trails')}
           sidebarBody={
+            trails.length > 0 && sidebarTab === 'trails' ? (
             <TrailStepsNav
               trails={[...trails]}
               focusedTrailId={focusedTrailId}
@@ -544,8 +644,26 @@ export function C4ProjectionView({
                 onTrailStepHover?.(null);
               }}
             />
+            ) : (
+              <C4ContainersPanel
+                containers={containerItems}
+                activeId={containerFocus?.id ?? null}
+                onActivate={activateContainer}
+                onSelect={selectContainer}
+                onOpenAll={openAll}
+                onCloseAll={collapseAll}
+              />
+            )
           }
         >
+          {hasNotes && notesOpen && (
+            <DescriptionOverlay
+              description={extendedNotes ?? ''}
+              ariaLabel="Subsystem notes"
+              slideIdPrefix="c4-projection-notes-overlay"
+              onClose={() => setNotesOpen(false)}
+            />
+          )}
           <C4Graph
             model={renderedModel}
             onSelectEdge={(edge) => {
@@ -554,6 +672,7 @@ export function C4ProjectionView({
             }}
             onTrailClick={(ref) => focusTrail(ref.trailId)}
             onToggleContainer={toggleContainer}
+            containerFocus={focusedTrailId ? undefined : containerFocus}
             hiddenElementIds={emphasis.hiddenElementIds}
             hiddenEdgeIds={emphasis.hiddenEdgeIds}
             dimmedElementIds={emphasis.dimmedElementIds}
@@ -571,25 +690,4 @@ export function C4ProjectionView({
       </div>
     </div>
   );
-}
-
-function smallButton(theme: ReturnType<typeof useTheme>['theme']) {
-  return {
-    flexShrink: 0,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 132,
-    height: 34,
-    padding: '0 12px',
-    boxSizing: 'border-box',
-    whiteSpace: 'nowrap',
-    borderRadius: 6,
-    border: `1px solid ${theme.colors.border}`,
-    background: 'transparent',
-    color: theme.colors.textSecondary,
-    fontFamily: theme.fonts.body,
-    fontSize: theme.fontSizes[1],
-    cursor: 'pointer',
-  } as const;
 }

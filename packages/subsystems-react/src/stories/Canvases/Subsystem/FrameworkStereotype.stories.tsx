@@ -6,7 +6,7 @@ import type { SubsystemComponent } from '../../../subsystem/model';
 import { trailFromSteps } from './fixtures';
 
 const meta = {
-  title: 'Canvases/Subsystem/FrameworkStereotype',
+  title: 'Canvases/Subsystem/Views/FrameworkStereotype',
   component: SubsystemComponentGraph,
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],

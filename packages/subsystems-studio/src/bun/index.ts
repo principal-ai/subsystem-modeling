@@ -2166,6 +2166,7 @@ const requests: RequestHandlers = {
 							id: e.id,
 							title: e.title,
 							description: e.description,
+							notes: full?.notes,
 							componentCount: e.componentCount,
 							edgeCount: e.edgeCount,
 							createdAt: e.createdAt,

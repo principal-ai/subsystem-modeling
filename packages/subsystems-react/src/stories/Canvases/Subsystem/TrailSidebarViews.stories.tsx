@@ -56,7 +56,7 @@ function Demo() {
 }
 
 const meta = {
-  title: 'Canvases/Subsystem/TrailSidebarViews',
+  title: 'Canvases/Subsystem/Views/TrailSidebarViews',
   component: SubsystemComponentGraph,
   parameters: { layout: 'fullscreen' },
   decorators: [(Story) => (

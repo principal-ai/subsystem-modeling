@@ -20,7 +20,7 @@ import type { SubsystemOpenFileOptions } from '../../../subsystem/sourceSpan';
 import { components, graphSpecFromSteps } from './fixtures';
 
 const meta = {
-  title: 'Canvases/Subsystem/LayoutDirection',
+  title: 'Canvases/Subsystem/Views/LayoutDirection',
   component: SubsystemComponentGraph,
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],

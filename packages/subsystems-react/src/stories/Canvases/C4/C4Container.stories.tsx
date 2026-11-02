@@ -6,7 +6,7 @@ import { C4Graph } from '../../../subsystem/C4Graph';
 import type { C4Edge, C4Model, C4Element, C4Container } from '../../../subsystem/c4';
 
 const meta = {
-  title: 'Canvases/C4/C4Container',
+  title: 'Canvases/C4/Graphs/C4Container',
   component: C4Graph,
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],

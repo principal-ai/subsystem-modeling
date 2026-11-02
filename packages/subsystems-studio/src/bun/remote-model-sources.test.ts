@@ -215,12 +215,26 @@ describe("remote model sources", () => {
 		expect(parseRemoteModelSource({ bucket: " acme-models ", prefix: " models/" })).toEqual({ bucket: "acme-models", prefix: " models/" });
 	});
 
-	test("previews keep large descriptions bounded without truncating the stored model", async () => {
-		const description = "x".repeat(2000);
-		const { sources } = fixture({ "model.json": JSON.stringify({ ...document, description }) });
+	test("previews keep the short description and extended notes intact", async () => {
+		const description = "A short blurb.";
+		const notes = "x".repeat(2000);
+		const { sources } = fixture({
+			"model.json": JSON.stringify({ ...document, description, notes }),
+		});
 		const result = await sources.configure({ bucket: "acme-models" });
-		expect(result.preview.models[0]?.description).toHaveLength(1000);
-		expect((await sources.get(result.source.id, "model.json")).document.description).toBe(description);
+		expect(result.preview.models[0]?.description).toBe(description);
+		const stored = (await sources.get(result.source.id, "model.json")).document;
+		expect(stored.description).toBe(description);
+		expect(stored.notes).toBe(notes);
+	});
+
+	test("skips a model whose description exceeds the 200-character cap", async () => {
+		const { sources } = fixture({
+			"model.json": JSON.stringify({ ...document, description: "x".repeat(201) }),
+		});
+		await expect(sources.configure({ bucket: "acme-models" })).rejects.toThrow(
+			"No readable, valid subsystem model JSON",
+		);
 	});
 });
 

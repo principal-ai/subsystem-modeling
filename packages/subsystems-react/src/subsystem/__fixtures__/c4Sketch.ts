@@ -14,6 +14,8 @@ export const SKETCH_FIXTURE: C4Sketch = {
   title: 'Acme widget architecture',
   repoKeys: [PURL],
   author: 'storybook',
+  description:
+    'An authored hypothesis for the Acme widget: a host, a worker, a store inside the host, and a GitHub integration.',
   notes:
     '## About this sketch\n\nThis is an **authored hypothesis** for the Acme widget. It describes the host and worker containers, the store inside the host, and the GitHub integration.\n\n- The worker calls the host over RPC.\n- The host calls GitHub over HTTPS.\n- Nothing here is verified or promoted.',
   createdAt: '2026-10-25T00:00:00.000Z',

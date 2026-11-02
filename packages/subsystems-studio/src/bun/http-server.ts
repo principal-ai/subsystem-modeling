@@ -413,6 +413,7 @@ export async function handleSubsystemModelRequest(
 			{
 				title: body["title"] as string,
 				description: typeof body["description"] === "string" ? body["description"] : undefined,
+				notes: typeof body["notes"] === "string" ? body["notes"] : undefined,
 				components: body["components"] as SubsystemModelDocument["components"],
 				trails: body["trails"] as StoredSubsystemModel["trails"],
 			},
@@ -665,6 +666,8 @@ export async function handleSubsystemModelRequest(
 			repoKeys: body["repoKeys"] as string[] | undefined,
 			model: body["model"] as C4SketchCreateInput["model"],
 			author: typeof body["author"] === "string" ? body["author"] : undefined,
+			description:
+				typeof body["description"] === "string" ? body["description"] : undefined,
 			notes: typeof body["notes"] === "string" ? body["notes"] : undefined,
 		});
 		if (!result.ok) return error(result.error, 400);

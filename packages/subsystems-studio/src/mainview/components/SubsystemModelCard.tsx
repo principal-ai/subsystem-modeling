@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
 	Check,
 	ChevronDown,
@@ -25,7 +26,7 @@ import {
 	Share2,
 	X,
 } from "lucide-react";
-import { IndustryMarkdownSlide } from "themed-markdown";
+import { DescriptionOverlay, DescriptionPreview } from "@principal-ai/subsystems-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import type { SubsystemModelSummary } from "../../shared/contract";
 import {
@@ -62,7 +63,7 @@ export interface SubsystemModelCardProps {
 	onRowClick?: (e: ReactMouseEvent) => void;
 	/** Open the model's C4 projection in its own tab. */
 	onOpenC4?: () => void;
-	/** Toggle the inline details (description + trail list). */
+	/** Toggle the inline details (description / notes + trail list). */
 	onToggleDetails?: () => void;
 	onCopyPath?: () => void;
 	onShareGist?: () => void;
@@ -238,6 +239,12 @@ export function SubsystemModelCard({
 }: SubsystemModelCardProps) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
+	const [notesOpen, setNotesOpen] = useState(false);
+	const description = graph.description?.trim();
+	const notes = graph.notes?.trim();
+	// The short description owns the details column; a legacy model with only
+	// notes falls back to a clamped preview of them.
+	const descriptionPreview = description || notes;
 	const isExpanded = selectedFile != null;
 	const isRowExpanded = rowExpanded && !isExpanded;
 	const isOpen = isExpanded || rowExpanded;
@@ -395,7 +402,7 @@ export function SubsystemModelCard({
 								alignItems: "flex-start",
 							}}
 						>
-							{graph.description && (
+							{descriptionPreview && (
 								<div
 									style={{
 										flex: "1.5 1 0",
@@ -418,14 +425,13 @@ export function SubsystemModelCard({
 										<FileText size={12} style={{ flexShrink: 0 }} aria-hidden="true" />
 										Description
 									</div>
-									<IndustryMarkdownSlide
-										content={graph.description}
-										theme={theme}
+									<DescriptionPreview
+										content={descriptionPreview}
+										clamp={!description}
+										open={Boolean(notes) && notesOpen}
+										onOpen={notes ? () => setNotesOpen(true) : undefined}
+										onClose={notes ? () => setNotesOpen(false) : undefined}
 										slideIdPrefix={`subsystem-model-desc-${graph.id}`}
-										slideIndex={0}
-										isVisible
-										transparentBackground
-										disableBasePadding
 									/>
 								</div>
 							)}
@@ -552,6 +558,22 @@ export function SubsystemModelCard({
 					)}
 				</div>
 			</div>
+			{notesOpen && notes
+				? createPortal(
+						<div
+							onClick={(e) => e.stopPropagation()}
+							style={{ position: "fixed", inset: 0, zIndex: 2147483000 }}
+						>
+							<DescriptionOverlay
+								description={notes}
+								ariaLabel={`Notes for ${graph.title}`}
+								slideIdPrefix={`subsystem-model-notes-${graph.id}`}
+								onClose={() => setNotesOpen(false)}
+							/>
+						</div>,
+						document.body,
+					)
+				: null}
 		</div>
 	);
 }

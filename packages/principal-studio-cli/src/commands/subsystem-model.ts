@@ -234,6 +234,7 @@ async function createAction(options: {
       {
         title: body['title'] as string,
         description: typeof body['description'] === 'string' ? body['description'] : undefined,
+        notes: typeof body['notes'] === 'string' ? body['notes'] : undefined,
         components: body['components'] as unknown[],
         trails: Array.isArray(body['trails']) ? body['trails'] : undefined,
       },

@@ -11,7 +11,10 @@
 import { promises as fs } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { deriveGraphEdges } from '@principal-ai/subsystems-core';
+import {
+  deriveGraphEdges,
+  SUBSYSTEM_MODEL_DESCRIPTION_MAX,
+} from '@principal-ai/subsystems-core';
 import { capturePurlCommits, purlRepoKey, type PurlCommit } from './purl-commits.js';
 
 /** Home override for tests (mirrors PRINCIPAL_ALEXANDRIA_HOME); lazy so an
@@ -81,7 +84,10 @@ interface IndexFile {
 export interface StoredSubsystemModel {
   id: string;
   title: string;
+  /** Short sidebar blurb, capped at SUBSYSTEM_MODEL_DESCRIPTION_MAX. */
   description?: string;
+  /** Extended Markdown notes, opened from the description's `Show more`. */
+  notes?: string;
   components: unknown[];
   trails?: unknown[];
   createdAt: string;
@@ -99,8 +105,24 @@ export interface StoredSubsystemModel {
 export interface CreateSubsystemModelInput {
   title: string;
   description?: string;
+  notes?: string;
   components: unknown[];
   trails?: unknown[];
+}
+
+/** Trim an optional authored field; blank means absent. */
+function normalizeOptionalText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+/** Keep the stored short description within the schema cap. */
+function normalizeDescription(value: string | undefined): string | undefined {
+  const trimmed = normalizeOptionalText(value);
+  if (!trimmed) return undefined;
+  return trimmed.length > SUBSYSTEM_MODEL_DESCRIPTION_MAX
+    ? `${trimmed.slice(0, SUBSYSTEM_MODEL_DESCRIPTION_MAX - 1)}…`
+    : trimmed;
 }
 
 function graphId(): string {
@@ -206,8 +228,13 @@ export async function createSubsystemModel(
 ): Promise<StoredSubsystemModel> {
   await ensureDir();
   const now = new Date().toISOString();
+  const { description: rawDescription, notes: rawNotes, ...rest } = doc;
+  const description = normalizeDescription(rawDescription);
+  const notes = normalizeOptionalText(rawNotes);
   const record: StoredSubsystemModel = {
-    ...doc,
+    ...rest,
+    ...(description ? { description } : {}),
+    ...(notes ? { notes } : {}),
     id: graphId(),
     createdAt: now,
     updatedAt: now,
@@ -229,6 +256,7 @@ export async function updateSubsystemModel(
       StoredSubsystemModel,
       | 'title'
       | 'description'
+      | 'notes'
       | 'components'
       | 'trails'
       | 'gist'
@@ -237,9 +265,16 @@ export async function updateSubsystemModel(
 ): Promise<StoredSubsystemModel | null> {
   const existing = await getSubsystemModel(id);
   if (!existing) return null;
+  const { description: rawDescription, notes: rawNotes, ...rest } = patch;
+  const description =
+    rawDescription !== undefined ? normalizeDescription(rawDescription) : undefined;
+  const notes =
+    rawNotes !== undefined ? normalizeOptionalText(rawNotes) : undefined;
   const updated: StoredSubsystemModel = {
     ...existing,
-    ...patch,
+    ...rest,
+    ...(rawDescription !== undefined ? { description } : {}),
+    ...(rawNotes !== undefined ? { notes } : {}),
     updatedAt: new Date().toISOString(),
   };
   await fs.writeFile(graphPath(id), JSON.stringify(updated, null, 2), 'utf8');
@@ -332,6 +367,7 @@ export async function upsertSubsystemModel(
       const updated = await updateSubsystemModel(existing.id, {
         title: doc.title,
         description: doc.description,
+        notes: doc.notes,
         components: doc.components,
         trails: doc.trails,
       });

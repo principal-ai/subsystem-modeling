@@ -4,11 +4,11 @@
  *
  * Left: the model's files as a tree; clicking a file toggles its
  * constructs. Right: signatures grouped by repo, and within a repo stacked
- * per file under one combined file header carrying the path and a
- * description toggle; a declaration with a known line labels just that
- * construct's line in a file-like gutter, and `external` constructs get a
- * header naming their kind with the body naming the construct. The model
- * description's toggle sits in the left chrome and opens the markdown as an
+ * per file under one combined file header carrying the path; a declaration
+ * with a known line labels just that construct's line in a file-like gutter,
+ * and `external` constructs get a header naming their kind with the body
+ * naming the construct. The short model description sits in the left chrome;
+ * when `notes` is set, its `Show more` link opens the extended Markdown as an
  * overlay over the construct area. File opens still use the bottom FileDrawer
  * when the host injects a viewer.
  */
@@ -16,6 +16,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTheme } from '@principal-ade/industry-theme';
+import { SUBSYSTEM_MODEL_DESCRIPTION_MAX } from '@principal-ai/subsystems-core';
 import { IndustryMarkdownSlide } from 'themed-markdown';
 import {
   AlignLeft,
@@ -35,6 +36,7 @@ import { ComponentDeclaration } from './ComponentDeclaration';
 import type { ComponentVerificationState } from './ComponentDeclaration';
 import type { DeclarationSymbolRef, SymbolInspection } from './symbolRefs';
 import { SubsystemDiagnosticToggle, type SubsystemDiagnostic } from './DiagnosticToggle';
+import { DescriptionPreview } from './DescriptionPreview';
 import { FileDrawer } from './FileDrawer';
 import { componentColor } from '../pierre/constructColors';
 import { resolvePierreSyntaxThemeName } from '../pierre/pierreSyntaxTheme';
@@ -45,14 +47,21 @@ export interface ConstructsCatalogProps {
   title?: string;
   hideSidebar?: boolean;
   /**
-   * Model description. Its toggle lives in the left chrome; opening it shows
-   * the markdown as an overlay over the construct area.
+   * Short model description shown in the left chrome. At most 200 characters;
+   * extended detail belongs in `notes`.
    */
   description?: string;
   /**
-   * Controlled open state for the description overlay. When provided the host
-   * owns it (e.g. a button in its own header) and the built-in toggle just
-   * reports changes; otherwise the built-in toggle drives the state.
+   * Extended Markdown notes about the model. When set, the description's
+   * `Show more` link opens the full document in an Overview overlay over the
+   * construct area. Omit `description` and the chrome falls back to a clamped
+   * preview of these notes.
+   */
+  notes?: string;
+  /**
+   * Controlled open state for the notes overlay. When provided the host owns
+   * it (e.g. a button in its own header); otherwise the built-in link drives
+   * the state.
    */
   descriptionOpen?: boolean;
   onDescriptionOpenChange?: (open: boolean) => void;
@@ -196,6 +205,7 @@ export function ConstructsCatalog({
   title,
   hideSidebar,
   description,
+  notes,
   descriptionOpen: descriptionOpenProp,
   onDescriptionOpenChange,
   diagnostic,
@@ -237,7 +247,17 @@ export function ConstructsCatalog({
     setDescriptionVisible(open);
     onDescriptionOpenChange?.(open);
   };
-  const [descToggleHover, setDescToggleHover] = useState(false);
+  const rawDescription = description?.trim();
+  // The host caps the authored description; trim defensively for other hosts.
+  const shortDescription =
+    rawDescription && rawDescription.length > SUBSYSTEM_MODEL_DESCRIPTION_MAX
+      ? `${rawDescription.slice(0, SUBSYSTEM_MODEL_DESCRIPTION_MAX - 1)}…`
+      : rawDescription;
+  const extendedNotes = notes?.trim();
+  // The short description owns the chrome; a legacy model with only notes
+  // falls back to a clamped preview of them.
+  const descriptionPreview = shortDescription || extendedNotes;
+  const hasNotes = Boolean(extendedNotes);
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
     new Set(),
@@ -571,7 +591,7 @@ export function ConstructsCatalog({
     !hideSidebar &&
     !!(
       title ||
-      description ||
+      descriptionPreview ||
       diagnostic ||
       sidebarExtra ||
       sidebarAfterDescription
@@ -612,7 +632,7 @@ export function ConstructsCatalog({
             }}
           >
             {sidebarExtra}
-            {(title || description || diagnostic) && (
+            {(title || diagnostic) && (
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                 {title && (
                   <h2
@@ -629,49 +649,30 @@ export function ConstructsCatalog({
                     {title}
                   </h2>
                 )}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    flexShrink: 0,
-                    marginLeft: title ? undefined : 'auto',
-                  }}
-                >
-                  {diagnostic && <SubsystemDiagnosticToggle {...diagnostic} />}
-                  {description && (
-                    <button
-                      type="button"
-                      aria-expanded={descriptionOpen}
-                      aria-label={
-                        descriptionOpen ? 'Hide description' : 'Show description'
-                      }
-                      title={
-                        descriptionOpen ? 'Hide description' : 'Show description'
-                      }
-                      onMouseEnter={() => setDescToggleHover(true)}
-                      onMouseLeave={() => setDescToggleHover(false)}
-                      onClick={() => setDescriptionOpen(!descriptionOpen)}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0,
-                        width: 22,
-                        height: 22,
-                        padding: 0,
-                        border: 'none',
-                        borderRadius: 4,
-                        background: descriptionOpen || descToggleHover ? theme.colors.border : 'transparent',
-                        color: descriptionOpen || descToggleHover ? theme.colors.text : muted,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <FileText size={14} />
-                    </button>
-                  )}
-                </div>
+                {diagnostic && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      flexShrink: 0,
+                      marginLeft: title ? undefined : 'auto',
+                    }}
+                  >
+                    <SubsystemDiagnosticToggle {...diagnostic} />
+                  </div>
+                )}
               </div>
+            )}
+            {descriptionPreview && (
+              <DescriptionPreview
+                content={descriptionPreview}
+                clamp={!shortDescription}
+                open={hasNotes && descriptionOpen}
+                onOpen={hasNotes ? () => setDescriptionOpen(true) : undefined}
+                onClose={hasNotes ? () => setDescriptionOpen(false) : undefined}
+                slideIdPrefix="constructs-desc"
+              />
             )}
             {sidebarAfterDescription}
           </div>
@@ -715,7 +716,7 @@ export function ConstructsCatalog({
           flexDirection: 'column',
         }}
       >
-        {description && descriptionOpen && (
+        {hasNotes && descriptionOpen && (
           <div
             style={{
               position: 'absolute',
@@ -753,7 +754,7 @@ export function ConstructsCatalog({
               </h3>
               <button
                 type="button"
-                aria-label="Close description"
+                aria-label="Close notes"
                 title="Close"
                 onClick={() => setDescriptionOpen(false)}
                 style={{
@@ -792,7 +793,7 @@ export function ConstructsCatalog({
                 }}
               >
                 <IndustryMarkdownSlide
-                  content={description}
+                  content={extendedNotes ?? ''}
                   slideIdPrefix="constructs-desc-overlay"
                   slideIndex={0}
                   isVisible

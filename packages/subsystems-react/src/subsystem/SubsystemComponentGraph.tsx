@@ -32,8 +32,8 @@ import {
   applyNodeChanges,
 } from '@xyflow/react';
 import { useTheme } from '@principal-ade/industry-theme';
+import { SUBSYSTEM_MODEL_DESCRIPTION_MAX } from '@principal-ai/subsystems-core';
 import { ArrowDown, ArrowRight, Boxes, Files, Route, Unlink, X } from 'lucide-react';
-import { IndustryMarkdownSlide } from 'themed-markdown';
 import {
   buildSubsystemGraph,
   deriveGraphEdges,
@@ -98,6 +98,7 @@ import type { DeclarationSymbolRef, SymbolInspection } from './symbolRefs';
 import { FileDrawer, FILE_DRAWER_HEIGHT_MS } from './FileDrawer';
 import { GraphWithSidebar } from './GraphWithSidebar';
 import { DescriptionOverlay } from './DescriptionOverlay';
+import { DescriptionPreview } from './DescriptionPreview';
 import type { GraphSidebarTab } from './GraphSidebar';
 import { TrailsPanel, TRAIL_PLAY_PAUSE_MS, TRAIL_HOVER_PREVIEW_MS } from './TrailsPanel';
 import type { StepEmphasisMap } from './stepEmphasis';
@@ -408,11 +409,21 @@ export interface SubsystemComponentGraphProps {
    * Uses the focused or hover-highlighted trail.
    */
   showTrailTitle?: boolean;
-  /** Markdown description rendered in the sidebar. */
+  /**
+   * Short description rendered at the top of the sidebar. At most 200
+   * characters; extended detail belongs in `notes`.
+   */
   description?: string;
   /**
-   * Controlled open state for the constructs catalog's description overlay.
-   * When provided, the host owns it (e.g. a button in its own header).
+   * Extended Markdown notes about the model. When set, the description's
+   * `Show more` link opens the full document in an Overview overlay. Omit
+   * `description` and the sidebar falls back to a clamped preview of these
+   * notes.
+   */
+  notes?: string;
+  /**
+   * Controlled open state for the notes overlay. When provided, the host owns
+   * it (e.g. a button in its own header).
    */
   descriptionOpen?: boolean;
   onDescriptionOpenChange?: (open: boolean) => void;
@@ -698,10 +709,21 @@ interface InnerProps extends SubsystemComponentGraphProps {
   onSidebarTrailChange: (trailId: string | null) => void;
 }
 
-function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, refocusOnLayoutFlip = true, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, stepEmphasis, onRemoveStepEmphasis, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, onAutoPlayStep, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, canvasOverlay, interactive = true, canvasBackground = 'theme', onLayoutReady, onNodeRects, sidebarExtra, sidebarAfterDescription, issues, showIssues, filesActive, sidebarScope, onSidebarTrailChange, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, regionDetails, defaultFramesCollapsed = true, containersActive, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
+function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, refocusOnLayoutFlip = true, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, stepEmphasis, onRemoveStepEmphasis, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, onAutoPlayStep, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, notes, canvasOverlay, interactive = true, canvasBackground = 'theme', onLayoutReady, onNodeRects, sidebarExtra, sidebarAfterDescription, issues, showIssues, filesActive, sidebarScope, onSidebarTrailChange, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, regionDetails, defaultFramesCollapsed = true, containersActive, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
   const { theme } = useTheme();
   const { fitView, fitBounds } = useReactFlow();
   const [descriptionOpen, setDescriptionOpen] = useState(false);
+  const rawDescription = description?.trim();
+  // The host caps the authored description; trim defensively for other hosts.
+  const shortDescription =
+    rawDescription && rawDescription.length > SUBSYSTEM_MODEL_DESCRIPTION_MAX
+      ? `${rawDescription.slice(0, SUBSYSTEM_MODEL_DESCRIPTION_MAX - 1)}…`
+      : rawDescription;
+  const extendedNotes = notes?.trim();
+  // The short description owns the top-left slot; a legacy model with only
+  // notes falls back to a clamped preview of them.
+  const descriptionPreview = shortDescription || extendedNotes;
+  const hasNotes = Boolean(extendedNotes);
   const viewport = useViewport();
   // Restored once per mount from `localStorage` (see `readViewState`). Each
   // graph is its own tab/mount, so `persistKey` is stable for a mount.
@@ -2975,7 +2997,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   // the same facts the sidebar renders.
   const sidebarVisible =
     !hideSidebar &&
-    (description || filesActive || containersActive || issuesActive || sidebarExtra || sidebarAfterDescription ||
+    (descriptionPreview || filesActive || containersActive || issuesActive || sidebarExtra || sidebarAfterDescription ||
       hasTrails);
   const sidebarBodyVisible = hasTrails || filesActive || containersActive || issuesActive;
   const sidebarTabs: GraphSidebarTab[] | undefined = issuesActive && !sidebarTrail
@@ -2986,52 +3008,19 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         ]
       : undefined
     : undefined;
-  // Header block: extras, then the description.
+  // Header block: extras, then the short description.
   const sidebarHeader = (
     <>
       {sidebarExtra}
-      {description && (
-        <div style={{ fontSize: theme.fontSizes[0], lineHeight: 1.5 }}>
-          <div style={{
-            display: '-webkit-box',
-            WebkitBoxOrient: 'vertical',
-            WebkitLineClamp: 6,
-            maxHeight: '9em',
-            overflow: 'hidden',
-          }}>
-            <IndustryMarkdownSlide
-              content={description}
-              slideIdPrefix="subsystem-desc"
-              slideIndex={0}
-              isVisible={true}
-              theme={theme}
-              disableScroll={true}
-              disableBasePadding
-              enableKeyboardScrolling={false}
-              autoFocusOnVisible={false}
-            />
-          </div>
-          <button
-            type="button"
-            aria-label="Read full description"
-            aria-haspopup="dialog"
-            aria-expanded={descriptionOpen}
-            onClick={() => setDescriptionOpen(true)}
-            style={{
-              marginTop: 6,
-              padding: 0,
-              border: 'none',
-              background: 'transparent',
-              color: theme.colors.textSecondary,
-              fontFamily: theme.fonts.body,
-              fontSize: theme.fontSizes[0],
-              textDecoration: 'underline',
-              cursor: 'pointer',
-            }}
-          >
-            More
-          </button>
-        </div>
+      {descriptionPreview && (
+        <DescriptionPreview
+          content={descriptionPreview}
+          clamp={!shortDescription}
+          open={hasNotes && descriptionOpen}
+          onOpen={hasNotes ? () => setDescriptionOpen(true) : undefined}
+          onClose={hasNotes ? () => setDescriptionOpen(false) : undefined}
+          slideIdPrefix="subsystem-desc"
+        />
       )}
       {sidebarAfterDescription}
     </>
@@ -3177,8 +3166,13 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       persistKey={persistKey}
       onResizeEnd={() => requestAnimationFrame(() => fitView())}
     >
-      {!hideSidebar && description && descriptionOpen && (
-        <DescriptionOverlay description={description} onClose={() => setDescriptionOpen(false)} />
+      {!hideSidebar && hasNotes && descriptionOpen && (
+        <DescriptionOverlay
+          description={extendedNotes ?? ''}
+          ariaLabel="Subsystem notes"
+          slideIdPrefix="subsystem-desc-overlay"
+          onClose={() => setDescriptionOpen(false)}
+        />
       )}
       {/* Graph area */}
       <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: committedDirection === 'vertical' ? 'row' : 'column', minHeight: 0, minWidth: 0 }}>
@@ -3922,6 +3916,7 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
             title={props.title}
             hideSidebar={props.hideSidebar}
             description={props.description}
+            notes={props.notes}
             descriptionOpen={props.descriptionOpen}
             onDescriptionOpenChange={props.onDescriptionOpenChange}
             diagnostic={props.diagnostic}

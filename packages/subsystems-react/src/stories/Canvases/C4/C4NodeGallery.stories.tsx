@@ -31,7 +31,7 @@ import type { C4Element } from '../../../subsystem/c4';
 // ---------------------------------------------------------------------------
 
 const meta = {
-  title: 'Canvases/C4/C4NodeGallery',
+  title: 'Canvases/C4/UI Isolation/C4NodeGallery',
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],
   decorators: [

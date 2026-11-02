@@ -10,7 +10,10 @@
 import { promises as fs, watch, type FSWatcher } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { deriveGraphEdges } from "@principal-ai/subsystems-core";
+import {
+	deriveGraphEdges,
+	SUBSYSTEM_MODEL_DESCRIPTION_MAX,
+} from "@principal-ai/subsystems-core";
 import { resolveRepoRootFromAlexandria } from "./alexandria";
 import { capturePurlCommits } from "./purl-commits";
 import type {
@@ -172,7 +175,10 @@ export type SubsystemDocumentBody = Omit<SubsystemModelDocument, "relations">;
 export interface StoredSubsystemModel extends SubsystemDocumentBody {
 	id: string;
 	title: string;
+	/** Short sidebar blurb, capped at SUBSYSTEM_MODEL_DESCRIPTION_MAX. */
 	description?: string;
+	/** Extended Markdown notes, opened from the description's `Show more`. */
+	notes?: string;
 	/** Ordered execution stories over the graph's edges (one per flow). Mirrors
 	 *  the wire `StoredSubsystemModel` in ../shared/contract; duplicated here
 	 *  until the react package (this type's `SubsystemModelDocument` origin)
@@ -619,6 +625,25 @@ function graphId(): string {
 	return `sg-${ts}-${rand}`;
 }
 
+/** Trim an optional authored field; blank means absent. */
+function normalizeOptionalText(value: string | undefined): string | undefined {
+	const trimmed = value?.trim();
+	return trimmed ? trimmed : undefined;
+}
+
+/**
+ * Keep the short description short at the store boundary. HTTP/CLI validation
+ * rejects overlong input first; this guards internal writers (migrations,
+ * composition) so an invalid record can never land on disk.
+ */
+function normalizeDescription(value: string | undefined): string | undefined {
+	const trimmed = normalizeOptionalText(value);
+	if (!trimmed) return undefined;
+	return trimmed.length > SUBSYSTEM_MODEL_DESCRIPTION_MAX
+		? `${trimmed.slice(0, SUBSYSTEM_MODEL_DESCRIPTION_MAX - 1)}…`
+		: trimmed;
+}
+
 function graphPath(id: string): string {
 	return join(modelsRoot(), `${id}.json`);
 }
@@ -734,14 +759,20 @@ export async function createSubsystemModel(
 	doc: SubsystemDocumentBody & {
 		title: string;
 		description?: string;
+		notes?: string;
 		trails?: SubsystemTrail[];
 	},
 ): Promise<StoredSubsystemModel> {
 	await ensureDir();
 	normalizeDeclarationProvenance(doc.components);
 	const now = new Date().toISOString();
+	const { description: rawDescription, notes: rawNotes, ...rest } = doc;
+	const description = normalizeDescription(rawDescription);
+	const notes = normalizeOptionalText(rawNotes);
 	const record: StoredSubsystemModel = {
-		...doc,
+		...rest,
+		...(description ? { description } : {}),
+		...(notes ? { notes } : {}),
 		id: graphId(),
 		createdAt: now,
 		updatedAt: now,
@@ -764,6 +795,7 @@ export async function updateSubsystemModel(
 			StoredSubsystemModel,
 			| "title"
 			| "description"
+			| "notes"
 			| "components"
 			| "trails"
 			| "gist"
@@ -773,9 +805,16 @@ export async function updateSubsystemModel(
 	const existing = await getSubsystemModel(id);
 	if (!existing) return null;
 	if (patch.components !== undefined) normalizeDeclarationProvenance(patch.components);
+	const { description: rawDescription, notes: rawNotes, ...rest } = patch;
+	const description =
+		rawDescription !== undefined ? normalizeDescription(rawDescription) : undefined;
+	const notes =
+		rawNotes !== undefined ? normalizeOptionalText(rawNotes) : undefined;
 	const updated: StoredSubsystemModel = {
 		...existing,
-		...patch,
+		...rest,
+		...(rawDescription !== undefined ? { description } : {}),
+		...(rawNotes !== undefined ? { notes } : {}),
 		updatedAt: new Date().toISOString(),
 	};
 	updated.verification = await verifyModelFiles(updated);
@@ -821,6 +860,7 @@ export async function upsertSubsystemModel(
 	doc: SubsystemDocumentBody & {
 		title: string;
 		description?: string;
+		notes?: string;
 		trails?: SubsystemTrail[];
 	},
 	options?: { force?: boolean },
@@ -831,6 +871,7 @@ export async function upsertSubsystemModel(
 			const updated = await updateSubsystemModel(existing.id, {
 				title: doc.title,
 				description: doc.description,
+				notes: doc.notes,
 				components: doc.components,
 				trails: doc.trails,
 			});

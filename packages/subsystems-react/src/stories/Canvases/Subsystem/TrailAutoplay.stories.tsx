@@ -16,7 +16,7 @@ import type { SubsystemComponent, SubsystemTrail } from '../../../subsystem/mode
  * camera today. This story exists to expose that gap and iterate on it.
  */
 const meta = {
-  title: 'Canvases/Subsystem/TrailAutoplay',
+  title: 'Canvases/Subsystem/Graphs/TrailAutoplay',
   component: SubsystemComponentGraph,
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],
@@ -203,7 +203,8 @@ export const AutoplayFocus: Story = {
         edgeView="trails"
         initialTrailId="wt-book"
         title="Autoplay through steps"
-        description="Autoplay cycles the trail steps. **Goal to refine:** each advance should camera-focus the step (and optionally open its snippet), not just dim the rest of the graph. Use the controls to compare `focus` vs `dim` and the zoom gate."
+        description="Autoplay cycles the trail steps."
+        notes="**Goal to refine:** each advance should camera-focus the step (and optionally open its snippet), not just dim the rest of the graph. Use the controls to compare `focus` vs `dim` and the zoom gate."
         renderFileViewer={(file, opts) => (
           <div style={{ padding: 12, fontFamily: 'monospace', fontSize: 12, color: '#bbb', whiteSpace: 'pre' }}>
             {`// ${file}`}

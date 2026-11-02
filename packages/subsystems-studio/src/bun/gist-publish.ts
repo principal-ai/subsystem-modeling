@@ -13,6 +13,7 @@ export type SubsystemModelGistRef = { id: string; fileName?: string };
 export type GistPublishDocument = {
 	title: string;
 	description?: string;
+	notes?: string;
 	components: unknown;
 	trails?: unknown;
 	$schema?: string;
@@ -38,6 +39,7 @@ function toPortableGistPayload(doc: GistPublishDocument): {
 	components: unknown;
 	$schema?: string;
 	description?: string;
+	notes?: string;
 	trails?: unknown;
 } {
 	const out: {
@@ -45,6 +47,7 @@ function toPortableGistPayload(doc: GistPublishDocument): {
 		components: unknown;
 		$schema?: string;
 		description?: string;
+		notes?: string;
 		trails?: unknown;
 	} = {
 		title: doc.title,
@@ -52,6 +55,7 @@ function toPortableGistPayload(doc: GistPublishDocument): {
 	};
 	if (doc.$schema) out.$schema = doc.$schema;
 	if (doc.description) out.description = doc.description;
+	if (doc.notes) out.notes = doc.notes;
 	if (doc.trails) out.trails = doc.trails;
 	return out;
 }

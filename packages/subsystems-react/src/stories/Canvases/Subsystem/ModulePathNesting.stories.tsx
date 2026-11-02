@@ -15,7 +15,7 @@ import type { SubsystemComponent } from '../../../subsystem/model';
  */
 
 const meta = {
-  title: 'Canvases/Subsystem/Module path nesting',
+  title: 'Canvases/Subsystem/Views/Module path nesting',
   component: SubsystemComponentGraph,
   parameters: { layout: 'fullscreen' },
   tags: ['autodocs'],

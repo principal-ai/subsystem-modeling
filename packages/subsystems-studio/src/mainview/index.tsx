@@ -15,7 +15,10 @@
 // FileCityTrailExplorerPanel's sequence view renders — ships completely
 // unstyled.
 import xyflowStyles from "@xyflow/react/dist/style.css" with { type: "text" };
-import excalidrawStyles from "@excalidraw/excalidraw/index.css" with { type: "text" };
+// Relative path on purpose: Excalidraw 0.18.1's `./index.css` export only
+// declares `development`/`production` conditions, which Bun's bundler does not
+// substitute. Resolve the built stylesheet directly instead.
+import excalidrawStyles from "../../node_modules/@excalidraw/excalidraw/dist/prod/index.css" with { type: "text" };
 import resetStyles from "./index.css" with { type: "text" };
 
 import mermaid from "mermaid";

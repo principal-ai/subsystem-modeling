@@ -68,6 +68,8 @@ const SKETCH_BODY = {
 	title: "Acme sketch",
 	repoKeys: ["pkg:github/acme/widget"],
 	author: "agent",
+	description: "A short, authored blurb.",
+	notes: "## Extended\n\nLonger Markdown notes.",
 	model: {
 		view: "container",
 		system: { id: "system:acme", label: "Acme" },
@@ -149,6 +151,9 @@ describe("C4 sketch HTTP routes", () => {
 		};
 		expect(createdBody.ok).toBe(true);
 		expect(createdBody.sketch.model.nodes.every((n) => n.state === "proposed")).toBe(true);
+		expect(
+			(createdBody.sketch as unknown as { description?: string }).description,
+		).toBe("A short, authored blurb.");
 		const sketchId = createdBody.sketch.id;
 
 		const listed = await handleSubsystemModelRequest(
