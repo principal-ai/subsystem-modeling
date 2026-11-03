@@ -1,6 +1,19 @@
 /**
  * Principal Studio host (bun process).
  *
+ * Boot inputs: */
+
+// Global error handlers to prevent crashes from unhandled rejections/exceptions
+process.on("uncaughtException", (err) => {
+	console.error("[studio] uncaughtException:", err);
+});
+process.on("unhandledRejection", (reason) => {
+	console.error("[studio] unhandledRejection:", reason);
+});
+
+/**
+ * Principal Studio host (bun process).
+ *
  * Boot inputs:
  *   - Tour: argv[2] / TOUR_FILE and TOUR_REPO_ROOT (default cwd).
  *   - Subsystem model: SUBSYSTEM_MODEL_ID — opens a stored model tab on cold
