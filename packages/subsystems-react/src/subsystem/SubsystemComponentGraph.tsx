@@ -16,7 +16,7 @@
  */
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
+import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -38,6 +38,7 @@ import {
   buildSubsystemGraph,
   deriveGraphEdges,
   buildBoundaryLayoutGroups,
+  cardFramesForAliases,
   isCardFrame,
   isConstructsOnlyModel,
   packageColor,
@@ -810,10 +811,41 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   const [toggledGroupIds, setToggledGroupIds] = useState<ReadonlySet<string>>(
     () => new Set(persisted.toggledFrames ?? []),
   );
+  // Picking a trail opens the container cards that hold its cast, so the flow
+  // reads as its components instead of a row of folded boxes. Derived rather
+  // than written into the user's frame state: clearing the trail — or moving to
+  // another — restores exactly the frames they had open before.
+  const trailFrameIds = useMemo<ReadonlySet<string>>(() => {
+    if (!layoutTrailId) return new Set();
+    const trail = (trails ?? []).find((t) => t.id === layoutTrailId);
+    if (!trail) return new Set();
+    const aliases = new Set<string>();
+    for (const step of trail.steps) {
+      aliases.add(step.from);
+      aliases.add(step.to);
+    }
+    return cardFramesForAliases(
+      { components },
+      aliases,
+      { showSingletonFrames, moduleNesting, codeProcessKeys },
+    );
+  }, [layoutTrailId, trails, components, showSingletonFrames, moduleNesting, codeProcessKeys]);
+  // `framesCollapsed` is the default every card takes; a toggled id is the
+  // exception. Opening a trail's frames therefore means adding them to the
+  // default-collapsed set (or removing them from the default-open one).
+  const effectiveToggledGroupIds = useMemo<ReadonlySet<string>>(() => {
+    if (trailFrameIds.size === 0) return toggledGroupIds;
+    const next = new Set(toggledGroupIds);
+    for (const id of trailFrameIds) {
+      if (framesCollapsed) next.add(id);
+      else next.delete(id);
+    }
+    return next;
+  }, [toggledGroupIds, trailFrameIds, framesCollapsed]);
   const [committedCollapsed, setCommittedCollapsed] = useState<{
     framesCollapsed: boolean;
     toggled: ReadonlySet<string>;
-  }>({ framesCollapsed, toggled: toggledGroupIds });
+  }>({ framesCollapsed, toggled: effectiveToggledGroupIds });
   const toggleCollapsed = useCallback((groupId: string) => {
     setToggledGroupIds((prev) => {
       const next = new Set(prev);
@@ -826,7 +858,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     setFramesCollapsed(collapsed);
     setToggledGroupIds(new Set());
   }, []);
-  const collapsedKey = `${framesCollapsed ? 'closed' : 'open'}:${Array.from(toggledGroupIds).sort().join(',')}`;
+  const collapsedKey = `${framesCollapsed ? 'closed' : 'open'}:${Array.from(effectiveToggledGroupIds).sort().join(',')}`;
   const committedCollapsedKey = `${committedCollapsed.framesCollapsed ? 'closed' : 'open'}:${Array.from(committedCollapsed.toggled).sort().join(',')}`;
 
   const changeLayoutDirection = useCallback(
@@ -874,7 +906,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     if (reduceMotion) {
       setCommittedDirection(requestedDirection);
       setCommittedTrailId(layoutTrailId);
-      setCommittedCollapsed({ framesCollapsed, toggled: toggledGroupIds });
+      setCommittedCollapsed({ framesCollapsed, toggled: effectiveToggledGroupIds });
       return;
     }
     flipSawPendingLayoutRef.current = false;
@@ -883,7 +915,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       flipFadeTimerRef.current = null;
       setCommittedDirection(requestedDirection);
       setCommittedTrailId(layoutTrailId);
-      setCommittedCollapsed({ framesCollapsed, toggled: toggledGroupIds });
+      setCommittedCollapsed({ framesCollapsed, toggled: effectiveToggledGroupIds });
     }, LAYOUT_FLIP_EDGE_MS);
     return () => {
       if (flipFadeTimerRef.current != null) {
@@ -898,7 +930,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     requestedDirection,
     layoutTrailId,
     framesCollapsed,
-    toggledGroupIds,
+    effectiveToggledGroupIds,
   ]);
 
   // Beat 3: the committed layout has settled → the node slide is over, fade
@@ -3702,6 +3734,58 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   );
 }
 
+/**
+ * One option in the header's segmented sidebar-view switch. Owns the hover
+ * state so every segment reacts the same way — the Issues segment is a
+ * `SubsystemDiagnosticToggle` and already hovers; keeping the plain options
+ * here means the switch has one hover affordance, not two.
+ */
+function SidebarViewOption({
+  active,
+  ariaLabel,
+  title,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  ariaLabel: string;
+  title?: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const { theme } = useTheme();
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      title={title}
+      aria-pressed={active}
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        height: 28,
+        padding: '4px 16px',
+        fontFamily: theme.fonts.monospace,
+        fontSize: theme.fontSizes[0],
+        border: 'none',
+        borderRadius: 4,
+        background: active || hover ? theme.colors.border : 'transparent',
+        color: active ? theme.colors.text : (theme.colors.textMuted ?? theme.colors.textSecondary),
+        cursor: 'pointer',
+        transition: 'background 120ms ease',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
   const { theme } = useTheme();
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -3761,22 +3845,6 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
       props.diagnostic?.onToggle?.();
     }
   };
-  const viewButtonStyle = (active: boolean): CSSProperties => ({
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    height: 28,
-    padding: '4px 16px',
-    fontFamily: theme.fonts.monospace,
-    fontSize: theme.fontSizes[0],
-    border: 'none',
-    borderRadius: 4,
-    background: active ? theme.colors.border : 'transparent',
-    color: active ? theme.colors.text : (theme.colors.textMuted ?? theme.colors.textSecondary),
-    cursor: 'pointer',
-  });
-
   useEffect(() => {
     if (props.initialTrailId) setFilesOpen(false);
   }, [props.initialTrailId]);
@@ -3857,43 +3925,37 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
               }}
             >
               {containerCount > 0 && (
-                <button
-                  type="button"
-                  aria-label={`Containers (${containerCount} ${containerCount === 1 ? 'container' : 'containers'})`}
+                <SidebarViewOption
+                  ariaLabel={`Containers (${containerCount} ${containerCount === 1 ? 'container' : 'containers'})`}
                   title="Show containers"
-                  aria-pressed={containersActive}
+                  active={containersActive}
                   onClick={() => selectSidebarView('containers')}
-                  style={viewButtonStyle(containersActive)}
                 >
                   <Boxes size={14} aria-hidden />
                   <span>Containers</span>
                   <span style={{ fontWeight: 600, marginLeft: 4 }}>{containerCount}</span>
-                </button>
+                </SidebarViewOption>
               )}
-              <button
-                type="button"
-                aria-label={sidebarScope.trail ? 'Trail' : `Trails (${trailCount} ${trailCount === 1 ? 'trail' : 'trails'})`}
-                aria-pressed={!filesActive && !containersActive && !issuesActive}
+              <SidebarViewOption
+                ariaLabel={sidebarScope.trail ? 'Trail' : `Trails (${trailCount} ${trailCount === 1 ? 'trail' : 'trails'})`}
+                active={!filesActive && !containersActive && !issuesActive}
                 onClick={() => selectSidebarView('trails')}
-                style={viewButtonStyle(!filesActive && !containersActive && !issuesActive)}
               >
                 <Route size={14} aria-hidden />
                 <span>{trailViewLabel}</span>
                 {!sidebarScope.trail && <span style={{ fontWeight: 600, marginLeft: 4 }}>{trailCount}</span>}
-              </button>
+              </SidebarViewOption>
               {hasFiles && (
-                <button
-                  type="button"
-                  aria-label={`Files (${fileCount} files)`}
+                <SidebarViewOption
+                  ariaLabel={`Files (${fileCount} files)`}
                   title="Show files"
-                  aria-pressed={filesActive}
+                  active={filesActive}
                   onClick={() => selectSidebarView('files')}
-                  style={viewButtonStyle(filesActive)}
                 >
                   <Files size={14} aria-hidden />
                   <span>Files</span>
                   <span style={{ fontWeight: 600, marginLeft: 4 }}>{fileCount}</span>
-                </button>
+                </SidebarViewOption>
               )}
               {hasIssues && (
                 <SubsystemDiagnosticToggle

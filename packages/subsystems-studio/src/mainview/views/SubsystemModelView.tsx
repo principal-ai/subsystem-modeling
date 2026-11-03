@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PenTool, Wrench, X, Boxes } from "lucide-react";
+import { PenTool, Wrench, X } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
 	SubsystemComponentGraph,
@@ -707,34 +707,6 @@ export function SubsystemModelView({
 				onReorderTrails={onReorderTrails}
 				initialTrailId={focusTrailId}
 				title={graph.title}
-				headerActions={
-					<button
-						type="button"
-						onClick={() => {
-							void electrobun.rpc!.request.openSubsystemC4Model({
-								graphId,
-							});
-						}}
-						style={{
-							display: "inline-flex",
-							alignItems: "center",
-							flexShrink: 0,
-							gap: 6,
-							padding: "6px 12px",
-							borderRadius: 6,
-							border: `1px solid ${theme.colors.border ?? "#333"}`,
-							background: theme.colors.background,
-							color: theme.colors.text,
-							fontSize: theme.fontSizes[1],
-							fontFamily: theme.fonts.monospace,
-							cursor: "pointer",
-						}}
-						title="Open this model as a C4 container diagram"
-					>
-						<Boxes size={14} />
-						C4 view
-					</button>
-				}
 				description={graph.description}
 				notes={graph.notes}
 				renderFileViewer={renderFileViewer}

@@ -924,6 +924,34 @@ export function buildBoundaryLayoutGroups(
 }
 
 /**
+ * The card frames (process / package) that hold any of `aliases`, plus every
+ * card ancestor a nested module needs opened to become visible. This is the
+ * set a trail focus opens, so a picked flow reads as its components rather
+ * than a row of folded boxes.
+ */
+export function cardFramesForAliases(
+  doc: Pick<SubsystemModelDocument, 'components'>,
+  aliases: ReadonlySet<string>,
+  opts: BoundaryFrameOptions = {},
+): Set<string> {
+  const groups = buildBoundaryLayoutGroups(doc, opts);
+  const byId = new Map(groups.map((g) => [g.id, g]));
+  const open = new Set<string>();
+  for (const group of groups) {
+    if (!group.memberAliases.some((alias) => aliases.has(alias))) continue;
+    if (isCardFrame(group.region)) open.add(group.id);
+    let parentId = group.parentId;
+    while (parentId) {
+      const parent = byId.get(parentId);
+      if (!parent) break;
+      if (isCardFrame(parent.region)) open.add(parent.id);
+      parentId = parent.parentId;
+    }
+  }
+  return open;
+}
+
+/**
  * Path-nesting variant of {@link buildBoundaryLayoutGroups}.
  *
  * Adds directory frames derived from each component's `module` path segments

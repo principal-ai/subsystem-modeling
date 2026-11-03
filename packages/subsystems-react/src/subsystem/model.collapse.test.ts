@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { buildSubsystemGraph, collapseBoundaryGroups, type BoundaryLayoutGroup, type SubsystemGraphEdge, type SubsystemGraphNode, type SubsystemProcessRegion } from './model';
+import { buildSubsystemGraph, cardFramesForAliases, collapseBoundaryGroups, packageGroupNodeId, type BoundaryLayoutGroup, type SubsystemGraphEdge, type SubsystemGraphNode, type SubsystemProcessRegion } from './model';
 import { NODE_H, NODE_W } from './containerCard';
 
 function region(kind: SubsystemProcessRegion['kind'], key: string, members: string[]): SubsystemProcessRegion {
@@ -124,5 +124,39 @@ describe('buildSubsystemGraph collapsed frames', () => {
   test('without it the toggled set names the closed frames', async () => {
     const built = await buildSubsystemGraph(doc, { collapsedGroupIds: new Set(['process:A']) });
     expect(groupIds(built.nodes).sort()).toEqual([['process:A', true], ['process:B', false]]);
+  });
+});
+
+describe('cardFramesForAliases', () => {
+  const flatDoc = {
+    components: [
+      { alias: 'a1', name: 'a1', construct: 'function', file: 'a1.ts', purl: 'pkg:github/acme/app', process: 'A' },
+      { alias: 'a2', name: 'a2', construct: 'function', file: 'a2.ts', purl: 'pkg:github/acme/app', process: 'A' },
+      { alias: 'b1', name: 'b1', construct: 'function', file: 'b1.ts', purl: 'pkg:github/acme/app', process: 'B' },
+      { alias: 'b2', name: 'b2', construct: 'function', file: 'b2.ts', purl: 'pkg:github/acme/app', process: 'B' },
+      { alias: 'c1', name: 'c1', construct: 'function', file: 'c1.ts', purl: 'pkg:github/acme/app', process: 'C' },
+    ],
+  } as unknown as Parameters<typeof cardFramesForAliases>[0];
+
+  test('names the process card that holds a trail member', () => {
+    expect([...cardFramesForAliases(flatDoc, new Set(['a1']))]).toEqual(['process:A']);
+  });
+
+  test('opens every card ancestor of a nested module', () => {
+    const nestedDoc = {
+      components: [
+        { alias: 'a1', name: 'a1', construct: 'function', file: 'a1.ts', purl: 'pkg:github/acme/one', process: 'A', module: 'src/a.ts' },
+        { alias: 'a2', name: 'a2', construct: 'function', file: 'a2.ts', purl: 'pkg:github/acme/one', process: 'A', module: 'src/a.ts' },
+        { alias: 'b1', name: 'b1', construct: 'function', file: 'b1.ts', purl: 'pkg:github/acme/two', process: 'B', module: 'src/b.ts' },
+        { alias: 'b2', name: 'b2', construct: 'function', file: 'b2.ts', purl: 'pkg:github/acme/two', process: 'B', module: 'src/b.ts' },
+      ],
+    } as unknown as Parameters<typeof cardFramesForAliases>[0];
+    expect([...cardFramesForAliases(nestedDoc, new Set(['a1']))].sort()).toEqual(
+      ['process:A', packageGroupNodeId('pkg:github/acme/one')].sort(),
+    );
+  });
+
+  test('ignores aliases with no card frame and a singleton process', () => {
+    expect([...cardFramesForAliases(flatDoc, new Set(['c1', 'missing']))]).toEqual([]);
   });
 });
