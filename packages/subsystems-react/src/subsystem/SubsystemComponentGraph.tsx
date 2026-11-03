@@ -36,6 +36,7 @@ import { SUBSYSTEM_MODEL_DESCRIPTION_MAX } from '@principal-ai/subsystems-core';
 import { ArrowDown, ArrowRight, Boxes, Files, Route, Unlink, X } from 'lucide-react';
 import {
   buildSubsystemGraph,
+  componentPackageKey,
   deriveGraphEdges,
   buildBoundaryLayoutGroups,
   cardFramesForAliases,
@@ -213,6 +214,38 @@ function edgeMatches(set: ReadonlySet<string>, e: Edge): boolean {
   if (set.has(e.id)) return true;
   const ids = (e.data as { rolledUpIds?: string[] } | undefined)?.rolledUpIds;
   return ids?.some((id) => set.has(id)) === true;
+}
+
+/**
+ * Whether a boundary region holds any of `aliases` — i.e. whether hovering a
+ * trail should keep its container bright. Reads component membership directly
+ * (process / module / package / directory path) so nesting is transitive: a
+ * package lights when a leaf in its nested process is in the trail, even
+ * though the package's layout member list only holds the nested group id.
+ * This also covers trails folded into nothing (a step whose endpoints share
+ * one collapsed card leaves no edge for `endpointsOf` to find).
+ */
+function regionTouchesTrailAliases(
+  region: SubsystemProcessRegion | undefined,
+  aliases: ReadonlySet<string> | null,
+  byAlias: ReadonlyMap<string, SubsystemComponent>,
+): boolean {
+  if (!region || !aliases || aliases.size === 0) return false;
+  for (const alias of aliases) {
+    const comp = byAlias.get(alias);
+    if (!comp) continue;
+    if (region.kind === 'process') {
+      if (comp.process === region.key) return true;
+    } else if (region.kind === 'module') {
+      if (comp.module?.trim() === region.key) return true;
+    } else if (region.kind === 'directory') {
+      const m = comp.module?.trim().replace(/\\/g, '/');
+      if (m === region.key || (m != null && m.startsWith(`${region.key}/`))) return true;
+    } else if (region.kind === 'package') {
+      if (componentPackageKey(comp) === region.key) return true;
+    }
+  }
+  return false;
 }
 
 /** Screen-space rectangle of a component node, relative to the graph canvas box. */
@@ -1827,6 +1860,33 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [baseEdges, openedEdgeIds],
   );
+  // Component aliases touched by the hovered trail — the whole flow when a
+  // collapsed row is hovered, one step's endpoints otherwise. Drives container
+  // dimming directly (rather than via rolled-up edge endpoints) so a parent
+  // frame lights when any transitive member is in the trail, and a trail
+  // folded entirely inside one collapsed card still dims the other cards.
+  const hoverTrailAliases = useMemo(() => {
+    if (!hoveredTrailStep || !trails) return null;
+    const tl = trails.find((t) => t.id === hoveredTrailStep.trailId);
+    if (!tl) return null;
+    const ids = new Set<string>();
+    if (hoveredTrailStep.stepIndex == null) {
+      for (const s of tl.steps) {
+        ids.add(s.from);
+        ids.add(s.to);
+      }
+    } else {
+      const step = tl.steps[hoveredTrailStep.stepIndex];
+      if (!step) return null;
+      ids.add(step.from);
+      ids.add(step.to);
+    }
+    return ids.size > 0 ? ids : null;
+  }, [trails, hoveredTrailStep]);
+  const aliasToComponent = useMemo(
+    () => new Map(components.map((c) => [c.alias, c])),
+    [components],
+  );
   // Endpoints of the bright set: the selected step's edge, or the whole flow
   // when no step is focused.
   const brightNodeIds = useMemo(
@@ -1872,13 +1932,20 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         // there is no opened set, so dimming has to be driven from the
         // participants or nothing outside the focused step would dim.
         const dimSource = previewNodeIds ?? brightNodeIds ?? issueFocusNodeIds;
+        // Hover keeps a container bright when any of its contents is in the
+        // hovered trail — read off component membership so nesting is
+        // transitive and internally-folded trails still count.
+        const touchesHover = regionTouchesTrailAliases(region, hoverTrailAliases, aliasToComponent);
+        const inSpotlight =
+          memberAliases.some((alias) => dimSource?.has(alias) === true) || touchesHover;
+        const anySpotlight = dimSource != null || hoverTrailAliases != null;
         const { hidden, dimmed } = flowNodeVisibility({
           inOpened: memberAliases.some((alias) => openedNodeIds?.has(alias) === true),
           inSelected: memberAliases.some((alias) => brightNodeIds?.has(alias) === true),
-          inSpotlight: memberAliases.some((alias) => dimSource?.has(alias) === true),
+          inSpotlight,
           anyOpened: openedNodeIds != null,
           anySelected: brightNodeIds != null,
-          anySpotlight: dimSource != null,
+          anySpotlight,
         });
         // Host override wins over the library's derived frame color.
         const color = region?.key != null ? boundaryColors?.[region.key] : undefined;
@@ -1910,10 +1977,10 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
       const { hidden, dimmed } = flowNodeVisibility({
         inOpened: openedNodeIds?.has(n.id) === true,
         inSelected: brightNodeIds?.has(n.id) === true,
-        inSpotlight: dimSource?.has(n.id) === true,
+        inSpotlight: dimSource?.has(n.id) === true || (hoverTrailAliases?.has(n.id) === true),
         anyOpened: openedNodeIds != null,
         anySelected: brightNodeIds != null,
-        anySpotlight: dimSource != null,
+        anySpotlight: dimSource != null || hoverTrailAliases != null,
       });
       // Component findings key by alias, boundary findings by region node id.
       // The two id spaces are disjoint (`module:` / `process:` are prefixed), so
@@ -1936,7 +2003,7 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
         },
       };
     });
-  }, [xyflowNodesBase, openFile, selected, focusNodeIds, openedNodeIds, brightNodeIds, previewNodeIds, issueFocusNodeIds, issueBadgeByAlias, regionIssueByNodeId, boundaryColors, toggleCollapsed]);
+  }, [xyflowNodesBase, openFile, selected, focusNodeIds, openedNodeIds, brightNodeIds, previewNodeIds, hoverTrailAliases, aliasToComponent, issueFocusNodeIds, issueBadgeByAlias, regionIssueByNodeId, boundaryColors, toggleCollapsed]);
 
   const baseNodesKey = useMemo(() => nodes.map((n) => n.id).sort().join(','), [nodes]);
   const baseEdgesKey = useMemo(
