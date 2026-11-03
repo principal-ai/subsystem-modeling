@@ -244,19 +244,10 @@ export async function runGraphifyExtract(
 	opts.signal?.addEventListener("abort", abort, { once: true });
 	if (opts.signal?.aborted) abort();
 
-	const [stdout, stderr] = await Promise.all([
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
-	]);
-	const exitCode = await proc.exited;
-	opts.signal?.removeEventListener("abort", abort);
-	if (opts.signal?.aborted) terminate("SIGKILL");
-	if (killTimer) clearTimeout(killTimer);
-	const durationMs = performance.now() - started;
-	const graphPath = opts.isolatedOutput
-		? join(outDir, "graphify-out", "graph.json")
-		: graphJsonPathForOut(outDir);
-
+	let stdout = "";
+	let stderr = "";
+	let exitCode = -1;
+	// Declared before the wait so the timeout/catch path can clean up a temp dir.
 	const failCleanup = () => {
 		if (usedTempOut && opts.cleanupTempOnFailure !== false) {
 			try {
@@ -266,6 +257,44 @@ export async function runGraphifyExtract(
 			}
 		}
 	};
+	try {
+		const outPromise = new Response(proc.stdout).text();
+		const errPromise = new Response(proc.stderr).text();
+		const exitedPromise = proc.exited;
+		const timeoutMs = 600_000; // 10 minutes max for graphify
+		const timeoutPromise = new Promise<never>((_, reject) => {
+			setTimeout(() => reject(new Error(`graphify extract timed out after ${timeoutMs}ms`)), timeoutMs);
+		});
+		const result = await Promise.race([
+			Promise.all([outPromise, errPromise, exitedPromise]).then(([o, e, ex]) => ({ o, e, ex })),
+			timeoutPromise,
+		]) as any;
+		stdout = result.o ?? "";
+		stderr = result.e ?? "";
+		exitCode = typeof result.ex === "number" ? result.ex : -1;
+	} catch (err) {
+		// On timeout/error, kill the process
+		try {
+			if (process.platform !== "win32" && proc.pid) process.kill(-proc.pid, "SIGKILL");
+			else proc.kill("SIGKILL");
+		} catch {}
+		if (killTimer) clearTimeout(killTimer);
+		opts.signal?.removeEventListener("abort", abort);
+		const durationMs = performance.now() - started;
+		failCleanup();
+		return {
+			ok: false,
+			error: err instanceof Error ? err.message : String(err),
+			durationMs,
+		};
+	}
+	opts.signal?.removeEventListener("abort", abort);
+	if (opts.signal?.aborted) terminate("SIGKILL");
+	if (killTimer) clearTimeout(killTimer);
+	const durationMs = performance.now() - started;
+	const graphPath = opts.isolatedOutput
+		? join(outDir, "graphify-out", "graph.json")
+		: graphJsonPathForOut(outDir);
 
 	if (opts.signal?.aborted) {
 		failCleanup();
