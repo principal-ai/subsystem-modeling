@@ -4,7 +4,7 @@
  * normalize/accumulate pipeline.
  *
  * Kind is explicit: a row in `session_v2` means V2; a row only in `session`
- * means V1. Do not infer V2 from an empty `event` table.
+ * indicates the legacy schema. Do not infer from an empty `event` table.
  */
 
 import { Database } from "bun:sqlite";
@@ -15,7 +15,7 @@ import {
 	type CommonToolName,
 } from "@principal-ai/agent-monitoring";
 
-export type OpencodeSessionKind = "v1" | "v2";
+export type OpencodeSessionKind = "v2";
 
 export interface OpencodeV2SessionMeta {
 	id: string;

@@ -204,8 +204,7 @@ const OPENCODE_TOOL: IntegrationSpec = {
 			package/module, and runtime verifiers/fixers) and concept
 			extraction execute through it,
 			with each run's events streamed back into the Maintain and session tabs.
-			Studio installs the v2 binary as <code>opencode2</code> so an existing v1
-			install is left untouched.
+			Studio installs the binary as <code>opencode2</code>.
 		</>
 	),
 	homepage: "https://opencode.ai",

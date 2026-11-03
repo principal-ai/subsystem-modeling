@@ -1399,7 +1399,7 @@ export async function processSessionEvents(
 		}
 	}
 	// OpenCode V2: identity is a `session_v2` row; transcript is `session_message`.
-	// Do not fall through to the V1 `event` path (which is empty for these).
+	// Do not fall through to the legacy `event` path (which is empty for these).
 	if (isOpencodeV2Session(sessionId)) {
 		try {
 			const result = await runOpencodeV2MessagePipeline(sessionId);
@@ -1411,7 +1411,7 @@ export async function processSessionEvents(
 			return { ok: false, error: (err as Error).message };
 		}
 	}
-	// OpenCode V1 sessions: raw rows in the `event` table. The full event set is
+	// Legacy OpenCode sessions: raw rows in the `event` table. The full event set is
 	// built once (normalize + accumulate need the whole session for correct
 	// accumulated rows), cached, and served in pages so the webview never
 	// receives the session's whole raw payload in one RPC message.
@@ -1481,7 +1481,7 @@ export async function processSessionEvents(
 				return {
 					seq,
 					type: rawEnvelope?.type ?? entry.normalized.eventType,
-					// Full raw V1 event (id/aggregateId/seq/type/data) when the
+					// Full raw legacy event (id/aggregateId/seq/type/data) when the
 					// session-events feed requests it — the raw column renders
 					// the complete payload, not just its `data` half.
 					raw: includeRawPayload ? (rawEnvelope as unknown) : undefined,
@@ -1542,7 +1542,7 @@ export async function processSessionEvents(
 			// Write-through the freshly processed timeline so cold starts serve
 			// it from disk instead of re-running the pipeline. Trimmed form only;
 			// `includeRaw` never hits this. Skip empty builds — caching a zero-
-			// event V1 miss used to poison V2 sessions that share the same id
+			// legacy event miss used to poison sessions that share the same id
 			// space once the adapter landed (disk cache is checked before kind).
 			if (built.length > 0) {
 				writeCachedSessionEvents(sessionId, {

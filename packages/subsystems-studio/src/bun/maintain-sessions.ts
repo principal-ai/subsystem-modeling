@@ -77,10 +77,7 @@ type SessionRow = {
 	time_updated: number | null;
 };
 
-function rowToSummary(
-	row: SessionRow,
-	opencodeKind: "v1" | "v2",
-): SessionSummary | null {
+function rowToSummary(row: SessionRow): SessionSummary | null {
 	const title = (row.title ?? "").trim() || row.id.slice(0, 12);
 	const agent = row.agent ?? undefined;
 	if (!isMaintainSession({ title, agent })) return null;
@@ -97,7 +94,6 @@ function rowToSummary(
 		eventCount: 0,
 		isFinished: true,
 		agent: agent ?? "maintain",
-		opencodeKind,
 		repoRoot: row.directory ?? undefined,
 		models: model ? [model] : undefined,
 	};
@@ -117,7 +113,6 @@ function tableExists(
 
 /**
  * List historical Maintain sessions from opencode.db (newest first).
- * Prefers `session_v2` (V2 service), falls back to legacy `session`.
  */
 export async function listMaintainSessions(opts?: {
 	days?: number;
@@ -145,24 +140,16 @@ export async function listMaintainSessions(opts?: {
 		const byId = new Map<string, SessionSummary>();
 		let hasOlder = false;
 
-		const ingest = (rows: SessionRow[], opencodeKind: "v1" | "v2") => {
+		const ingest = (rows: SessionRow[]) => {
 			for (const row of rows) {
 				if (row.time_created <= cutoff) {
 					hasOlder = true;
 					continue;
 				}
-				const summary = rowToSummary(row, opencodeKind);
+				const summary = rowToSummary(row);
 				if (!summary) continue;
 				const existing = byId.get(summary.id);
 				if (!existing) {
-					byId.set(summary.id, summary);
-					continue;
-				}
-				// Prefer V2 identity when both tables somehow share an id.
-				if (
-					summary.opencodeKind === "v2" &&
-					existing.opencodeKind !== "v2"
-				) {
 					byId.set(summary.id, summary);
 					continue;
 				}
@@ -195,24 +182,6 @@ export async function listMaintainSessions(opts?: {
 						LIMIT ?`,
 					)
 					.all(limit * 3) as SessionRow[],
-				"v2",
-			);
-		}
-
-		if (tableExists(db, "session")) {
-			ingest(
-				db
-					.prepare(
-						`SELECT
-							id, title, slug, agent, model, directory,
-							time_created, time_updated
-						FROM session
-						WHERE ${maintainWhere}
-						ORDER BY time_created DESC
-						LIMIT ?`,
-					)
-					.all(limit * 3) as SessionRow[],
-				"v1",
 			);
 		}
 

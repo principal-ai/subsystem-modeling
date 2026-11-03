@@ -314,11 +314,6 @@ export interface SessionSummary {
 	repoRoot?: string;
 	repos?: RepoInfo[];
 	agent?: string;
-	/**
-	 * OpenCode durable identity when known: `session_v2` → v2, `session` → v1.
-	 * Used to badge V2 Maintain / Agent Sessions in the drawer.
-	 */
-	opencodeKind?: "v1" | "v2";
 	/** Distinct model ids the session used, in first-use order. */
 	models?: string[];
 }

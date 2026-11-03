@@ -53,7 +53,7 @@ export function buildAgentSessionsView(opts: {
 	repoRoot?: string;
 	models?: string[];
 	/** Explicit OpenCode V1/V2 identity from the session list (preferred). */
-	opencodeKind?: "v1" | "v2";
+
 }): AgentSessionsView | null {
 	const { sessionId, title, sessionMeta, dirSet, repoOwner, repoName } = opts;
 	if (!opts.events || opts.events.length === 0) return null;
@@ -140,7 +140,7 @@ export function buildAgentSessionsView(opts: {
 		sessionMeta?.agent ?? (!sessionMeta?.slug ? "cline" : "opencode");
 	const { logoAgent, displayAgent } = resolveAgentLogoFields(rawAgent);
 	const isV2 = isOpencodeV2SessionMeta({
-		opencodeKind: opts.opencodeKind,
+
 		agent: sessionMeta?.agent,
 	});
 
@@ -219,20 +219,18 @@ function resolveAgentLogoFields(raw: string): {
 	return { logoAgent: key || "opencode", displayAgent: key || "opencode" };
 }
 
-/** True when the session is an OpenCode V2 durable transcript. */
+/** True when the session is an OpenCode durable transcript. */
 function isOpencodeV2SessionMeta(s: {
-	opencodeKind?: string;
 	agent?: string | null;
 } | null | undefined): boolean {
 	if (!s) return false;
-	if (s.opencodeKind === "v2") return true;
 	const agent = (s.agent ?? "").trim().toLowerCase();
 	return agent === "opencode-v2" || agent === "opencode2";
 }
 
 /**
- * Panel drawer shows `models` as a monospace meta line — prepend a `v2` token
- * so V2 OpenCode runs are visually distinct from V1 without a panel API change.
+ * Panel drawer shows `models` as a monospace meta line — prepend a token
+ * for OpenCode runs without a panel API change.
  */
 function modelsWithV2Badge(
 	models: string[] | undefined,
@@ -461,7 +459,7 @@ export function AgentSessionsOverviewView({
 						repoName: p.repos[0]?.name ?? null,
 						repoRoot: p.repoRoot,
 						models: summary?.models,
-						opencodeKind: summary?.opencodeKind,
+
 					});
 					if (!slice) continue;
 					nextSessions.set(p.id, slice.sessions[0]);
@@ -525,7 +523,6 @@ export function AgentSessionsOverviewView({
 			repoName: null,
 			repoRoot: res.repoRoot ?? res.repos?.[0]?.root,
 			models: s.models,
-			opencodeKind: s.opencodeKind,
 		});
 		if (!slice) return;
 		const session = slice.sessions[0];
@@ -589,7 +586,6 @@ export function AgentSessionsOverviewView({
 			repoName: null,
 			repoRoot: res.repoRoot ?? res.repos?.[0]?.root,
 			models: s.models,
-			opencodeKind: s.opencodeKind,
 		});
 		if (!slice) return false;
 		const existing = eventsByIdRef.current.get(s.id) ?? [];
@@ -1011,7 +1007,6 @@ export function AgentSessionsOverviewView({
 					repoName: null,
 					repoRoot: res.repoRoot ?? res.repos?.[0]?.root,
 					models: summary?.models,
-					opencodeKind: summary?.opencodeKind,
 				});
 				if (!slice) return { events: [], title: sessionId };
 				setSessionsById((prev) => {

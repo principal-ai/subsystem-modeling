@@ -4,8 +4,7 @@
  * Studio does not shell out to `npm`. Install/update downloads the platform
  * binary straight from the vendor's registry tarball and writes it to the
  * conventional location (`~/.opencode/bin/opencode2`). Installing under the
- * `opencode2` name (never `opencode`) keeps a user's V1 install untouched, and
- * avoids depending on PATH, which GUI launches do not receive.
+ * `opencode2` name avoids depending on PATH, which GUI launches do not receive.
  */
 
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -14,6 +13,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { OpencodeV2Status } from "../shared/contract";
 import { compareSemver } from "./graphify-runner";
+import { probeOpencodeServer, resolveOpencodeConnection } from "./server-sessions";
 
 export const OPENCODE_V2_BIN_NAME = "opencode2";
 
@@ -165,8 +165,9 @@ export async function fetchLatestOpencode2Version(): Promise<string | null> {
 export function getOpencodeV2Status(): OpencodeV2Status {
 	const bin = resolveOpencode2Bin();
 	const installedVersion = bin ? readOpencode2Version(bin) : null;
+	const connection = resolveOpencodeConnection();
 	return {
-		installed: bin !== null,
+		installed: bin !== null || connection !== null,
 		bin,
 		conventionalBin: installBinPath(),
 		installCommand: OPENCODE_V2_INSTALL_COMMAND,
@@ -180,11 +181,21 @@ export function getOpencodeV2Status(): OpencodeV2Status {
 export async function getOpencodeV2StatusDetailed(): Promise<OpencodeV2Status> {
 	const base = getOpencodeV2Status();
 	const latestVersion = await fetchLatestOpencode2Version();
+	const server = await probeOpencodeServer().catch(() => null);
 	let updateAvailable: boolean | null = null;
 	if (base.installedVersion && latestVersion) {
 		updateAvailable = compareSemver(latestVersion, base.installedVersion) > 0;
 	} else if (!base.installed && latestVersion) {
 		updateAvailable = true;
+	}
+	// If we can reach a running server but can't locate the binary, mark as available
+	if (!base.installed && server?.running) {
+		return {
+			...base,
+			installed: true,
+			latestVersion,
+			updateAvailable: null,
+		};
 	}
 	return { ...base, latestVersion, updateAvailable };
 }
@@ -199,7 +210,7 @@ export interface InstallOpencodeV2Result {
 }
 
 /** Download the platform tarball and drop the binary at the conventional path
- *  as `opencode2`. Never touches a V1 `opencode`. */
+ *  as `opencode2`. */
 async function downloadAndInstall(
 	version: string,
 	scope: string,
