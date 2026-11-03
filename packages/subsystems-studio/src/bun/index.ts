@@ -3385,6 +3385,15 @@ function auditSubsystemModelsInBackground(graphIds: string[]): void {
 	})();
 }
 
+/**
+ * Window RPC surface. Declared before the regular-audit scheduler because the
+ * scheduler notifies synchronously on `sync()` (start → scheduleNext → notify
+ * → broadcast → sendToAllWindows), which reads `rpc`. Declaring it later put
+ * `rpc` in its temporal dead zone and threw
+ * `ReferenceError: Cannot access 'rpc' before initialization` at boot.
+ */
+const rpc = createWindowRpc(() => null);
+
 const regularAuditScheduler = createRegularAuditScheduler({
 	listGraphIds: async () => {
 		const entries = await listSubsystemModels();
@@ -3919,8 +3928,6 @@ function createWindowRpc(getWindowId: () => number | null) {
 		},
 	});
 }
-
-const rpc = createWindowRpc(() => null);
 
 /** Send a host→renderer message to the main window and every detached window. */
 function sendToAllWindows(message: keyof StudioMessages, payload: unknown): void {
