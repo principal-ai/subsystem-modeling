@@ -1194,26 +1194,66 @@ export async function applyDeterministicSpanFixes(
  * Always returns a per-component `checks` checklist so a clean run still shows
  * what was inspected.
  */
+/**
+ * Serialize audits host-wide.
+ *
+ * One audit pass parses full `graph.json` bundles per purl and holds them for
+ * the whole pass. Running passes concurrently multiplies that working set
+ * (measured: ~4.8 GB for one pass over 97 models, ~10.3 GB for 98 concurrent
+ * audits) and the host never returns those pages, so repeated concurrency
+ * ratchets the process toward an OOM kill — which dies with no JS error.
+ * Audits are independent and idempotent, so queueing them costs latency but
+ * bounds memory to one pass at a time.
+ */
+let auditQueue: Promise<unknown> = Promise.resolve();
+
+function serializeAudit<T>(run: () => Promise<T>): Promise<T> {
+	const result = auditQueue.then(run, run);
+	// Keep the chain alive even when a run rejects, so one failure can never
+	// wedge every later audit.
+	auditQueue = result.then(
+		() => undefined,
+		() => undefined,
+	);
+	return result;
+}
+
 export async function auditSubsystemModel(
 	graphId: string,
 ): Promise<
 	| { ok: true; report: SubsystemModelAuditReport; fingerprint: string }
 	| { ok: false; error: string }
 > {
-	const graph = await getSubsystemModel(graphId);
-	if (!graph) return { ok: false, error: `unknown graph: ${graphId}` };
+	return serializeAudit(() => runAuditSubsystemModel(graphId));
+}
 
-	// Audit must use the current HEAD(+dirty) graphify slot, not a stale fallback.
-	const graphifyEnsure = await ensureCurrentGraphifyCachesForModel(graph);
-	if (graphifyEnsure.failed.length > 0) {
-		console.warn(
-			`[audit] graphify ensure incomplete for ${graphId}: ${graphifyEnsure.failed
-				.map((f) => `${f.purl} (${f.error})`)
-				.join("; ")}`,
-		);
-	}
+async function runAuditSubsystemModel(
+	graphId: string,
+): Promise<
+	| { ok: true; report: SubsystemModelAuditReport; fingerprint: string }
+	| { ok: false; error: string }
+> {
+	try {
+		const graph = await getSubsystemModel(graphId);
+		if (!graph) return { ok: false, error: `unknown graph: ${graphId}` };
 
-	const files = await verifyModelFiles(graph);
+		// Audit must use the current HEAD(+dirty) graphify slot, not a stale fallback.
+		let graphifyEnsure;
+		try {
+			graphifyEnsure = await ensureCurrentGraphifyCachesForModel(graph);
+			if (graphifyEnsure.failed.length > 0) {
+				console.warn(
+					`[audit] graphify ensure incomplete for ${graphId}: ${graphifyEnsure.failed
+						.map((f) => `${f.purl} (${f.error})`)
+						.join("; ")}`,
+				);
+			}
+		} catch (err) {
+			console.warn(`[audit] graphify ensure failed for ${graphId}:`, err);
+			graphifyEnsure = { ensured: [], failed: [] };
+		}
+
+		const files = await verifyModelFiles(graph);
 	const missingFileAliases = new Set(files.missing.map((m) => m.componentAlias));
 
 	const findings: SubsystemModelAuditFinding[] = [];
@@ -1340,13 +1380,8 @@ export async function auditSubsystemModel(
 			continue;
 		}
 
-		const r = await verifySubsystemComponent(graphId, c.alias, {
-			dryRun: true,
-			graphifyCache,
-			treeCache,
-		});
-		let issue = seenComponentIssue.has(c.alias);
-
+		// Declared before the verify call so the catch below can report a
+		// per-component skip when verify throws (e.g. a tree-sitter WASM abort).
 		const check: SubsystemModelAuditCheck = {
 			componentAlias: c.alias,
 			componentName: c.name,
@@ -1362,6 +1397,25 @@ export async function auditSubsystemModel(
 			graphify: "unavailable",
 			verdict: "ok",
 		};
+
+		let r;
+		try {
+			r = await verifySubsystemComponent(graphId, c.alias, {
+				dryRun: true,
+				graphifyCache,
+				treeCache,
+			});
+		} catch (err) {
+			console.warn(`[audit] verify failed for ${c.alias}:`, err);
+			checks.push({
+				...check,
+				graphify: "unavailable",
+				verdict: "skipped",
+				note: `verify error: ${err instanceof Error ? err.message : String(err)}`,
+			});
+			continue;
+		}
+		let issue = seenComponentIssue.has(c.alias);
 
 		if (!r.file?.repoRoot) {
 			const purl = (c.purl || "").trim();
@@ -2032,11 +2086,15 @@ export async function auditSubsystemModel(
 		}
 	}
 
-	return {
-		ok: true,
-		report,
-		fingerprint,
-	};
+		return {
+			ok: true,
+			report,
+			fingerprint,
+		};
+	} catch (err) {
+		console.error("[audit] auditSubsystemModel failed:", err);
+		return { ok: false, error: err instanceof Error ? err.message : String(err) };
+	}
 }
 
 /**
