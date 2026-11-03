@@ -618,13 +618,23 @@ async function doEnsure(ctx: {
 		}
 	}
 
-	const extract = await runGraphifyExtract({
-		repoRoot: ctx.repoRoot,
-		bin: ctx.bin,
-		codeOnly: true,
-		extraArgs: ctx.extraArgs,
-		cleanupTempOnFailure: true,
-	});
+	let extract;
+	try {
+		extract = await runGraphifyExtract({
+			repoRoot: ctx.repoRoot,
+			bin: ctx.bin,
+			codeOnly: true,
+			extraArgs: ctx.extraArgs,
+			cleanupTempOnFailure: true,
+		});
+	} catch (err) {
+		return {
+			ok: false,
+			error: err instanceof Error ? err.message : String(err),
+			purl: ctx.purl,
+			durationMs: performance.now() - ctx.started,
+		};
+	}
 	if (!extract.ok) {
 		return {
 			ok: false,
