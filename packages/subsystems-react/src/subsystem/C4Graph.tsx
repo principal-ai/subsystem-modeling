@@ -844,6 +844,46 @@ export function c4CameraNodeIds(model: C4Model, targetIds?: string | readonly st
   ];
 }
 
+/**
+ * Fold authored lines onto the boxes that are actually drawn.
+ *
+ * A sketch can author a line between components. When their container is
+ * closed, those components are hidden — but the relationship they express did
+ * not disappear, it changed level. Roll each hidden component endpoint up to
+ * its container, so a component-to-component line across containers reads as a
+ * container-to-container line instead of being dropped along with the box.
+ *
+ * A line whose endpoints both fold to the same container is internal to a
+ * closed box, so it has nowhere to land and is omitted. Endpoints that are
+ * neither drawn nor a component of a drawn container are dropped too.
+ *
+ * Returns the original edge alongside its resolved endpoints: the caller still
+ * needs the authored id/label/provenance for selection and the inspector.
+ */
+export function resolveC4EdgeEndpoints(
+  edges: readonly C4Edge[],
+  nodes: readonly C4Element[],
+  drawnIds: ReadonlySet<string>,
+): Array<{ edge: C4Edge; source: string; target: string }> {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const anchorOf = (id: string): string | null => {
+    if (drawnIds.has(id)) return id;
+    const node = byId.get(id);
+    if (node?.kind !== 'component') return null;
+    const owner = node.container ?? node.parentId;
+    return owner && drawnIds.has(owner) ? owner : null;
+  };
+
+  const resolved: Array<{ edge: C4Edge; source: string; target: string }> = [];
+  for (const edge of edges) {
+    const source = anchorOf(edge.source);
+    const target = anchorOf(edge.target);
+    if (!source || !target || source === target) continue;
+    resolved.push({ edge, source, target });
+  }
+  return resolved;
+}
+
 /** A fully laid-out open state: the RF nodes/edges and label anchors. */
 interface Rendered {
   nodes: Node[];
@@ -1381,20 +1421,23 @@ function Inner({ model, containerFocus, selectedNodeId, selectedEdgeId: controll
     );
 
     const drawnIds = new Set(rfNodes.map((n) => n.id));
-    const rfEdges: Edge[] = model.edges
-      .filter((e) => drawnIds.has(e.source) && drawnIds.has(e.target))
-      .map((e) => {
+    // Authored component lines survive a collapse by rolling up to the
+    // container that now stands in for their endpoint. Without this, closing a
+    // container silently removes every relationship drawn from inside it.
+    const rfEdges: Edge[] = resolveC4EdgeEndpoints(model.edges, model.nodes, drawnIds).map(
+      ({ edge: e, source, target }) => {
         const color = protocolColor(e.protocol);
         return {
           id: e.id,
           type: 'c4-edge',
-          source: e.source,
-          target: e.target,
+          source,
+          target,
           label: e.protocol ?? e.label,
           markerEnd: { type: MarkerType.ArrowClosed, color, width: 18, height: 18 },
           data: { edge: e, color, path: '' },
         };
-      });
+      },
+    );
     // Construct edges attach only when both endpoints are drawn — a step to an
     // external, or to a construct in another container, is dropped here and left
     // to the C4 container-level line.
