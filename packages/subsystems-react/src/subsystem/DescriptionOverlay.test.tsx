@@ -62,7 +62,7 @@ describe('subsystem description overlay', () => {
       expect(more.textContent).toBe('Close');
       const close = view.getByRole('button', { name: 'Close description' });
       expect(document.activeElement).toBe(close);
-      if (closeWithEscape) fireEvent.keyDown(close, { key: 'Escape' });
+      if (closeWithEscape) fireEvent.keyDown(document.body, { key: 'Escape' });
       else fireEvent.click(close);
       expect(view.queryByRole('dialog')).toBeNull();
       expect(more.getAttribute('aria-expanded')).toBe('false');
