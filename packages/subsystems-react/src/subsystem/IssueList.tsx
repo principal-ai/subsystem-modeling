@@ -289,7 +289,7 @@ const KIND_LABEL: Record<string, string> = {
   signature_mismatch: 'Construct signature mismatch',
   signature_unconfirmed: 'Construct signature unconfirmed',
   repo_unresolved: 'No repository clone',
-  graphify_unavailable: 'Graphify cache unavailable',
+  graphify_unavailable: 'Source verification unavailable',
   boundary_module_file_mismatch: 'Declaration file outside module',
   boundary_process_nest_disagree: 'Module spans multiple process contexts',
   // C4 process verification (labels read as boundary states, since the layer

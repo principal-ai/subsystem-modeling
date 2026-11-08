@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { installedDependencyPackage, storeTypeStale, storeTypeUndeclared } from "./verify-subsystem-component";
+import {
+	installedDependencyPackage,
+	storeTypeStale,
+	storeTypeUndeclared,
+	verificationFailureDiagnostic,
+	verificationUnavailableFinding,
+} from "./verify-subsystem-component";
 import type { SubsystemComponent } from "../shared/contract";
 
 /**
@@ -169,5 +175,37 @@ describe("installedDependencyPackage", () => {
 		expect(
 			installedDependencyPackage("a/node_modules/pkg/node_modules/dep/b.js"),
 		).toEqual({ packageName: "dep" });
+	});
+});
+
+describe("verificationFailureDiagnostic", () => {
+	test("identifies the Tree-sitter WASM indirect-call crash without leaking runtime paths", () => {
+		const diagnostic = verificationFailureDiagnostic(
+			new Error("Out of bounds call_indirect (evaluating 'C2._ts_parser_new_wasm()')"),
+		);
+		expect(diagnostic).toBe(
+			"Tree-sitter WASM parser aborted (out-of-bounds indirect call)",
+		);
+	});
+
+	test("summarizes other verifier exceptions by error type", () => {
+		expect(verificationFailureDiagnostic(new TypeError("/private/path/source.ts"))).toBe(
+			"component verification threw TypeError",
+		);
+	});
+
+	test("turns parser aborts into an audit finding grouped by repository", () => {
+		expect(
+			verificationUnavailableFinding(
+				"pkg:github/acme/app",
+				new Error("Out of bounds call_indirect (evaluating '_ts_parser_new_wasm()')"),
+			),
+		).toEqual({
+			kind: "graphify_unavailable",
+			severity: "info",
+			purl: "pkg:github/acme/app",
+			message:
+				"Source verification aborted for pkg:github/acme/app: Tree-sitter WASM parser aborted (out-of-bounds indirect call). Retry the audit; if it repeats, inspect the Studio logs.",
+		});
 	});
 });

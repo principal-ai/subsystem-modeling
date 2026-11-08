@@ -38,7 +38,11 @@ import {
 	parseSourceLocation,
 	type SubsystemSourceSpan,
 } from "./declaration-ref";
-import { deriveSpan, type SpanTreeCache } from "./span-derivation";
+import {
+	deriveSpan,
+	disposeSpanTreeCache,
+	type SpanTreeCache,
+} from "./span-derivation";
 import { loadGraphifyGraph } from "./graphify-runner";
 import {
 	assessSubsystemGraphifyReadiness,
@@ -338,6 +342,29 @@ export function installedDependencyPackage(
 	const scoped = name.startsWith("@") ? segments[at + 2] : undefined;
 	if (name.startsWith("@") && !scoped) return null;
 	return { packageName: scoped ? `${name}/${scoped}` : name };
+}
+
+/** Keep a parser/runtime failure legible in the audit without dumping paths. */
+export function verificationFailureDiagnostic(error: unknown): string {
+	const message = error instanceof Error ? error.message : String(error);
+	if (/\bcall_indirect\b|_ts_parser_new_wasm/i.test(message)) {
+		return "Tree-sitter WASM parser aborted (out-of-bounds indirect call)";
+	}
+	const name = error instanceof Error && error.name ? error.name : "Error";
+	return `component verification threw ${name}`;
+}
+
+export function verificationUnavailableFinding(
+	purl: string,
+	error: unknown,
+): SubsystemModelAuditFinding {
+	const diagnostic = verificationFailureDiagnostic(error);
+	return {
+		kind: "graphify_unavailable",
+		severity: "info",
+		purl,
+		message: `Source verification aborted for ${purl}: ${diagnostic}. Retry the audit; if it repeats, inspect the Studio logs.`,
+	};
 }
 
 async function captureDeclaration(
@@ -1407,12 +1434,19 @@ async function runAuditSubsystemModel(
 			});
 		} catch (err) {
 			console.warn(`[audit] verify failed for ${c.alias}:`, err);
+			const diagnostic = verificationFailureDiagnostic(err);
 			checks.push({
 				...check,
 				graphify: "unavailable",
 				verdict: "skipped",
-				note: `verify error: ${err instanceof Error ? err.message : String(err)}`,
+				note: diagnostic,
 			});
+			const purl = purlRepoKey(c.purl) ?? c.purl?.trim();
+			if (purl && !cacheUnavailablePurls.has(purl)) {
+				cacheUnavailablePurls.add(purl);
+				unresolved++;
+				findings.push(verificationUnavailableFinding(purl, err));
+			}
 			continue;
 		}
 		let issue = seenComponentIssue.has(c.alias);
@@ -1714,6 +1748,7 @@ async function runAuditSubsystemModel(
 		if (!issue && r.ok) okComponents++;
 		checks.push(check);
 	}
+	disposeSpanTreeCache(treeCache);
 
 	// --- Boundary membership: process (runtime) + module (containment) ---
 	const augmentedModuleAliases = new Set<string>();
@@ -2401,5 +2436,3 @@ export async function applySubsystemModelAuditFix(opts: {
 		fingerprint: audited.fingerprint,
 	};
 }
-
-

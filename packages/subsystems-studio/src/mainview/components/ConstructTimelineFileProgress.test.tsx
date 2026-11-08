@@ -5,7 +5,10 @@ import type { ConstructTimelineFileSnapshot, ConstructTimelineFileStatus } from 
 import { timelineChangeLayers, timelineChangeSnapshot, timelineFileExplanation, timelineFileLayers } from "./timelineFileCity";
 import { timelineFileStatus } from "../../shared/construct-timeline";
 
-mock.module("../rpc", () => ({ electrobun: { rpc: { request: {} } } }));
+mock.module("../rpc", () => ({
+	electrobun: { rpc: { request: {} } },
+	reloadSubscribers: new Set(),
+}));
 const { ConstructTimelineFileProgress, ConstructTimelineFilesView, ConstructTimelineFileDetails, ConstructTimelineFileDetailsOverlay } = await import("./ConstructTimelineFileProgress");
 
 const statuses: ConstructTimelineFileStatus[] = ["verified", "partial", "unresolved", "unsupported", "error", "uncovered", "non-code"];

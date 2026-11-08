@@ -213,6 +213,10 @@ import { createRegularAuditScheduler } from "./regular-audit";
 import { reconcileOrphanedRuns } from "./subsystem-model-run-reconcile";
 import { maintenanceRuns } from "./subsystem-maintenance-runs";
 import { createMaintenanceOutcomeSender } from "./maintenance-outcome-delivery";
+import { SpanKind, SpanStatusCode } from "@opentelemetry/api";
+import { initializeStudioTelemetry, withStudioSpan } from "../shared/telemetry";
+
+initializeStudioTelemetry("subsystems-studio-host");
 
 /**
  * Resident store — the in-memory home for the recent window's processed
@@ -2139,82 +2143,99 @@ const requests: RequestHandlers = {
 					modelIds: models.map((m) => m.id),
 				};
 			},
-			listSubsystemModels: async () => {
-				const entries = await listSubsystemModels();
-				const graphs = await Promise.all(
-					entries.map(async (e) => {
-						const full = await getSubsystemModel(e.id);
-						const graphify = full
-							? await assessSubsystemGraphifyReadiness(full, graphifyBuildingPurls)
-							: undefined;
-								let lastAudit:
-							| {
-									checkedAt: string;
-									needsUpdate: boolean;
-									issueCount: number;
-									verdict: "fully_verified" | "partially_verified" | "issues";
-									stale: boolean;
-									verification?: SubsystemModelVerification;
-							  }
-							| undefined;
-						if (full) {
-							const fingerprint = await buildAuditFingerprint({
-								updatedAt: full.updatedAt,
-								components: full.components,
-								graphify,
-							});
-							const summary = await getSubsystemModelAuditListSummary(
-								e.id,
-								fingerprint,
-								{ hasTrails: (full.trails?.length ?? 0) > 0 },
-							);
-							if (summary) {
-								lastAudit = {
-									checkedAt: summary.checkedAt,
-									needsUpdate: summary.needsUpdate,
-									issueCount: summary.issueCount,
-									verdict: summary.verdict,
-									stale: summary.stale,
-									verification: summary.verification,
-								};
-							}
-						}
-						const pendingCount = await pendingProposalCount(e.id);
-						return {
-							id: e.id,
-							title: e.title,
-							description: e.description,
-							notes: full?.notes,
-							componentCount: e.componentCount,
-							edgeCount: e.edgeCount,
-							createdAt: e.createdAt,
-							updatedAt: e.updatedAt,
-							lastOpenedAt: e.lastOpenedAt,
-						repos: full
-							? githubReposFromComponents(full.components)
-							: undefined,
-					files: full
-						? subsystemFilesFromComponents(full.components)
-						: undefined,
-					trails: full
-						? subsystemTrailsFromModel(full.trails)
-						: undefined,
-						path: subsystemModelFilePath(e.id),
-							gist: e.gist ?? full?.gist,
-							graphify,
-							lastAudit,
-							createdAtCommits: full?.createdAtCommits,
-							verifiedAtCommits: full?.verifiedAtCommits,
-							purlFreshness:
-								full && (full.createdAtCommits || full.verifiedAtCommits)
-									? await purlCommitFreshness(full, full.components)
+			listSubsystemModels: async () =>
+				withStudioSpan(
+					"studio.rpc.list_subsystem_models",
+					{
+						kind: SpanKind.SERVER,
+						attributes: {
+							"rpc.system": "electrobun",
+							"rpc.method": "listSubsystemModels",
+							"studio.tab.kind": "subsystems",
+						},
+					},
+					async (span) => {
+						const entries = await listSubsystemModels();
+						const graphs = await Promise.all(
+							entries.map(async (e) => {
+								const full = await getSubsystemModel(e.id);
+								const graphify = full
+									? await assessSubsystemGraphifyReadiness(full, graphifyBuildingPurls)
+									: undefined;
+										let lastAudit:
+									| {
+											checkedAt: string;
+											needsUpdate: boolean;
+											issueCount: number;
+											verdict: "fully_verified" | "partially_verified" | "issues";
+											stale: boolean;
+											verification?: SubsystemModelVerification;
+									  }
+									| undefined;
+								if (full) {
+									const fingerprint = await buildAuditFingerprint({
+										updatedAt: full.updatedAt,
+										components: full.components,
+										graphify,
+									});
+									const summary = await getSubsystemModelAuditListSummary(
+										e.id,
+										fingerprint,
+										{ hasTrails: (full.trails?.length ?? 0) > 0 },
+									);
+									if (summary) {
+										lastAudit = {
+											checkedAt: summary.checkedAt,
+											needsUpdate: summary.needsUpdate,
+											issueCount: summary.issueCount,
+											verdict: summary.verdict,
+											stale: summary.stale,
+											verification: summary.verification,
+										};
+									}
+								}
+								const pendingCount = await pendingProposalCount(e.id);
+								return {
+									id: e.id,
+									title: e.title,
+									description: e.description,
+									notes: full?.notes,
+									componentCount: e.componentCount,
+									edgeCount: e.edgeCount,
+									createdAt: e.createdAt,
+									updatedAt: e.updatedAt,
+									lastOpenedAt: e.lastOpenedAt,
+								repos: full
+									? githubReposFromComponents(full.components)
 									: undefined,
-							pendingProposalCount: pendingCount > 0 ? pendingCount : undefined,
-						};
-					}),
-				);
-				return { graphs };
-			},
+							files: full
+								? subsystemFilesFromComponents(full.components)
+								: undefined,
+							trails: full
+								? subsystemTrailsFromModel(full.trails)
+								: undefined,
+								path: subsystemModelFilePath(e.id),
+									gist: e.gist ?? full?.gist,
+									graphify,
+									lastAudit,
+									createdAtCommits: full?.createdAtCommits,
+									verifiedAtCommits: full?.verifiedAtCommits,
+									purlFreshness:
+										full && (full.createdAtCommits || full.verifiedAtCommits)
+											? await purlCommitFreshness(full, full.components)
+											: undefined,
+									pendingProposalCount: pendingCount > 0 ? pendingCount : undefined,
+								};
+							}),
+						);
+						span.setAttribute("studio.model.count", graphs.length);
+						span.setAttribute(
+							"studio.model.component_count",
+							graphs.reduce((total, graph) => total + graph.componentCount, 0),
+						);
+						return { graphs };
+					},
+				),
 			searchConstructRepositories: async ({ query }) => {
 				try {
 					return { ok: true, repos: searchConstructRepositories(query) };
@@ -3339,7 +3360,7 @@ async function auditAndStageOneClickFixes(
  */
 async function reauditSubsystemModelQuietly(
 	graphId: string,
-	opts?: { surface?: boolean },
+	opts?: { surface?: boolean; trigger?: string },
 ): Promise<void> {
 	const surface = opts?.surface === true;
 	if (surface) {
@@ -3348,7 +3369,26 @@ async function reauditSubsystemModelQuietly(
 		broadcastSubsystemModelChanged({ graphId, reason: "updated" });
 	}
 	try {
-		const audited = await auditAndStageOneClickFixes(graphId);
+		const audited = await withStudioSpan(
+			opts?.trigger === "scheduled"
+				? "studio.audit.regular_model"
+				: "studio.audit.model",
+			{
+				kind: SpanKind.INTERNAL,
+				attributes: { "audit.trigger": opts?.trigger ?? "model-change" },
+			},
+			async (span) => {
+				const result = await auditAndStageOneClickFixes(graphId);
+				span.setAttribute("audit.ok", result.ok);
+				if (result.ok) {
+					span.setAttribute("audit.finding.count", result.report.findings.length);
+					span.setAttribute("audit.check.count", result.report.checks.length);
+				} else {
+					span.setStatus({ code: SpanStatusCode.ERROR });
+				}
+				return result;
+			},
+		);
 		if (!audited.ok) {
 			console.warn(
 				`[principal-studio] re-audit after model change failed for ${graphId}: ${audited.error}`,
@@ -3405,7 +3445,9 @@ const regularAuditScheduler = createRegularAuditScheduler({
 		return entries.map((e) => e.id);
 	},
 	auditOne: async (graphId) => {
-		await reauditSubsystemModelQuietly(graphId);
+		await reauditSubsystemModelQuietly(graphId, {
+			trigger: "scheduled",
+		});
 	},
 	onStatusChange: (status) => {
 		broadcastRegularAuditChanged(status);

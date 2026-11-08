@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import config from "../../electrobun.config";
 import { grammarFile } from "./tree-sitter-assets";
-import { parserFor } from "./tree-sitter-parser";
+import { parseWith, parserFor, sharedParserFor } from "./tree-sitter-parser";
 
 const SAMPLES: Record<string, string> = {
 	"sample.ts": "export function greet(name: string): string { return name; }",
@@ -37,6 +37,25 @@ describe("Tree-sitter assets", () => {
 			parser!.delete();
 		}
 		expect(await parserFor("README.md")).toBeNull();
+	});
+
+	test("serializes a larger cross-grammar parse burst through shared parsers", async () => {
+		const samples = Object.entries(SAMPLES);
+		const parses = await Promise.all(
+			Array.from({ length: 8 }, (_, pass) =>
+				Promise.all(
+					samples.map(async ([file, content]) => {
+						const parser = await sharedParserFor(file);
+						expect(parser).not.toBeNull();
+						const tree = await parseWith(parser!, content);
+						const result = { file, pass, hasError: tree.rootNode.hasError };
+						tree.delete();
+						return result;
+					}),
+				),
+			),
+		);
+		expect(parses.flat().every((result) => !result.hasError)).toBe(true);
 	});
 
 	test("bundled parsers work with only the configured app assets and no node_modules", async () => {

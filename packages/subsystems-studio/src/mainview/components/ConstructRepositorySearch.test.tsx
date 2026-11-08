@@ -2,7 +2,10 @@ import { expect, mock, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider, slateNeonTheme } from "@principal-ade/industry-theme";
 
-mock.module("../rpc", () => ({ electrobun: { rpc: { request: {} } } }));
+mock.module("../rpc", () => ({
+	electrobun: { rpc: { request: {} } },
+	reloadSubscribers: new Set(),
+}));
 const { ConstructRepositorySearch } = await import("./ConstructRepositorySearch");
 
 test("renders an accessible registry search without starting any RPC request", () => {

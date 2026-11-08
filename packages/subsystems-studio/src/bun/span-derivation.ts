@@ -16,7 +16,7 @@
 import { promises as fs } from "node:fs";
 import type { Tree } from "web-tree-sitter";
 import { grammarFile } from "./tree-sitter-assets";
-import { parserFor } from "./tree-sitter-parser";
+import { parseWith, sharedParserFor } from "./tree-sitter-parser";
 import {
 	resolveComponentAnchor,
 	type ComponentAnchorResult,
@@ -272,7 +272,7 @@ export interface DeriveInput {
 /**
  * Classify one declaration span derivation. Pure given `content` + anchor.
  */
-export async function deriveSpan(input: DeriveInput): Promise<SpanDerivation> {
+async function deriveSpanUsingCache(input: DeriveInput): Promise<SpanDerivation> {
 	const evidence: string[] = [];
 	const failed: string[] = [];
 
@@ -314,30 +314,28 @@ export async function deriveSpan(input: DeriveInput): Promise<SpanDerivation> {
 		};
 	}
 
-	const parser = await parserFor(input.file);
-	if (!parser) {
-		failed.push("no-grammar");
-		return {
-			class: "unknown",
-			language: null,
-			graphifyStart,
-			derivedEnd: null,
-			declNodeType: null,
-			declName: null,
-			failedGates: failed,
-			evidence,
-		};
-	}
-
 	// Parse once per file per audit pass: reuse a cached tree when the caller
-	// shares one (many components live in the same file).
+	// shares one (many components live in the same file). Use the shared parser
+	// and serialized parse queue: constructing a fresh WASM Parser for every file
+	// churns the heap and can abort on larger audits.
 	let tree = input.treeCache?.get(input.file) ?? null;
 	if (!tree) {
-		tree = parser.parse(input.content);
-		parser.delete?.();
+		const parser = await sharedParserFor(input.file);
+		if (!parser) {
+			failed.push("no-grammar");
+			return {
+				class: "unknown",
+				language: null,
+				graphifyStart,
+				derivedEnd: null,
+				declNodeType: null,
+				declName: null,
+				failedGates: failed,
+				evidence,
+			};
+		}
+		tree = await parseWith(parser, input.content);
 		if (tree) input.treeCache?.set(input.file, tree);
-	} else {
-		parser.delete?.();
 	}
 	if (!tree) {
 		failed.push("parse-error");
@@ -469,6 +467,23 @@ export async function deriveSpan(input: DeriveInput): Promise<SpanDerivation> {
 		failedGates: failed,
 		evidence,
 	};
+}
+
+/** Release parser-owned trees when a caller did not provide a pass cache. */
+export function disposeSpanTreeCache(treeCache: SpanTreeCache): void {
+	for (const tree of treeCache.values()) tree.delete();
+	treeCache.clear();
+}
+
+/** Classify one declaration and dispose its temporary WASM tree when unshared. */
+export async function deriveSpan(input: DeriveInput): Promise<SpanDerivation> {
+	if (input.treeCache) return deriveSpanUsingCache(input);
+	const treeCache: SpanTreeCache = new Map();
+	try {
+		return await deriveSpanUsingCache({ ...input, treeCache });
+	} finally {
+		disposeSpanTreeCache(treeCache);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -660,8 +675,12 @@ export async function classifyModelSpans(
 	}
 	const components: ComponentSpanReport[] = [];
 	const treeCache: SpanTreeCache = new Map();
-	for (const c of graph.components) {
-		components.push(await classifyComponent(graphId, c, treeCache));
+	try {
+		for (const c of graph.components) {
+			components.push(await classifyComponent(graphId, c, treeCache));
+		}
+	} finally {
+		disposeSpanTreeCache(treeCache);
 	}
 	return { models: 1, components, summary: summarize(components) };
 }
@@ -674,16 +693,20 @@ export async function classifyAllSpans(
 	const components: ComponentSpanReport[] = [];
 	const treeCache: SpanTreeCache = new Map();
 	let index = 0;
-	for (const entry of entries) {
-		opts?.onModel?.(entry.id, index++);
-		const graph = await getSubsystemModel(entry.id);
-		if (!graph) continue;
-		if (opts?.ensure) {
-			await ensureCurrentGraphifyCachesForModel(graph);
+	try {
+		for (const entry of entries) {
+			opts?.onModel?.(entry.id, index++);
+			const graph = await getSubsystemModel(entry.id);
+			if (!graph) continue;
+			if (opts?.ensure) {
+				await ensureCurrentGraphifyCachesForModel(graph);
+			}
+			for (const c of graph.components) {
+				components.push(await classifyComponent(entry.id, c, treeCache));
+			}
 		}
-		for (const c of graph.components) {
-			components.push(await classifyComponent(entry.id, c, treeCache));
-		}
+	} finally {
+		disposeSpanTreeCache(treeCache);
 	}
 	return { models: entries.length, components, summary: summarize(components) };
 }

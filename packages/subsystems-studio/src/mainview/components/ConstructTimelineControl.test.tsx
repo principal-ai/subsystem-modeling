@@ -6,7 +6,10 @@ import type { ConstructTimelineCommit, ConstructTimelineOptions, ConstructTimeli
 
 // The section's module imports the electrobun RPC bridge, which touches `window`
 // at import time. The section itself never issues a request while rendering.
-mock.module("../rpc", () => ({ electrobun: { rpc: { request: {} } } }));
+mock.module("../rpc", () => ({
+	electrobun: { rpc: { request: {} } },
+	reloadSubscribers: new Set(),
+}));
 
 const { ConstructTimelinePanel, ConstructTimelineSection, ConstructTimelineTrigger, ConstructTimelineResetConfirmation, ConstructTimelineProjectStats } = await import("./ConstructTimelineControl");
 const { ConstructTimelineExtendDialog } = await import("./ConstructTimelineExtendDialog");

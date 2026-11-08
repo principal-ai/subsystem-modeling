@@ -8,6 +8,8 @@
  */
 
 import type { RegularAuditStatus, ViewerSettings } from "../shared/contract";
+import { SpanKind } from "@opentelemetry/api";
+import { withStudioSpan } from "../shared/telemetry";
 
 const DEFAULT_BOOT_DELAY_MS = 15_000;
 
@@ -70,25 +72,40 @@ export function createRegularAuditScheduler(
 		nextAuditAtMs = null;
 		notify();
 		try {
-			const ids = await deps.listGraphIds();
-			if (ids.length === 0) {
-				log("pass skipped — no subsystem models");
-				return;
-			}
-			log(`pass start — ${ids.length} model${ids.length === 1 ? "" : "s"}`);
-			for (const graphId of ids) {
-				if (!enabled) break;
-				try {
-					await deps.auditOne(graphId);
-				} catch (err) {
-					log(
-						`audit failed for ${graphId}: ${
-							err instanceof Error ? err.message : String(err)
-						}`,
-					);
-				}
-			}
-			log("pass complete");
+			await withStudioSpan(
+				"studio.audit.regular_pass",
+				{
+					kind: SpanKind.INTERNAL,
+					attributes: { "audit.trigger": "scheduled" },
+				},
+				async (span) => {
+					const ids = await deps.listGraphIds();
+					span.setAttribute("audit.model.count", ids.length);
+					if (ids.length === 0) {
+						span.setAttribute("audit.result", "empty");
+						log("pass skipped — no subsystem models");
+						return;
+					}
+					log(`pass start — ${ids.length} model${ids.length === 1 ? "" : "s"}`);
+					let attempted = 0;
+					for (const graphId of ids) {
+						if (!enabled) break;
+						attempted++;
+						try {
+							await deps.auditOne(graphId);
+						} catch (err) {
+							log(
+								`audit failed for ${graphId}: ${
+									err instanceof Error ? err.message : String(err)
+								}`,
+							);
+						}
+					}
+					span.setAttribute("audit.model.attempted", attempted);
+					if (!enabled) span.setAttribute("audit.interrupted", true);
+					log("pass complete");
+				},
+			);
 		} catch (err) {
 			log(
 				`pass failed: ${err instanceof Error ? err.message : String(err)}`,
