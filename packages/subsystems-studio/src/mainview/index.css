@@ -40,6 +40,16 @@ body {
 	background: color-mix(in srgb, var(--chip-fg) 17%, transparent) !important;
 }
 
+.share-option-button:hover:not(:disabled) {
+	background: var(--share-option-hover-background) !important;
+	border-color: var(--share-option-hover-border) !important;
+}
+
+.share-option-button:focus-visible {
+	outline: 2px solid currentColor;
+	outline-offset: 2px;
+}
+
 
 @keyframes principal-studio-audit-border {
 	0% {
@@ -131,4 +141,3 @@ body {
 	position: relative;
 	z-index: 1;
 }
-

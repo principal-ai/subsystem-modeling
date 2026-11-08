@@ -99,6 +99,7 @@ export function ModalHeader({
 	title,
 	tone = "default",
 	onClose,
+	closeDisabled = false,
 }: {
 	icon?: LucideIcon;
 	/** Overrides the icon colour (e.g. error red for destructive dialogs). */
@@ -109,6 +110,8 @@ export function ModalHeader({
 	/** Close handler for the × button. Omit to hide the button (e.g. when the
 	 *  footer owns dismissal, like a bare confirm). */
 	onClose?: () => void;
+	/** Keep the close button visible but disabled while an action is in flight. */
+	closeDisabled?: boolean;
 }) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textSecondary;
@@ -161,6 +164,7 @@ export function ModalHeader({
 				<button
 					type="button"
 					onClick={onClose}
+					disabled={closeDisabled}
 					title="Close"
 					style={{
 						width: 28,
@@ -173,7 +177,8 @@ export function ModalHeader({
 						background: theme.colors.background,
 						color: muted,
 						fontSize: theme.fontSizes[2],
-						cursor: "pointer",
+						cursor: closeDisabled ? "default" : "pointer",
+						opacity: closeDisabled ? 0.6 : 1,
 						lineHeight: 1,
 						flexShrink: 0,
 					}}
