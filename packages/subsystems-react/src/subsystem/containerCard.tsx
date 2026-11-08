@@ -9,6 +9,7 @@
  * known quantity for the layout that has to reserve room for it.
  */
 
+import { Fragment } from 'react';
 import { useTheme } from '@principal-ade/industry-theme';
 import type { LucideIcon } from 'lucide-react';
 import { TechMark } from './techIcons';
@@ -110,6 +111,29 @@ export const OPEN_FOOTER_PAD = TOGGLE_INSET + TOGGLE_SIZE + 8;
  */
 export const OPEN_SIDE_PAD = OPEN_FOOTER_PAD;
 
+/** Split path-like labels at `/`, keeping each segment (and its slash) together. */
+export function containerLabelChunks(label: string): Array<{
+  text: string;
+  pathSegment: boolean;
+  breakAfter: boolean;
+}> {
+  return label.split(/(\s+)/).flatMap((part): Array<{
+    text: string;
+    pathSegment: boolean;
+    breakAfter: boolean;
+  }> => {
+    if (!part.includes('/') || /^\s+$/.test(part)) {
+      return [{ text: part, pathSegment: false, breakAfter: false }];
+    }
+    const segments = part.split('/');
+    return segments.map((segment, index) => ({
+      text: `${segment}${index < segments.length - 1 ? '/' : ''}`,
+      pathSegment: true,
+      breakAfter: index < segments.length - 1,
+    }));
+  });
+}
+
 export interface ContainerCardHeaderProps {
   label: string;
   /** The kind glyph beside the label — a container's sort, a package's mark. */
@@ -194,7 +218,16 @@ export function ContainerCardHeader({
             minWidth: 0,
           }}
         >
-          {label}
+          {containerLabelChunks(label).map((chunk, index) => (
+            <Fragment key={index}>
+              {chunk.pathSegment ? (
+                <span style={{ whiteSpace: 'nowrap' }}>{chunk.text}</span>
+              ) : (
+                chunk.text
+              )}
+              {chunk.breakAfter && <wbr />}
+            </Fragment>
+          ))}
         </span>
         {Icon && (
           <span
