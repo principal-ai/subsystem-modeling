@@ -9,21 +9,29 @@ mock.module("../rpc", () => ({
 }));
 const { SharedSubsystemsView } = await import("./SharedSubsystemsView");
 const { RemoteSubsystemGraph } = await import("./RemoteSubsystemModelView");
+const { SharedModelsSettingsPane } = await import("../components/SharedModelsSettingsPane");
 
-test("bucket setup exposes optional AWS configuration, without credential or confirmation fields", () => {
+test("shared subsystem browser has no source configuration form", () => {
 	const html = renderToStaticMarkup(
 		<ThemeProvider theme={slateNeonTheme}><SharedSubsystemsView active /></ThemeProvider>,
 	);
-	expect(html).toContain('aria-label="Bucket"');
-	expect(html).toContain('aria-label="Storage provider"');
-	expect(html).toContain('value="r2"');
-	expect(html).toContain("Cloudflare R2");
-	expect(html).toContain('aria-label="Region (optional)"');
-	expect(html).toContain('aria-label="Prefix (optional)"');
-	expect(html).toContain('aria-label="AWS profile (optional)"');
-	expect(html).toContain("Add bucket");
-	expect(html).not.toContain('type="password"');
-	expect(html).not.toContain("Confirm");
+	expect(html).toContain("Manage sources in Settings");
+	expect(html).not.toContain('aria-label="Bucket"');
+	expect(html).not.toContain('aria-label="Storage provider"');
+	expect(html).not.toContain("Add bucket");
+
+	const settingsHtml = renderToStaticMarkup(
+		<ThemeProvider theme={slateNeonTheme}><SharedModelsSettingsPane /></ThemeProvider>,
+	);
+	expect(settingsHtml).toContain('aria-label="Bucket"');
+	expect(settingsHtml).toContain('aria-label="Storage provider"');
+	expect(settingsHtml).toContain('value="r2"');
+	expect(settingsHtml).toContain('aria-label="Region (optional)"');
+	expect(settingsHtml).toContain('aria-label="Prefix (optional)"');
+	expect(settingsHtml).toContain('aria-label="AWS profile (optional)"');
+	expect(settingsHtml).toContain("Add bucket");
+	expect(settingsHtml).not.toContain('type="password"');
+	expect(settingsHtml).not.toContain("Confirm");
 });
 
 test("R2 graph displays its account and jurisdiction instead of an S3 origin", () => {

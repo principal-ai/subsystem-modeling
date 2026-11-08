@@ -33,3 +33,6 @@ export const SecondOpinion: Story = { args: { initialTab: "jev" } };
  * server's availability shown inline).
  */
 export const Maintainer: Story = { args: { initialTab: "maintainer" } };
+
+/** Shared S3/R2 model-source configuration. */
+export const SharedModels: Story = { args: { initialTab: "sharedModels" } };

@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Bot, ChevronRight, Gauge, Scale, Server, SlidersHorizontal } from "lucide-react";
+import { Bot, ChevronRight, Database, Gauge, Scale, Server, SlidersHorizontal } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
 	DEFAULT_TAB_FLAGS,
@@ -15,6 +15,7 @@ import {
 import { electrobun } from "../rpc";
 import { MaintainerPane } from "./MaintainerPane";
 import { RepoMonitorPane } from "./RepoMonitorPane";
+import { SharedModelsSettingsPane } from "./SharedModelsSettingsPane";
 import { SecondOpinionPane } from "./SecondOpinionPane";
 import { useEscapeToClose } from "./useEscapeToClose";
 
@@ -166,6 +167,12 @@ const SETTINGS_TABS = [
 		icon: Server,
 		description:
 			"The shared daemon that owns git-aware file trees, watchers and caches for every repo Studio and the Principal desktop app open.",
+	},
+	{
+		id: "sharedModels",
+		label: "Shared models",
+		icon: Database,
+		description: "Configure the S3 or Cloudflare R2 buckets used by Shared Subsystems.",
 	},
 ] as const;
 
@@ -884,6 +891,7 @@ export function SettingsModal({
 						)}
 
 						{activeTab === "repoMonitor" && <RepoMonitorPane />}
+						{activeTab === "sharedModels" && <SharedModelsSettingsPane />}
 					</div>
 				</div>
 

@@ -451,6 +451,10 @@ function isPermanentTabId(id: string): boolean {
 	return PERMANENT_TAB_DEFS.some((d) => d.id === id);
 }
 
+function isPermanentTabAvailable(def: (typeof PERMANENT_TAB_DEFS)[number]): boolean {
+	return def.kind !== "shared-subsystems" || remoteModelSources.list().length > 0;
+}
+
 // ---------------------------------------------------------------------------
 // CLI args / env
 // ---------------------------------------------------------------------------
@@ -491,14 +495,14 @@ function resolveRepoRoot(tourFilePath: string | null): string {
 // that tab is enabled, else the first enabled permanent tab.
 function resolveStartTab(settings: ViewerSettings): string {
 	const raw = process.env["PRINCIPAL_STUDIO_START_TAB"];
-	if (raw && isPermanentTabId(raw)) {
+	if (raw && isPermanentTabId(raw) && PERMANENT_TAB_DEFS.some((d) => d.id === raw && isPermanentTabAvailable(d))) {
 		return raw;
 	}
-	const last = PERMANENT_TAB_DEFS.find((d) => d.id === settings.lastActiveTabId);
+	const last = PERMANENT_TAB_DEFS.find((d) => d.id === settings.lastActiveTabId && isPermanentTabAvailable(d));
 	if (last && settings.defaultTabs[last.flag]) return last.id;
 	if (settings.defaultTabs.subsystems) return SUBSYSTEMS_TAB_ID;
 	const firstEnabled = PERMANENT_TAB_DEFS.find(
-		(d) => settings.defaultTabs[d.flag],
+		(d) => settings.defaultTabs[d.flag] && isPermanentTabAvailable(d),
 	);
 	return firstEnabled?.id ?? SUBSYSTEMS_TAB_ID;
 }
@@ -728,7 +732,7 @@ function syncPermanentTabs(settings: ViewerSettings): void {
 	);
 	tabs.clear();
 	for (const def of PERMANENT_TAB_DEFS) {
-		if (settings.defaultTabs[def.flag]) {
+		if (settings.defaultTabs[def.flag] && isPermanentTabAvailable(def)) {
 			tabs.set(def.id, permanentTabState(def));
 		}
 	}
@@ -745,7 +749,7 @@ function syncPermanentTabs(settings: ViewerSettings): void {
  *  when settings currently hide it. Does not persist a settings change. */
 function ensurePermanentTab(id: string): void {
 	const def = PERMANENT_TAB_DEFS.find((d) => d.id === id);
-	if (!def || tabs.has(id)) return;
+	if (!def || !isPermanentTabAvailable(def) || tabs.has(id)) return;
 	// Insert at the permanent-tab position: rebuild with this tab forced on.
 	const forced: ViewerSettings = {
 		defaultTabs: {
@@ -819,7 +823,8 @@ syncPermanentTabs(viewerSettings);
 // agent-sessions` still lands on Agent Sessions even if that flag is off.
 {
 	const start = process.env["PRINCIPAL_STUDIO_START_TAB"];
-	if (start && isPermanentTabId(start) && !tabs.has(start)) {
+	const startDef = PERMANENT_TAB_DEFS.find((def) => def.id === start);
+	if (start && startDef && isPermanentTabAvailable(startDef) && !tabs.has(start)) {
 		ensurePermanentTab(start);
 		suggestedTabId = start;
 	}
@@ -2086,8 +2091,15 @@ const requests: RequestHandlers = {
 
 			listRemoteModelSources: async () =>
 				remoteResult(async () => ({ sources: remoteModelSources.list().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) })),
-			configureRemoteModelSource: async ({ input }) =>
-				remoteResult(() => remoteModelSources.configure(input)),
+			configureRemoteModelSource: async ({ input }) => {
+				const result = await remoteResult(() => remoteModelSources.configure(input));
+				if (result.ok) {
+					const previousSuggestion = suggestedTabId;
+					syncPermanentTabs(viewerSettings);
+					broadcastTabsChanged(suggestedTabId !== previousSuggestion ? suggestedTabId : undefined);
+				}
+				return result;
+			},
 			listRemoteModels: async ({ sourceId, cursor }) =>
 				remoteResult(async () => ({ page: await remoteModelSources.browse(sourceId, cursor) })),
 			getRemoteModel: async ({ sourceId, key }) =>
