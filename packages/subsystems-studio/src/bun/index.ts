@@ -37,7 +37,6 @@ import {
 } from "electrobun/bun";
 import { promises as fs } from "node:fs";
 import { existsSync, readFileSync } from "node:fs";
-import { isDevBuild } from "./studio-http-port";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import {
 	parsePurl,
@@ -4057,12 +4056,6 @@ if (bootSubsystemModelId) {
 // Window
 // ---------------------------------------------------------------------------
 
-// `electrobun dev --watch` rebuilds and relaunches this host on every change,
-// and each launch would otherwise activate the window and yank focus out of the
-// editor mid-keystroke. In dev we open it without activating; release builds
-// keep the normal focus-on-open behavior.
-const activateOnOpen = !isDevBuild();
-
 const browserWindow = new BrowserWindow({
 	title: "Principal AI",
 	url: "views://mainview/index.html",
@@ -4070,8 +4063,9 @@ const browserWindow = new BrowserWindow({
 	// Initial frame is just the fallback the window briefly opens at before we
 	// maximize it below; it's also what `unmaximize` restores to.
 	frame: { width: 1200, height: 800, x: 100, y: 100 },
-	// `activate: false` shows the window without stealing app focus.
-	activate: activateOnOpen,
+	// Keep activation consistent in dev and release: an inactive Studio window
+	// can still appear in front of the editor after a dev-host restart.
+	activate: true,
 });
 
 // Open filling the screen's work area. We maximize rather than hardcode a size
