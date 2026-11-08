@@ -94,7 +94,7 @@ let viewerSettings: ViewerSettings = {
     subsystems: true,
     sharedSubsystems: true,
     constructs: false,
-    maintenance: true,
+    maintenance: false,
     opencodeV2: false,
   },
   autoAcceptSubsystemModelProposals: false,

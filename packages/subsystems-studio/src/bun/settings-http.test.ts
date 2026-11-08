@@ -65,6 +65,13 @@ async function body(res: Response | null): Promise<Record<string, unknown>> {
 }
 
 describe("settings HTTP", () => {
+	test("fresh settings hide Constructs and Maintainer by default", () => {
+		const { defaultTabs } = defaultViewerSettings();
+		expect(defaultTabs.subsystems).toBe(true);
+		expect(defaultTabs.constructs).toBe(false);
+		expect(defaultTabs.maintenance).toBe(false);
+	});
+
 	test("ignores unrelated paths and refuses non-loopback hosts", async () => {
 		const { deps } = harness();
 		expect(await handleSettingsRequest(request("/api/subsystem-model"), deps)).toBeNull();

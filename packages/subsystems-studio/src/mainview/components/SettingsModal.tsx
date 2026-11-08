@@ -585,7 +585,7 @@ export function SettingsModal({
 											lineHeight: 1.4,
 										}}
 									>
-										Subsystems and Maintainer start on. Reset restores that.
+										Subsystems starts on. Other tabs are opt-in; Shared Subsystems appears after a source is configured.
 									</span>
 									<button
 										type="button"
@@ -593,8 +593,8 @@ export function SettingsModal({
 										disabled={!resetTabsEnabled}
 										title={
 											tabsAtDefaults
-												? "Subsystems and Maintainer are already the only tabs on"
-												: "Show only Subsystems and Maintainer"
+												? "Already at the recommended tab defaults"
+												: "Restore the recommended tab defaults"
 										}
 										style={{
 											flexShrink: 0,

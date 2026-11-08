@@ -65,8 +65,8 @@ export type ViewerMode = "local" | "remote";
 /**
  * Which permanent tabs appear in the strip by default. Toggled from the
  * header Settings modal; persisted host-side under
- * `~/.principal/principal-studio-settings.json`. Subsystems, Constructs and
- * Maintainer start on; the rest start off.
+ * `~/.principal/principal-studio-settings.json`. Subsystems starts on; the
+ * other tabs are opt-in (Shared Subsystems is also gated on a configured source).
  */
 export interface DefaultTabFlags {
 	/** Agent Sessions overview tab. */
@@ -100,8 +100,8 @@ export const DEFAULT_TAB_FLAGS: DefaultTabFlags = {
 	packageLayers: false,
 	subsystems: true,
 	sharedSubsystems: true,
-	constructs: true,
-	maintenance: true,
+	constructs: false,
+	maintenance: false,
 	opencodeV2: false,
 };
 
