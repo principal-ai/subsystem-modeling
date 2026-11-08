@@ -311,6 +311,7 @@ export { C4ProjectionView } from './subsystem/C4ProjectionView';
 export type { C4ProjectionViewProps } from './subsystem/C4ProjectionView';
 export { C4SketchView } from './subsystem/C4SketchView';
 export type { C4SketchViewProps } from './subsystem/C4SketchView';
+export { ShareButton } from './subsystem/ShareButton';
 export { C4ContainersPanel } from './subsystem/C4ContainersPanel';
 export type {
   C4ContainerListItem,

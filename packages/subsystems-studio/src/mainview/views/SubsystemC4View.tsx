@@ -17,6 +17,7 @@ import { useTheme } from "@principal-ade/industry-theme";
 import { C4ProjectionView } from "@principal-ai/subsystems-react";
 import { electrobun, subsystemModelChangeSubscribers } from "../rpc";
 import { CenteredMessage } from "../ui";
+import { ShareSubsystemModelModal } from "../components/ShareSubsystemModelModal";
 import type {
 	StoredSubsystemModel,
 	SubsystemC4Projection,
@@ -38,6 +39,7 @@ export function SubsystemC4View({
 	const [graph, setGraph] = useState<StoredSubsystemModel | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [shareOpen, setShareOpen] = useState(false);
 
 	const load = useCallback(async () => {
 		setLoading(true);
@@ -123,6 +125,7 @@ export function SubsystemC4View({
 				description={graph.description}
 				notes={graph.notes}
 				persistKey={graphId}
+				onShare={() => setShareOpen(true)}
 				headerActions={
 					<>
 						<span
@@ -171,6 +174,14 @@ export function SubsystemC4View({
 					</>
 				}
 			/>
+			{shareOpen && (
+				<ShareSubsystemModelModal
+					graphId={graphId}
+					title={graph.title}
+					hasGist={Boolean(graph.gist)}
+					onClose={() => setShareOpen(false)}
+				/>
+			)}
 		</div>
 	);
 }

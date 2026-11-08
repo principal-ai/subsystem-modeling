@@ -18,6 +18,7 @@ import { SUBSYSTEM_MODEL_DESCRIPTION_MAX } from '@principal-ai/subsystems-core';
 import { C4Graph } from './C4Graph';
 import type { C4ConstructGraph, C4GraphProps } from './C4Graph';
 import { C4ContainersPanel } from './C4ContainersPanel';
+import { ShareButton } from './ShareButton';
 import { DescriptionOverlay } from './DescriptionOverlay';
 import { DescriptionPreview } from './DescriptionPreview';
 import { GraphWithSidebar } from './GraphWithSidebar';
@@ -56,6 +57,8 @@ export interface C4ProjectionViewProps {
   notes?: string;
   /** Extra controls in the sidebar header (source badge, refresh, …). */
   headerActions?: ReactNode;
+  /** Show the standard Share button and delegate its action to the host. */
+  onShare?: () => void;
   /**
    * Controlled open-container ids. Omit to let the view own them. Pass an empty
    * array to start collapsed.
@@ -213,6 +216,7 @@ export function C4ProjectionView({
   description,
   notes,
   headerActions,
+  onShare,
   openContainerIds,
   onOpenContainerIdsChange,
   onTrailSelect,
@@ -581,6 +585,7 @@ export function C4ProjectionView({
           }}
         >
           {headerActions}
+          {onShare && <ShareButton onClick={onShare} />}
         </div>
       </header>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>

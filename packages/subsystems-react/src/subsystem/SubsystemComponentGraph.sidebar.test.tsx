@@ -49,6 +49,12 @@ describe('subsystem graph sidebar', () => {
     expect(header?.nextElementSibling?.textContent).toContain('Always visible description.');
   });
 
+  test('shows the host-configured Share button in the header', () => {
+    const body = renderGraph({ onShare: () => undefined });
+    const header = body.querySelector('header');
+    expect(header?.querySelector('button[aria-label="Share"]')?.textContent).toBe('Share');
+  });
+
   test('puts the name in a full-width header above the sidebar and graph', () => {
     const body = renderGraph();
     const header = body.querySelector('header');

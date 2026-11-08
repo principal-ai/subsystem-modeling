@@ -12,6 +12,7 @@ import { useTheme } from '@principal-ade/industry-theme';
 import { PencilRuler } from 'lucide-react';
 import { C4Graph } from './C4Graph';
 import { C4ContainersPanel } from './C4ContainersPanel';
+import { ShareButton } from './ShareButton';
 import { DescriptionOverlay } from './DescriptionOverlay';
 import { DescriptionPreview } from './DescriptionPreview';
 import { GraphWithSidebar } from './GraphWithSidebar';
@@ -26,6 +27,8 @@ export interface C4SketchViewProps {
   onOpenContainerIdsChange?: (ids: string[]) => void;
   /** Extra controls in the header. */
   headerActions?: ReactNode;
+  /** Show the standard Share button and delegate its action to the host. */
+  onShare?: () => void;
   /** Sidebar width persistence key. */
   persistKey?: string;
   /** Outer style for the flex fill. */
@@ -37,6 +40,7 @@ export function C4SketchView({
   openContainerIds,
   onOpenContainerIdsChange,
   headerActions,
+  onShare,
   persistKey,
   style,
 }: C4SketchViewProps) {
@@ -221,6 +225,7 @@ export function C4SketchView({
           }}
         >
           {headerActions}
+          {onShare && <ShareButton onClick={onShare} />}
         </div>
       </header>
 

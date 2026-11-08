@@ -99,6 +99,7 @@ import type { ComponentVerificationState } from './ComponentDeclaration';
 import type { DeclarationSymbolRef, SymbolInspection } from './symbolRefs';
 import { FileDrawer, FILE_DRAWER_HEIGHT_MS } from './FileDrawer';
 import { GraphWithSidebar } from './GraphWithSidebar';
+import { ShareButton } from './ShareButton';
 import { DescriptionOverlay } from './DescriptionOverlay';
 import { DescriptionPreview } from './DescriptionPreview';
 import type { GraphSidebarTab } from './GraphSidebar';
@@ -394,6 +395,8 @@ export interface SubsystemComponentGraphProps {
   title?: string;
   /** Extra actions on the right side of the full-width graph header. */
   headerActions?: ReactNode;
+  /** Show the standard Share button and delegate its action to the host. */
+  onShare?: () => void;
   /**
    * Suppresses the header and sidebar entirely (title, description,
    * trails) for graph-only embeds. Pair with `graphTitle` to keep the
@@ -4035,6 +4038,7 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
               )}
             </div>
           {props.headerActions}
+          {props.onShare && <ShareButton onClick={props.onShare} />}
         </header>
       )}
       <div ref={wrapRef} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -4049,7 +4053,7 @@ export function SubsystemComponentGraph(props: SubsystemComponentGraphProps) {
             descriptionOpen={props.descriptionOpen}
             onDescriptionOpenChange={props.onDescriptionOpenChange}
             diagnostic={props.diagnostic}
-            sidebarExtra={props.headerActions ? <>{props.headerActions}{props.sidebarExtra}</> : props.sidebarExtra}
+            sidebarExtra={props.onShare || props.headerActions ? <>{props.headerActions}{props.onShare && <ShareButton onClick={props.onShare} />}{props.sidebarExtra}</> : props.sidebarExtra}
             sidebarAfterDescription={props.sidebarAfterDescription}
             renderFileViewer={props.renderFileViewer}
             onFileSelect={props.onFileSelect}

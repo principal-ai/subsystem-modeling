@@ -2163,6 +2163,10 @@ export type StudioRequests = {
 		params: { graphId: string };
 		response: { ok: boolean; error?: string; graph?: StoredSubsystemModel };
 	};
+	getSubsystemModelPath: {
+		params: { graphId: string };
+		response: { ok: boolean; error?: string; path?: string };
+	};
 	listRemoteModelSources: {
 		params: Record<string, never>;
 		response: { ok: boolean; sources?: RemoteModelSource[]; error?: string };

@@ -37,6 +37,7 @@ import {
 	diagnosticStatus,
 } from "../subsystemIssues";
 import { SubsystemExcalidrawOverlay } from "../components/SubsystemExcalidrawOverlay";
+import { ShareSubsystemModelModal } from "../components/ShareSubsystemModelModal";
 import { useMaintainLiveFeed } from "../useMaintainLiveFeed";
 import type { ExcalidrawSelectionInfo } from "../excalidraw/excalidrawToSubsystem";
 import type {
@@ -100,6 +101,7 @@ export function SubsystemModelView({
 	const { theme } = useTheme();
 	const [graph, setGraph] = useState<StoredSubsystemModel | null | undefined>(undefined);
 	const [excalidrawOpen, setExcalidrawOpen] = useState(false);
+	const [shareOpen, setShareOpen] = useState(false);
 	const [selection, setSelection] = useState<ExcalidrawSelectionInfo | null>(null);
 	const [auditReport, setAuditReport] = useState<SubsystemModelAuditReport | null>(null);
 	// Per-lane statuses from the same derivation the maintainer shows — the
@@ -706,6 +708,7 @@ export function SubsystemModelView({
 				persistKey={graphId}
 				onReorderTrails={onReorderTrails}
 				initialTrailId={focusTrailId}
+				onShare={() => setShareOpen(true)}
 				title={graph.title}
 				description={graph.description}
 				notes={graph.notes}
@@ -815,6 +818,14 @@ export function SubsystemModelView({
 				}
 			/>
 			</div>
+			{shareOpen && (
+				<ShareSubsystemModelModal
+					graphId={graphId}
+					title={graph.title}
+					hasGist={Boolean(graph.gist)}
+					onClose={() => setShareOpen(false)}
+				/>
+			)}
 		</div>
 	);
 }

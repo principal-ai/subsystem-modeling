@@ -2098,6 +2098,11 @@ const requests: RequestHandlers = {
 				const components = await attachSignatureAugmentations(graph.components);
 				return { ok: true, graph: { ...graph, components } };
 			},
+			getSubsystemModelPath: async ({ graphId }) => {
+				const graph = await getSubsystemModel(graphId);
+				if (!graph) return { ok: false, error: `unknown graph: ${graphId}` };
+				return { ok: true, path: subsystemModelFilePath(graphId) };
+			},
 			updateSubsystemModel: async ({ graphId, patch }) => {
 				const updated = await updateSubsystemModel(graphId, patch);
 				if (!updated) return { ok: false, error: `unknown graph: ${graphId}` };

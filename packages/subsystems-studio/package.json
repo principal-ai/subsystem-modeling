@@ -1,6 +1,6 @@
 {
   "name": "@principal-ai/subsystems-studio",
-  "version": "0.20.12",
+  "version": "0.20.16",
   "description": "Subsystems Studio — desktop host for subsystem models, trails, tours, and agent sessions. Pairs with the principal-ai CLI.",
   "type": "module",
   "os": [
@@ -80,7 +80,7 @@
     "@principal-ai/principal-view-react": "^0.15.10",
     "@principal-ai/repository-monitoring-server": "^2.3.3",
     "@principal-ai/subsystems-core": "^0.51.3",
-    "@principal-ai/subsystems-react": "^0.56.29",
+    "@principal-ai/subsystems-react": "^0.56.30",
     "@react-spring/three": "^10.1.2",
     "@react-three/drei": "^10.7.9",
     "@react-three/fiber": "^9.8.1",
