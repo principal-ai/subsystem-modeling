@@ -8,6 +8,7 @@ import {
 	deleteC4Sketch,
 	getC4Sketch,
 	listC4Sketches,
+	setC4SketchChangeListener,
 	updateC4Sketch,
 	validateC4SketchModel,
 } from "./c4-sketch-store";
@@ -70,9 +71,28 @@ describe("c4 sketch store", () => {
 	});
 
 	afterEach(() => {
+		setC4SketchChangeListener(null);
 		if (previous === undefined) delete process.env["PRINCIPAL_C4_SKETCHES_HOME"];
 		else process.env["PRINCIPAL_C4_SKETCHES_HOME"] = previous;
 		rmSync(root, { recursive: true, force: true });
+	});
+
+	test("notifies the host when sketches are created, updated, or deleted", async () => {
+		const changes: Array<{ sketchId: string; reason: string }> = [];
+		setC4SketchChangeListener((change) => changes.push(change));
+
+		const created = await createC4Sketch({ title: "Acme architecture", model: MODEL });
+		expect(created.ok).toBe(true);
+		if (!created.ok) return;
+
+		await updateC4Sketch(created.sketch.id, { title: "Updated architecture" });
+		await deleteC4Sketch(created.sketch.id);
+		expect(changes.map((change) => change.reason)).toEqual([
+			"created",
+			"updated",
+			"deleted",
+		]);
+		expect(changes.every((change) => change.sketchId === created.sketch.id)).toBe(true);
 	});
 
 	test("create forces proposed state and persists the authored model", async () => {

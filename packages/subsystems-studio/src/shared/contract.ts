@@ -3076,6 +3076,11 @@ export type StudioMessages = {
 			durationMs?: number;
 		};
 	};
+	/** A C4 sketch was written through the store or changed on disk externally. */
+	c4SketchChanged: {
+		sketchId: string;
+		reason: "created" | "updated" | "deleted" | "external";
+	};
 	/**
 	 * A subsystem graph was created/updated/deleted via the store API, or its
 	 * on-disk file changed under ~/.principal/subsystem-models (external edit).

@@ -5,9 +5,9 @@
  * Clicking a row opens the graph in a subsystem-model tab via the host;
  * clicking a file opens its owning graph.
  *
- * The list polls every 10s so graphs posted via the HTTP API appear without
- * reopening the viewer. Verification and maintenance live in the Maintenance
- * tab; the list no longer surfaces per-model audit state.
+ * The list loads once and refreshes from host-pushed store changes. Verification
+ * and maintenance live in the Maintenance tab; the list no longer surfaces
+ * per-model audit state.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
@@ -26,6 +26,7 @@ import type {
 } from "../../shared/contract";
 import {
 	electrobun,
+	c4SketchChangeSubscribers,
 	graphifyChangeSubscribers,
 	subsystemModelChangeSubscribers,
 	subsystemModelProposalsChangeSubscribers,
@@ -49,7 +50,6 @@ import { ComposedGraphPane } from "./ComposedGraphPane";
 import { SubsystemReposMap } from "./SubsystemReposMap";
 import { CenteredMessage } from "../ui";
 
-const SUBSYSTEMS_POLL_MS = 10_000;
 const COPY_FEEDBACK_MS = 1500;
 /** Width of the model-list side panel shown beside the composed graph. */
 const COMBINED_LIST_WIDTH = 340;
@@ -957,10 +957,9 @@ export function SubsystemModelsView({
 					.listC4Sketches({})
 					.catch(() => null),
 			]);
-			// Keep the previous array identity when nothing changed — otherwise
-			// every 10s poll rebuilds the file-panel groups and the Pierre
-			// tree sees a new `files` prop, calling `resetPaths` and wiping
-			// folder expansion.
+			// Keep the previous array identity when a push-triggered refresh finds
+			// no changes. The repo map and Pierre tree use this identity to preserve
+			// their derived state and folder expansion.
 			setGraphs((prev) =>
 				prev !== null &&
 				JSON.stringify(prev) === JSON.stringify(subResult.graphs)
@@ -982,14 +981,6 @@ export function SubsystemModelsView({
 	}, []);
 
 	useEffect(() => {
-		void refresh();
-		const id = setInterval(() => {
-			void refresh();
-		}, SUBSYSTEMS_POLL_MS);
-		return () => clearInterval(id);
-	}, [refresh]);
-
-	useEffect(() => {
 		const onGraphify = (_payload: StudioMessages["graphifyChanged"]) => {
 			void refresh();
 		};
@@ -1001,13 +992,19 @@ export function SubsystemModelsView({
 		) => {
 			void refresh();
 		};
+		const onC4Sketch = (_payload: StudioMessages["c4SketchChanged"]) => {
+			void refresh();
+		};
 		graphifyChangeSubscribers.add(onGraphify);
 		subsystemModelChangeSubscribers.add(onSubsystem);
 		subsystemModelProposalsChangeSubscribers.add(onProposals);
+		c4SketchChangeSubscribers.add(onC4Sketch);
+		void refresh();
 		return () => {
 			graphifyChangeSubscribers.delete(onGraphify);
 			subsystemModelChangeSubscribers.delete(onSubsystem);
 			subsystemModelProposalsChangeSubscribers.delete(onProposals);
+			c4SketchChangeSubscribers.delete(onC4Sketch);
 		};
 	}, [refresh]);
 

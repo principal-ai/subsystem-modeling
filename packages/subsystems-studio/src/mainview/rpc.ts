@@ -93,6 +93,11 @@ export const subsystemModelChangeSubscribers = new Set<
 	(payload: StudioMessages["subsystemModelChanged"]) => void
 >();
 
+/** C4 sketch store writes + disk watch push `c4SketchChanged`. */
+export const c4SketchChangeSubscribers = new Set<
+	(payload: StudioMessages["c4SketchChanged"]) => void
+>();
+
 /** Agent correction proposals push `subsystemModelProposalsChanged`. */
 export const subsystemModelProposalsChangeSubscribers = new Set<
 	(payload: StudioMessages["subsystemModelProposalsChanged"]) => void
@@ -160,6 +165,9 @@ const rpc = Electroview.defineRPC<StudioRPC>({
 			},
 			subsystemModelChanged: (payload) => {
 				for (const fn of subsystemModelChangeSubscribers) fn(payload);
+			},
+			c4SketchChanged: (payload) => {
+				for (const fn of c4SketchChangeSubscribers) fn(payload);
 			},
 			subsystemModelProposalsChanged: (payload) => {
 				for (const fn of subsystemModelProposalsChangeSubscribers) fn(payload);

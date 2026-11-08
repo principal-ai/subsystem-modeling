@@ -54,7 +54,13 @@ import {
 } from "./tab-windows";
 import { deleteSubsystemModel, getSubsystemModel, listSubsystemModels, purlRepoKey, resolveRepoRootForComponent, setSubsystemModelChangeListener, stampVerifiedCommits, startSubsystemModelDirWatcher, subsystemModelFilePath, touchSubsystemModelOpened, updateSubsystemModel } from "./subsystem-model-store";
 import { buildC4ProjectionForModel } from "./c4-projection";
-import { deleteC4Sketch, getC4Sketch, listC4Sketches } from "./c4-sketch-store";
+import {
+	deleteC4Sketch,
+	getC4Sketch,
+	listC4Sketches,
+	setC4SketchChangeListener,
+	startC4SketchDirWatcher,
+} from "./c4-sketch-store";
 import { mergeSubsystemModels, type MergeInputModel } from "./merge-submodel-models";
 import type { ModelProvenanceSnapshot } from "../shared/contract";
 import {
@@ -3247,6 +3253,12 @@ function broadcastSubsystemModelChanged(
 	sendToAllWindows("subsystemModelChanged", payload);
 }
 
+function broadcastC4SketchChanged(
+	payload: StudioMessages["c4SketchChanged"],
+): void {
+	sendToAllWindows("c4SketchChanged", payload);
+}
+
 function broadcastSubsystemModelProposalsChanged(
 	payload: StudioMessages["subsystemModelProposalsChanged"],
 ): void {
@@ -4393,10 +4405,14 @@ const maintenanceOutcomeSender = createMaintenanceOutcomeSender({
 });
 maintenanceOutcomeSender.start();
 setSubsystemModelChangeListener(broadcastSubsystemModelChanged);
+setC4SketchChangeListener(broadcastC4SketchChanged);
 onRepoMonitorChanged(broadcastRepoMonitorChanged);
 process.on("exit", () => void shutdownRepoMonitor());
 void startSubsystemModelDirWatcher().then(() => {
 	console.log("[principal-studio] watching ~/.principal/subsystem-models for changes");
+});
+void startC4SketchDirWatcher().then(() => {
+	console.log("[principal-studio] watching ~/.principal/c4-sketches for changes");
 });
 startHttpServer(
 	async (graphId) => {

@@ -12,7 +12,7 @@
  * a standalone artifact.
  */
 
-import { promises as fs } from "node:fs";
+import { watch, type FSWatcher, promises as fs } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -37,6 +37,48 @@ const SKETCH_DESCRIPTION_MAX = 200;
 type StoredC4Sketch = C4Sketch & { description?: string };
 
 const ROOT = join(homedir(), ".principal", "c4-sketches");
+
+export type C4SketchChange = {
+	sketchId: string;
+	reason: "created" | "updated" | "deleted" | "external";
+};
+
+let changeListener: ((change: C4SketchChange) => void) | null = null;
+
+export function setC4SketchChangeListener(
+	listener: ((change: C4SketchChange) => void) | null,
+): void {
+	changeListener = listener;
+}
+
+function emitC4SketchChange(change: C4SketchChange): void {
+	try {
+		changeListener?.(change);
+	} catch (error) {
+		console.warn(
+			`[c4-sketch-store] change listener failed: ${(error as Error).message}`,
+		);
+	}
+}
+
+const recentSelfWrites = new Map<string, number>();
+const SELF_WRITE_SUPPRESS_MS = 500;
+
+function noteSelfWrite(sketchId: string): void {
+	recentSelfWrites.set(sketchId, Date.now());
+}
+
+function wasRecentSelfWrite(sketchId: string): boolean {
+	const at = recentSelfWrites.get(sketchId);
+	if (at == null) return false;
+	if (Date.now() - at < SELF_WRITE_SUPPRESS_MS) return true;
+	recentSelfWrites.delete(sketchId);
+	return false;
+}
+
+let dirWatcher: FSWatcher | null = null;
+let watchDebounce: ReturnType<typeof setTimeout> | null = null;
+const pendingWatchIds = new Set<string>();
 
 /** Root home for the store; tests override with `PRINCIPAL_C4_SKETCHES_HOME`. */
 function storeRoot(override?: string): string {
@@ -303,11 +345,56 @@ async function readSketch(id: string, root?: string): Promise<StoredC4Sketch | n
 
 async function writeSketch(sketch: C4Sketch, root?: string): Promise<void> {
 	await fs.mkdir(storeRoot(root), { recursive: true });
+	noteSelfWrite(sketch.id);
 	await fs.writeFile(
 		sketchPath(sketch.id, root),
 		`${JSON.stringify(sketch, null, "\t")}\n`,
 		"utf8",
 	);
+}
+
+/** Watch external edits to the C4 sketch directory; returns an idempotent stop function. */
+export async function startC4SketchDirWatcher(): Promise<() => void> {
+	if (dirWatcher) return stopC4SketchDirWatcher;
+	const root = storeRoot();
+	await fs.mkdir(root, { recursive: true });
+	try {
+		dirWatcher = watch(root, { persistent: false }, (_event, filename) => {
+			const name = filename;
+			if (!name?.endsWith(".json")) return;
+			const sketchId = name.slice(0, -".json".length);
+			if (!sketchId || sketchId.includes("/") || wasRecentSelfWrite(sketchId)) return;
+			pendingWatchIds.add(sketchId);
+			if (watchDebounce) clearTimeout(watchDebounce);
+			watchDebounce = setTimeout(() => {
+				const ids = [...pendingWatchIds];
+				pendingWatchIds.clear();
+				watchDebounce = null;
+				for (const id of ids) emitC4SketchChange({ sketchId: id, reason: "external" });
+			}, 120);
+		});
+		dirWatcher.on("error", (error) => {
+			console.warn(
+				`[c4-sketch-store] dir watch error: ${(error as Error).message}`,
+			);
+		});
+	} catch (error) {
+		console.warn(
+			`[c4-sketch-store] could not watch ${root}: ${(error as Error).message}`,
+		);
+		dirWatcher = null;
+	}
+	return stopC4SketchDirWatcher;
+}
+
+export function stopC4SketchDirWatcher(): void {
+	if (watchDebounce) {
+		clearTimeout(watchDebounce);
+		watchDebounce = null;
+	}
+	pendingWatchIds.clear();
+	dirWatcher?.close();
+	dirWatcher = null;
 }
 
 export function c4SketchSummary(sketch: C4Sketch): ContractSketchSummary {
@@ -380,6 +467,7 @@ export async function createC4Sketch(
 		updatedAt: now,
 	};
 	await writeSketch(sketch, root);
+	emitC4SketchChange({ sketchId: sketch.id, reason: "created" });
 	return { ok: true, sketch };
 }
 
@@ -415,12 +503,15 @@ export async function updateC4Sketch(
 		updatedAt: new Date().toISOString(),
 	};
 	await writeSketch(sketch, root);
+	emitC4SketchChange({ sketchId: sketch.id, reason: "updated" });
 	return { ok: true, sketch };
 }
 
 export async function deleteC4Sketch(id: string, root?: string): Promise<boolean> {
 	try {
+		noteSelfWrite(id);
 		await fs.unlink(sketchPath(id, root));
+		emitC4SketchChange({ sketchId: id, reason: "deleted" });
 		return true;
 	} catch {
 		return false;
