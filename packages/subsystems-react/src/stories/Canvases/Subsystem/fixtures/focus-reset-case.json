@@ -1,0 +1,479 @@
+{
+  "components": [
+    {
+      "alias": "subsystem-model-view",
+      "name": "SubsystemModelView",
+      "construct": "function",
+      "framework": "react",
+      "stereotype": "component",
+      "role": "entry",
+      "process": "subsystems-studio/renderer",
+      "module": "packages/subsystems-studio/src/mainview/views/SubsystemModelView.tsx",
+      "file": "packages/subsystems-studio/src/mainview/views/SubsystemModelView.tsx",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/views/SubsystemModelView.tsx",
+      "symbol": "SubsystemModelView",
+      "purpose": "Renders the subsystem graph tab and loads the persisted audit into its diagnostics list."
+    },
+    {
+      "alias": "audit-issues",
+      "name": "auditReportToIssues",
+      "construct": "function",
+      "process": "subsystems-studio/renderer",
+      "module": "packages/subsystems-studio/src/mainview/subsystemIssues.ts",
+      "file": "packages/subsystems-studio/src/mainview/subsystemIssues.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/subsystemIssues.ts",
+      "symbol": "auditReportToIssues",
+      "purpose": "Maps a persisted audit report into the presentational issues the diagnostics list renders."
+    },
+    {
+      "alias": "regular-audit-subscribers",
+      "name": "regularAuditChangeSubscribers",
+      "construct": "store",
+      "process": "subsystems-studio/renderer",
+      "module": "packages/subsystems-studio/src/mainview/rpc.ts",
+      "file": "packages/subsystems-studio/src/mainview/rpc.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/rpc.ts",
+      "symbol": "regularAuditChangeSubscribers",
+      "purpose": "Holds renderer callbacks registered for regular-audit status pushes."
+    },
+    {
+      "alias": "audit-model",
+      "name": "auditSubsystemModel",
+      "construct": "function",
+      "process": "subsystems-studio/host",
+      "module": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+      "file": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+      "symbol": "auditSubsystemModel",
+      "purpose": "Runs the dry-run deterministic audit: graphify caches, files, per-component construct and signature, and mechanical boundary membership."
+    },
+    {
+      "alias": "verify-files",
+      "name": "verifyModelFiles",
+      "construct": "function",
+      "process": "subsystems-studio/host",
+      "module": "packages/subsystems-studio/src/bun/subsystem-model-store.ts",
+      "file": "packages/subsystems-studio/src/bun/subsystem-model-store.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/subsystem-model-store.ts",
+      "symbol": "verifyModelFiles",
+      "purpose": "Checks every component file exists and resolves each trail site against its repo checkout."
+    },
+    {
+      "alias": "verify-component",
+      "name": "verifySubsystemComponent",
+      "construct": "function",
+      "process": "subsystems-studio/host",
+      "module": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+      "file": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+      "symbol": "verifySubsystemComponent",
+      "purpose": "Verifies one component against disk plus its graphify anchor."
+    },
+    {
+      "alias": "ensure-graphify-caches",
+      "name": "ensureCurrentGraphifyCachesForModel",
+      "construct": "function",
+      "process": "subsystems-studio/host",
+      "module": "packages/subsystems-studio/src/bun/graphify-store.ts",
+      "file": "packages/subsystems-studio/src/bun/graphify-store.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/graphify-store.ts",
+      "symbol": "ensureCurrentGraphifyCachesForModel",
+      "purpose": "Ensures each component purl has a graphify cache at the current HEAD slot."
+    },
+    {
+      "alias": "graphify-readiness",
+      "name": "assessSubsystemGraphifyReadiness",
+      "construct": "function",
+      "process": "subsystems-studio/host",
+      "module": "packages/subsystems-studio/src/bun/graphify-store.ts",
+      "file": "packages/subsystems-studio/src/bun/graphify-store.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/graphify-store.ts",
+      "symbol": "assessSubsystemGraphifyReadiness",
+      "purpose": "Reports current-slot graphify cache readiness for each distinct component purl."
+    },
+    {
+      "alias": "build-fingerprint",
+      "name": "buildAuditFingerprint",
+      "construct": "function",
+      "process": "subsystems-studio/host",
+      "module": "packages/subsystems-studio/src/bun/audit-report-store.ts",
+      "file": "packages/subsystems-studio/src/bun/audit-report-store.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/audit-report-store.ts",
+      "symbol": "buildAuditFingerprint",
+      "purpose": "Builds a stable fingerprint of the model's claims plus the current graphify slot identity."
+    },
+    {
+      "alias": "save-audit",
+      "name": "saveSubsystemModelAudit",
+      "construct": "function",
+      "process": "subsystems-studio/host",
+      "module": "packages/subsystems-studio/src/bun/audit-report-store.ts",
+      "file": "packages/subsystems-studio/src/bun/audit-report-store.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/audit-report-store.ts",
+      "symbol": "saveSubsystemModelAudit",
+      "purpose": "Persists the audit report with its fingerprint so badges and the issues list survive relaunches."
+    },
+    {
+      "alias": "load-audit",
+      "name": "loadSubsystemModelAudit",
+      "construct": "function",
+      "process": "subsystems-studio/host",
+      "module": "packages/subsystems-studio/src/bun/audit-report-store.ts",
+      "file": "packages/subsystems-studio/src/bun/audit-report-store.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/audit-report-store.ts",
+      "symbol": "loadSubsystemModelAudit",
+      "purpose": "Reads the persisted audit report for a model."
+    },
+    {
+      "alias": "apply-fix",
+      "name": "applySubsystemModelAuditFix",
+      "construct": "function",
+      "process": "subsystems-studio/host",
+      "module": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+      "file": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+      "symbol": "applySubsystemModelAuditFix",
+      "purpose": "Applies a deterministic one-click audit fix, then re-audits the model."
+    },
+    {
+      "alias": "regular-audit-scheduler",
+      "name": "createRegularAuditScheduler",
+      "construct": "function",
+      "role": "entry",
+      "process": "subsystems-studio/host",
+      "module": "packages/subsystems-studio/src/bun/regular-audit.ts",
+      "file": "packages/subsystems-studio/src/bun/regular-audit.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/regular-audit.ts",
+      "symbol": "createRegularAuditScheduler",
+      "purpose": "Runs the dry-run audit over every stored model on a timeout chain while Studio is open."
+    },
+    {
+      "alias": "regular-audit-run",
+      "name": "reauditSubsystemModelQuietly",
+      "construct": "function",
+      "process": "subsystems-studio/host",
+      "module": "packages/subsystems-studio/src/bun/index.ts",
+      "file": "packages/subsystems-studio/src/bun/index.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/index.ts",
+      "symbol": "reauditSubsystemModelQuietly",
+      "purpose": "Quietly re-audits one model and tells every surface its audit changed."
+    },
+    {
+      "alias": "audit-stage-fixes",
+      "name": "auditAndStageOneClickFixes",
+      "construct": "function",
+      "process": "subsystems-studio/host",
+      "module": "packages/subsystems-studio/src/bun/index.ts",
+      "file": "packages/subsystems-studio/src/bun/index.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/index.ts",
+      "symbol": "auditAndStageOneClickFixes",
+      "purpose": "Audits a model, then stages any one-click fixes it found for user confirmation."
+    },
+    {
+      "alias": "regular-audit-status",
+      "name": "broadcastRegularAuditChanged",
+      "construct": "function",
+      "process": "subsystems-studio/host",
+      "module": "packages/subsystems-studio/src/bun/index.ts",
+      "file": "packages/subsystems-studio/src/bun/index.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/index.ts",
+      "symbol": "broadcastRegularAuditChanged",
+      "purpose": "Pushes the scheduler's live status to the renderer over RPC."
+    },
+    {
+      "alias": "broadcast-changed",
+      "name": "broadcastSubsystemModelChanged",
+      "construct": "function",
+      "process": "subsystems-studio/host",
+      "module": "packages/subsystems-studio/src/bun/index.ts",
+      "file": "packages/subsystems-studio/src/bun/index.ts",
+      "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/index.ts",
+      "symbol": "broadcastSubsystemModelChanged",
+      "purpose": "Tells every surface a model changed so the canvas and lists reload."
+    }
+  ],
+  "trails": [
+    {
+      "id": "tl-host-audit",
+      "title": "Run the deterministic host audit",
+      "steps": [
+        {
+          "from": "audit-model",
+          "to": "ensure-graphify-caches",
+          "mechanism": "calls",
+          "file": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "symbol": "auditSubsystemModel",
+          "annotation": "Ensure the current-HEAD graphify cache for every component purl.",
+          "span": {
+            "startLine": 1003,
+            "endLine": 1003,
+            "contentHash": "storybook-fixture"
+          }
+        },
+        {
+          "from": "audit-model",
+          "to": "verify-files",
+          "mechanism": "calls",
+          "file": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "symbol": "auditSubsystemModel",
+          "annotation": "Check every component file and trail site resolves.",
+          "span": {
+            "startLine": 1216,
+            "endLine": 1216,
+            "contentHash": "22c9e227add5fcdace4ffc6789afad07"
+          }
+        },
+        {
+          "from": "audit-model",
+          "to": "verify-component",
+          "mechanism": "calls",
+          "file": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "symbol": "auditSubsystemModel",
+          "annotation": "Dry-run each source component against its graphify anchor.",
+          "span": {
+            "startLine": 1159,
+            "endLine": 1159,
+            "contentHash": "storybook-fixture"
+          }
+        },
+        {
+          "from": "verify-component",
+          "to": "graphify-readiness",
+          "mechanism": "calls",
+          "file": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "symbol": "verifySubsystemComponent",
+          "annotation": "Read the current-slot cache readiness for the component's purl.",
+          "span": {
+            "startLine": 586,
+            "endLine": 588,
+            "contentHash": "fd0883df22210fd04a4054c2620a68d2"
+          }
+        }
+      ]
+    },
+    {
+      "id": "tl-persist-audit",
+      "title": "Persist the audit report and its fingerprint",
+      "steps": [
+        {
+          "from": "audit-model",
+          "to": "graphify-readiness",
+          "mechanism": "calls",
+          "file": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "symbol": "auditSubsystemModel",
+          "annotation": "Capture current readiness to feed the fingerprint.",
+          "span": {
+            "startLine": 1643,
+            "endLine": 1643,
+            "contentHash": "storybook-fixture"
+          }
+        },
+        {
+          "from": "audit-model",
+          "to": "build-fingerprint",
+          "mechanism": "calls",
+          "file": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "symbol": "auditSubsystemModel",
+          "annotation": "Fingerprint the claims plus the graphify slot identity.",
+          "span": {
+            "startLine": 2002,
+            "endLine": 2006,
+            "contentHash": "5ffb36a0e2c7e4e8fc5b1b10bce2ff01"
+          }
+        },
+        {
+          "from": "audit-model",
+          "to": "save-audit",
+          "mechanism": "writes",
+          "file": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "symbol": "auditSubsystemModel",
+          "annotation": "Persist the report so badges and the issues list survive a relaunch.",
+          "span": {
+            "startLine": 1650,
+            "endLine": 1650,
+            "contentHash": "storybook-fixture"
+          }
+        }
+      ]
+    },
+    {
+      "id": "wt-regular-audit",
+      "title": "Background regular audit pass",
+      "steps": [
+        {
+          "from": "regular-audit-scheduler",
+          "to": "regular-audit-run",
+          "mechanism": "calls",
+          "file": "packages/subsystems-studio/src/bun/index.ts",
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/index.ts",
+          "symbol": "auditOne",
+          "annotation": "Hand the next stored model to the quiet re-audit once the timer fires.",
+          "span": {
+            "startLine": 3146,
+            "endLine": 3146,
+            "contentHash": "f3504f402572afd5f91f48a25cda389c"
+          }
+        },
+        {
+          "from": "regular-audit-run",
+          "to": "audit-stage-fixes",
+          "mechanism": "calls",
+          "file": "packages/subsystems-studio/src/bun/index.ts",
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/index.ts",
+          "symbol": "reauditSubsystemModelQuietly",
+          "annotation": "Run the audit then stage any one-click fixes it found.",
+          "span": {
+            "startLine": 3098,
+            "endLine": 3098,
+            "contentHash": "5c7b11e69cf79b1cf4c5ecb8f522ce4d"
+          }
+        },
+        {
+          "from": "audit-stage-fixes",
+          "to": "audit-model",
+          "mechanism": "calls",
+          "file": "packages/subsystems-studio/src/bun/index.ts",
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/index.ts",
+          "symbol": "auditAndStageOneClickFixes",
+          "annotation": "Re-run the deterministic dry-run audit.",
+          "span": {
+            "startLine": 2954,
+            "endLine": 2954,
+            "contentHash": "storybook-fixture"
+          }
+        },
+        {
+          "from": "regular-audit-run",
+          "to": "broadcast-changed",
+          "mechanism": "calls",
+          "file": "packages/subsystems-studio/src/bun/index.ts",
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/index.ts",
+          "symbol": "reauditSubsystemModelQuietly",
+          "annotation": "Tell every surface the model changed so badges and the canvas reload.",
+          "span": {
+            "startLine": 2996,
+            "endLine": 2996,
+            "contentHash": "storybook-fixture"
+          }
+        },
+        {
+          "from": "regular-audit-scheduler",
+          "to": "regular-audit-status",
+          "mechanism": "produces",
+          "file": "packages/subsystems-studio/src/bun/index.ts",
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/index.ts",
+          "symbol": "onStatusChange",
+          "annotation": "Emit scheduler status on every enable, tick and pass finish.",
+          "span": {
+            "startLine": 3149,
+            "endLine": 3149,
+            "contentHash": "59a09a10b075afa60fe37cbc25c75a5d"
+          }
+        },
+        {
+          "from": "regular-audit-status",
+          "to": "regular-audit-subscribers",
+          "mechanism": "feeds",
+          "file": "packages/subsystems-studio/src/mainview/rpc.ts",
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/rpc.ts",
+          "symbol": "regularAuditChanged",
+          "annotation": "Fan the pushed status out to every registered renderer callback.",
+          "span": {
+            "startLine": 168,
+            "endLine": 168,
+            "contentHash": "storybook-fixture"
+          }
+        }
+      ]
+    },
+    {
+      "id": "tl-renderer-issues",
+      "title": "Load the persisted audit into diagnostics",
+      "steps": [
+        {
+          "from": "subsystem-model-view",
+          "to": "load-audit",
+          "mechanism": "calls",
+          "file": "packages/subsystems-studio/src/mainview/views/SubsystemModelView.tsx",
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/views/SubsystemModelView.tsx",
+          "symbol": "loadAudit",
+          "annotation": "Read the persisted report and its live staleness over RPC.",
+          "span": {
+            "startLine": 170,
+            "endLine": 170,
+            "contentHash": "storybook-fixture"
+          }
+        },
+        {
+          "from": "subsystem-model-view",
+          "to": "audit-issues",
+          "mechanism": "uses",
+          "file": "packages/subsystems-studio/src/mainview/views/SubsystemModelView.tsx",
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/views/SubsystemModelView.tsx",
+          "symbol": "SubsystemModelView",
+          "annotation": "Map report findings into the diagnostics issues list.",
+          "span": {
+            "startLine": 485,
+            "endLine": 485,
+            "contentHash": "storybook-fixture"
+          }
+        }
+      ]
+    },
+    {
+      "id": "tl-apply-fix",
+      "title": "Apply a one-click audit fix",
+      "steps": [
+        {
+          "from": "subsystem-model-view",
+          "to": "apply-fix",
+          "mechanism": "calls",
+          "file": "packages/subsystems-studio/src/mainview/views/SubsystemModelView.tsx",
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/mainview/views/SubsystemModelView.tsx",
+          "symbol": "onApplyIssueFix",
+          "annotation": "Apply the deterministic fix for a finding.",
+          "span": {
+            "startLine": 536,
+            "endLine": 536,
+            "contentHash": "storybook-fixture"
+          }
+        },
+        {
+          "from": "apply-fix",
+          "to": "verify-component",
+          "mechanism": "calls",
+          "file": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "symbol": "applySubsystemModelAuditFix",
+          "annotation": "Re-verify the component to re-derive the fix premise.",
+          "span": {
+            "startLine": 1733,
+            "endLine": 1733,
+            "contentHash": "storybook-fixture"
+          }
+        },
+        {
+          "from": "apply-fix",
+          "to": "audit-model",
+          "mechanism": "calls",
+          "file": "packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "purl": "pkg:github/principal-ai/subsystem-modeling#packages/subsystems-studio/src/bun/verify-subsystem-component.ts",
+          "symbol": "applySubsystemModelAuditFix",
+          "annotation": "Re-audit after the fix lands so the report is fresh.",
+          "span": {
+            "startLine": 1769,
+            "endLine": 1769,
+            "contentHash": "storybook-fixture"
+          }
+        }
+      ]
+    }
+  ]
+}

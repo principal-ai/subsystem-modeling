@@ -31,6 +31,7 @@ import type {
 	SubsystemModelAuditFinding,
 	SubsystemModelAuditFix,
 	SubsystemModelAuditReport,
+	SubsystemTrail,
 } from "../shared/contract";
 import {
 	buildSourceSpan,
@@ -1234,6 +1235,34 @@ export async function applyDeterministicSpanFixes(
  */
 let auditQueue: Promise<unknown> = Promise.resolve();
 
+/**
+ * Report components that participate in no authored trail edge. This is an
+ * informational modeling-quality finding, not a save-time validation error:
+ * a standalone node may be intentional, but is worth a second look in a
+ * subsystem graph whose purpose is to explain relationships.
+ */
+export function unconnectedComponentFindings(
+	components: readonly SubsystemComponent[],
+	trails: readonly SubsystemTrail[],
+): SubsystemModelAuditFinding[] {
+	const connected = new Set<string>();
+	for (const trail of trails) {
+		for (const step of trail.steps ?? []) {
+			connected.add(step.from);
+			connected.add(step.to);
+		}
+	}
+	return components
+		.filter((component) => !connected.has(component.alias))
+		.map((component) => ({
+			kind: "component_unconnected",
+			severity: "info",
+			componentAlias: component.alias,
+			componentName: component.name,
+			message: `Component ${JSON.stringify(component.name)} has no trail edges. Add a trail if it participates in this subsystem, or remove it if it is out of scope.`,
+		}));
+}
+
 function serializeAudit<T>(run: () => Promise<T>): Promise<T> {
 	const result = auditQueue.then(run, run);
 	// Keep the chain alive even when a run rejects, so one failure can never
@@ -1283,7 +1312,10 @@ async function runAuditSubsystemModel(
 		const files = await verifyModelFiles(graph);
 	const missingFileAliases = new Set(files.missing.map((m) => m.componentAlias));
 
-	const findings: SubsystemModelAuditFinding[] = [];
+	const findings: SubsystemModelAuditFinding[] = unconnectedComponentFindings(
+		graph.components,
+		graph.trails ?? [],
+	);
 	const checks: SubsystemModelAuditCheck[] = [];
 
 	// One parsed graphify graph per purl for the whole pass — shared by the

@@ -14,6 +14,7 @@ import {
   calculatePathMidpoint,
   pointAlongPath,
   fractionAlongPath,
+  graphGeometryBounds,
   planCompoundGroups,
   getElkOptions,
   absoluteBoundsOf,
@@ -100,6 +101,38 @@ describe('absolute coordinate space', () => {
 
   test('an unknown parent falls back to absolute, not to a wrong origin', () => {
     expect(flowPositionOf(syntheticResult(), 'cmp:a', 'nope')).toEqual({ x: 24, y: 96 });
+  });
+});
+
+describe('graph camera bounds', () => {
+  test('includes routed edge points and label boxes beyond the node bounds', () => {
+    const nodes = [
+      { x: 0, y: 0, width: 100, height: 60 },
+      { x: 300, y: 0, width: 100, height: 60 },
+    ];
+    const bounds = graphGeometryBounds(nodes, [{
+      labelCenter: { x: 180, y: 150 },
+      points: [
+        { x: 100, y: 30 },
+        { x: 180, y: 30 },
+        { x: 180, y: 150 },
+        { x: 300, y: 30 },
+      ],
+    }], { width: 140, height: 40 });
+
+    expect(bounds).toEqual({
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 170,
+    });
+  });
+
+  test('returns undefined when there is no finite graph geometry', () => {
+    expect(graphGeometryBounds([], [{ points: [{ x: Number.NaN, y: 1 }] }], {
+      width: 140,
+      height: 40,
+    })).toBeUndefined();
   });
 });
 

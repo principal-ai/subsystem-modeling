@@ -782,6 +782,7 @@ export interface SubsystemComponentVerificationResult {
 /** One finding from a dry-run deterministic subsystem-model audit. */
 export type SubsystemModelAuditFindingKind =
 	| "missing_file"
+	| "component_unconnected"
 	| "symbol_ambiguous"
 	| "symbol_unmatched"
 	| "trail"

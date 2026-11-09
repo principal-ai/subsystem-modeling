@@ -19,7 +19,7 @@
         "@principal-ai/principal-view-react": "^0.15.10",
         "@principal-ai/repository-monitoring-server": "^2.3.3",
         "@principal-ai/subsystems-core": "^0.51.3",
-        "@principal-ai/subsystems-react": "^0.56.30",
+        "@principal-ai/subsystems-react": "^0.56.32",
         "@react-spring/three": "^10.1.2",
         "@react-three/drei": "^10.7.9",
         "@react-three/fiber": "^9.8.1",
@@ -401,7 +401,7 @@
 
     "@principal-ai/subsystems-core": ["@principal-ai/subsystems-core@0.51.3", "", { "dependencies": { "better-sqlite3": "^13.0.0" }, "peerDependencies": { "@principal-ai/agent-monitoring": "^0.3.43" } }, "sha512-711cXqWQQxYcEtHOdXotjoO/1uYnBB3o+EzaYSibidX4kkVnLSC111gaXGw72YszM5y8F3MB0qrjZXbdy/yPAw=="],
 
-    "@principal-ai/subsystems-react": ["@principal-ai/subsystems-react@0.56.30", "", { "dependencies": { "@pierre/theme": "^2.0.0", "@pierre/trees": "1.0.0-beta.6", "@xyflow/react": "^12.11.3", "elkjs": "^0.12.0", "hast-util-sanitize": "^5.0.2", "highlight.js": "^11.11.1", "js-yaml": "4.1.1", "lucide-react": "0.554.0", "prettier": "3", "react-markdown": "^10.1.0", "react-zoom-pan-pinch": "^3.7.0", "rehype-highlight": "^7.0.2", "rehype-raw": "^7.0.0", "rehype-sanitize": "^6.0.0", "rehype-slug": "^6.0.0", "remark-gfm": "^4.0.1", "shiki": "^4.0.0", "themed-markdown": "^0.1.82", "zustand": "4.5.0" }, "peerDependencies": { "@pierre/diffs": ">=1.6.0", "@principal-ade/industry-theme": "^0.1.7", "@principal-ai/subsystems-core": "^0.51.0", "react": "^18.0.0 || ^19.0.0", "react-dom": "^18.0.0 || ^19.0.0" } }, "sha512-lVpZjp3zLN+F3i3Si96I/6FoMoc9n5wtQ3I5cxH0kS1yGCdoMVmYV9UeToEYOUcY79uu4nEgMD77AMoeu5ZsRg=="],
+    "@principal-ai/subsystems-react": ["@principal-ai/subsystems-react@0.56.32", "", { "dependencies": { "@pierre/theme": "^2.0.0", "@pierre/trees": "1.0.0-beta.6", "@xyflow/react": "^12.11.3", "elkjs": "^0.12.0", "hast-util-sanitize": "^5.0.2", "highlight.js": "^11.11.1", "js-yaml": "4.1.1", "lucide-react": "0.554.0", "prettier": "3", "react-markdown": "^10.1.0", "react-zoom-pan-pinch": "^3.7.0", "rehype-highlight": "^7.0.2", "rehype-raw": "^7.0.0", "rehype-sanitize": "^6.0.0", "rehype-slug": "^6.0.0", "remark-gfm": "^4.0.1", "shiki": "^4.0.0", "themed-markdown": "^0.1.82", "zustand": "4.5.0" }, "peerDependencies": { "@pierre/diffs": ">=1.6.0", "@principal-ade/industry-theme": "^0.1.7", "@principal-ai/subsystems-core": "^0.51.3", "react": "^18.0.0 || ^19.0.0", "react-dom": "^18.0.0 || ^19.0.0" } }, "sha512-pz0wdlHuG04cL9z5nK30Obn7cp7t3/ZH+DKSZ0Gp+2LqRrnoZAq8zUtHHQ9F3OqQchk0diEOPIf1kyOErTW2IQ=="],
 
     "@protobufjs/aspromise": ["@protobufjs/aspromise@1.1.2", "", {}, "sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ=="],
 

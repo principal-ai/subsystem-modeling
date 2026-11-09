@@ -254,6 +254,81 @@ export interface Point {
   y: number;
 }
 
+export interface LayoutRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface EdgeBoundsGeometry {
+  points?: readonly Point[];
+  /** Center of the edge's overlay label, in absolute flow coordinates. */
+  labelCenter?: Point;
+}
+
+/**
+ * Bounds the visible graph geometry in ELK's absolute flow coordinate space.
+ * React Flow's `fitView` frames nodes only; routed edges and their overlay labels
+ * can extend beyond those rectangles. Callers can include label boxes as rects.
+ */
+export function boundsOfRectsAndPoints(
+  rects: Iterable<LayoutRect>,
+  points: Iterable<Point>,
+): LayoutRect | undefined {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const rect of rects) {
+    const right = rect.x + rect.width;
+    const bottom = rect.y + rect.height;
+    if (![rect.x, rect.y, right, bottom].every(Number.isFinite)) continue;
+    minX = Math.min(minX, rect.x);
+    minY = Math.min(minY, rect.y);
+    maxX = Math.max(maxX, right);
+    maxY = Math.max(maxY, bottom);
+  }
+  for (const point of points) {
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  }
+
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return undefined;
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(1, maxX - minX),
+    height: Math.max(1, maxY - minY),
+  };
+}
+
+/** Bounds node rectangles together with routed edge paths and centered labels. */
+export function graphGeometryBounds(
+  nodeRects: Iterable<LayoutRect>,
+  edges: Iterable<EdgeBoundsGeometry>,
+  labelSize: { width: number; height: number },
+): LayoutRect | undefined {
+  const rects = [...nodeRects];
+  const points: Point[] = [];
+  for (const edge of edges) {
+    if (edge.points) points.push(...edge.points);
+    if (edge.labelCenter) {
+      rects.push({
+        x: edge.labelCenter.x - labelSize.width / 2,
+        y: edge.labelCenter.y - labelSize.height / 2,
+        width: labelSize.width,
+        height: labelSize.height,
+      });
+    }
+  }
+  return boundsOfRectsAndPoints(rects, points);
+}
+
 /** ELK edge section with bend points */
 interface ElkEdgeSection {
   id: string;

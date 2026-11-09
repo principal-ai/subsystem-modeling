@@ -112,6 +112,7 @@ import {
   EDGE_LABEL_CLOUD_PATH,
   EDGE_LABEL_CLOUD_EXTRA_TOP,
 } from '../utils/edgeLabel';
+import { graphGeometryBounds } from '../utils/elkLayout';
 
 /** Context passed to `renderTrailViewer` when a flow/step is focused. */
 export interface TrailViewerContext {
@@ -778,6 +779,43 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     edges: [],
     absoluteRects: new Map(),
   });
+  const fitGraphContents = useCallback(
+    (duration = 300) => {
+      const edges = built.edges.map((edge) => {
+        const data = edge.data as
+          | {
+              labelX?: number;
+              labelY?: number;
+              elkPathPoints?: { x: number; y: number }[];
+            }
+          | undefined;
+        return {
+          points: data?.elkPathPoints,
+          labelCenter:
+            data?.labelX != null && data.labelY != null
+              ? { x: data.labelX, y: data.labelY }
+              : undefined,
+        };
+      });
+      const bounds = graphGeometryBounds(
+        built.absoluteRects.values(),
+        edges,
+        { width: EDGE_LABEL_WIDTH, height: EDGE_LABEL_HEIGHT },
+      );
+      if (!bounds) {
+        fitView({
+          padding: 0.1,
+          includeHiddenNodes: false,
+          minZoom: 0.05,
+          maxZoom: 2,
+          duration,
+        });
+        return;
+      }
+      fitBounds(bounds, { padding: 0.1, duration });
+    },
+    [built.absoluteRects, built.edges, fitBounds, fitView],
+  );
   const [layoutReady, setLayoutReady] = useState(false);
   const transparentCanvas = canvasBackground === 'transparent';
 
@@ -993,15 +1031,9 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     if (!layoutReady || !refitAfterLayoutRef.current) return;
     refitAfterLayoutRef.current = false;
     requestAnimationFrame(() => {
-      fitView({
-        padding: 0.1,
-        includeHiddenNodes: false,
-        minZoom: 0.05,
-        maxZoom: 2,
-        duration: LAYOUT_FLIP_NODE_MS,
-      });
+      fitGraphContents(LAYOUT_FLIP_NODE_MS);
     });
-  }, [built, layoutReady, fitView]);
+  }, [built, layoutReady, fitGraphContents]);
 
   // Persist the choice so a model reopens the way it was left.
   useEffect(() => {
@@ -2104,10 +2136,10 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
     // mount/edit fit would otherwise fire mid-flip and fight it.
     if (layoutFlipping) return;
     const t = setTimeout(() => {
-      fitView({ padding: 0.1, includeHiddenNodes: false, minZoom: 0.05, maxZoom: 2, duration: 200 });
+      fitGraphContents(200);
     }, 200);
     return () => clearTimeout(t);
-  }, [baseNodesKey, baseEdgesKey, fitView]);
+  }, [baseNodesKey, baseEdgesKey, fitGraphContents, layoutFlipping]);
 
   // When the file drawer opens or closes the canvas is resized but the
   // camera stays put — no refit/zoom. Spotlight + dimming already convey
@@ -2477,17 +2509,13 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   );
 
   // Zoom back out to the full diagram after the last expanded trail
-  // closes (visibility restores non-flow nodes that were hidden).
+  // closes (visibility restores non-flow nodes that were hidden). `fitView`
+  // only considers node rectangles, but routed edges and their label chips can
+  // extend beyond those rectangles; include their ELK geometry in the frame.
   const fitOverview = useCallback(() => {
     if (!zoomOnTrailFocus) return;
-    fitView({
-      padding: 0.1,
-      includeHiddenNodes: false,
-      minZoom: 0.05,
-      maxZoom: 2,
-      duration: 300,
-    });
-  }, [fitView, zoomOnTrailFocus]);
+    fitGraphContents(300);
+  }, [fitGraphContents, zoomOnTrailFocus]);
 
   // Focus an entire flow: hide everything but the flow's nodes and edges, and
   // frame the flow on the canvas. Selection state is cleared — the graph now

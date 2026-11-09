@@ -37,3 +37,14 @@ describe('issueCategory — C4 process kinds', () => {
     );
   });
 });
+
+describe('issueCategory — unconnected components', () => {
+  test('files unconnected components under Trail', () => {
+    expect(
+      issueCategory({ id: 'x', severity: 'info', kind: 'component_unconnected', message: '' }),
+    ).toBe('trail');
+    expect(
+      issueKindLabel({ id: 'x', severity: 'info', kind: 'component_unconnected', message: '' }),
+    ).toBe('Component has no trail edges');
+  });
+});

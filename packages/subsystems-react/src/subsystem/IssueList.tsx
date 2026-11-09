@@ -99,6 +99,7 @@ export const SUBSYSTEM_ISSUE_CATEGORY_LABEL: Record<
 
 /** Default `kind` → layer. Module containment is static; process nest is dynamic. */
 const KIND_CATEGORY: Record<string, SubsystemIssueCategory> = {
+  component_unconnected: 'trail',
   missing_file: 'construct',
   symbol_ambiguous: 'construct',
   symbol_unmatched: 'construct',
@@ -279,6 +280,7 @@ export function humanizeIssueKind(kind: string): string {
  * scopes them. Explicit `issue.kindLabel` wins.
  */
 const KIND_LABEL: Record<string, string> = {
+  component_unconnected: 'Component has no trail edges',
   missing_file: 'Construct declaration file missing',
   symbol_ambiguous: 'Multiple construct symbol matches',
   symbol_unmatched: 'Construct symbol missing',
@@ -345,7 +347,8 @@ const KIND_ORDER: Record<string, number> = {
   boundary_process_unbacked: 33,
   boundary_process_proposed: 34,
   boundary_process_rejected: 35,
-  // Trail — mechanical issues first, then step verification
+  // Trail — graph-level completeness, then mechanical issues and step verification
+  component_unconnected: 39,
   trail: 40,
   step_span_unconfirmed: 41,
   step_span_stale: 42,

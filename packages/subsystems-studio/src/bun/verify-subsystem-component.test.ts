@@ -3,10 +3,11 @@ import {
 	installedDependencyPackage,
 	storeTypeStale,
 	storeTypeUndeclared,
+	unconnectedComponentFindings,
 	verificationFailureDiagnostic,
 	verificationUnavailableFinding,
 } from "./verify-subsystem-component";
-import type { SubsystemComponent } from "../shared/contract";
+import type { SubsystemComponent, SubsystemTrail } from "../shared/contract";
 
 /**
  * Store completeness — the `store_type_undeclared` gap.
@@ -148,6 +149,53 @@ describe("storeTypeStale", () => {
 		const undeclared = typedStore("memory");
 		expect(storeTypeUndeclared(undeclared)).toBe(true);
 		expect(storeTypeStale(undeclared, "stale")).toBe(false);
+	});
+});
+
+describe("unconnectedComponentFindings", () => {
+	const component = (alias: string): SubsystemComponent =>
+		({ alias, name: alias, construct: "store", file: "", purl: "external" }) as SubsystemComponent;
+
+	test("reports components that are not an endpoint of any trail step", () => {
+		const trails = [
+			{
+				id: "flow",
+				title: "flow",
+				steps: [{ from: "entry", to: "service", mechanism: "calls" }],
+			},
+		] as unknown as SubsystemTrail[];
+		const findings = unconnectedComponentFindings(
+			[component("entry"), component("service"), component("projects-json")],
+			trails,
+		);
+
+		expect(findings).toEqual([
+			{
+				kind: "component_unconnected",
+				severity: "info",
+				componentAlias: "projects-json",
+				componentName: "projects-json",
+				message:
+					'Component "projects-json" has no trail edges. Add a trail if it participates in this subsystem, or remove it if it is out of scope.',
+			},
+		]);
+	});
+
+	test("does not report connected singletons or components with self-edges", () => {
+		const trails = [
+			{
+				id: "self",
+				title: "self",
+				steps: [{ from: "standalone", to: "standalone", mechanism: "calls" }],
+			},
+		] as unknown as SubsystemTrail[];
+		expect(unconnectedComponentFindings([component("standalone")], trails)).toEqual([]);
+	});
+
+	test("reports every component when there are no trail steps", () => {
+		expect(
+			unconnectedComponentFindings([component("a"), component("b")], []),
+		).toHaveLength(2);
 	});
 });
 
