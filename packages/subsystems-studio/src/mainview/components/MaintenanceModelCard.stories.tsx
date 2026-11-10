@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
 import type {
 	MaintenanceOverviewModel,
@@ -164,7 +165,7 @@ const meta = {
 	component: MaintenanceModelCard,
 	parameters: { layout: "fullscreen" },
 	decorators: [
-		(Story: () => JSX.Element) => (
+		(Story: () => ReactElement) => (
 			<div style={{ padding: 24, maxWidth: 960 }}>
 				<Story />
 			</div>

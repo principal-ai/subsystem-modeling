@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
 import type { SubsystemModelSummary } from "../../shared/contract";
 import { SubsystemModelCard } from "./SubsystemModelCard";
@@ -96,7 +97,7 @@ const meta = {
 	component: SubsystemModelCard,
 	parameters: { layout: "fullscreen" },
 	decorators: [
-		(Story: () => JSX.Element) => (
+		(Story: () => ReactElement) => (
 			<div style={{ padding: 24, maxWidth: 720 }}>
 				<Story />
 			</div>

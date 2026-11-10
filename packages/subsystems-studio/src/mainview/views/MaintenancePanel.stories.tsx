@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
 import type {
 	MaintenanceOverview,
@@ -152,7 +153,7 @@ const meta = {
 		// The panel sizes itself with `flex: 1` against a definite-height
 		// ancestor (the app shell's `100vh`). Storybook's html/body are
 		// `height: auto`, so give it that ancestor here.
-		(Story: () => JSX.Element) => (
+		(Story: () => ReactElement) => (
 			<div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
 				<Story />
 			</div>

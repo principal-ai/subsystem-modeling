@@ -22,7 +22,7 @@
  */
 
 import type { CommitDot } from "./ModelProvenance";
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
 import {
 	ModelProvenance,
@@ -487,7 +487,7 @@ const meta = {
 	component: ModelProvenance,
 	parameters: { layout: "fullscreen" },
 	decorators: [
-		(Story: () => JSX.Element) => (
+		(Story: () => ReactElement) => (
 			<div style={{ padding: 24, maxWidth: 760 }}>
 				<Story />
 			</div>
@@ -553,7 +553,7 @@ const metaAspirational = {
 	component: ModelProvenance,
 	parameters: { layout: "fullscreen" },
 	decorators: [
-		(Story: () => JSX.Element) => (
+		(Story: () => ReactElement) => (
 			<div style={{ padding: 24, maxWidth: 760, display: "flex", flexDirection: "column", gap: 20 }}>
 				<Story />
 			</div>
@@ -624,7 +624,7 @@ const metaBadge = {
 	component: ProvenanceBadge,
 	parameters: { layout: "fullscreen" },
 	decorators: [
-		(Story: () => JSX.Element) => (
+		(Story: () => ReactElement) => (
 			<div style={{ padding: 24, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
 				<Story />
 			</div>
@@ -915,7 +915,7 @@ const metaRegression = {
 	component: ProvenanceBadge,
 	parameters: { layout: "fullscreen" },
 	decorators: [
-		(Story: () => JSX.Element) => (
+		(Story: () => ReactElement) => (
 			<div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 10 }}>
 				<Story />
 			</div>

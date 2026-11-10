@@ -15,7 +15,7 @@ import {
 	type CommonToolName,
 } from "@principal-ai/agent-monitoring";
 
-export type OpencodeSessionKind = "v2";
+export type OpencodeSessionKind = "v1" | "v2";
 
 export interface OpencodeV2SessionMeta {
 	id: string;
