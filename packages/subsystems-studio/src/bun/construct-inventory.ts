@@ -1,6 +1,6 @@
 /** Current-checkout graph inventory. Reads caches; never runs an audit/extractor. */
 import type { ConstructInventoryPackage, ConstructInventoryRepo, SourceConstruct } from "../shared/contract";
-import type { GraphifyNode } from "../../../subsystems-react/src/graphify/types";
+import type { GraphifyNode } from "../../../subsystems-core/src/graphify/types";
 import { listGraphifyRepos } from "./graphify-store";
 import { loadGraphifyGraph } from "./graphify-runner";
 import { verifyGraphConstructs } from "./graph-constructs";

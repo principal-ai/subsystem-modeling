@@ -8,6 +8,7 @@
  */
 
 export * from './types';
+export * from './audit';
 
 // File-per-topic store (~/.principal/topics) — node:fs only
 export {

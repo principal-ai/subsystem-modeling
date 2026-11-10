@@ -1,6 +1,6 @@
 {
   "name": "@principal-ai/subsystems-core",
-  "version": "0.51.3",
+  "version": "0.51.5",
   "description": "Subsystem model types and agent-session tooling for Principal AI",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -23,6 +23,24 @@
       "require": "./dist/opencode/pipeline.js",
       "default": "./dist/opencode/pipeline.js"
     },
+    "./audit": {
+      "types": "./dist/audit/index.d.ts",
+      "import": "./dist/audit/index.js",
+      "require": "./dist/audit/index.js",
+      "default": "./dist/audit/index.js"
+    },
+    "./graphify": {
+      "types": "./dist/graphify/index.d.ts",
+      "import": "./dist/graphify/index.js",
+      "require": "./dist/graphify/index.js",
+      "default": "./dist/graphify/index.js"
+    },
+    "./graphify/*": {
+      "types": "./dist/graphify/*.d.ts",
+      "import": "./dist/graphify/*.js",
+      "require": "./dist/graphify/*.js",
+      "default": "./dist/graphify/*.js"
+    },
     "./schemas/subsystem-model.schema.json": "./schemas/subsystem-model.schema.json"
   },
   "files": [
@@ -44,7 +62,9 @@
     "lint:fix": "cd ../.. && eslint packages/subsystems-core --ext .ts,.tsx,.js,.jsx --fix"
   },
   "dependencies": {
-    "better-sqlite3": "^13.0.0"
+    "better-sqlite3": "^13.0.0",
+    "web-tree-sitter": "^0.25.10",
+    "tree-sitter-wasms": "^0.1.13"
   },
   "peerDependencies": {
     "@principal-ai/agent-monitoring": "^0.3.43"

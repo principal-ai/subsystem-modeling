@@ -35,6 +35,10 @@ await esbuild.build({
     'glob',
     'better-sqlite3',
     '@principal-ai/repository-abstraction',
+    // The audit verifier resolves WASM grammars by package name at runtime;
+    // bundling web-tree-sitter would break its emscripten asset lookup.
+    'web-tree-sitter',
+    'tree-sitter-wasms',
   ],
 });
 

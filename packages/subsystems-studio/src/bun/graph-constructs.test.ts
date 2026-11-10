@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { GraphifyNode } from "../../../subsystems-react/src/graphify/types";
+import type { GraphifyNode } from "../../../subsystems-core/src/graphify/types";
 import { hashContentRange } from "./declaration-ref";
 import {
 	declarationForSymbol,

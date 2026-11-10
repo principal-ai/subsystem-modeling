@@ -1,6 +1,6 @@
 {
   "name": "@principal-ai/principal-studio-cli",
-  "version": "0.52.2",
+  "version": "0.52.4",
   "description": "Principal AI CLI — subsystem models, Subsystems Studio, tours, and agent sessions",
   "main": "dist/index.cjs",
   "types": "dist/index.d.ts",
@@ -31,32 +31,34 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@pierre/diffs": "^1.6.2",
-    "@principal-ai/agent-monitoring": "0.3.43",
+    "@pierre/diffs": "^1.6.4",
+    "@principal-ai/agent-monitoring": "0.3.46",
     "@principal-ai/alexandria-core-library": "^0.4.0",
-    "@principal-ai/codebase-composition": "^0.2.57",
-    "@principal-ai/file-city-builder": "^0.5.0",
+    "@principal-ai/codebase-composition": "^0.2.58",
+    "@principal-ai/file-city-builder": "^0.5.5",
     "@principal-ai/repository-abstraction": "^0.5.7",
-    "@principal-ai/subsystems-core": "^0.51.3",
+    "@principal-ai/subsystems-core": "^0.51.5",
+    "tree-sitter-wasms": "^0.1.13",
+    "web-tree-sitter": "^0.25.10",
     "ajv": "^8.20.0",
-    "better-sqlite3": "^13.0.0",
+    "better-sqlite3": "^13.0.3",
     "chalk": "5.6.2",
-    "commander": "14.0.2",
-    "glob": "^13.0.0",
-    "globby": "16.0.0",
+    "commander": "14.0.3",
+    "glob": "^13.0.7",
+    "globby": "16.2.4",
     "js-yaml": "4.1.1"
   },
   "optionalDependencies": {
-    "@principal-ai/subsystems-studio": "^0.20.7"
+    "@principal-ai/subsystems-studio": "^0.20.17"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
-    "@types/bun": "latest",
+    "@types/bun": "1.4.4",
     "@types/js-yaml": "4.0.9",
-    "@types/node": "22.10.1",
-    "esbuild": "0.24.0",
-    "tsx": "4.19.2",
-    "typescript": "5.7.2"
+    "@types/node": "22.20.5",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
   },
   "files": [
     "dist",

@@ -8,7 +8,7 @@ describe("adoptGraphifyDeclarationRefFixFromVerify", () => {
 		const fix = adoptGraphifyDeclarationRefFixFromVerify(
 			{ declarationSpan: { startLine: 10, endLine: 16, contentHash: "abc" } },
 			{ freshness: "stale", repin },
-			{ resolution: "exact", nodeId: "n1" },
+			{ resolution: "exact" },
 		);
 		expect(fix?.id).toBe("adopt_graphify_declaration_ref");
 		expect(fix?.declarationSpan.startLine).toBe(42);

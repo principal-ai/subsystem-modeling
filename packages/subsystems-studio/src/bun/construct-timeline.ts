@@ -16,7 +16,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { GraphifyNode } from "../../../subsystems-react/src/graphify/types";
+import type { GraphifyNode } from "../../../subsystems-core/src/graphify/types";
 import {
 	CONSTRUCT_TIMELINE_ANALYZER, CONSTRUCT_TIMELINE_MAX_COMMITS, selectTimelineExtensionCommits,
 	type ConstructTimeline, type ConstructTimelineEvent, type ConstructTimelineIdentity,

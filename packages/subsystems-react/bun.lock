@@ -29,7 +29,7 @@
         "@pierre/diffs": "1.6.2",
         "@principal-ade/industry-theme": "0.1.7",
         "@principal-ai/agent-monitoring": "^0.3.38",
-        "@principal-ai/subsystems-core": "^0.51.3",
+        "@principal-ai/subsystems-core": "^0.51.5",
         "@storybook/addon-docs": "10.1.2",
         "@storybook/addon-links": "10.1.2",
         "@storybook/addon-onboarding": "10.1.2",
@@ -50,7 +50,7 @@
       "peerDependencies": {
         "@pierre/diffs": ">=1.6.0",
         "@principal-ade/industry-theme": "^0.1.7",
-        "@principal-ai/subsystems-core": "^0.51.3",
+        "@principal-ai/subsystems-core": "^0.51.5",
         "react": "^18.0.0 || ^19.0.0",
         "react-dom": "^18.0.0 || ^19.0.0",
       },
@@ -221,7 +221,7 @@
 
     "@principal-ai/agent-monitoring": ["@principal-ai/agent-monitoring@0.3.44", "", { "dependencies": { "@opencode-ai/sdk": "^1.18.18", "dotenv": "^17.2.2", "drizzle-orm": "^0.44.5", "pg": "^8.16.3" }, "peerDependencies": { "better-sqlite3": ">=7" }, "optionalPeers": ["better-sqlite3"] }, "sha512-8Uf2WjtZrsO/mvJ5JS0+918JHAGf4kd4FYOwuF8o8PwoEPeryZduxa2gtnNQw3RKRNGjbztTvnRixr67/5DZJg=="],
 
-    "@principal-ai/subsystems-core": ["@principal-ai/subsystems-core@0.51.3", "", { "dependencies": { "better-sqlite3": "^13.0.0" }, "peerDependencies": { "@principal-ai/agent-monitoring": "^0.3.43" } }, "sha512-711cXqWQQxYcEtHOdXotjoO/1uYnBB3o+EzaYSibidX4kkVnLSC111gaXGw72YszM5y8F3MB0qrjZXbdy/yPAw=="],
+    "@principal-ai/subsystems-core": ["@principal-ai/subsystems-core@0.51.5", "", { "dependencies": { "better-sqlite3": "^13.0.0", "tree-sitter-wasms": "^0.1.13", "web-tree-sitter": "^0.25.10" }, "peerDependencies": { "@principal-ai/agent-monitoring": "^0.3.43" } }, "sha512-7lBWyn3oyveUh1b4NYIcj9xlnsKVcFOLZr3KPON9i95EMAs4iNGBzkiuJ2DvbWPAFYN8r8In86RuSyEUJNQ1Iw=="],
 
     "@rollup/pluginutils": ["@rollup/pluginutils@5.4.0", "", { "dependencies": { "@types/estree": "^1.0.0", "estree-walker": "^2.0.2", "picomatch": "^4.0.2" }, "peerDependencies": { "rollup": "^1.20.0||^2.0.0||^3.0.0||^4.0.0" }, "optionalPeers": ["rollup"] }, "sha512-MfPp06CjRLfXQ3wY0R8vJDYBy/MvVcc9OulEfR0B8Iv9ko+GCNaRZ+EpJYFl27LhKsZK0o420sYCRHCjfCgeUg=="],
 
@@ -1219,6 +1219,8 @@
 
     "toidentifier": ["toidentifier@1.0.1", "", {}, "sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA=="],
 
+    "tree-sitter-wasms": ["tree-sitter-wasms@0.1.13", "", { "dependencies": { "tree-sitter-wasms": "^0.1.11" } }, "sha512-wT+cR6DwaIz80/vho3AvSF0N4txuNx/5bcRKoXouOfClpxh/qqrF4URNLQXbbt8MaAxeksZcZd1j8gcGjc+QxQ=="],
+
     "trim-lines": ["trim-lines@3.0.1", "", {}, "sha512-kRj8B+YHZCc9kQYdWfJB2/oUl9rA99qbowYYBtr4ui4mZyAQ2JpvVBd/6U2YloATfqBhBTSMhTpgBHtU0Mf3Rg=="],
 
     "trough": ["trough@2.2.0", "", {}, "sha512-tmMpK00BjZiUyVyvrBK7knerNgmgvcV/KLVyuma/SC+TQN167GrMRciANTz09+k3zW8L8t60jWO1GpfkZdjTaw=="],
@@ -1274,6 +1276,8 @@
     "vite": ["vite@6.4.3", "", { "dependencies": { "esbuild": "^0.25.0", "fdir": "^6.4.4", "picomatch": "^4.0.2", "postcss": "^8.5.3", "rollup": "^4.34.9", "tinyglobby": "^0.2.13" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^18.0.0 || ^20.0.0 || >=22.0.0", "jiti": ">=1.21.0", "less": "*", "lightningcss": "^1.21.0", "sass": "*", "sass-embedded": "*", "stylus": "*", "sugarss": "*", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "jiti", "less", "lightningcss", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-NTKlcQjlAK7MlQoyb6LgaqHc8sso/pVyUJYWMws3jg21uTJw/LddqIFPcPqP6PzpgbIcZyKI85sFE4HBrQDA8A=="],
 
     "web-namespaces": ["web-namespaces@2.0.1", "", {}, "sha512-bKr1DkiNa2krS7qxNtdrtHAmzuYGFQLiQ13TsorsdT6ULTkPLKuu5+GsFpDlg6JFjUTwX2DyhMPG2be8uPrqsQ=="],
+
+    "web-tree-sitter": ["web-tree-sitter@0.25.10", "", { "peerDependencies": { "@types/emscripten": "^1.40.0" }, "optionalPeers": ["@types/emscripten"] }, "sha512-Y09sF44/13XvgVKgO2cNDw5rGk6s26MgoZPXLESvMXeefBf7i6/73eFurre0IsTW6E14Y0ArIzhUMmjoc7xyzA=="],
 
     "webidl-conversions": ["webidl-conversions@7.0.0", "", {}, "sha512-VwddBukDzu71offAQR975unBIGqfKZpM+8ZX6ySk8nYhVoo5CYaZyzt3YBvYtRtO+aoGlqxPg/B87NGVZ/fu6g=="],
 

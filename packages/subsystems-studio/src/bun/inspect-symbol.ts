@@ -12,10 +12,10 @@
 import { existsSync } from "node:fs";
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
-import { findUniqueDefinitionBySymbol } from "../../../subsystems-react/src/graphify/anchor";
-import { normalizeSourcePath } from "../../../subsystems-react/src/graphify/ids";
-import { createGraphifyTypeResolver } from "../../../subsystems-react/src/graphify/resolve";
-import type { GraphifyNode } from "../../../subsystems-react/src/graphify/types";
+import { findUniqueDefinitionBySymbol } from "../../../subsystems-core/src/graphify/anchor";
+import { normalizeSourcePath } from "../../../subsystems-core/src/graphify/ids";
+import { createGraphifyTypeResolver } from "../../../subsystems-core/src/graphify/resolve";
+import type { GraphifyNode } from "../../../subsystems-core/src/graphify/types";
 import type {
 	SymbolInspection,
 	SymbolInspectionCandidate,

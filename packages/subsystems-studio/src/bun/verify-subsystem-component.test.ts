@@ -253,7 +253,7 @@ describe("verificationFailureDiagnostic", () => {
 			severity: "info",
 			purl: "pkg:github/acme/app",
 			message:
-				"Source verification aborted for pkg:github/acme/app: Tree-sitter WASM parser aborted (out-of-bounds indirect call). Retry the audit; if it repeats, inspect the Studio logs.",
+				"Source verification aborted for pkg:github/acme/app: Tree-sitter WASM parser aborted (out-of-bounds indirect call). Retry the audit; if it repeats, inspect the host logs.",
 		});
 	});
 });

@@ -20,6 +20,7 @@ import {
   type StoredSubsystemModel,
 } from '../lib/subsystem-model-store.js';
 import { findSubsystemModelProblems } from '../lib/subsystem-model-validation.js';
+import { runCliSubsystemModelAudit } from '../lib/subsystem-model-audit.js';
 import {
   analyzeComposeOverlap,
   formatComposeOverlap,
@@ -392,9 +393,22 @@ async function auditAction(id: string | undefined): Promise<void> {
     process.stderr.write('Pass a model id.\n');
     process.exit(2);
   }
-  const { ok, json } = await studioFetch(`/api/subsystem-model/${encodeURIComponent(id)}/audit`);
-  process.stdout.write(JSON.stringify(json, null, 2) + '\n');
-  if (!ok) process.exit(2);
+  // Runs the shared core audit engine against the local stores directly —
+  // no Studio HTTP bridge required. Missing checkouts / Graphify caches are
+  // reported inside the report rather than aborting the command.
+  const result = await runCliSubsystemModelAudit(id);
+  if (result.ok) {
+    process.stdout.write(
+      JSON.stringify(
+        { ok: true, report: result.report, fingerprint: result.fingerprint },
+        null,
+        2,
+      ) + '\n',
+    );
+    return;
+  }
+  process.stdout.write(JSON.stringify({ ok: false, error: result.error }, null, 2) + '\n');
+  process.exit(2);
 }
 
 interface MaintainPlanJson {

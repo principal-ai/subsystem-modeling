@@ -32,6 +32,15 @@ import type {
 	SymbolInspection,
 } from "@principal-ai/subsystems-react";
 import type { SubsystemComponentRemoval } from "@principal-ai/subsystems-core";
+import type {
+	SubsystemModelAuditFixGroup,
+	SubsystemModelAuditReport,
+} from "../../../subsystems-core/src/audit/report";
+import type {
+	SubsystemModelVerification,
+	SubsystemVerificationLane,
+	VerificationLaneStatus,
+} from "../../../subsystems-core/src/audit/report";
 // Type-only: the shared repository monitoring daemon's diagnostics snapshot
 // (Settings → Repository monitor). The host talks to the daemon; the renderer
 // only sees this shape.
@@ -779,293 +788,23 @@ export interface SubsystemComponentVerificationResult {
 	storeTypeUndeclared?: boolean;
 }
 
-/** One finding from a dry-run deterministic subsystem-model audit. */
-export type SubsystemModelAuditFindingKind =
-	| "missing_file"
-	| "component_unconnected"
-	| "symbol_ambiguous"
-	| "symbol_unmatched"
-	| "trail"
-	| "construct_span_stale"
-	/**
-	 * A grounded claim with no captured span — a completeness gap, never a hard
-	 * failure. The construct-verifier agent lane reads source and proposes the
-	 * span (start/end/content hash); until then the claim cannot be fully
-	 * verified. Parallel to `construct_unconfirmed`.
-	 */
-	| "construct_span_unconfirmed"
-	/**
-	 * A grounded claim with no captured span, but the span is *derivable* —
-	 * tree-sitter pins the declaration's end line and all structural gates pass.
-	 * Carries a deterministic one-click capture fix; not a hard failure.
-	 */
-	| "construct_span_capturable"
-	| "construct_mismatch"
-	| "construct_unconfirmed"
-	| "store_type_undeclared"
-	| "store_type_stale"
-	| "signature_mismatch"
-	| "signature_unconfirmed"
-	| "step_span_unconfirmed"
-	| "step_span_stale"
-	/**
-	 * A `calls` step whose site is not housed by its `from` component. The
-	 * code may be in a helper or child component that the story elides; the
-	 * honest label is `uses`, or the caller must be modeled and `from` changed.
-	 * Informational during the migration — reclassify, then promote to error.
-	 */
-	| "step_site_outside_from"
-	/** A `calls` step with no site construct. Required by the portable schema. */
-	| "step_site_unconfirmed"
-	/** The step's resolved site construct does not match its declared span/symbol. */
-	| "step_site_mismatch"
-	/** The step's resolved site construct content changed since it was captured. */
-	| "step_site_stale"
-	/** The step's target construct does not resolve to the declared span/symbol. */
-	| "step_target_mismatch"
-	/** The step's target construct content changed since it was captured. */
-	| "step_target_stale"
-	| "repo_unresolved"
-	| "graphify_unavailable"
-	| "third_party_path"
-	| "boundary_module_file_mismatch"
-	| "boundary_process_nest_disagree"
-	| "boundary_process_missing"
-	| "boundary_process_unassigned"
-	| "boundary_process_proposed"
-	| "boundary_process_rejected"
-	/**
-	 * A runtime component needs a process claim but no accepted container
-	 * exists to assign it to — the gap stays open until a container-verifier
-	 * run gets one accepted. Routes to container-verifier, never to
-	 * runtime-topology-verifier (which proposes only verified keys).
-	 */
-	| "boundary_process_unbacked";
+export type {
+	SubsystemModelAuditFindingKind,
+	SubsystemModelAuditSeverity,
+	SubsystemModelAuditFix,
+	SubsystemModelAuditFixGroup,
+	SubsystemModelAuditFinding,
+	SubsystemModelAuditCheck,
+	SubsystemModelAuditBoundaryCheck,
+	SubsystemModelAuditReport,
+} from "../../../subsystems-core/src/audit/report";
 
-export type SubsystemModelAuditSeverity = "error" | "info";
-
-/**
- * Deterministic fix the user can apply from the audit UI (no agent).
- */
-export type SubsystemModelAuditFix =
-	| {
-			id: "adopt_graphify_signature";
-			label: string;
-			parameterTypes: string[];
-			returnTypes: string[];
-	  }
-	| {
-			id: "adopt_graphify_file";
-			label: string;
-			/** New file path from Graphify’s definition node. */
-			file: string;
-			previousFile?: string;
-	  }
-	| {
-			id: "adopt_graphify_declaration_ref";
-			label: string;
-			/** Re-pin the span to Graphify's `source_location`, shifted + re-hashed. */
-			declarationSpan: SubsystemSourceSpan;
-			previousStartLine?: number;
-	  }
-	| {
-			id: "adopt_tree_sitter_span";
-			label: string;
-			/** Fresh span derived from graphify's start + a tree-sitter parse. */
-			declarationSpan: SubsystemSourceSpan;
-	  };
-
-/**
- * One kind of one-click fix found by an audit, with how many findings it would
- * close. Grouped by `fix.id` so the confirmation preview can offer a single
- * action per kind instead of one button per finding.
- */
-export interface SubsystemModelAuditFixGroup {
-	fixId: SubsystemModelAuditFix["id"];
-	/** Findings of this kind carrying the fix. */
-	count: number;
-}
-
-export interface SubsystemModelAuditFinding {
-	kind: SubsystemModelAuditFindingKind;
-	severity: SubsystemModelAuditSeverity;
-	componentAlias?: string;
-	componentName?: string;
-	/** Module frame key when the finding is about boundary membership. */
-	moduleKey?: string;
-	/** Process boundary key when the finding is about a process boundary. */
-	processKey?: string;
-	/** Repo purl when the finding is graph-level, about a repo rather than a node. */
-	purl?: string;
-	trailId?: string;
-	step?: number;
-	message: string;
-	/** Present when a one-click deterministic fix is available. */
-	fix?: SubsystemModelAuditFix;
-}
-
-/** Per-component checklist of what the deterministic audit actually inspected. */
-export interface SubsystemModelAuditCheck {
-	componentAlias: string;
-	componentName?: string;
-	construct?: string;
-	symbol?: string;
-	file?: string;
-	/** null = not applicable / unresolved root. */
-	fileExists: boolean | null;
-	/** null = no symbol claimed or file unresolved. */
-	symbolDeclared: boolean | null;
-	declarationFreshness?: SpanFreshness | "n/a";
-	constructMatch?: boolean | null;
-	/** Claimed construct from the model (when construct was checked). */
-	constructClaimed?: string;
-	/** Construct inferred from graphify structure (when construct was checked). */
-	constructInferred?: string;
-	/** Evidence strings from construct inference (when available). */
-	constructEvidence?: string[];
-	signature?: "match" | "mismatch" | "skipped" | "augmented" | "n/a";
-	/**
-	 * Store completeness: does an in-memory store declare the type it holds, and
-	 * is that declared type still current?
-	 * `declared` = `valueType` or named state members; `undeclared` = neither
-	 * (a gap for the agent to fill); `stale` = the pinned declaration moved, so
-	 * a declared `valueType` may be out of date; `n/a` = not a store.
-	 */
-	storeType?: "declared" | "undeclared" | "stale" | "n/a";
-	anchor?: "exact" | "file-only" | "ambiguous" | "missing" | "n/a";
-	/**
-	 * Whether graphify confirmed this component:
-	 * `confirmed` = exact anchor in cache; `weak` = cache ready but not exact;
-	 * `unavailable` = no usable cache; `skipped` = external / no source check.
-	 */
-	graphify: "confirmed" | "weak" | "unavailable" | "skipped";
-	verdict: "ok" | "issue" | "skipped";
-	note?: string;
-}
-
-/**
- * Per-component / per-module boundary membership check (process / module).
- *
- * - `module_file`  — static topology: a component's module vs its source file
- * - `process_nest` — dynamic topology: members of a multi-member module agree on process
- * - `process_claim`— dynamic topology: a component that requires a process has one
- * - `skipped`      — not applicable to this component (exempt construct, etc.)
- */
-export interface SubsystemModelAuditBoundaryCheck {
-	componentAlias: string;
-	componentName?: string;
-	kind:
-		| "module_file"
-		| "process_nest"
-		| "process_claim"
-		/** Element-store verification of the boundary this component claims. */
-		| "process_container"
-		| "skipped";
-	module?: string;
-	file?: string;
-	process?: string;
-	verdict: "ok" | "issue" | "gap" | "skipped";
-	note?: string;
-}
-
-/** Aggregated dry-run audit report (also persisted under ~/.principal/subsystem-model-audits). */
-export interface SubsystemModelAuditReport {
-	graphId: string;
-	title: string;
-	checkedAt: string;
-	needsUpdate: boolean;
-	summary: {
-		components: number;
-		filesVerified: number;
-		symbolsVerified: number;
-		declarationsFresh: number;
-		constructsMatched: number;
-		signaturesMatched: number;
-		anchorsExact: number;
-		/** Components with an exact graphify anchor (graphify-confirmed). */
-		graphifyConfirmed: number;
-		externalsSkipped: number;
-		missingFiles: number;
-		missingSymbols: number;
-		trailFailures: number;
-		/** Trail steps without an accepted call site augmentation. */
-		stepsUnconfirmed: number;
-		/** Trail steps with a stale augmentation (contentHash mismatch). */
-		stepsStale: number;
-		/** Trail steps verified against accepted call site augmentations. */
-		stepsVerified: number;
-		staleDeclarations: number;
-		constructMismatches: number;
-		signatureMismatches: number;
-		weakAnchors: number;
-		unresolved: number;
-		ok: number;
-		/** Boundary (process/module) membership. */
-		modulesClaimed: number;
-		moduleFileOk: number;
-		moduleFileMismatch: number;
-		processNestsChecked: number;
-		processNestOk: number;
-		processNestDisagree: number;
-		/** Runtime-executing components that must state a deployment unit. */
-		processRequired: number;
-		processClaimed: number;
-		processMissing: number;
-	};
-	/** What was inspected, one row per component — shown even when clean. */
-	checks: SubsystemModelAuditCheck[];
-	/** Boundary membership checks (process / module). */
-	boundaryChecks?: SubsystemModelAuditBoundaryCheck[];
-	findings: SubsystemModelAuditFinding[];
-}
-
-/** Coarse per-lane verification status for at-a-glance lane badges. */
-export type VerificationLaneStatus =
-	| "verified"
-	| "partial"
-	| "issues"
-	| "blocked"
-	| "none";
-
-/** Verification progress for one layer (construct / boundary / topology). */
-export interface SubsystemModelVerificationLayer {
-	verified: number;
-	open: number;
-	blocked: number;
-	na: number;
-	/** verified / (verified + open); 1 when nothing adjudicable is left. */
-	coverage: number;
-	/** Hard failures among open — must be 0 for fully_verified. */
-	blocking: number;
-}
-
-/**
- * Claim-based verification ledger derived from an audit report.
- *
- * - `verified` — evidence confirms the claim
- * - `open`     — claim is wrong (`blocking`) or unconfirmed (gap) → agent work
- * - `blocked`  — cannot check yet (repo/cache unavailable) → environment fix
- * - `na`       — external / skipped-by-design (excluded)
- *
- * `coverage` only counts adjudicable claims (verified + open); `blocked` and
- * `na` are excluded from the ratio but still reported so a model can't read
- * 100% while verifiable work remains stranded on an unbuilt cache.
- */
-export interface SubsystemModelVerification {
-	verified: number;
-	open: number;
-	blocked: number;
-	na: number;
-	/** verified / (verified + open); 1 when nothing adjudicable is left. */
-	coverage: number;
-	/** Hard failures among open — must be 0 for fully_verified. */
-	blocking: number;
-	byLayer: {
-		construct: SubsystemModelVerificationLayer;
-		boundary: SubsystemModelVerificationLayer;
-		topology: SubsystemModelVerificationLayer;
-	};
-}
+export type {
+	VerificationLaneStatus,
+	SubsystemModelVerificationLayer,
+	SubsystemModelVerification,
+	SubsystemVerificationLane,
+} from "../../../subsystems-core/src/audit/report";
 
 /** Per-model row for the ambient Maintain agent surface. */
 export interface MaintenanceOverviewModel {
@@ -1565,19 +1304,6 @@ export interface SubsystemModelSecondOpinionRequest {
  * Agent-authored correction awaiting (or after) human confirmation.
  * Persisted under ~/.principal/subsystem-model-proposals/<graphId>.json
  */
-/**
- * Verification lane a proposal belongs to — the four layers of the model:
- * construct (L1), static topology (L2), dynamic topology (L3), trail (L4).
- * Static topology = package/module (containment); dynamic topology = process
- * (runtime). Derived from the proposal's changes
- * (+ finding kind) at creation.
- */
-export type SubsystemVerificationLane =
-	| "construct"
-	| "static-topology"
-	| "dynamic-topology"
-	| "trail";
-
 export interface SubsystemModelProposal {
 	id: string;
 	graphId: string;

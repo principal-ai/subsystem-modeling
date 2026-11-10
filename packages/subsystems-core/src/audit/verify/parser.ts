@@ -1,0 +1,124 @@
+/**
+ * Tree-sitter parser runtime shared by every audit host.
+ *
+ * WASM assets can be bundled next to the host entry (Studio copies them to
+ * `bun/tree-sitter`) or resolved from installed dependencies (the CLI). This
+ * module checks the bundled location first, then falls back to package
+ * resolution, so one parser implementation serves both.
+ */
+
+import { existsSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { join } from 'node:path'
+import { Parser, Language, type Tree } from 'web-tree-sitter'
+import { grammarFile } from './grammar'
+
+const nodeRequire = createRequire(__filename)
+
+function wasmPath(wasm: string): string {
+  const configured = process.env['PRINCIPAL_TREE_SITTER_DIR']?.trim()
+  if (configured) {
+    const candidate = join(configured, wasm)
+    if (existsSync(candidate)) return candidate
+  }
+  // Bundled imports share the host entry's directory. The package resolver is
+  // only a fallback for unbundled source/scripts in a checkout.
+  const bundled = join(__dirname, 'tree-sitter', wasm)
+  if (existsSync(bundled)) return bundled
+  try {
+    return nodeRequire.resolve(
+      wasm === 'tree-sitter.wasm'
+        ? `web-tree-sitter/${wasm}`
+        : `tree-sitter-wasms/out/${wasm}`,
+    )
+  } catch {
+    throw new Error(
+      `Missing Tree-sitter WASM asset: ${wasm}. Install web-tree-sitter and tree-sitter-wasms, or bundle the parser assets.`,
+    )
+  }
+}
+
+let parserInit: Promise<void> | null = null
+const grammars = new Map<string, Promise<Language>>()
+
+async function loadLanguage(wasm: string): Promise<Language> {
+  let pending = grammars.get(wasm)
+  if (pending) return pending
+  pending = (async () => {
+    if (!parserInit) {
+      const runtimePath = wasmPath('tree-sitter.wasm')
+      // Emscripten's default relative lookup points at the JS bundle, not the
+      // installed dependency, after a host bundles its entry point.
+      parserInit = Parser.init({ locateFile: () => runtimePath })
+    }
+    await parserInit
+    return Language.load(wasmPath(wasm))
+  })()
+  grammars.set(wasm, pending)
+  return pending
+}
+
+export async function parserFor(file: string): Promise<Parser | null> {
+  const wasm = grammarFile(file)
+  if (!wasm) return null
+  const language = await loadLanguage(wasm)
+  const parser = new Parser()
+  parser.setLanguage(language)
+  return parser
+}
+
+/** Drop the cached runtime so the next parse re-initializes from scratch. */
+function resetParserRuntime(): void {
+  parserInit = null
+  grammars.clear()
+  parsers.clear()
+}
+
+/**
+ * One long-lived Parser per grammar, reused. Creating a Parser per file churns
+ * the WASM heap and aborts under a large run; a shared parser is safe because
+ * `parseWith` serializes every call.
+ */
+const parsers = new Map<string, Promise<Parser>>()
+export async function sharedParserFor(file: string): Promise<Parser | null> {
+  const wasm = grammarFile(file)
+  if (!wasm) return null
+  let pending = parsers.get(wasm)
+  if (!pending) {
+    pending = (async () => {
+      const language = await loadLanguage(wasm)
+      const parser = new Parser()
+      parser.setLanguage(language)
+      return parser
+    })()
+    parsers.set(wasm, pending)
+  }
+  return pending
+}
+
+let parseQueue: Promise<unknown> = Promise.resolve()
+
+/**
+ * Parse one file, serialized. web-tree-sitter's WASM runtime aborts if a parser
+ * is used concurrently, and an abort poisons the cached runtime — so calls are
+ * chained, and a throw drops the runtime so the next file re-initializes rather
+ * than failing forever.
+ */
+export function parseWith(parser: Parser, content: string): Promise<Tree> {
+  const task = async (): Promise<Tree> => {
+    try {
+      const tree = parser.parse(content)
+      if (!tree) throw new Error('Tree-sitter returned no syntax tree.')
+      return tree
+    } catch (error) {
+      resetParserRuntime()
+      throw error
+    }
+  }
+  const result = parseQueue.then(task, task)
+  parseQueue = result.then(
+    () => undefined,
+    () => undefined,
+  )
+  return result
+}

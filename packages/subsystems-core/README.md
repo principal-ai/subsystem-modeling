@@ -9,6 +9,27 @@ Subsystem model types/schema and agent-session tooling for Principal AI.
 | `@principal-ai/subsystems-core` | Browser-safe subsystem model/topic types, reference links + `isSubsystemModelDocument` |
 | `@principal-ai/subsystems-core/node` | OpenCode store, agent-session list/fetch/normalize, topic store, fixtures |
 | `@principal-ai/subsystems-core/pipeline` | Bun-safe session normalize/accumulate (no `better-sqlite3`) |
+| `@principal-ai/subsystems-core/audit` | Node audit engine, component verifier (tree-sitter), Graphify ports, report types, local cache reader |
+| `@principal-ai/subsystems-core/graphify` | Pure Graphify graph types + anchor/construct/signature resolution helpers |
+
+`./audit` is the shared implementation behind both the `principal-ai
+subsystem-model audit <id>` CLI command and Subsystems Studio. Hosts supply
+adapters for the model store, Graphify transport, augmentations, C4 evidence,
+source reads, report persistence, and commit provenance; the engine owns the
+verification policy, report assembly, and fingerprint. `./graphify` and
+`./audit`'s pure policy are browser-safe; `./audit` itself is Node-only
+(`node:crypto`, `node:fs`, `web-tree-sitter`).
+
+The Graphify dependency is a port, not a transport: `graphify-provider` defines
+the contract, and `createLocalGraphifyAuditProvider` reads the same
+`~/.principal/graphify-graphs` HEAD(+dirty) cache layout Studio writes. A host
+can substitute a build-capable provider or a future MCP daemon without changing
+the engine. Pure verdict/fix/verification rules stay browser-safe via
+`./audit/pure` (re-exported from the main entry).
+
+Studio and the CLI therefore run one audit implementation. Studio keeps its own
+Graphify adapter (it can build caches); the CLI reads caches read-only and
+reports missing checkouts/caches as explicit unavailable results.
 
 ## Schema
 

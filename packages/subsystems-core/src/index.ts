@@ -27,3 +27,7 @@ export { formatTopicReferenceLink, parseTopicReferenceLink } from './storage/top
 // `schemas/subsystem-model.schema.json`.
 export { validateSubsystemModelCrossField } from './validation';
 export type { SubsystemValidationProblem } from './validation';
+
+// Audit policy and report rules are runtime-neutral. The Node-only engine lives
+// behind `./audit` so the main entry never pulls in filesystem/crypto.
+export * from './audit/pure';
