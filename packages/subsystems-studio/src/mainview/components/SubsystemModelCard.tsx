@@ -51,10 +51,14 @@ export interface SubsystemModelCardProps {
 	openFile?: { repoKey: string | undefined; displayPath: string } | null;
 	/** The row's own trail list is expanded (details toggle). */
 	rowExpanded?: boolean;
+	/** A hovered repo card touches this model — tint the title primary. */
+	highlighted?: boolean;
 	/** Row click — opens the model in its own tab. */
 	onRowClick?: (e: ReactMouseEvent) => void;
 	/** Toggle the inline details (description / notes + trail list). */
 	onToggleDetails?: () => void;
+	/** Report row hover (own model id, or null on leave). */
+	onHoverModel?: (modelId: string | null) => void;
 	onDelete?: () => void;
 	/** Open the graph in a tab with this trail selected. */
 	onOpenTrail?: (trailId: string) => void;
@@ -214,7 +218,9 @@ export function SubsystemModelCard({
 	selectedFile,
 	openFile,
 	rowExpanded = false,
+	highlighted = false,
 	onRowClick,
+	onHoverModel,
 	onToggleDetails,
 	onDelete,
 	onOpenTrail,
@@ -261,9 +267,11 @@ export function SubsystemModelCard({
 			// rest, filled on hover, and separated by a hairline drawn on the
 			// wrapper (see `SubsystemModelsView`).
 			onMouseEnter={(e) => {
+				onHoverModel?.(graph.id);
 				e.currentTarget.style.background = theme.colors.border ?? "#333";
 			}}
 			onMouseLeave={(e) => {
+				onHoverModel?.(null);
 				e.currentTarget.style.background = "transparent";
 			}}
 			style={{
@@ -313,6 +321,8 @@ export function SubsystemModelCard({
 							whiteSpace: "normal",
 							overflowWrap: "break-word",
 							wordBreak: "break-word",
+							color: highlighted ? theme.colors.primary : theme.colors.text,
+							transition: "color 120ms ease",
 						}}
 					>
 						{graph.title}

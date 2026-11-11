@@ -138,15 +138,14 @@ function buildRepoCity(files: Array<{ path: string; size?: number }>): RepoCity 
 
 export function SubsystemReposMap({
 	graphs,
-	onOpenModel,
 	onFileCoverage,
 	selectedRepoKeys,
 	onToggleRepo,
+	onHoverRepo,
+	hoveredModelId,
 	onOpenFile,
 }: {
 	graphs: SubsystemModelSummary[];
-	/** Open a model (optionally at a trail) as a subsystem-model tab. */
-	onOpenModel: (graphId: string, trailId?: string) => void;
 	/**
 	 * Repo key → share of that repo's checkout referenced by subsystem models.
 	 * Reported as each city finishes loading.
@@ -159,6 +158,10 @@ export function SubsystemReposMap({
 	selectedRepoKeys: ReadonlySet<string>;
 	/** Toggle a repo in the list's filter set. */
 	onToggleRepo: (repoKey: string) => void;
+	/** Report card hover (repo key, or null on leave). */
+	onHoverRepo?: (repoKey: string | null) => void;
+	/** Model hovered via the list — cards isolate its layer. */
+	hoveredModelId?: string | null;
 	/**
 	 * Fired when a building on a map is clicked. The card knows which repo's
 	 * city it is, so the repo key travels with the repo-relative path.
@@ -293,7 +296,8 @@ export function SubsystemReposMap({
 			repos={repos}
 			selectedRepoKeys={selectedRepoKeys}
 			onSelectRepo={onToggleRepo}
-			onOpenModel={(modelId) => onOpenModel(modelId)}
+			onHoverRepo={onHoverRepo}
+			hoveredModelId={hoveredModelId}
 			onOpenFile={onOpenFile}
 		/>
 	);

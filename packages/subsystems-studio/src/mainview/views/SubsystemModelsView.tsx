@@ -8,10 +8,10 @@
  * per-model audit state.
  */
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { LayoutDashboard, Loader2, PencilRuler, Search, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { LayoutDashboard, PencilRuler, Search, Trash2, X } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
-import { PierreFileView, purlRepoKey } from "@principal-ai/subsystems-react";
+import { purlRepoKey } from "@principal-ai/subsystems-react";
 import type {
 	C4SketchSummary,
 	SubsystemModelSummary,
@@ -33,7 +33,6 @@ import {
 	ModalFooter,
 	ModalHeader,
 } from "../components/Modal";
-import { firstReferencedLine, graphReferencesFile } from "../subsystemModelFiles";
 import { SubsystemReposMap } from "./SubsystemReposMap";
 import { CenteredMessage } from "../ui";
 
@@ -447,230 +446,6 @@ function SubsystemsTabShell({ children }: { children: ReactNode }) {
 	);
 }
 
-/**
- * File preview pane — the right-hand `PierreFileView` for a selected file,
- * read through `readSubsystemFile` (purl + repo-relative path). Shared by the
- * list view and the repo City map so both open files the same way.
- *
- * Positioning is left to the caller via `style` (the two views dock it
- * differently); the inner layout is fixed.
- */
-function FilePreviewPane({
-	file,
-	readFile,
-	onClose,
-	style,
-}: {
-	file: { repoKey?: string; displayPath: string; focusLine?: number | null };
-	readFile: (path: string) => Promise<string>;
-	onClose: () => void;
-	style?: CSSProperties;
-}) {
-	const { theme } = useTheme();
-	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
-	// Read the file here (not inside PierreFileView) so the pane can slide in
-	// immediately showing a loading state instead of an empty body. Keep the
-	// latest reader in a ref so the effect only re-runs when the file changes.
-	const readRef = useRef(readFile);
-	readRef.current = readFile;
-	const fileKey = `${file.repoKey ?? ""}\0${file.displayPath}`;
-	const [content, setContent] = useState<string | null>(null);
-	const [error, setError] = useState<string | null>(null);
-	useEffect(() => {
-		let cancelled = false;
-		setContent(null);
-		setError(null);
-		(async () => {
-			try {
-				const text = await readRef.current(file.displayPath);
-				if (!cancelled) setContent(text);
-			} catch (err) {
-				if (!cancelled) {
-					setError(err instanceof Error ? err.message : String(err));
-				}
-			}
-		})();
-		return () => {
-			cancelled = true;
-		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [fileKey]);
-	return (
-		<div
-			style={{
-				display: "flex",
-				flexDirection: "column",
-				minHeight: 0,
-				background: theme.colors.background,
-				...style,
-			}}
-		>
-			<div
-				style={{
-					flexShrink: 0,
-					display: "flex",
-					alignItems: "center",
-					gap: 8,
-					padding: "8px 12px",
-					borderBottom: `1px solid ${theme.colors.border ?? "#333"}`,
-				}}
-			>
-				<span
-					style={{
-						flex: 1,
-						minWidth: 0,
-						fontSize: theme.fontSizes[1],
-						fontFamily: theme.fonts.monospace,
-						whiteSpace: "nowrap",
-						overflow: "hidden",
-						textOverflow: "ellipsis",
-					}}
-					title={file.displayPath}
-				>
-					{file.displayPath}
-				</span>
-				<button
-					type="button"
-					onClick={onClose}
-					title="Close preview"
-					aria-label="Close file preview"
-					style={{
-						flexShrink: 0,
-						border: "none",
-						background: "transparent",
-						color: muted,
-						cursor: "pointer",
-						fontSize: theme.fontSizes[1],
-						lineHeight: 1,
-						padding: "2px 6px",
-						borderRadius: 4,
-					}}
-				>
-					✕
-				</button>
-			</div>
-			<div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-				{error ? (
-					<div
-						style={{
-							padding: 16,
-							fontSize: theme.fontSizes[1],
-							color: "#e5534b",
-							fontFamily: theme.fonts.body,
-						}}
-					>
-						{error}
-					</div>
-				) : content == null ? (
-					<div
-						style={{
-							height: "100%",
-							display: "flex",
-							alignItems: "center",
-							justifyContent: "center",
-							gap: 8,
-							color: muted,
-							fontSize: theme.fontSizes[1],
-							fontFamily: theme.fonts.body,
-						}}
-					>
-						<Loader2 size={16} className="principal-studio-spin" />
-						Loading…
-					</div>
-				) : (
-					<PierreFileView
-						key={`${fileKey}\0${file.focusLine ?? ""}`}
-						filePath={file.displayPath}
-						fileName={
-							file.displayPath.split("/").pop() ?? file.displayPath
-						}
-						readFile={async () => content}
-						background={theme.colors.background}
-						focusLine={file.focusLine ?? undefined}
-					/>
-				)}
-			</div>
-		</div>
-	);
-}
-
-/**
- * Right-docked preview that slides in from / out to the right edge. Keeps the
- * pane mounted through the exit so the transform animates instead of the pane
- * vanishing; `file === null` starts the exit.
- */
-function SlideInPreview({
-	file,
-	readFile,
-	onClose,
-	width,
-	onResizeStart,
-}: {
-	file: { repoKey?: string; displayPath: string; focusLine?: number | null } | null;
-	readFile: (path: string) => Promise<string>;
-	onClose: () => void;
-	width: number;
-	onResizeStart: (e: React.MouseEvent) => void;
-}) {
-	const { theme } = useTheme();
-	const [entered, setEntered] = useState(false);
-	const [displayed, setDisplayed] = useState(file);
-	useEffect(() => {
-		if (file) {
-			setDisplayed(file);
-			const raf = requestAnimationFrame(() => setEntered(true));
-			return () => cancelAnimationFrame(raf);
-		}
-		setEntered(false);
-		const t = setTimeout(() => setDisplayed(null), 220);
-		return () => clearTimeout(t);
-	}, [file]);
-	if (!displayed) return null;
-	return (
-		<div
-			style={{
-				position: "absolute",
-				top: 0,
-				right: 0,
-				bottom: 0,
-				width,
-				maxWidth: "100%",
-				zIndex: 4,
-				display: "flex",
-				transform: entered ? "translateX(0)" : "translateX(100%)",
-				transition: "transform 220ms cubic-bezier(0.4, 0, 0.2, 1)",
-				pointerEvents: entered ? "auto" : "none",
-			}}
-		>
-			<div
-				onMouseDown={onResizeStart}
-				aria-label="Resize file preview"
-				title="Drag to resize"
-				style={{
-					position: "absolute",
-					top: 0,
-					bottom: 0,
-					left: -3,
-					width: 3,
-					zIndex: 5,
-					cursor: "col-resize",
-					background: theme.colors.border,
-				}}
-			/>
-			<FilePreviewPane
-				file={displayed}
-				readFile={readFile}
-				onClose={onClose}
-				style={{
-					flex: 1,
-					minWidth: 0,
-					borderLeft: `1px solid ${theme.colors.border ?? "#333"}`,
-				}}
-			/>
-		</div>
-	);
-}
-
 export function SubsystemModelsView({
 	scope,
 }: {
@@ -708,72 +483,20 @@ export function SubsystemModelsView({
 		setQuery("");
 		setSelectedRepos(new Set());
 	}, []);
+	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
+
+	/** Repo hovered via the rail — touching models tint primary. */
+	const [hoveredRepoKey, setHoveredRepoKey] = useState<string | null>(null);
+	/** Model hovered via the list — the rail isolates its layer. */
+	const [hoveredModelId, setHoveredModelId] = useState<string | null>(null);
 	/** Rows expanded to list all their trails (row click toggles). */
 	const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(
 		() => new Set(),
 	);
-	/** Map-mode file preview (a city building click). List mode has no preview. */
-	const [previewFile, setPreviewFile] = useState<{
-		graphId: string;
-		repoKey: string | undefined;
-		displayPath: string;
-		/** 1-based line to highlight (first line the graph references). */
-		focusLine?: number | null;
-	} | null>(null);
 	/** Last `panelGraphs` handed to the map; reused while its contents hold. */
 	const panelGraphsRef = useRef<SubsystemModelSummary[] | null>(null);
 	/** Last repo-filter-exempt graphs handed to the rail; same reuse. */
 	const mapPanelGraphsRef = useRef<SubsystemModelSummary[] | null>(null);
-
-	// Preview pane width (px) — docked right in map mode, draggable by its
-	// left edge. Starts wide and clamps so the map keeps some room.
-	const [previewWidth, setPreviewWidth] = useState(800);
-	const [previewDrag, setPreviewDrag] = useState(false);
-	const previewDragStartX = useRef(0);
-	const previewDragStartWidth = useRef(800);
-	const PREVIEW_MIN_WIDTH = 320;
-
-	const onPreviewResizeStart = useCallback(
-		(e: React.MouseEvent) => {
-			e.preventDefault();
-			previewDragStartX.current = e.clientX;
-			previewDragStartWidth.current = previewWidth;
-			setPreviewDrag(true);
-		},
-		[previewWidth],
-	);
-
-	useEffect(() => {
-		if (!previewDrag) return;
-		const onMove = (e: MouseEvent) => {
-			// The handle sits on the pane's left edge — dragging left widens it.
-			const delta = previewDragStartX.current - e.clientX;
-			setPreviewWidth(
-				Math.min(
-					Math.max(previewDragStartWidth.current + delta, PREVIEW_MIN_WIDTH),
-					Math.max(window.innerWidth - 480, PREVIEW_MIN_WIDTH),
-				),
-			);
-		};
-		const onUp = () => setPreviewDrag(false);
-		document.addEventListener("mousemove", onMove);
-		document.addEventListener("mouseup", onUp);
-		return () => {
-			document.removeEventListener("mousemove", onMove);
-			document.removeEventListener("mouseup", onUp);
-		};
-	}, [previewDrag]);
-
-	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
-
-	useEffect(() => {
-		if (!previewFile) return;
-		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "Escape") setPreviewFile(null);
-		};
-		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
-	}, [previewFile]);
 
 	const refresh = useCallback(async () => {
 		try {
@@ -844,22 +567,6 @@ export function SubsystemModelsView({
 		[],
 	);
 
-	/** Map-mode opener: the repo map only knows model ids. */
-	const onOpenModelById = useCallback(
-		(graphId: string, trailId?: string) => {
-			const graph = graphs?.find((g) => g.id === graphId);
-			if (graph) {
-				void onOpen(graph, trailId);
-				return;
-			}
-			void electrobun.rpc!.request.openSubsystemModel({
-				graphId,
-				...(trailId ? { trailId } : {}),
-			});
-		},
-		[graphs, onOpen],
-	);
-
 	/** Open an authored C4 hypothesis in its own tab. */
 	const onOpenSketch = useCallback((sketch: C4SketchSummary) => {
 		void electrobun.rpc!.request.openC4Sketch({ sketchId: sketch.id });
@@ -880,24 +587,6 @@ export function SubsystemModelsView({
 			setError(err instanceof Error ? err.message : String(err));
 		}
 	}, []);
-
-/** Map mode: a city building click opens the file in the shared preview. */
-	const onOpenMapFile = useCallback(
-		(file: { repoKey: string | undefined; displayPath: string }) => {
-			const graph = graphs?.find((g) =>
-				graphReferencesFile(g, file.repoKey, file.displayPath),
-			);
-			setPreviewFile({
-				graphId: graph?.id ?? "",
-				repoKey: file.repoKey,
-				displayPath: file.displayPath,
-				focusLine: graph
-					? firstReferencedLine(graph, file.repoKey, file.displayPath)
-					: null,
-			});
-		},
-		[graphs],
-	);
 
 	/** Details toggle: open/close the row's inline trail list. */
 	const onToggleDetails = useCallback(
@@ -927,22 +616,6 @@ export function SubsystemModelsView({
 		[onOpen],
 	);
 
-	const readPreviewFile = useCallback(
-		async (_path: string): Promise<string> => {
-			if (!previewFile) throw new Error("No file selected");
-			const res = await electrobun.rpc!.request.readSubsystemFile({
-				purl: previewFile.repoKey,
-				file: previewFile.displayPath,
-			});
-			if (!res.ok || res.content == null) {
-				throw new Error(res.error ?? "Failed to read file");
-			}
-			return res.content;
-		},
-		[previewFile],
-	);
-
-
 	/** Arm the delete confirmation modal for a model. */
 	const requestDelete = useCallback((graph: SubsystemModelSummary) => {
 		setConfirmId(graph.id);
@@ -964,9 +637,6 @@ export function SubsystemModelsView({
 				next.delete(graph.id);
 				return next;
 			});
-			setPreviewFile((current) =>
-				current?.graphId === graph.id ? null : current,
-			);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
 		}
@@ -1179,8 +849,13 @@ windowedGraphs.length === 0 ? (
 							<SubsystemModelCard
 								graph={graph}
 								rowExpanded={expandedIds.has(graph.id)}
+								highlighted={
+									hoveredRepoKey != null &&
+									repoKeysForGraph(graph).has(hoveredRepoKey)
+								}
 								onRowClick={() => onRowClick(graph)}
 								onToggleDetails={() => onToggleDetails(graph)}
+								onHoverModel={setHoveredModelId}
 								onDelete={() => requestDelete(graph)}
 								onOpenTrail={(trailId) => void onOpen(graph, trailId)}
 							/>
@@ -1277,13 +952,12 @@ windowedGraphs.length === 0 ? (
 						display: "flex",
 						position: "relative",
 						overflow: "hidden",
-						userSelect: previewDrag ? "none" : undefined,
 					}}
 				>
 					<div
 						className="subsystem-map-rail"
 						style={{
-							width: "30%",
+							width: "40%",
 							flexShrink: 0,
 							minHeight: 0,
 							display: "flex",
@@ -1297,20 +971,13 @@ windowedGraphs.length === 0 ? (
 						<style>{`.subsystem-map-rail,.subsystem-map-rail *{scrollbar-width:none;}.subsystem-map-rail::-webkit-scrollbar,.subsystem-map-rail *::-webkit-scrollbar{display:none;}`}</style>
 						<SubsystemReposMap
 							graphs={mapPanelGraphs}
-							onOpenModel={onOpenModelById}
 							selectedRepoKeys={selectedRepos}
 							onToggleRepo={onToggleRepo}
-							onOpenFile={onOpenMapFile}
-						/>
+							onHoverRepo={setHoveredRepoKey}
+							hoveredModelId={hoveredModelId}
+							/>
 					</div>
 					{renderListScroll(false)}
-					<SlideInPreview
-						file={previewFile}
-						readFile={readPreviewFile}
-						onClose={() => setPreviewFile(null)}
-						width={previewWidth}
-						onResizeStart={onPreviewResizeStart}
-					/>
 				</div>
 			</SubsystemsTabBody>
 			)}

@@ -6,7 +6,6 @@ import {
 	type CityData,
 } from "@principal-ai/file-city-react";
 import {
-	SubsystemCoverageMapCard,
 	SubsystemCoverageMapCards,
 	type SubsystemCoverageRepo,
 } from "./SubsystemCoverageMapCards";
@@ -347,7 +346,6 @@ const meta = {
 		repos: ALL_REPOS,
 		selectedRepoKeys: new Set(["pkg:github/acme/payments"]),
 		onSelectRepo: (repoKey: string) => console.info("select repo", repoKey),
-		onOpenModel: (modelId: string) => console.info("open model", modelId),
 	},
 } satisfies Meta<typeof SubsystemCoverageMapCards>;
 
@@ -357,8 +355,7 @@ type Story = StoryObj<typeof meta>;
 /**
  * The Map pane as repo cards. Each card is a File City with one glow layer per
  * subsystem model — blue, purple, green in `acme/payments` — and uncovered
- * buildings muted by the collapse isolation mode. The header's Models pill
- * opens the color legend.
+ * buildings muted by the collapse isolation mode.
  */
 export const Default: Story = {};
 
@@ -399,34 +396,4 @@ export const Wide: Story = {
 			</div>
 		),
 	],
-};
-
-/**
- * The Models legend open on both cards: colored dot, model title, and how many
- * of that model's anchored files actually exist in the checkout. Clicking a row
- * opens the model.
- */
-export const ModelsLegend: Story = {
-	render: () => (
-		<div
-			style={{
-				height: "100vh",
-				display: "grid",
-				gridTemplateColumns: "repeat(2, minmax(0, 400px))",
-				gap: 16,
-				padding: 16,
-				alignContent: "start",
-			}}
-		>
-			{ALL_REPOS.slice(0, 2).map((repo) => (
-				<SubsystemCoverageMapCard
-					key={repo.repoKey}
-					repo={repo}
-					defaultModelsOpen
-					onSelectRepo={() => {}}
-					onOpenModel={(modelId) => console.info("open model", modelId)}
-				/>
-			))}
-		</div>
-	),
 };

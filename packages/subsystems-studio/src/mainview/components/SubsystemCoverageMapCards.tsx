@@ -18,14 +18,14 @@
  * sits beside) the File City canvas in `SubsystemReposMap`.
  */
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
 	ArchitectureMapHighlightLayers,
 	type CityData,
 	type HighlightLayer,
 } from "@principal-ai/file-city-react";
-import { FolderGit2, LayoutDashboard, X } from "lucide-react";
+import { FolderGit2, LayoutDashboard } from "lucide-react";
 
 /** Layer colors in assignment order — distinct glows on the dark city base. */
 export const MODEL_LAYER_COLORS = [
@@ -155,59 +155,20 @@ export function collectModelColors(
 	return colors;
 }
 
-/** Small header pill, matching the Sky card's action buttons. */
-function HeaderAction({
-	active,
-	onClick,
-	children,
-}: {
-	active?: boolean;
-	onClick: () => void;
-	children: ReactNode;
-}) {
-	const { theme } = useTheme();
-	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
-	return (
-		<button
-			type="button"
-			onClick={onClick}
-			aria-pressed={active}
-			style={{
-				flexShrink: 0,
-				display: "inline-flex",
-				alignItems: "center",
-				gap: 4,
-				padding: "4px 8px",
-				borderRadius: 4,
-				border: `1px solid ${active ? theme.colors.primary : (theme.colors.border ?? "#333")}`,
-				background: active ? `${theme.colors.primary}1a` : "transparent",
-				color: active ? theme.colors.primary : muted,
-				cursor: "pointer",
-				fontSize: theme.fontSizes[0],
-				fontFamily: theme.fonts.body,
-				lineHeight: 1.2,
-				transition: "color 120ms ease, border-color 120ms ease",
-			}}
-		>
-			{children}
-		</button>
-	);
-}
-
 export interface SubsystemCoverageMapCardProps {
 	repo: SubsystemCoverageRepo;
 	/** Stable model-id → layer color, so a multi-repo model keeps its color. */
 	modelColors?: ReadonlyMap<string, string>;
 	/** The host's focused repo, highlighted with the primary border. */
 	selected?: boolean;
+	/** Report card hover so the host can tint this repo's models elsewhere. */
+	onHoverRepo?: (repoKey: string | null) => void;
+	/** Model hovered via the list — show only its layer. */
+	hoveredModelId?: string | null;
 	/** Focus / open this repo. */
 	onSelectRepo?: () => void;
-	/** Open a model in its own tab. */
-	onOpenModel?: (modelId: string) => void;
 	/** Open a file clicked on the map. */
 	onOpenFile?: (file: { repoKey: string; displayPath: string }) => void;
-	/** Start with the Models legend open (Storybook / docs). */
-	defaultModelsOpen?: boolean;
 }
 
 /**
@@ -219,15 +180,14 @@ export function SubsystemCoverageMapCard({
 	modelColors,
 	selected = false,
 	onSelectRepo,
-	onOpenModel,
 	onOpenFile,
-	defaultModelsOpen = false,
+	onHoverRepo,
+	hoveredModelId,
 }: SubsystemCoverageMapCardProps) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 	const border = theme.colors.border ?? "#333";
-	const [modelsOpen, setModelsOpen] = useState(defaultModelsOpen);
-	const [nameHovered, setNameHovered] = useState(false);
+	const [cardHovered, setCardHovered] = useState(false);
 	const [avatarBroken, setAvatarBroken] = useState(false);
 
 	const coloredModels = useMemo(
@@ -245,20 +205,45 @@ export function SubsystemCoverageMapCard({
 		() => coverageForRepo(repo.cityData, coloredModels),
 		[repo.cityData, coloredModels],
 	);
-	const cityPaths = useMemo(
-		() =>
-			new Set(
-				(repo.cityData?.buildings ?? []).map((building) =>
-					normalizeCoveragePath(building.path),
-				),
-			),
-		[repo.cityData],
-	);
 	const layers = useMemo(() => coverageLayers(coloredModels), [coloredModels]);
-	const colorFor = (model: SubsystemCoverageModel) => model.color!;
+	/** The hovered model has a layer in this repo — isolate it. Otherwise
+		keep every layer and dim the card instead. */
+	const hoveredPresent =
+		hoveredModelId != null && layers.some((l) => l.id === hoveredModelId);
+	const displayLayers = useMemo(
+		() =>
+			layers.map((layer) => ({
+				// Isolate the hovered model where it lives; everywhere else the
+				// composite stays exactly as it is.
+				...layer,
+				enabled:
+					hoveredModelId == null || !hoveredPresent || layer.id === hoveredModelId,
+			})),
+		[layers, hoveredModelId, hoveredPresent],
+	);
 
 	return (
 		<div
+			role={onSelectRepo ? "checkbox" : undefined}
+			aria-checked={onSelectRepo ? selected : undefined}
+			aria-label={onSelectRepo ? repo.label : undefined}
+			tabIndex={onSelectRepo ? 0 : undefined}
+			onClick={() => onSelectRepo?.()}
+			onMouseEnter={() => {
+				setCardHovered(true);
+				onHoverRepo?.(repo.repoKey);
+			}}
+			onMouseLeave={() => {
+				setCardHovered(false);
+				onHoverRepo?.(null);
+			}}
+			onKeyDown={(e) => {
+				if (!onSelectRepo) return;
+				if (e.key === "Enter" || e.key === " ") {
+					e.preventDefault();
+					onSelectRepo();
+				}
+			}}
 			style={{
 				position: "relative",
 				width: "100%",
@@ -269,14 +254,12 @@ export function SubsystemCoverageMapCard({
 				borderRadius: 8,
 				border: `1px solid ${selected ? theme.colors.primary : border}`,
 				background: theme.colors.surface ?? theme.colors.backgroundSecondary,
+				cursor: onSelectRepo ? "pointer" : "default",
 			}}
 		>
 			<div style={{ flexShrink: 0, padding: 8 }}>
 				<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-					<button
-						type="button"
-						onClick={onSelectRepo}
-						disabled={!onSelectRepo}
+					<div
 						title={repo.label}
 						style={{
 							flexShrink: 0,
@@ -287,7 +270,6 @@ export function SubsystemCoverageMapCard({
 							border: `1px solid ${border}`,
 							background: theme.colors.background,
 							overflow: "hidden",
-							cursor: onSelectRepo ? "pointer" : "default",
 						}}
 					>
 						{repo.avatarUrl && !avatarBroken ? (
@@ -302,22 +284,13 @@ export function SubsystemCoverageMapCard({
 						) : (
 							<FolderGit2 size={20} color={muted} />
 						)}
-					</button>
+					</div>
 
 					<div style={{ flex: 1, minWidth: 0 }}>
-						<button
-							type="button"
-							onClick={onSelectRepo}
-							disabled={!onSelectRepo}
-							onMouseEnter={() => setNameHovered(true)}
-							onMouseLeave={() => setNameHovered(false)}
+						<div
 							style={{
 								display: "block",
 								width: "100%",
-								padding: 0,
-								border: "none",
-								background: "transparent",
-								textAlign: "left",
 								overflow: "hidden",
 								textOverflow: "ellipsis",
 								whiteSpace: "nowrap",
@@ -326,15 +299,14 @@ export function SubsystemCoverageMapCard({
 								fontWeight: 600,
 								lineHeight: "20px",
 								color:
-									onSelectRepo && nameHovered
+									(onSelectRepo && cardHovered) || hoveredPresent
 										? theme.colors.primary
 										: theme.colors.text,
-								cursor: onSelectRepo ? "pointer" : "default",
 								transition: "color 120ms ease",
 							}}
 						>
 							{repo.name}
-						</button>
+						</div>
 						<div
 							style={{
 								display: "flex",
@@ -347,11 +319,6 @@ export function SubsystemCoverageMapCard({
 								color: muted,
 							}}
 						>
-							<span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-								<LayoutDashboard size={11} aria-hidden="true" />
-								{repo.models.length} model{repo.models.length === 1 ? "" : "s"}
-							</span>
-							<span aria-hidden="true">·</span>
 							{repo.cityData ? (
 								<span
 									title={`${coverage.referenced} of ${coverage.total} files covered by subsystem models`}
@@ -362,15 +329,13 @@ export function SubsystemCoverageMapCard({
 							) : (
 								<span>loading city…</span>
 							)}
+							<span aria-hidden="true">·</span>
+							<span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+								<LayoutDashboard size={11} aria-hidden="true" />
+								{repo.models.length} model{repo.models.length === 1 ? "" : "s"}
+							</span>
 						</div>
 					</div>
-
-					<HeaderAction
-						active={modelsOpen}
-						onClick={() => setModelsOpen((open) => !open)}
-					>
-						Models
-					</HeaderAction>
 				</div>
 
 				{/* Coverage bar: filled share of the repo the models reference. */}
@@ -412,7 +377,7 @@ export function SubsystemCoverageMapCard({
 				{repo.cityData ? (
 					<ArchitectureMapHighlightLayers
 						cityData={repo.cityData}
-						highlightLayers={layers}
+						highlightLayers={displayLayers}
 						fullSize
 						showFileNames={false}
 						showFileTypeIcons={false}
@@ -447,126 +412,6 @@ export function SubsystemCoverageMapCard({
 					</div>
 				)}
 
-				{modelsOpen && (
-					<div
-						style={{
-							position: "absolute",
-							inset: 0,
-							zIndex: 2,
-							display: "flex",
-							flexDirection: "column",
-							background: theme.colors.background,
-						}}
-					>
-						<div
-							style={{
-								flexShrink: 0,
-								display: "flex",
-								alignItems: "center",
-								gap: 8,
-								padding: "6px 8px",
-								borderBottom: `1px solid ${border}`,
-								fontSize: theme.fontSizes[0],
-								fontFamily: theme.fonts.monospace,
-								color: muted,
-							}}
-						>
-							<span style={{ color: theme.colors.text }}>
-								{repo.models.length} model{repo.models.length === 1 ? "" : "s"}
-							</span>
-							<span>· color = coverage layer</span>
-							<button
-								type="button"
-								onClick={() => setModelsOpen(false)}
-								aria-label="Close models list"
-								style={{
-									marginLeft: "auto",
-									padding: 2,
-									border: "none",
-									background: "transparent",
-									color: muted,
-									cursor: "pointer",
-									display: "inline-flex",
-								}}
-							>
-								<X size={12} />
-							</button>
-						</div>
-						<div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-							{coloredModels.map((model) => {
-								const color = colorFor(model);
-								const covered = new Set(
-									model.files
-										.map(normalizeCoveragePath)
-										.filter((path) => cityPaths.has(path)),
-								).size;
-								return (
-									<button
-										key={model.id}
-										type="button"
-										onClick={() => onOpenModel?.(model.id)}
-										disabled={!onOpenModel}
-										title={`Open ${model.title}`}
-										style={{
-											display: "flex",
-											alignItems: "center",
-											gap: 8,
-											width: "100%",
-											padding: "7px 10px",
-											border: "none",
-											borderBottom: `1px solid ${border}`,
-											background: "transparent",
-											color: theme.colors.text,
-											cursor: onOpenModel ? "pointer" : "default",
-											textAlign: "left",
-											fontFamily: theme.fonts.body,
-											fontSize: theme.fontSizes[1],
-										}}
-									>
-										<span
-											aria-hidden="true"
-											title={
-												covered === 0
-													? "No anchored files in this checkout"
-													: undefined
-											}
-											style={{
-												flexShrink: 0,
-												width: 9,
-												height: 9,
-												borderRadius: 999,
-												background: color,
-												opacity: covered === 0 ? 0.35 : 1,
-												boxShadow: covered === 0 ? "none" : `0 0 6px ${color}`,
-											}}
-										/>
-										<span
-											style={{
-												flex: 1,
-												minWidth: 0,
-												overflow: "hidden",
-												textOverflow: "ellipsis",
-												whiteSpace: "nowrap",
-											}}
-										>
-											{model.title}
-										</span>
-										<span
-											style={{
-												flexShrink: 0,
-												fontFamily: theme.fonts.monospace,
-												fontSize: theme.fontSizes[0],
-												color: muted,
-											}}
-										>
-											{covered} file{covered === 1 ? "" : "s"}
-										</span>
-									</button>
-								);
-							})}
-						</div>
-					</div>
-				)}
 			</div>
 		</div>
 	);
@@ -576,10 +421,12 @@ export interface SubsystemCoverageMapCardsProps {
 	repos: readonly SubsystemCoverageRepo[];
 	/** Repos currently filtering the list (`SubsystemReposMap`'s `selectedRepoKeys`). */
 	selectedRepoKeys?: ReadonlySet<string>;
+	/** Report card hover (repo key, or null on leave). */
+	onHoverRepo?: (repoKey: string | null) => void;
+	/** Model hovered via the list — isolate its layer. */
+	hoveredModelId?: string | null;
 	/** Focus a repo (pan the map / open its models). */
 	onSelectRepo?: (repoKey: string) => void;
-	/** Open a model in its own tab. */
-	onOpenModel?: (modelId: string) => void;
 	/** Open a file clicked on a card's map. */
 	onOpenFile?: (file: { repoKey: string; displayPath: string }) => void;
 	/** Minimum card width before the grid adds another column. */
@@ -594,8 +441,9 @@ export function SubsystemCoverageMapCards({
 	repos,
 	selectedRepoKeys,
 	onSelectRepo,
-	onOpenModel,
 	onOpenFile,
+	onHoverRepo,
+	hoveredModelId,
 	minColumnWidth = 300,
 }: SubsystemCoverageMapCardsProps) {
 	const { theme } = useTheme();
@@ -663,10 +511,11 @@ export function SubsystemCoverageMapCards({
 							repo={repo}
 							modelColors={modelColors}
 							selected={selectedRepoKeys?.has(repo.repoKey) ?? false}
+						onHoverRepo={onHoverRepo}
+						hoveredModelId={hoveredModelId}
 							onSelectRepo={
 								onSelectRepo ? () => onSelectRepo(repo.repoKey) : undefined
 							}
-							onOpenModel={onOpenModel}
 							onOpenFile={onOpenFile}
 						/>
 					</div>
