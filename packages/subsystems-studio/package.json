@@ -83,7 +83,7 @@
     "@principal-ai/codebase-composition": "0.2.58",
     "@principal-ai/principal-view-core": "^0.28.14",
     "@principal-ai/principal-view-react": "^0.15.10",
-    "@principal-ai/repository-monitoring-server": "^2.3.3",
+    "@principal-ai/repository-monitoring-server": "^4.0.3",
     "@principal-ai/subsystems-core": "^0.51.5",
     "@principal-ai/subsystems-react": "^0.56.32",
     "@react-spring/three": "^10.1.2",

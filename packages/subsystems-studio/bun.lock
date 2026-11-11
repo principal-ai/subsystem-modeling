@@ -17,7 +17,7 @@
         "@principal-ai/codebase-composition": "0.2.58",
         "@principal-ai/principal-view-core": "^0.28.14",
         "@principal-ai/principal-view-react": "^0.15.10",
-        "@principal-ai/repository-monitoring-server": "^2.3.3",
+        "@principal-ai/repository-monitoring-server": "^4.0.3",
         "@principal-ai/subsystems-core": "^0.51.5",
         "@principal-ai/subsystems-react": "^0.56.32",
         "@react-spring/three": "^10.1.2",
@@ -397,7 +397,7 @@
 
     "@principal-ai/repository-monitoring": ["@principal-ai/repository-monitoring@0.1.13", "", { "dependencies": { "@parcel/watcher": "^2.5.6", "chokidar": "^3.6.0", "minimatch": "^9.0.4" }, "peerDependencies": { "typescript": "^5.9.3" } }, "sha512-V5/sOE8CcCNA5rObp1XKyN35cSJL+oKmKDFsN7RKS+ixWDewOSDbztmZ27og61hWqR3t2i45VO+lEJq90Kz1Fg=="],
 
-    "@principal-ai/repository-monitoring-server": ["@principal-ai/repository-monitoring-server@2.3.3", "", { "dependencies": { "@opentelemetry/api": "^1.9.0", "@opentelemetry/exporter-trace-otlp-http": "^0.200.0", "@opentelemetry/resources": "^2.0.0", "@opentelemetry/sdk-trace-node": "^2.0.0", "@opentelemetry/semantic-conventions": "^1.28.0", "@principal-ai/alexandria-core-library": "^0.7.0", "@principal-ai/codebase-composition": "^0.2.58", "@principal-ai/codebase-quality-lenses": "latest", "@principal-ai/repository-abstraction": "^0.5.7", "@principal-ai/repository-monitoring": "^0.1.12", "async-mutex": "^0.5.0", "electron-log": "^5.3.2", "globby": "^16.0.0", "minimatch": "^10.1.1", "uuid": "^9.0.0" }, "peerDependencies": { "electron": ">=28.0.0", "react": ">=18.0.0", "react-dom": ">=18.0.0" }, "optionalPeers": ["electron", "react", "react-dom"], "bin": { "repo-monitor-daemon": "dist/daemon/repository-monitoring-daemon.js" } }, "sha512-HwrdXqb/kbc1q6duaRPUUmVsgQRZi5FFRmlWzkEvvv6vpqLnlcQwxf9AndKNvb8cN+qxR8WztqcBsqkMUvpnzg=="],
+    "@principal-ai/repository-monitoring-server": ["@principal-ai/repository-monitoring-server@4.0.3", "", { "dependencies": { "@opentelemetry/api": "^1.9.0", "@opentelemetry/exporter-trace-otlp-http": "^0.200.0", "@opentelemetry/resources": "^2.0.0", "@opentelemetry/sdk-trace-node": "^2.0.0", "@opentelemetry/semantic-conventions": "^1.28.0", "@principal-ai/codebase-composition": "^0.2.58", "@principal-ai/codebase-quality-lenses": "latest", "@principal-ai/repository-abstraction": "^0.5.7", "@principal-ai/repository-monitoring": "^0.1.12", "async-mutex": "^0.5.0", "globby": "^16.0.0", "minimatch": "^10.1.1", "uuid": "^9.0.0" }, "bin": { "repo-monitor-daemon": "dist/daemon/repository-monitoring-daemon.js" } }, "sha512-FXfLtqbna8Eeq48Sn/mrIQqjP0Wkdglr7T4UAC/BHGX+wuGBW3QkEeaYePCqfPLWKwcQVwJn0UM19vuyP4hPVg=="],
 
     "@principal-ai/subsystems-core": ["@principal-ai/subsystems-core@0.51.5", "", { "dependencies": { "better-sqlite3": "^13.0.0", "tree-sitter-wasms": "^0.1.13", "web-tree-sitter": "^0.25.10" }, "peerDependencies": { "@principal-ai/agent-monitoring": "^0.3.43" } }, "sha512-7lBWyn3oyveUh1b4NYIcj9xlnsKVcFOLZr3KPON9i95EMAs4iNGBzkiuJ2DvbWPAFYN8r8In86RuSyEUJNQ1Iw=="],
 
