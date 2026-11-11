@@ -108,12 +108,8 @@ const meta = {
 		selectedFile: null,
 		openFile: null,
 		rowExpanded: false,
-		copied: false,
-		sharing: false,
 		onRowClick: () => {},
 		onToggleDetails: () => {},
-		onCopyPath: () => {},
-		onShareGist: () => {},
 		onDelete: () => {},
 		onOpenTrail: () => {},
 		onOpenComponent: () => {},
@@ -123,7 +119,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Baseline row, collapsed: title and the details / copy-path / gist / delete actions. */
+/** Baseline row, collapsed: title and the details / delete actions. */
 export const Default: Story = {};
 
 /** Expanded: the description sits on the left, the trail list on the right. */
@@ -175,15 +171,4 @@ export const FileUnreferenced: Story = {
 		graph: WITH_DESC,
 		selectedFile: { repoKey: PAYMENTS, displayPath: "src/unknown.ts" },
 	},
-};
-
-/** The copy-path action just succeeded. */
-export const Copied: Story = { args: { copied: true } };
-
-/** A gist share is in flight. */
-export const Sharing: Story = { args: { sharing: true } };
-
-/** The model has already been shared — the Share button opens the update flow. */
-export const SharedGist: Story = {
-	args: { graph: { ...BASE, gist: { id: "abc123", fileName: "payments.json" } } },
 };

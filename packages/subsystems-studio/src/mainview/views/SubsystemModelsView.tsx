@@ -1,24 +1,17 @@
 /**
  * SubsystemModelsView — the "Subsystems" tab: a list of stored subsystem
- * graphs (~/.principal/subsystem-models) with an aggregate file tree on the
- * left (union of `summary.files` across the listed graphs, grouped per repo).
- * Clicking a row opens the graph in a subsystem-model tab via the host;
- * clicking a file opens its owning graph.
+ * graphs (~/.principal/subsystem-models). Clicking a row opens the graph in
+ * a subsystem-model tab via the host.
  *
  * The list loads once and refreshes from host-pushed store changes. Verification
  * and maintenance live in the Maintenance tab; the list no longer surfaces
  * per-model audit state.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { LayoutDashboard, LayoutGrid, List, Loader2, PencilRuler, Share2, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { LayoutDashboard, Loader2, PencilRuler, Search, Trash2, X } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
-import {
-	buildRepoGroups,
-	purlRepoKey,
-	PierreFileView,
-	type RepoGroup,
-} from "@principal-ai/subsystems-react";
+import { PierreFileView, purlRepoKey } from "@principal-ai/subsystems-react";
 import type {
 	C4SketchSummary,
 	SubsystemModelSummary,
@@ -31,11 +24,6 @@ import {
 	subsystemModelChangeSubscribers,
 	subsystemModelProposalsChangeSubscribers,
 } from "../rpc";
-import {
-	FilesDrilldown,
-	drilldownRepoKey,
-	type RepoFileCoverage,
-} from "../components/FilesDrilldown";
 import { SubsystemModelCard } from "../components/SubsystemModelCard";
 import { SubsystemSketchCard } from "../components/SubsystemSketchCard";
 import {
@@ -46,13 +34,11 @@ import {
 	ModalHeader,
 } from "../components/Modal";
 import { firstReferencedLine, graphReferencesFile } from "../subsystemModelFiles";
-import { ComposedGraphPane } from "./ComposedGraphPane";
 import { SubsystemReposMap } from "./SubsystemReposMap";
 import { CenteredMessage } from "../ui";
 
-const COPY_FEEDBACK_MS = 1500;
-/** Width of the model-list side panel shown beside the composed graph. */
-const COMBINED_LIST_WIDTH = 340;
+/** Max width of the centered list column (sketches + model rows). */
+const LIST_MAX_WIDTH = 960;
 
 /** Which edited-at window the Subsystems list and map are showing. */
 type EditedWindow = "today" | "yesterday" | "week" | "all";
@@ -226,28 +212,51 @@ function sameElements<T>(prev: readonly T[] | null, next: readonly T[]): boolean
 	return true;
 }
 
+/** Repo keys (`pkg:github/owner/name`) a model touches, via `repos` + file purls. */
+function repoKeysForGraph(graph: SubsystemModelSummary): Set<string> {
+	const keys = new Set<string>();
+	for (const r of graph.repos ?? []) {
+		if (r.owner && r.name) keys.add(`pkg:github/${r.owner}/${r.name}`);
+	}
+	for (const f of graph.files ?? []) {
+		const key = purlRepoKey(f.purl);
+		if (key) keys.add(key);
+	}
+	return keys;
+}
+
+/**
+ * Title search, centered in the Subsystems tab header. Title-only substring
+ * match (case-insensitive). Repo selection lives in the left map rail;
+ * search, repos, and the edited-at window all compose.
+ */
 function SubsystemsTabHeader({
 	editedWindow,
 	onEditedWindowChange,
-	viewMode,
-	onViewModeChange,
+	query,
+	onQueryChange,
+	resultCount,
+	totalCount,
+	filtersActive,
+	onClearAll,
 }: {
 	editedWindow?: EditedWindow;
 	onEditedWindowChange?: (window: EditedWindow) => void;
-	/** List (default) or repo City map. */
-	viewMode?: "list" | "map";
-	onViewModeChange?: (mode: "list" | "map") => void;
+	query: string;
+	onQueryChange: (query: string) => void;
+	resultCount: number;
+	totalCount: number;
+	filtersActive: boolean;
+	onClearAll: () => void;
 }) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
-
 	return (
 		<div
 			style={{
 				flexShrink: 0,
 				display: "flex",
 				alignItems: "stretch",
-				justifyContent: "space-between",
 				padding: 0,
 				minHeight: 34,
 				borderBottom: `1px solid ${theme.colors.border ?? "#333"}`,
@@ -298,56 +307,114 @@ function SubsystemsTabHeader({
 					</div>
 				)}
 			</div>
-			<div style={{ display: "flex", alignItems: "stretch", flexShrink: 0 }}>
-				{onViewModeChange && (
-					<div
-						role="group"
-						aria-label="Subsystems view"
-						style={{ display: "flex", alignItems: "stretch" }}
-					>
-						{(
-							[
-								["list", "List"],
-								["map", "Map"],
-							] as const
-						).map(([key, label], i) => {
-							const active = (viewMode ?? "list") === key;
-							return (
-								<button
-									key={key}
-									type="button"
-									title={`${label} view`}
-									aria-pressed={active}
-									onClick={() => onViewModeChange(key)}
-									style={{
-										display: "inline-flex",
-										alignItems: "center",
-										gap: 4,
-										fontSize: theme.fontSizes[0],
-										fontWeight: active ? 600 : 400,
-										letterSpacing: 0.3,
-										textTransform: "uppercase",
-										padding: "0 14px",
-										border: "none",
-										borderLeft:
-											i > 0
-												? `1px solid ${theme.colors.border ?? "#333"}`
-												: "none",
-										background: active
-											? `${theme.colors.primary}22`
-											: "transparent",
-										color: active ? theme.colors.primary : muted,
-										cursor: "pointer",
-										fontFamily: theme.fonts.body,
-									}}
-								>
-									{key === "list" ? <List size={12} /> : <LayoutGrid size={12} />}
-									{label}
-								</button>
-							);
-						})}
-					</div>
-				)}
+			<div
+				role="group"
+				aria-label="Filter"
+				style={{
+					flex: 1,
+					minWidth: 0,
+					display: "flex",
+					alignItems: "stretch",
+					justifyContent: "center",
+				}}
+			>
+				<div
+					style={{
+						display: "inline-flex",
+						alignItems: "center",
+						gap: 6,
+						padding: "0 6px 0 14px",
+						minWidth: 120,
+						flex: "0 1 280px",
+					}}
+				>
+					<Search size={12} color={muted} style={{ flexShrink: 0 }} aria-hidden="true" />
+					<input
+						type="search"
+						value={query}
+						placeholder="SEARCH TITLES"
+						aria-label="Search subsystem models by title"
+						onChange={(e) => onQueryChange(e.target.value)}
+						onKeyDown={(e) => {
+							if (e.key === "Escape" && query) {
+								e.preventDefault();
+								onQueryChange("");
+							}
+						}}
+						style={{
+							flex: 1,
+							minWidth: 0,
+							border: "none",
+							outline: "none",
+							background: "transparent",
+							color: theme.colors.text,
+							fontFamily: theme.fonts.body,
+							fontSize: theme.fontSizes[0],
+							letterSpacing: 0.3,
+						}}
+					/>
+					{query && (
+						<button
+							type="button"
+							aria-label="Clear title search"
+							onClick={() => onQueryChange("")}
+							style={{
+								display: "inline-flex",
+								border: "none",
+								background: "transparent",
+								color: muted,
+								cursor: "pointer",
+								padding: "0 2px",
+							}}
+						>
+							<X size={12} />
+						</button>
+					)}
+				</div>
+				{/* Always mounted (visibility-toggled) so the centered
+					search + repo controls never shift when it appears. */}
+				<button
+					type="button"
+					onClick={onClearAll}
+					title="Clear title search and repo filter"
+					disabled={!filtersActive}
+					tabIndex={filtersActive ? undefined : -1}
+					aria-hidden={!filtersActive}
+					style={{
+						flexShrink: 0,
+						alignSelf: "stretch",
+						border: "none",
+						borderLeft: `1px solid ${theme.colors.border ?? "#333"}`,
+						background: "transparent",
+						color: muted,
+						cursor: filtersActive ? "pointer" : "default",
+						fontFamily: theme.fonts.body,
+						fontSize: theme.fontSizes[0],
+						fontWeight: 600,
+						letterSpacing: 0.3,
+						textTransform: "uppercase",
+						padding: "0 14px",
+						visibility: filtersActive ? "visible" : "hidden",
+					}}
+				>
+					Clear
+				</button>
+			</div>
+			<div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+				<span
+					style={{
+						padding: "0 8px",
+						color: muted,
+						fontFamily: theme.fonts.monospace,
+						fontSize: theme.fontSizes[0],
+						whiteSpace: "nowrap",
+						display: "inline-block",
+						minWidth: "22ch",
+						textAlign: "right",
+					}}
+				>
+					{filtersActive ? `Filtered · ${resultCount} of ${totalCount}` : `${resultCount} of ${totalCount}`}
+				</span>
 			</div>
 		</div>
 	);
@@ -604,157 +671,6 @@ function SlideInPreview({
 	);
 }
 
-/**
- * Left file panel for the Subsystems tab: a drill-down over every visible
- * subsystem's files, grouped per repo with `buildRepoGroups` — the same
- * primitives the detail graph sidebar uses. Fed by `summary.files` (the host
- * already loads every full model per listing), so no detail fetches are
- * needed. Clicking a repo drills in (and narrows the list to its models);
- * clicking a file highlights its owning graph and expands the trails
- * using that file; a shared file prefers the selected row's graph when it
- * owns it, else the topmost owner in list order. Clicking a file highlights
- * its graph, expands its trails, and opens it in the preview pane.
- */
-function FilesPanel({
-	graphs,
-	selectedId,
-	width,
-	focusedRepo,
-	onFocusRepo,
-	onHighlightGraph,
-	onPreviewFile,
-	combinedActive,
-	onToggleCombined,
-	autoFocusSingleRepo,
-	fileCoverageByRepo,
-}: {
-	graphs: SubsystemModelSummary[];
-	selectedId: string | null;
-	width: number;
-	focusedRepo: string | null;
-	onFocusRepo: (repoKey: string) => void;
-	/**
-	 * Map mode only. Overview rows show this instead of the model count.
-	 */
-	fileCoverageByRepo?: ReadonlyMap<string, RepoFileCoverage>;
-	/** Combined-graph mode toggle — omitted in map mode (the toggle hides). */
-	combinedActive?: boolean;
-	onToggleCombined?: () => void;
-	/** Showcase single-repo: skip the repo overview and go straight to files. */
-	autoFocusSingleRepo?: boolean;
-	onHighlightGraph: (
-		graph: SubsystemModelSummary,
-		file: { repoKey: string | undefined; displayPath: string },
-	) => void;
-	onPreviewFile: (
-		graph: SubsystemModelSummary,
-		file: { repoKey: string | undefined; displayPath: string },
-	) => void;
-}) {
-	const { theme } = useTheme();
-	const byId = useMemo(() => new Map(graphs.map((g) => [g.id, g])), [graphs]);
-
-	const { groups, owners, graphCountByRepo } = useMemo(() => {
-		const flat = graphs.flatMap((g) =>
-			(g.files ?? []).map((f) => ({ file: f.file, purl: f.purl })),
-		);
-		const grouped = buildRepoGroups(flat);
-		// `${repoKey}\0${file}` → owning graph ids in list order.
-		const owners = new Map<string, string[]>();
-		for (const g of graphs) {
-			for (const f of g.files ?? []) {
-				const key = `${purlRepoKey(f.purl) ?? ""}\0${f.file}`;
-				const arr = owners.get(key);
-				if (arr) {
-					if (!arr.includes(g.id)) arr.push(g.id);
-				} else {
-					owners.set(key, [g.id]);
-				}
-			}
-		}
-		// Repos holding files from the most subsystem graphs first.
-		const graphCount = (group: RepoGroup): number => {
-			const ids = new Set<string>();
-			for (const e of group.entries) {
-				for (const id of owners.get(
-					`${group.repoKey ?? ""}\0${e.file}`,
-				) ?? []) {
-					ids.add(id);
-				}
-			}
-			return ids.size;
-		};
-		const groups = [...grouped.groups].sort(
-			(a, b) =>
-				graphCount(b) - graphCount(a) ||
-				b.entries.length - a.entries.length ||
-				(a.repo ?? "").localeCompare(b.repo ?? ""),
-		);
-		const graphCountByRepo = new Map(
-			groups.map((g) => [g.repoKey ?? "", graphCount(g)]),
-		);
-		return { groups, owners, graphCountByRepo };
-	}, [graphs]);
-
-	const pickGraph = useCallback(
-		(repoKey: string | undefined, displayPath: string) => {
-			const ids = owners.get(`${repoKey ?? ""}\0${displayPath}`) ?? [];
-			const pick =
-				selectedId && ids.includes(selectedId) ? selectedId : ids[0];
-			return pick ? byId.get(pick) : undefined;
-		},
-		[owners, byId, selectedId],
-	);
-
-	const onSelectFile = useCallback(
-		(repoKey: string | undefined, displayPath: string) => {
-			const graph = pickGraph(repoKey, displayPath);
-			if (!graph) return;
-			onHighlightGraph(graph, { repoKey, displayPath });
-			onPreviewFile(graph, { repoKey, displayPath });
-		},
-		[pickGraph, onHighlightGraph, onPreviewFile],
-	);
-
-	return (
-		<div
-			style={{
-				width,
-				minWidth: width,
-				borderRight: `1px solid ${theme.colors.border ?? "#333"}`,
-				background: theme.colors.backgroundSecondary ?? theme.colors.background,
-				display: "flex",
-				flexDirection: "column",
-				minHeight: 0,
-			}}
-		>
-			<div
-				style={{
-					flex: 1,
-					minHeight: 0,
-					display: "flex",
-					flexDirection: "column",
-					overflow: "hidden",
-				}}
-			>
-				<FilesDrilldown
-					groups={groups}
-					graphCountByRepo={graphCountByRepo}
-					fileCoverageByRepo={fileCoverageByRepo}
-					focusedRepo={focusedRepo}
-					onFocusRepo={onFocusRepo}
-					onSelectFile={(group, displayPath) =>
-						onSelectFile(group.repoKey, displayPath)
-					}
-					combinedActive={combinedActive}
-					onToggleCombined={onToggleCombined}
-					autoFocusSingleRepo={autoFocusSingleRepo}
-				/>
-			</div>
-		</div>
-	);
-}
-
 export function SubsystemModelsView({
 	scope,
 }: {
@@ -770,31 +686,33 @@ export function SubsystemModelsView({
 	const [sketches, setSketches] = useState<C4SketchSummary[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [confirmId, setConfirmId] = useState<string | null>(null);
-	const [copiedId, setCopiedId] = useState<string | null>(null);
-	const [sharingId, setSharingId] = useState<string | null>(null);
-	/** The model whose gist-share confirmation modal is open. */
-	const [shareId, setShareId] = useState<string | null>(null);
-	/** Result of the completed share, shown inside the modal. */
-	const [shareResult, setShareResult] = useState<{
-		url?: string;
-		created: boolean;
-	} | null>(null);
-	/** Share failure, kept inside the modal rather than the list. */
-	const [shareError, setShareError] = useState<string | null>(null);
 	const [editedWindow, setEditedWindow] = useState<EditedWindow>("today");
-	/** Selected row highlight (file-tree clicks land here, no new tab). */
-	const [selectedId, setSelectedId] = useState<string | null>(null);
+	/** Title substring filter (case-insensitive). Inactive in showcase scope. */
+	const [query, setQuery] = useState("");
+	/** Repo keys (`pkg:github/owner/name`) — empty means all repos. */
+	const [selectedRepos, setSelectedRepos] = useState<ReadonlySet<string>>(
+		() => new Set(),
+	);
+	const onToggleRepo = useCallback((repoKey: string) => {
+		setSelectedRepos((current) => {
+			const next = new Set(current);
+			if (next.has(repoKey)) {
+				next.delete(repoKey);
+			} else {
+				next.add(repoKey);
+			}
+			return next;
+		});
+	}, []);
+	const onClearFilters = useCallback(() => {
+		setQuery("");
+		setSelectedRepos(new Set());
+	}, []);
 	/** Rows expanded to list all their trails (row click toggles). */
 	const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(
 		() => new Set(),
 	);
-	/** Clicked file driving row expansion (trails using it). */
-	const [selectedFile, setSelectedFile] = useState<{
-		graphId: string;
-		repoKey: string | undefined;
-		displayPath: string;
-	} | null>(null);
-	/** Double-clicked file shown in the right preview pane. */
+	/** Map-mode file preview (a city building click). List mode has no preview. */
 	const [previewFile, setPreviewFile] = useState<{
 		graphId: string;
 		repoKey: string | undefined;
@@ -802,94 +720,10 @@ export function SubsystemModelsView({
 		/** 1-based line to highlight (first line the graph references). */
 		focusLine?: number | null;
 	} | null>(null);
-	/** While previewing, the list collapses to a rail; expanding the rail
-	 *  overlays the list back over the preview. */
-	const [listOverlay, setListOverlay] = useState(false);
-	/** Drilled-in repo in the file panel — the list filters to its models. */
-	const [focusedRepo, setFocusedRepo] = useState<string | null>(null);
-	/** Combined-graph mode: the list swaps for the merged repo graph. */
-	const [combinedActive, setCombinedActive] = useState(false);
-	/** Repo City map replaces the file tree + model list. */
-	const [showMap, setShowMap] = useState(false);
 	/** Last `panelGraphs` handed to the map; reused while its contents hold. */
 	const panelGraphsRef = useRef<SubsystemModelSummary[] | null>(null);
-	/** Map mode: repo key → file coverage, filled as each city tree loads. */
-	const [fileCoverageByRepo, setFileCoverageByRepo] = useState<
-		ReadonlyMap<string, RepoFileCoverage>
-	>(() => new Map());
-	const onFileCoverage = useCallback(
-		(next: ReadonlyMap<string, RepoFileCoverage>) => {
-			setFileCoverageByRepo((prev) => {
-				if (prev.size !== next.size) return next;
-				for (const [key, value] of next) {
-					const old = prev.get(key);
-					if (
-						!old ||
-						old.percent !== value.percent ||
-						old.referenced !== value.referenced ||
-						old.total !== value.total
-					) {
-						return next;
-					}
-				}
-				return prev;
-			});
-		},
-		[],
-	);
-
-	const onFocusRepo = useCallback((repoKey: string) => {
-		setFocusedRepo((current) => (current === repoKey ? null : repoKey));
-		setCombinedActive(false);
-	}, []);
-
-	const onToggleCombined = useCallback(() => {
-		setCombinedActive((v) => !v);
-	}, []);
-
-	// Panel width (px). Draggable via the resize handle between the panel
-	// and the list — same pattern as the detail graph sidebar in
-	// `@principal-ai/subsystems-react` (mousedown + document move/up, clamped).
-	const [panelWidth, setPanelWidth] = useState(350);
-	const [panelDrag, setPanelDrag] = useState(false);
-	const panelDragStartX = useRef(0);
-	const panelDragStartWidth = useRef(350);
-	const panelDragMaxWidth = useRef(600);
-	const PANEL_MIN_WIDTH = 200;
-
-	const onPanelResizeStart = useCallback(
-		(e: React.MouseEvent) => {
-			e.preventDefault();
-			panelDragStartX.current = e.clientX;
-			panelDragStartWidth.current = panelWidth;
-			panelDragMaxWidth.current = Math.max(
-				window.innerWidth * 0.6,
-				PANEL_MIN_WIDTH,
-			);
-			setPanelDrag(true);
-		},
-		[panelWidth],
-	);
-
-	useEffect(() => {
-		if (!panelDrag) return;
-		const onMove = (e: MouseEvent) => {
-			const delta = e.clientX - panelDragStartX.current;
-			setPanelWidth(
-				Math.min(
-					Math.max(panelDragStartWidth.current + delta, PANEL_MIN_WIDTH),
-					panelDragMaxWidth.current,
-				),
-			);
-		};
-		const onUp = () => setPanelDrag(false);
-		document.addEventListener("mousemove", onMove);
-		document.addEventListener("mouseup", onUp);
-		return () => {
-			document.removeEventListener("mousemove", onMove);
-			document.removeEventListener("mouseup", onUp);
-		};
-	}, [panelDrag]);
+	/** Last repo-filter-exempt graphs handed to the rail; same reuse. */
+	const mapPanelGraphsRef = useRef<SubsystemModelSummary[] | null>(null);
 
 	// Preview pane width (px) — docked right in map mode, draggable by its
 	// left edge. Starts wide and clamps so the map keeps some room.
@@ -930,15 +764,7 @@ export function SubsystemModelsView({
 		};
 	}, [previewDrag]);
 
-	const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
-
-	useEffect(
-		() => () => {
-			if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-		},
-		[],
-	);
 
 	useEffect(() => {
 		if (!previewFile) return;
@@ -1010,7 +836,6 @@ export function SubsystemModelsView({
 
 	const onOpen = useCallback(
 		async (graph: SubsystemModelSummary, trailId?: string) => {
-			setSelectedId(graph.id);
 			await electrobun.rpc!.request.openSubsystemModel({
 				graphId: graph.id,
 				...(trailId ? { trailId } : {}),
@@ -1056,14 +881,7 @@ export function SubsystemModelsView({
 		}
 	}, []);
 
-	/** Map mode: a file click just selects its owning graph (no preview pane). */
-	const onMapHighlightGraph = useCallback(
-		(graph: SubsystemModelSummary) => setSelectedId(graph.id),
-		[],
-	);
-	const onMapPreviewFile = useCallback(() => {}, []);
-
-	/** Map mode: a city building click opens the file in the shared preview. */
+/** Map mode: a city building click opens the file in the shared preview. */
 	const onOpenMapFile = useCallback(
 		(file: { repoKey: string | undefined; displayPath: string }) => {
 			const graph = graphs?.find((g) =>
@@ -1081,47 +899,20 @@ export function SubsystemModelsView({
 		[graphs],
 	);
 
-	/** Details toggle: open/close the row's inline body. When closing, clear
-	 *  both the row's own expansion and any file-driven expansion on this row;
-	 *  when opening, reveal the trail list and focus the first line this graph
-	 *  references in the previewed file. */
+	/** Details toggle: open/close the row's inline trail list. */
 	const onToggleDetails = useCallback(
 		(graph: SubsystemModelSummary) => {
-			setSelectedId(graph.id);
-			const isOpen =
-				expandedIds.has(graph.id) || selectedFile?.graphId === graph.id;
-			if (isOpen) {
-				setSelectedFile((current) =>
-					current?.graphId === graph.id ? null : current,
-				);
-				setExpandedIds((current) => {
-					if (!current.has(graph.id)) return current;
-					const next = new Set(current);
-					next.delete(graph.id);
-					return next;
-				});
-				return;
-			}
-			if (previewFile) {
-				const line = firstReferencedLine(
-					graph,
-					previewFile.repoKey,
-					previewFile.displayPath,
-				);
-				if (line != null) {
-					setPreviewFile((current) =>
-						current ? { ...current, focusLine: line } : current,
-					);
-				}
-			}
 			setExpandedIds((current) => {
-				if (current.has(graph.id)) return current;
 				const next = new Set(current);
-				next.add(graph.id);
+				if (next.has(graph.id)) {
+					next.delete(graph.id);
+				} else {
+					next.add(graph.id);
+				}
 				return next;
 			});
 		},
-		[expandedIds, selectedFile, previewFile],
+		[],
 	);
 
 	/**
@@ -1134,50 +925,6 @@ export function SubsystemModelsView({
 			void onOpen(graph);
 		},
 		[onOpen],
-	);
-
-	/** File-tree click: highlight the owning row in place (no new tab),
-	 *  expand the trails using that file, and open the preview pane.
-	 *  Re-clicking the same file collapses the expansion (preview stays). */
-	const onHighlightGraph = useCallback(
-		(
-			graph: SubsystemModelSummary,
-			file: { repoKey: string | undefined; displayPath: string },
-		) => {
-			setSelectedId(graph.id);
-			setSelectedFile((current) =>
-				current &&
-				current.graphId === graph.id &&
-				(current.repoKey ?? "") === (file.repoKey ?? "") &&
-				current.displayPath === file.displayPath
-					? null
-					: { graphId: graph.id, ...file },
-			);
-			requestAnimationFrame(() => {
-				document
-					.querySelector(`[data-subsystem-row="${CSS.escape(graph.id)}"]`)
-					?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-			});
-		},
-		[],
-	);
-
-	/** File-tree click: open the file in the preview pane, focused on the
-	 *  first line the owning graph references in it. */
-	const onPreviewFile = useCallback(
-		(
-			graph: SubsystemModelSummary,
-			file: { repoKey: string | undefined; displayPath: string },
-		) => {
-			setSelectedId(graph.id);
-			setListOverlay(true);
-			setPreviewFile({
-				graphId: graph.id,
-				...file,
-				focusLine: firstReferencedLine(graph, file.repoKey, file.displayPath),
-			});
-		},
-		[],
 	);
 
 	const readPreviewFile = useCallback(
@@ -1195,70 +942,6 @@ export function SubsystemModelsView({
 		[previewFile],
 	);
 
-
-	const onCopyPath = useCallback(
-		async (graph: SubsystemModelSummary) => {
-			try {
-				await navigator.clipboard.writeText(graph.path);
-				setCopiedId(graph.id);
-				if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-				copyTimeoutRef.current = setTimeout(() => setCopiedId(null), COPY_FEEDBACK_MS);
-			} catch {
-				// clipboard may be denied — fail quietly
-			}
-		},
-		[],
-	);
-
-	/** Open the gist confirmation modal for a model — no network yet. */
-	const requestShareGist = useCallback((graph: SubsystemModelSummary) => {
-		setSelectedId(graph.id);
-		setShareId(graph.id);
-		setShareResult(null);
-		setShareError(null);
-	}, []);
-
-	/** Dismiss the gist modal and clear its transient result / error. */
-	const closeShareModal = useCallback(() => {
-		setShareId(null);
-		setShareResult(null);
-		setShareError(null);
-	}, []);
-
-	/** Share the model the modal is confirming; keep feedback in the modal. */
-	const confirmShareGist = useCallback(async () => {
-		const graph = shareId ? graphs?.find((g) => g.id === shareId) : undefined;
-		if (!graph) {
-			closeShareModal();
-			return;
-		}
-		setSharingId(graph.id);
-		setShareResult(null);
-		setShareError(null);
-		try {
-			const result = await electrobun.rpc!.request.shareSubsystemModelAsGist({
-				graphId: graph.id,
-			});
-			if (!result.ok) {
-				setShareError(result.error ?? "Failed to share as gist");
-				return;
-			}
-			const url = result.viewUrl ?? result.gistUrl;
-			if (url) {
-				try {
-					await navigator.clipboard.writeText(url);
-				} catch {
-					// clipboard may be denied
-				}
-			}
-			setShareResult({ url, created: result.created === true });
-			await refresh();
-		} catch (err) {
-			setShareError(err instanceof Error ? err.message : "Failed to share as gist");
-		} finally {
-			setSharingId(null);
-		}
-	}, [shareId, graphs, refresh, closeShareModal]);
 
 	/** Arm the delete confirmation modal for a model. */
 	const requestDelete = useCallback((graph: SubsystemModelSummary) => {
@@ -1281,13 +964,9 @@ export function SubsystemModelsView({
 				next.delete(graph.id);
 				return next;
 			});
-			setSelectedFile((current) =>
-				current?.graphId === graph.id ? null : current,
-			);
 			setPreviewFile((current) =>
 				current?.graphId === graph.id ? null : current,
 			);
-			setSelectedId((current) => (current === graph.id ? null : current));
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
 		}
@@ -1296,11 +975,6 @@ export function SubsystemModelsView({
 	/** The model whose deletion is awaiting confirmation. */
 	const pendingDelete = confirmId
 		? (graphs?.find((g) => g.id === confirmId) ?? null)
-		: null;
-
-	/** The model whose gist share is awaiting confirmation. */
-	const pendingShare = shareId
-		? (graphs?.find((g) => g.id === shareId) ?? null)
 		: null;
 
 	if (error && graphs === null) {
@@ -1337,19 +1011,26 @@ export function SubsystemModelsView({
 	const now = Date.now();
 	const inEditedWindow = (g: SubsystemModelSummary) =>
 		editedInWindow(g.updatedAt, editedWindow, now);
-	// Sketches are a separate artifact, but they carry repo keys and updatedAt,
-	// so the list's repo drilldown and recency window apply the same way. A
-	// showcase is an explicit model-id set, so sketches are not part of it.
+	// Title + repo filters. In showcase scope they are inactive (the agent
+	// chose the set). Title, repos, and the recency window all compose.
+	const searching = !scope && (query.trim() !== "" || selectedRepos.size > 0);
+	const titleQuery = query.trim().toLowerCase();
+	const matchesTitle = (title: string) =>
+		titleQuery === "" || title.toLowerCase().includes(titleQuery);
+	const matchesRepos = (keys: ReadonlySet<string> | Set<string>) =>
+		selectedRepos.size === 0 || [...selectedRepos].some((k) => keys.has(k));
+	// Sketches are a separate artifact, but they carry title + updatedAt, so
+	// the title filter and recency window apply the same way. A showcase is
+	// an explicit model-id set, so sketches are not part of it.
 	const visibleSketches = (sketches ?? []).filter((sketch) => {
-		if (scope || previewFile) return false;
-		if (!editedInWindow(sketch.updatedAt, editedWindow, now)) return false;
-		if (!focusedRepo) return true;
-		return sketch.repoKeys.some(
-			(repoKey) => drilldownRepoKey({ repoKey }) === focusedRepo,
-		);
+		if (scope) return false;
+		if (!matchesTitle(sketch.title)) return false;
+		if (selectedRepos.size > 0 && !sketch.repoKeys.some((k) => selectedRepos.has(k))) return false;
+		if (editedWindow !== "all" && !editedInWindow(sketch.updatedAt, editedWindow, now)) return false;
+		return true;
 	});
 	// Showcase scope: an explicit, ordered id set. When present it wins over
-	// repo drilldown and recency hiding — the agent chose the set and its order.
+	// recency hiding — the agent chose the set and its order.
 	const scopeOrder = scope?.ids ?? null;
 	const scopeRank = scopeOrder
 		? new Map(scopeOrder.map((id, i) => [id, i]))
@@ -1362,26 +1043,14 @@ export function SubsystemModelsView({
 						(scopeRank.get(b.id) ?? Number.MAX_SAFE_INTEGER),
 				)
 			: list;
-	const visibleGraphs = scopeOrder
+	const queryFilteredGraphs = scopeOrder
 		? graphs.filter((g) => scopeRank!.has(g.id))
-		: focusedRepo
-			? graphs.filter((g) =>
-					(g.files ?? []).some(
-						(f) =>
-							focusedRepo ===
-							drilldownRepoKey({ repoKey: purlRepoKey(f.purl) }),
-					),
-				)
-			: graphs;
-	// An open preview narrows the list to the models referencing that file.
-	const fileVisibleGraphs = previewFile
-		? visibleGraphs.filter((g) =>
-				graphReferencesFile(g, previewFile.repoKey, previewFile.displayPath),
-			)
-		: visibleGraphs;
-	// The edited-at window applies identically to both chains; only the
-	// open-file narrowing differs (list vs panel). Order stays last-opened,
-	// newest first. Showcase scope skips the window.
+		: graphs.filter(
+				(g) => matchesTitle(g.title) && matchesRepos(repoKeysForGraph(g)),
+			);
+	const visibleGraphs = queryFilteredGraphs;
+	// Order stays last-opened, newest first. Title, repos, and the edited-at
+	// window all compose (AND). Showcase scope skips the window.
 	const applyListFilters = (base: SubsystemModelSummary[]) => {
 		const windowed =
 			scopeOrder || editedWindow === "all" ? base : base.filter(inEditedWindow);
@@ -1391,42 +1060,38 @@ export function SubsystemModelsView({
 	};
 	const windowedGraphs =
 		scopeOrder || editedWindow === "all"
-			? fileVisibleGraphs
-			: fileVisibleGraphs.filter(inEditedWindow);
-	const sortedGraphs = applyListFilters(fileVisibleGraphs);
-	// The file panel ignores the open-file narrowing so the tree stays stable
-	// while previewing; it still follows the recency filter. Identity-stable:
-	// hover, divider drags, and preview toggles re-render this view without
-	// changing the list, and the repo map keys every city build off this array.
+			? visibleGraphs
+			: visibleGraphs.filter(inEditedWindow);
+	const sortedGraphs = applyListFilters(visibleGraphs);
+	// Identity-stable: preview toggles re-render this view without changing
+	// the list, and the repo map keys every city build off this array.
 	const nextPanelGraphs = applyListFilters(visibleGraphs);
 	const panelGraphs = sameElements(panelGraphsRef.current, nextPanelGraphs)
 		? panelGraphsRef.current!
 		: nextPanelGraphs;
 	panelGraphsRef.current = panelGraphs;
-	/** The composed graph is showing, with the model list docked right. */
-	const combinedPane = combinedActive && focusedRepo != null;
-	/**
-	 * Model ids the composed graph is built from. Omitting them makes the host
-	 * compose every model touching the repo, so the recency window would filter
-	 * the list but not the graph. Uses the panel list — recency applied, open-file
-	 * narrowing ignored — so previewing a file does not recompose.
-	 */
-	const composedModelIds = scopeOrder ?? panelGraphs.map((g) => g.id);
+	// The rail is the repo picker: it follows the title + window filters but
+	// never the repo selection itself, so clicking a card only highlights —
+	// the rail's membership and order stay put while the list narrows.
+	const queryNoRepoGraphs = scopeOrder
+		? graphs.filter((g) => scopeRank!.has(g.id))
+		: graphs.filter((g) => matchesTitle(g.title));
+	const nextMapGraphs = applyListFilters(queryNoRepoGraphs);
+	const mapPanelGraphs = sameElements(mapPanelGraphsRef.current, nextMapGraphs)
+		? mapPanelGraphsRef.current!
+		: nextMapGraphs;
+	mapPanelGraphsRef.current = mapPanelGraphs;
 
-	// The model list is rendered either as the main pane or as the
-	// composed-graph side panel — one JSX tree, two placements.
-	const outsideWindow = fileVisibleGraphs.length - windowedGraphs.length;
-	const widenTo =
-		!previewFile && !scopeOrder ? widerEditedWindow(editedWindow) : null;
-	const emptyCopy = previewFile && fileVisibleGraphs.length === 0
+	const outsideWindow = visibleGraphs.length - windowedGraphs.length;
+	const widenTo = !scopeOrder ? widerEditedWindow(editedWindow) : null;
+	const filtersMatchNothing = visibleGraphs.length === 0 && (titleQuery !== "" || selectedRepos.size > 0);
+	const emptyCopy: { title: string; detail?: string } = filtersMatchNothing
 		? {
-				title: "No models for this file",
-				detail: previewFile.displayPath,
-			}
-		: focusedRepo && editedWindow === "all"
-			? {
-					title: "No models in this repo",
-					detail: "None of the subsystem models touch the repo you have open.",
+					title: "No models match",
+					detail:
+						[titleQuery ? `"${query.trim()}"` : null, selectedRepos.size > 0 ? `${selectedRepos.size} repo${selectedRepos.size === 1 ? "" : "s"}` : null]
+							.filter(Boolean)
+							.join(" · ") || undefined,
 				}
 			: editedWindow === "today"
 				? { title: "Nothing edited today" }
@@ -1436,16 +1101,15 @@ export function SubsystemModelsView({
 						? { title: "Nothing edited this week" }
 						: { title: "No subsystem models" };
 	const widenLabel = EDITED_WINDOWS.find((w) => w.key === widenTo)?.label;
-	const emptyAction =
-		widenTo && outsideWindow > 0 && widenLabel
-			? {
-					label: `Show ${widenLabel.toLowerCase()}`,
-					onClick: () => setEditedWindow(widenTo),
+	const emptyAction = filtersMatchNothing
+		? {
+					label: "Clear search",
+					onClick: onClearFilters,
 				}
-			: focusedRepo && !previewFile
+			: widenTo && outsideWindow > 0 && widenLabel
 				? {
-						label: "All repos",
-						onClick: () => onFocusRepo(focusedRepo),
+						label: `Show ${widenLabel.toLowerCase()}`,
+						onClick: () => setEditedWindow(widenTo),
 					}
 				: undefined;
 	const sketchSection = visibleSketches.length > 0 ? (
@@ -1500,8 +1164,6 @@ windowedGraphs.length === 0 ? (
 			) : (
 			<div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
 				{sortedGraphs.map((graph, i) => {
-					const rowSelectedFile =
-						selectedFile?.graphId === graph.id ? selectedFile : null;
 					return (
 						<div
 							key={graph.id}
@@ -1516,46 +1178,11 @@ windowedGraphs.length === 0 ? (
 						>
 							<SubsystemModelCard
 								graph={graph}
-								selectedFile={
-									rowSelectedFile
-										? {
-												repoKey: rowSelectedFile.repoKey,
-												displayPath: rowSelectedFile.displayPath,
-											}
-										: null
-								}
-								openFile={
-									previewFile
-										? {
-												repoKey: previewFile.repoKey,
-												displayPath: previewFile.displayPath,
-											}
-										: null
-								}
 								rowExpanded={expandedIds.has(graph.id)}
-								copied={copiedId === graph.id}
-								sharing={sharingId === graph.id}
 								onRowClick={() => onRowClick(graph)}
-								onOpenC4={() => {
-									void electrobun.rpc!.request.openSubsystemC4Model({
-										graphId: graph.id,
-									});
-								}}
 								onToggleDetails={() => onToggleDetails(graph)}
-								onCopyPath={() => void onCopyPath(graph)}
-								onShareGist={() => requestShareGist(graph)}
 								onDelete={() => requestDelete(graph)}
 								onOpenTrail={(trailId) => void onOpen(graph, trailId)}
-								onOpenComponent={(m) => {
-									setSelectedId(graph.id);
-									setListOverlay(true);
-									setPreviewFile({
-										graphId: graph.id,
-										repoKey: rowSelectedFile?.repoKey,
-										displayPath: rowSelectedFile?.displayPath ?? "",
-										focusLine: m.startLine ?? null,
-									});
-								}}
 							/>
 						</div>
 					);
@@ -1564,23 +1191,68 @@ windowedGraphs.length === 0 ? (
 			)
 	);
 
+
+	const renderListScroll = (centered: boolean) => (
+		<div
+			style={{
+				flex: 1,
+				minHeight: 0,
+				overflowY: "auto",
+				padding: 0,
+			}}
+		>
+			<div
+				style={{
+					maxWidth: LIST_MAX_WIDTH,
+					margin: centered ? "0 auto" : 0,
+					width: "100%",
+					boxSizing: "border-box",
+				}}
+			>
+				{error && (
+					<div
+						style={{
+							fontSize: theme.fontSizes[1],
+							color: "#e5534b",
+							marginBottom: 10,
+							padding: "12px 24px 0",
+						}}
+					>
+						{error}
+					</div>
+				)}
+				{sketchSection}
+				{modelList}
+			</div>
+		</div>
+	);
 	return (
 		<SubsystemsTabShell>
 			{!scope && (
 				<SubsystemsTabHeader
 				editedWindow={editedWindow}
 				onEditedWindowChange={setEditedWindow}
-				viewMode={showMap ? "map" : "list"}
-				onViewModeChange={(mode) => {
-					setShowMap(mode === "map");
-					if (mode === "map") setFileCoverageByRepo(new Map());
-				}}
+				query={query}
+				onQueryChange={setQuery}
+				resultCount={sortedGraphs.length}
+				totalCount={graphs.length}
+				filtersActive={searching}
+				onClearAll={onClearFilters}
 			/>
 			)}
 			{panelGraphs.length === 0 && visibleSketches.length > 0 ? (
 				<SubsystemsTabBody>
 					<div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-						{sketchSection}
+						<div
+							style={{
+								maxWidth: LIST_MAX_WIDTH,
+								margin: "0 auto",
+								width: "100%",
+								boxSizing: "border-box",
+							}}
+						>
+							{sketchSection}
+						</div>
 					</div>
 				</SubsystemsTabBody>
 			) : panelGraphs.length === 0 ? (
@@ -1591,279 +1263,58 @@ windowedGraphs.length === 0 ? (
 						action={emptyAction}
 					/>
 				</SubsystemsTabBody>
-			) : showMap && !scope ? (
-				<SubsystemsTabBody>
-					<div
-						style={{
-							flex: 1,
-							minHeight: 0,
-							display: "flex",
-							flexDirection: "row",
-							position: "relative",
-							userSelect: panelDrag ? "none" : undefined,
-						}}
-					>
-						{/* Reuse the tab's existing repo list/drilldown as the
-						    map's repo-selection chrome (same `focusedRepo`). */}
-						<FilesPanel
-							graphs={panelGraphs}
-							selectedId={selectedId}
-							width={panelWidth}
-							focusedRepo={focusedRepo}
-							onFocusRepo={onFocusRepo}
-							onHighlightGraph={onMapHighlightGraph}
-							onPreviewFile={onMapPreviewFile}
-							autoFocusSingleRepo={false}
-							fileCoverageByRepo={fileCoverageByRepo}
-						/>
-						<div
-							onMouseDown={onPanelResizeStart}
-							aria-label="Resize files panel"
-							title="Drag to resize"
-							style={{
-								width: 3,
-								flexShrink: 0,
-								cursor: "col-resize",
-								background: theme.colors.border,
-								transition: "background 120ms ease",
-								zIndex: 1,
-							}}
-						/>
-						<div
-							style={{
-								flex: 1,
-								minWidth: 0,
-								minHeight: 0,
-								display: "flex",
-								position: "relative",
-								overflow: "hidden",
-								userSelect: previewDrag ? "none" : undefined,
-							}}
-						>
-							<SubsystemReposMap
-								graphs={panelGraphs}
-								onOpenModel={onOpenModelById}
-								onFileCoverage={onFileCoverage}
-								selectedRepoKey={focusedRepo}
-								onSelectRepo={setFocusedRepo}
-								onOpenFile={onOpenMapFile}
-							/>
-							<SlideInPreview
-								file={previewFile}
-								readFile={readPreviewFile}
-								onClose={() => setPreviewFile(null)}
-								width={previewWidth}
-								onResizeStart={onPreviewResizeStart}
-							/>
-						</div>
-					</div>
-				</SubsystemsTabBody>
+			) : scope ? (
+			<SubsystemsTabBody>
+				{renderListScroll(true)}
+			</SubsystemsTabBody>
 			) : (
 			<SubsystemsTabBody>
 				<div
 					style={{
 						flex: 1,
+						minWidth: 0,
 						minHeight: 0,
 						display: "flex",
-						flexDirection: "row",
 						position: "relative",
-						userSelect: panelDrag ? "none" : undefined,
+						overflow: "hidden",
+						userSelect: previewDrag ? "none" : undefined,
 					}}
 				>
-					<FilesPanel
-						graphs={panelGraphs}
-						selectedId={selectedId}
-						width={panelWidth}
-						focusedRepo={focusedRepo}
-						onFocusRepo={onFocusRepo}
-						onHighlightGraph={onHighlightGraph}
-						onPreviewFile={onPreviewFile}
-						combinedActive={combinedActive}
-						onToggleCombined={onToggleCombined}
-						autoFocusSingleRepo={scope != null}
-					/>
 					<div
-						onMouseDown={onPanelResizeStart}
-						aria-label="Resize files panel"
-						title="Drag to resize"
+						className="subsystem-map-rail"
 						style={{
-							width: 3,
+							width: "30%",
 							flexShrink: 0,
-							cursor: "col-resize",
-							background: theme.colors.border,
-							transition: "background 120ms ease",
-							zIndex: 1,
-						}}
-					/>
-					<div
-						style={{
-							flex: 1,
-							minWidth: 0,
 							minHeight: 0,
-							overflowY: "auto",
-							// The composed graph and the model list are both
-							// full-bleed: rows sit flush against the pane edges.
-							padding: 0,
-							// In composed mode the list is a persistent right
-							// panel, so the preview's dock-to-rail behavior is off.
-							...(previewFile && listOverlay && !combinedPane
-								? {
-										position: "absolute",
-										top: 0,
-										bottom: 0,
-										right: 0,
-										width: 400,
-										zIndex: 4,
-										flex: "none",
-										background: theme.colors.background,
-										borderLeft: `1px solid ${theme.colors.border ?? "#333"}`,
-									}
-								: null),
-						}}
-					>
-			{previewFile && listOverlay && !combinedPane && (
-				<div
-					style={{
-						flexShrink: 0,
-						display: "flex",
-						alignItems: "center",
-						gap: 8,
-						padding: "16px 24px 8px",
-					}}
-				>
-					<span
-						style={{
 							display: "flex",
-							alignItems: "center",
-							gap: 6,
-							fontSize: theme.fontSizes[0],
-							color: muted,
-							textTransform: "uppercase",
-							letterSpacing: 0.3,
+							flexDirection: "column",
+							background: theme.colors.background,
+							paddingLeft: 12,
+							paddingRight: 12,
+							scrollbarWidth: "none",
 						}}
 					>
-						<LayoutDashboard size={12} style={{ flexShrink: 0 }} aria-hidden="true" />
-						Subsystems
-					</span>
-					<span style={{ flex: 1 }} />
-					<button
-						type="button"
-						onClick={() => setListOverlay(false)}
-						title="Collapse list to rail"
-						aria-label="Collapse subsystem list"
-						style={{
-							flexShrink: 0,
-							border: "none",
-							background: "transparent",
-							color: muted,
-							cursor: "pointer",
-							fontSize: theme.fontSizes[1],
-							lineHeight: 1,
-							padding: "2px 6px",
-							borderRadius: 4,
-						}}
-					>
-						»
-					</button>
-				</div>
-			)}
-			{error && (
-				<div
-					style={{
-						fontSize: theme.fontSizes[1],
-						color: "#e5534b",
-						marginBottom: 10,
-						padding: combinedPane ? 0 : "12px 24px 0",
-					}}
-				>
-					{error}
-				</div>
-			)}
-			{combinedActive && focusedRepo ? (
-				<div style={{ height: "100%", display: "flex", flexDirection: "row" }}>
-					<div style={{ flex: 1, minWidth: 0, height: "100%" }}>
-						<ComposedGraphPane
-							repoKey={focusedRepo}
-							graphs={graphs}
-							modelIds={composedModelIds}
-							onPreviewFile={onPreviewFile}
+						<style>{`.subsystem-map-rail,.subsystem-map-rail *{scrollbar-width:none;}.subsystem-map-rail::-webkit-scrollbar,.subsystem-map-rail *::-webkit-scrollbar{display:none;}`}</style>
+						<SubsystemReposMap
+							graphs={mapPanelGraphs}
+							onOpenModel={onOpenModelById}
+							selectedRepoKeys={selectedRepos}
+							onToggleRepo={onToggleRepo}
+							onOpenFile={onOpenMapFile}
 						/>
 					</div>
-					<div
-						style={{
-							width: COMBINED_LIST_WIDTH,
-							flexShrink: 0,
-							height: "100%",
-							boxSizing: "border-box",
-							overflowY: "auto",
-							borderLeft: `1px solid ${theme.colors.border ?? "#333"}`,
-							background:
-								theme.colors.backgroundSecondary ?? theme.colors.background,
-							padding: "12px",
-						}}
-					>
-						{modelList}
-					</div>
-				</div>
-			) : (
-				<>
-					{sketchSection}
-					{modelList}
-				</>
-			)}
-				</div>
-				{previewFile && (
-					<FilePreviewPane
+					{renderListScroll(false)}
+					<SlideInPreview
 						file={previewFile}
 						readFile={readPreviewFile}
 						onClose={() => setPreviewFile(null)}
-						style={{
-							position: "absolute",
-							top: 0,
-							bottom: 0,
-							left: panelWidth + 3,
-							// The open list docks right — end the preview at its
-							// edge so the header (and its ✕) is never covered.
-							// Composed mode keeps the list panel visible instead.
-							right: combinedPane
-								? COMBINED_LIST_WIDTH
-								: listOverlay
-									? 400
-									: 0,
-							zIndex: 2,
-							borderLeft: `1px solid ${theme.colors.border ?? "#333"}`,
-						}}
+						width={previewWidth}
+						onResizeStart={onPreviewResizeStart}
 					/>
-				)}
-				{previewFile && !listOverlay && !combinedPane && (
-					<button
-						type="button"
-						onClick={() => setListOverlay(true)}
-						title="Show subsystem list"
-						aria-label="Show subsystem list"
-						style={{
-							position: "absolute",
-							top: 0,
-							bottom: 0,
-							right: 0,
-							width: 28,
-							zIndex: 3,
-							border: "none",
-							borderLeft: `1px solid ${theme.colors.border ?? "#333"}`,
-							background:
-								theme.colors.backgroundSecondary ?? theme.colors.background,
-							color: muted,
-							cursor: "pointer",
-							fontSize: theme.fontSizes[1],
-						}}
-					>
-						«
-					</button>
-				)}
 				</div>
 			</SubsystemsTabBody>
 			)}
-			{pendingDelete && (
+		{pendingDelete && (
 				<Modal
 					ariaLabel="Delete subsystem model"
 					onClose={() => setConfirmId(null)}
@@ -1886,110 +1337,6 @@ windowedGraphs.length === 0 ? (
 						>
 							Delete
 						</ModalButton>
-					</ModalFooter>
-				</Modal>
-			)}
-			{pendingShare && (
-				<Modal
-					ariaLabel="Share subsystem model as gist"
-					onClose={
-						sharingId === pendingShare.id ? undefined : closeShareModal
-					}
-				>
-					<ModalHeader
-						icon={Share2}
-						title="Share subsystem model"
-					/>
-					<ModalBody>
-						{shareResult ? (
-							<div
-								style={{ display: "flex", flexDirection: "column", gap: 10 }}
-							>
-								<div>
-									{shareResult.created ? (
-										<>
-											Shared <strong>{pendingShare.title}</strong> as a
-											public gist.
-										</>
-									) : (
-										<>
-											Updated the public gist for{" "}
-											<strong>{pendingShare.title}</strong>.
-										</>
-									)}
-								</div>
-								{shareResult.url && (
-									<code
-										style={{
-											fontFamily: theme.fonts.monospace,
-											fontSize: theme.fontSizes[1],
-											overflowWrap: "anywhere",
-											padding: "6px 8px",
-											borderRadius: 6,
-											background:
-												theme.colors.backgroundSecondary ??
-												theme.colors.background,
-											border: `1px solid ${theme.colors.border ?? "#333"}`,
-										}}
-									>
-										{shareResult.url}
-									</code>
-								)}
-								<div style={{ color: muted, fontSize: theme.fontSizes[1] }}>
-									Link copied to your clipboard.
-								</div>
-							</div>
-						) : (
-							<div
-								style={{ display: "flex", flexDirection: "column", gap: 10 }}
-							>
-								<div>
-									{pendingShare.gist ? (
-										<>
-											Updates the public GitHub gist to share{" "}
-											<strong>{pendingShare.title}</strong>.
-										</>
-									) : (
-										<>
-											Creates a public GitHub gist to share{" "}
-											<strong>{pendingShare.title}</strong>.
-										</>
-									)}
-								</div>
-								{shareError && (
-									<div
-										role="alert"
-										style={{ color: theme.colors.error ?? "#e5534b" }}
-									>
-										{shareError}
-									</div>
-								)}
-							</div>
-						)}
-					</ModalBody>
-					<ModalFooter>
-						{shareResult ? (
-							<ModalButton variant="primary" onClick={closeShareModal}>
-								Done
-							</ModalButton>
-						) : (
-							<>
-								<ModalButton
-									onClick={closeShareModal}
-									disabled={sharingId === pendingShare.id}
-								>
-									Cancel
-								</ModalButton>
-								<ModalButton
-									variant="primary"
-									icon={Share2}
-									busy={sharingId === pendingShare.id}
-									onClick={() => void confirmShareGist()}
-								>
-									{pendingShare.gist ? "Update gist" : "Share as gist"}
-								</ModalButton>
-							</>
-						)}
 					</ModalFooter>
 				</Modal>
 			)}

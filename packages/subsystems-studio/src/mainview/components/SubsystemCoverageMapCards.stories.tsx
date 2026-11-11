@@ -345,7 +345,7 @@ const meta = {
 	],
 	args: {
 		repos: ALL_REPOS,
-		selectedRepoKey: "pkg:github/acme/payments",
+		selectedRepoKeys: new Set(["pkg:github/acme/payments"]),
 		onSelectRepo: (repoKey: string) => console.info("select repo", repoKey),
 		onOpenModel: (modelId: string) => console.info("open model", modelId),
 	},
@@ -364,7 +364,7 @@ export const Default: Story = {};
 
 /** One repo — useful for judging a single card at grid width. */
 export const SingleRepo: Story = {
-	args: { repos: [PAYMENTS_REPO], selectedRepoKey: null },
+	args: { repos: [PAYMENTS_REPO], selectedRepoKeys: new Set<string>() },
 };
 
 /** A repo whose checkout is still loading shows the placeholder, not a blank card. */

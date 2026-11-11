@@ -1,6 +1,6 @@
 /**
  * SubsystemModelCard — one stored subsystem model as a row in the Subsystems
- * tab: title, a details toggle, copy-path / gist / delete actions, and two
+ * tab: title, a details toggle, delete action, and two
  * collapsible sections — the trails using the open file (when a file is
  * selected) and, failing that, the components declared in it, or the model's
  * full trail list when the details are toggled open.
@@ -14,16 +14,12 @@
 import { useEffect, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
-	Check,
 	ChevronDown,
 	ChevronRight,
-	Copy,
 	FileText,
 	LayoutDashboard,
 	Route as RouteIcon,
 	Box,
-	Boxes,
-	Share2,
 	X,
 } from "lucide-react";
 import { DescriptionOverlay, DescriptionPreview } from "@principal-ai/subsystems-react";
@@ -55,18 +51,10 @@ export interface SubsystemModelCardProps {
 	openFile?: { repoKey: string | undefined; displayPath: string } | null;
 	/** The row's own trail list is expanded (details toggle). */
 	rowExpanded?: boolean;
-	/** The copy-path action just landed. */
-	copied?: boolean;
-	/** A gist share is in flight. */
-	sharing?: boolean;
 	/** Row click — opens the model in its own tab. */
 	onRowClick?: (e: ReactMouseEvent) => void;
-	/** Open the model's C4 projection in its own tab. */
-	onOpenC4?: () => void;
 	/** Toggle the inline details (description / notes + trail list). */
 	onToggleDetails?: () => void;
-	onCopyPath?: () => void;
-	onShareGist?: () => void;
 	onDelete?: () => void;
 	/** Open the graph in a tab with this trail selected. */
 	onOpenTrail?: (trailId: string) => void;
@@ -226,13 +214,8 @@ export function SubsystemModelCard({
 	selectedFile,
 	openFile,
 	rowExpanded = false,
-	copied = false,
-	sharing = false,
 	onRowClick,
-	onOpenC4,
 	onToggleDetails,
-	onCopyPath,
-	onShareGist,
 	onDelete,
 	onOpenTrail,
 	onOpenComponent,
@@ -346,30 +329,6 @@ export function SubsystemModelCard({
 					accent={theme.colors.primary}
 					active={isOpen}
 					onClick={() => onToggleDetails?.()}
-				/>
-				<ActionButton
-					icon={<Boxes size={12} />}
-					label="C4"
-					ariaLabel={`Open ${graph.title} as a C4 diagram`}
-					accent={theme.colors.primary}
-					onClick={() => onOpenC4?.()}
-				/>
-				<ActionButton
-					icon={copied ? <Check size={12} /> : <Copy size={12} />}
-					label={copied ? "Copied" : "Copy path"}
-					ariaLabel={`Copy path for ${graph.title}`}
-					accent={theme.colors.primary}
-					active={copied}
-					fillWhenActive
-					onClick={() => onCopyPath?.()}
-				/>
-				<ActionButton
-					icon={<Share2 size={12} />}
-					label={sharing ? "Sharing…" : "Share"}
-					ariaLabel={`Share ${graph.title}`}
-					accent={theme.colors.success ?? "#10b981"}
-					disabled={sharing}
-					onClick={() => onShareGist?.()}
 				/>
 				<ActionButton
 					icon={<X size={12} />}

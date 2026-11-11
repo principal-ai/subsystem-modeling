@@ -574,8 +574,8 @@ export function SubsystemCoverageMapCard({
 
 export interface SubsystemCoverageMapCardsProps {
 	repos: readonly SubsystemCoverageRepo[];
-	/** The host's focused repo key (`SubsystemReposMap`'s `selectedRepoKey`). */
-	selectedRepoKey?: string | null;
+	/** Repos currently filtering the list (`SubsystemReposMap`'s `selectedRepoKeys`). */
+	selectedRepoKeys?: ReadonlySet<string>;
 	/** Focus a repo (pan the map / open its models). */
 	onSelectRepo?: (repoKey: string) => void;
 	/** Open a model in its own tab. */
@@ -592,7 +592,7 @@ export interface SubsystemCoverageMapCardsProps {
  */
 export function SubsystemCoverageMapCards({
 	repos,
-	selectedRepoKey,
+	selectedRepoKeys,
 	onSelectRepo,
 	onOpenModel,
 	onOpenFile,
@@ -662,7 +662,7 @@ export function SubsystemCoverageMapCards({
 						<SubsystemCoverageMapCard
 							repo={repo}
 							modelColors={modelColors}
-							selected={selectedRepoKey === repo.repoKey}
+							selected={selectedRepoKeys?.has(repo.repoKey) ?? false}
 							onSelectRepo={
 								onSelectRepo ? () => onSelectRepo(repo.repoKey) : undefined
 							}

@@ -8,8 +8,8 @@
  *
  * Cities are built lazily from each repo's own checkout, resolved from its
  * purl via the Alexandria registry (the host's `getRepoFileTree` RPC), one at
- * a time so a large repo set does not hammer the host. Cards render while
- * their city loads; repos whose checkout cannot be read are dropped.
+ * a time so a large repo set does not hammer the host. Cards render as their
+ * city finishes loading; repos whose checkout cannot be read never render.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -140,8 +140,8 @@ export function SubsystemReposMap({
 	graphs,
 	onOpenModel,
 	onFileCoverage,
-	selectedRepoKey,
-	onSelectRepo,
+	selectedRepoKeys,
+	onToggleRepo,
 	onOpenFile,
 }: {
 	graphs: SubsystemModelSummary[];
@@ -149,16 +149,16 @@ export function SubsystemReposMap({
 	onOpenModel: (graphId: string, trailId?: string) => void;
 	/**
 	 * Repo key → share of that repo's checkout referenced by subsystem models.
-	 * Reported as each city finishes loading, for the map's repo rows.
+	 * Reported as each city finishes loading.
 	 */
 	onFileCoverage?: (coverage: ReadonlyMap<string, RepoFileCoverage>) => void;
 	/**
-	 * Host-owned selection, keyed by purl repo key (the same key the tab's
-	 * `FilesDrilldown`/`focusedRepo` uses).
+	 * Repos currently filtering the list — card headers highlight while
+	 * selected and clicking one toggles it in the filter set.
 	 */
-	selectedRepoKey: string | null;
-	/** Forward a card header click back to the host's selection state. */
-	onSelectRepo: (repoKey: string | null) => void;
+	selectedRepoKeys: ReadonlySet<string>;
+	/** Toggle a repo in the list's filter set. */
+	onToggleRepo: (repoKey: string) => void;
 	/**
 	 * Fired when a building on a map is clicked. The card knows which repo's
 	 * city it is, so the repo key travels with the repo-relative path.
@@ -238,7 +238,10 @@ export function SubsystemReposMap({
 	const repos = useMemo<SubsystemCoverageRepo[]>(
 		() =>
 			descriptors
-				.filter((descriptor) => !failed.has(descriptor.repoKey))
+				// Only repos whose checkout resolved get a card — pending and
+				// failed repos never render, so the grid fills in instead of
+				// thinning out as fetches settle.
+				.filter((descriptor) => trees.has(descriptor.repoKey))
 				.map((descriptor) => ({
 					repoKey: descriptor.repoKey,
 					label: descriptor.label,
@@ -249,14 +252,29 @@ export function SubsystemReposMap({
 				})),
 		// `modelsFor` reads `descriptors`, which is already a dependency.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[descriptors, trees, failed],
+		[descriptors, trees],
 	);
+
+	/** Repos whose checkout fetch has not settled yet (neither loaded nor failed). */
+	const pendingCount = descriptors.filter(
+		(descriptor) =>
+			!trees.has(descriptor.repoKey) && !failed.has(descriptor.repoKey),
+	).length;
 
 	if (descriptors.length === 0) {
 		return (
 			<CenteredMessage
 				title="No repos to map"
 				detail="Subsystem models in this tab reference no resolvable repos."
+			/>
+		);
+	}
+
+	if (repos.length === 0 && pendingCount > 0) {
+		return (
+			<CenteredMessage
+				title="Loading repo cities…"
+				detail={`${pendingCount} of ${descriptors.length} checkouts still loading.`}
 			/>
 		);
 	}
@@ -273,8 +291,8 @@ export function SubsystemReposMap({
 	return (
 		<SubsystemCoverageMapCards
 			repos={repos}
-			selectedRepoKey={selectedRepoKey}
-			onSelectRepo={onSelectRepo}
+			selectedRepoKeys={selectedRepoKeys}
+			onSelectRepo={onToggleRepo}
 			onOpenModel={(modelId) => onOpenModel(modelId)}
 			onOpenFile={onOpenFile}
 		/>
