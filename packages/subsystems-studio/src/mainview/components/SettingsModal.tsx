@@ -5,14 +5,23 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Bot, ChevronRight, Database, Gauge, Scale, Server, SlidersHorizontal } from "lucide-react";
+import {
+	Bot,
+	ChevronRight,
+	Database,
+	Gauge,
+	LayoutDashboard,
+	Scale,
+	Server,
+	SlidersHorizontal,
+} from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
 	DEFAULT_TAB_FLAGS,
 	type DefaultTabFlags,
 	type ViewerSettings,
 } from "../../shared/contract";
-import { electrobun } from "../rpc";
+import { electrobun, showFailedRepoCityCardsSubscribers } from "../rpc";
 import { MaintainerPane } from "./MaintainerPane";
 import { RepoMonitorPane } from "./RepoMonitorPane";
 import { SharedModelsSettingsPane } from "./SharedModelsSettingsPane";
@@ -74,6 +83,11 @@ const TAB_TOGGLES: Array<{
 		label: "OpenCode V2",
 		description: "Debug detect/install for the Maintain V2 runtime",
 	},
+	{
+		key: "mergedPullRequests",
+		label: "Merged PRs",
+		description: "Recently merged pull requests across locally cloned GitHub repos",
+	},
 ];
 
 const REGULAR_AUDIT_INTERVAL_OPTIONS = [
@@ -100,6 +114,7 @@ const FALLBACK_SETTINGS: ViewerSettings = {
 	ollamaJudgeModel: null,
 	maintenanceRepoKey: null,
 	lastActiveTabId: null,
+	showFailedRepoCityCards: false,
 };
 
 type SavingKey =
@@ -107,7 +122,8 @@ type SavingKey =
 	| "resetTabs"
 	| "autoApplyAuditFixes"
 	| "regularAudit"
-	| "regularAuditInterval";
+	| "regularAuditInterval"
+	| "showFailedRepoCityCards";
 
 /**
  * The audit findings that carry a deterministic one-click fix. Enumerated here
@@ -146,6 +162,12 @@ const SETTINGS_TABS = [
 		icon: Gauge,
 		description:
 			"Control how subsystem models are audited on a schedule.",
+	},
+	{
+		id: "subsystems",
+		label: "Subsystems",
+		icon: LayoutDashboard,
+		description: "Configure the Subsystems repo-city map and its diagnostics.",
 	},
 	{
 		id: "jev",
@@ -410,6 +432,30 @@ export function SettingsModal({
 		},
 		[settings],
 	);
+
+	const toggleShowFailedRepoCityCards = useCallback(async () => {
+		if (!settings) return;
+		const nextValue = !settings.showFailedRepoCityCards;
+		setSavingKey("showFailedRepoCityCards");
+		setSettings({ ...settings, showFailedRepoCityCards: nextValue });
+		try {
+			const res = await electrobun.rpc!.request.setSettings({
+				settings: { showFailedRepoCityCards: nextValue },
+			});
+			if (res.ok) {
+				setSettings(res.settings);
+				for (const subscriber of showFailedRepoCityCardsSubscribers) {
+					subscriber(res.settings.showFailedRepoCityCards);
+				}
+			} else {
+				setSettings({ ...settings, showFailedRepoCityCards: !nextValue });
+			}
+		} catch {
+			setSettings({ ...settings, showFailedRepoCityCards: !nextValue });
+		} finally {
+			setSavingKey(null);
+		}
+	}, [settings]);
 
 	const tabsAtDefaults =
 		!!settings &&
@@ -880,6 +926,61 @@ export function SettingsModal({
 									</div>
 								</div>
 							</>
+						)}
+
+						{activeTab === "subsystems" && (
+							<label
+								style={{
+									display: "flex",
+									alignItems: "center",
+									gap: 12,
+									padding: "10px 12px",
+									borderRadius: 8,
+									background: theme.colors.background,
+									border: `1px solid ${theme.colors.border}`,
+									cursor:
+										settings && savingKey !== "showFailedRepoCityCards"
+											? "pointer"
+											: "default",
+									opacity: settings ? 1 : 0.6,
+								}}
+							>
+								<input
+									type="checkbox"
+									checked={settings?.showFailedRepoCityCards ?? false}
+									disabled={!settings || savingKey === "showFailedRepoCityCards"}
+									onChange={() => void toggleShowFailedRepoCityCards()}
+									style={{
+										width: 16,
+										height: 16,
+										accentColor: theme.colors.primary,
+										flexShrink: 0,
+									}}
+								/>
+								<span style={{ minWidth: 0, flex: 1 }}>
+									<span
+										style={{
+											display: "block",
+											fontSize: theme.fontSizes[1],
+											fontWeight: 600,
+											lineHeight: 1.3,
+										}}
+									>
+										Show failed repo city cards
+									</span>
+									<span
+										style={{
+											display: "block",
+											fontSize: theme.fontSizes[0],
+											color: muted,
+											lineHeight: 1.4,
+											marginTop: 2,
+										}}
+									>
+										Keep unresolved checkouts visible with their error and a Retry action.
+									</span>
+								</span>
+							</label>
 						)}
 
 						{activeTab === "jev" && (

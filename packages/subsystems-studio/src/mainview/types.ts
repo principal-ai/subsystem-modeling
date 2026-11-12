@@ -22,6 +22,7 @@ export type TabState =
 	| { kind: "graphify" }
 	| { kind: "package-layers" }
 	| { kind: "opencode-v2" }
+	| { kind: "merged-pull-requests" }
 	| { kind: "session-events"; id: string; sessionId: string }
 	| {
 			kind: "subsystem-model";

@@ -371,6 +371,21 @@ export const LoadingCity: Story = {
 	},
 };
 
+/** A failed checkout stays visible with the returned error. */
+export const FailedCity: Story = {
+	args: {
+		repos: [
+			PAYMENTS_REPO,
+			{
+				...CHECKOUT_REPO,
+				cityData: null,
+				error: "no local checkout for this repo",
+			},
+		],
+		onRetryRepo: (repoKey: string) => console.info("retry repo city", repoKey),
+	},
+};
+
 /** No repos in the filtered window. */
 export const Empty: Story = {
 	args: { repos: [] },

@@ -62,7 +62,16 @@ export interface SubsystemCoverageRepo {
 	avatarUrl?: string;
 	/** The repo checkout laid out as a city; `null` while it loads. */
 	cityData: CityData | null;
+	/** Why the repo city could not be loaded. */
+	error?: string;
+	/** True while a retry request is in flight. */
+	retrying?: boolean;
 	models: readonly SubsystemCoverageModel[];
+	/** Optional copy overrides when layers represent something besides models. */
+	layerSingular?: string;
+	layerPlural?: string;
+	coverageVerb?: string;
+	coverageTitle?: string;
 }
 
 /** Strip `./` / leading `/` so anchored paths match city building paths. */
@@ -169,6 +178,8 @@ export interface SubsystemCoverageMapCardProps {
 	onSelectRepo?: () => void;
 	/** Open a file clicked on the map. */
 	onOpenFile?: (file: { repoKey: string; displayPath: string }) => void;
+	/** Retry loading a failed repo city. */
+	onRetry?: () => void;
 }
 
 /**
@@ -183,6 +194,7 @@ export function SubsystemCoverageMapCard({
 	onOpenFile,
 	onHoverRepo,
 	hoveredModelId,
+	onRetry,
 }: SubsystemCoverageMapCardProps) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -205,6 +217,12 @@ export function SubsystemCoverageMapCard({
 		() => coverageForRepo(repo.cityData, coloredModels),
 		[repo.cityData, coloredModels],
 	);
+	const layerSingular = repo.layerSingular ?? "model";
+	const layerPlural = repo.layerPlural ?? `${layerSingular}s`;
+	const coverageVerb = repo.coverageVerb ?? "covered";
+	const coverageTitle =
+		repo.coverageTitle ??
+		`${coverage.referenced} of ${coverage.total} files covered by subsystem models`;
 	const layers = useMemo(() => coverageLayers(coloredModels), [coloredModels]);
 	/** The hovered model has a layer in this repo — isolate it. Otherwise
 		keep every layer and dim the card instead. */
@@ -238,7 +256,7 @@ export function SubsystemCoverageMapCard({
 				onHoverRepo?.(null);
 			}}
 			onKeyDown={(e) => {
-				if (!onSelectRepo) return;
+				if (!onSelectRepo || e.target !== e.currentTarget) return;
 				if (e.key === "Enter" || e.key === " ") {
 					e.preventDefault();
 					onSelectRepo();
@@ -319,12 +337,19 @@ export function SubsystemCoverageMapCard({
 								color: muted,
 							}}
 						>
-							{repo.cityData ? (
+							{repo.error ? (
 								<span
-									title={`${coverage.referenced} of ${coverage.total} files covered by subsystem models`}
+									title={repo.error}
+									style={{ color: theme.colors.error ?? "#e5534b" }}
+								>
+									city unavailable
+								</span>
+							) : repo.cityData ? (
+								<span
+									title={coverageTitle}
 									style={{ color: theme.colors.text }}
 								>
-									{coverage.percent}% covered
+									{coverage.percent}% {coverageVerb}
 								</span>
 							) : (
 								<span>loading city…</span>
@@ -332,13 +357,13 @@ export function SubsystemCoverageMapCard({
 							<span aria-hidden="true">·</span>
 							<span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
 								<LayoutDashboard size={11} aria-hidden="true" />
-								{repo.models.length} model{repo.models.length === 1 ? "" : "s"}
+								{repo.models.length} {repo.models.length === 1 ? layerSingular : layerPlural}
 							</span>
 						</div>
 					</div>
 				</div>
 
-				{/* Coverage bar: filled share of the repo the models reference. */}
+				{/* Coverage bar: share of repo files represented by these layers. */}
 				{repo.cityData && (
 					<div
 						style={{
@@ -348,7 +373,7 @@ export function SubsystemCoverageMapCard({
 							overflow: "hidden",
 							background: border,
 						}}
-						title={`${coverage.referenced} of ${coverage.total} files covered`}
+						title={coverageTitle}
 					>
 						<div
 							style={{
@@ -374,7 +399,47 @@ export function SubsystemCoverageMapCard({
 					borderTop: `1px solid ${border}`,
 				}}
 			>
-				{repo.cityData ? (
+				{repo.error ? (
+					<div
+						role="alert"
+						style={{
+							maxWidth: "90%",
+							padding: 16,
+							textAlign: "center",
+							fontSize: theme.fontSizes[0],
+							lineHeight: 1.5,
+							color: theme.colors.error ?? "#e5534b",
+							overflowWrap: "anywhere",
+						}}
+					>
+						<FolderGit2 size={30} style={{ opacity: 0.6 }} />
+						<div style={{ fontWeight: 600 }}>Could not load repo city</div>
+						<div>{repo.error}</div>
+						{onRetry && (
+							<button
+								type="button"
+								disabled={repo.retrying}
+								onClick={(event) => {
+									event.stopPropagation();
+									onRetry();
+								}}
+								style={{
+									marginTop: 8,
+									padding: "5px 12px",
+									borderRadius: 6,
+									border: `1px solid ${border}`,
+									background: theme.colors.surface ?? theme.colors.background,
+									color: theme.colors.text,
+									font: "inherit",
+									cursor: repo.retrying ? "default" : "pointer",
+									opacity: repo.retrying ? 0.65 : 1,
+								}}
+							>
+								{repo.retrying ? "Retrying…" : "Retry"}
+							</button>
+						)}
+					</div>
+				) : repo.cityData ? (
 					<ArchitectureMapHighlightLayers
 						cityData={repo.cityData}
 						highlightLayers={displayLayers}
@@ -429,8 +494,15 @@ export interface SubsystemCoverageMapCardsProps {
 	onSelectRepo?: (repoKey: string) => void;
 	/** Open a file clicked on a card's map. */
 	onOpenFile?: (file: { repoKey: string; displayPath: string }) => void;
+	/** Retry a failed repo city by repo key. */
+	onRetryRepo?: (repoKey: string) => void;
 	/** Minimum card width before the grid adds another column. */
 	minColumnWidth?: number;
+	/** Accessible label for this map grid. */
+	listLabel?: string;
+	/** Empty-state copy for non-subsystem uses of these cards. */
+	emptyTitle?: string;
+	emptyDetail?: string;
 }
 
 /**
@@ -442,9 +514,13 @@ export function SubsystemCoverageMapCards({
 	selectedRepoKeys,
 	onSelectRepo,
 	onOpenFile,
+	onRetryRepo,
 	onHoverRepo,
 	hoveredModelId,
 	minColumnWidth = 300,
+	listLabel = "Subsystem coverage maps",
+	emptyTitle = "No repo cities to map",
+	emptyDetail = "Repos referenced by subsystem models will appear here, with their covered files lit on the map.",
 }: SubsystemCoverageMapCardsProps) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -473,11 +549,10 @@ export function SubsystemCoverageMapCards({
 							marginBottom: 6,
 						}}
 					>
-						No repo cities to map
+						{emptyTitle}
 					</div>
 					<div style={{ fontSize: theme.fontSizes[1] }}>
-						Repos referenced by subsystem models will appear here, with their
-						covered files lit on the map.
+						{emptyDetail}
 					</div>
 				</div>
 			</div>
@@ -497,7 +572,7 @@ export function SubsystemCoverageMapCards({
 		>
 			<div
 				role="list"
-				aria-label="Subsystem coverage maps"
+				aria-label={listLabel}
 				style={{
 					display: "grid",
 					gridTemplateColumns: `repeat(auto-fill, minmax(${minColumnWidth}px, 1fr))`,
@@ -511,12 +586,13 @@ export function SubsystemCoverageMapCards({
 							repo={repo}
 							modelColors={modelColors}
 							selected={selectedRepoKeys?.has(repo.repoKey) ?? false}
-						onHoverRepo={onHoverRepo}
-						hoveredModelId={hoveredModelId}
+							onHoverRepo={onHoverRepo}
+							hoveredModelId={hoveredModelId}
 							onSelectRepo={
 								onSelectRepo ? () => onSelectRepo(repo.repoKey) : undefined
 							}
 							onOpenFile={onOpenFile}
+							onRetry={onRetryRepo ? () => onRetryRepo(repo.repoKey) : undefined}
 						/>
 					</div>
 				))}

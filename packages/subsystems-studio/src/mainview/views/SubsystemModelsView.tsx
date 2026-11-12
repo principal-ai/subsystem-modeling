@@ -19,6 +19,7 @@ import type {
 } from "../../shared/contract";
 import {
 	electrobun,
+	showFailedRepoCityCardsSubscribers,
 	c4SketchChangeSubscribers,
 	graphifyChangeSubscribers,
 	subsystemModelChangeSubscribers,
@@ -458,6 +459,7 @@ export function SubsystemModelsView({
 } = {}) {
 	const { theme } = useTheme();
 	const [graphs, setGraphs] = useState<SubsystemModelSummary[] | null>(null);
+	const [showFailedRepos, setShowFailedRepos] = useState(false);
 	const [sketches, setSketches] = useState<C4SketchSummary[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -497,6 +499,26 @@ export function SubsystemModelsView({
 	const panelGraphsRef = useRef<SubsystemModelSummary[] | null>(null);
 	/** Last repo-filter-exempt graphs handed to the rail; same reuse. */
 	const mapPanelGraphsRef = useRef<SubsystemModelSummary[] | null>(null);
+
+	useEffect(() => {
+		let settingsChanged = false;
+		const onShowFailedRepoCityCards = (enabled: boolean) => {
+			settingsChanged = true;
+			setShowFailedRepos(enabled);
+		};
+		showFailedRepoCityCardsSubscribers.add(onShowFailedRepoCityCards);
+		void electrobun.rpc!.request
+			.getSettings({})
+			.then((settings) => {
+				if (!settingsChanged) {
+					setShowFailedRepos(settings.showFailedRepoCityCards);
+				}
+			})
+			.catch(() => {});
+		return () => {
+			showFailedRepoCityCardsSubscribers.delete(onShowFailedRepoCityCards);
+		};
+	}, []);
 
 	const refresh = useCallback(async () => {
 		try {
@@ -971,6 +993,7 @@ windowedGraphs.length === 0 ? (
 						<style>{`.subsystem-map-rail,.subsystem-map-rail *{scrollbar-width:none;}.subsystem-map-rail::-webkit-scrollbar,.subsystem-map-rail *::-webkit-scrollbar{display:none;}`}</style>
 						<SubsystemReposMap
 							graphs={mapPanelGraphs}
+							showFailedRepos={showFailedRepos}
 							selectedRepoKeys={selectedRepos}
 							onToggleRepo={onToggleRepo}
 							onHoverRepo={setHoveredRepoKey}

@@ -34,6 +34,7 @@ import { MaintenanceView } from "./views/MaintenanceView";
 import { GraphifyReposView } from "./views/GraphifyReposView";
 import { PackageLayersReposView } from "./views/PackageLayersReposView";
 import { OpencodeV2DebugView } from "./views/OpencodeV2DebugView";
+import { MergedPullRequestsView } from "./views/MergedPullRequestsView";
 import { SessionEventsView } from "./views/SessionEventsView";
 import { SubsystemModelView } from "./views/SubsystemModelView";
 import { SubsystemC4View } from "./views/SubsystemC4View";
@@ -97,6 +98,7 @@ const STATIC_TAB_IDS = new Set([
 	"graphify",
 	"package-layers",
 	"opencode-v2",
+	"merged-pull-requests",
 ]);
 
 // Permanent tabs carry no host payload — their resolved state is known from the
@@ -114,6 +116,7 @@ function staticTabState(tabId: string): TabState | null {
 	if (tabId === "graphify") return { kind: "graphify" };
 	if (tabId === "package-layers") return { kind: "package-layers" };
 	if (tabId === "opencode-v2") return { kind: "opencode-v2" };
+	if (tabId === "merged-pull-requests") return { kind: "merged-pull-requests" };
 	return null;
 }
 
@@ -135,6 +138,7 @@ function renderStaticView(tabId: string, active: boolean): ReactNode | null {
 	if (state.kind === "graphify") return <GraphifyReposView />;
 	if (state.kind === "package-layers") return <PackageLayersReposView />;
 	if (state.kind === "opencode-v2") return <OpencodeV2DebugView />;
+	if (state.kind === "merged-pull-requests") return <MergedPullRequestsView />;
 	return null;
 }
 

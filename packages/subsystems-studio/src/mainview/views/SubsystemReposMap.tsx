@@ -12,7 +12,7 @@
  * city finishes loading; repos whose checkout cannot be read never render.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
 	MultiVersionCityBuilder,
 	type CityData,
@@ -138,6 +138,7 @@ function buildRepoCity(files: Array<{ path: string; size?: number }>): RepoCity 
 
 export function SubsystemReposMap({
 	graphs,
+	showFailedRepos = false,
 	onFileCoverage,
 	selectedRepoKeys,
 	onToggleRepo,
@@ -146,6 +147,8 @@ export function SubsystemReposMap({
 	onOpenFile,
 }: {
 	graphs: SubsystemModelSummary[];
+	/** Include failed repo cards with their load errors instead of hiding them. */
+	showFailedRepos?: boolean;
 	/**
 	 * Repo key → share of that repo's checkout referenced by subsystem models.
 	 * Reported as each city finishes loading.
@@ -170,12 +173,26 @@ export function SubsystemReposMap({
 }) {
 	const descriptors = useMemo(() => buildRepoDescriptors(graphs), [graphs]);
 	const [trees, setTrees] = useState<Map<string, RepoCity>>(new Map());
-	const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set());
+	const [failed, setFailed] = useState<ReadonlyMap<string, string>>(
+		() => new Map(),
+	);
+	const [retrying, setRetrying] = useState<ReadonlySet<string>>(
+		() => new Set(),
+	);
+	const retryRepo = useCallback((repoKey: string) => {
+		setRetrying((prev) =>
+			prev.has(repoKey) ? prev : new Set(prev).add(repoKey),
+		);
+	}, []);
 
 	// Fetch missing repo trees one per cycle (sequential so a big repo set
-	// doesn't hammer the host with concurrent walks). Failures are skipped.
+	// doesn't hammer the host with concurrent walks). Failures wait for retry.
 	useEffect(() => {
-		const missing = descriptors.find(
+		const retryTarget = descriptors.find(
+			(descriptor) =>
+				!trees.has(descriptor.repoKey) && retrying.has(descriptor.repoKey),
+		);
+		const missing = retryTarget ?? descriptors.find(
 			(descriptor) =>
 				!trees.has(descriptor.repoKey) && !failed.has(descriptor.repoKey),
 		);
@@ -188,9 +205,32 @@ export function SubsystemReposMap({
 				});
 				if (cancelled) return;
 				if (!res.files || res.files.length === 0) {
-					setFailed((prev) => new Set(prev).add(missing.repoKey));
+					setFailed((prev) =>
+						new Map(prev).set(
+							missing.repoKey,
+							res.error || "No files were returned for this checkout.",
+						),
+					);
+					setRetrying((prev) => {
+						if (!prev.has(missing.repoKey)) return prev;
+						const next = new Set(prev);
+						next.delete(missing.repoKey);
+						return next;
+					});
 					return;
 				}
+				setFailed((prev) => {
+					if (!prev.has(missing.repoKey)) return prev;
+					const next = new Map(prev);
+					next.delete(missing.repoKey);
+					return next;
+				});
+				setRetrying((prev) => {
+					if (!prev.has(missing.repoKey)) return prev;
+					const next = new Set(prev);
+					next.delete(missing.repoKey);
+					return next;
+				});
 				const entry = buildRepoCity(res.files);
 				setTrees((prev) => {
 					const next = new Map(prev);
@@ -203,13 +243,24 @@ export function SubsystemReposMap({
 					missing.repoKey,
 					err,
 				);
-				setFailed((prev) => new Set(prev).add(missing.repoKey));
+				setFailed((prev) =>
+					new Map(prev).set(
+						missing.repoKey,
+						err instanceof Error ? err.message : String(err),
+					),
+				);
+				setRetrying((prev) => {
+					if (!prev.has(missing.repoKey)) return prev;
+					const next = new Set(prev);
+					next.delete(missing.repoKey);
+					return next;
+				});
 			}
 		})();
 		return () => {
 			cancelled = true;
 		};
-	}, [descriptors, trees, failed]);
+	}, [descriptors, trees, failed, retrying]);
 
 	/** The model file sets in the shape the cards consume. */
 	const modelsFor = (descriptor: RepoDescriptor): SubsystemCoverageModel[] =>
@@ -242,20 +293,28 @@ export function SubsystemReposMap({
 		() =>
 			descriptors
 				// Only repos whose checkout resolved get a card — pending and
-				// failed repos never render, so the grid fills in instead of
-				// thinning out as fetches settle.
-				.filter((descriptor) => trees.has(descriptor.repoKey))
+				// failed repos are hidden by default. The debug flag can include
+				// failures alongside resolved cities.
+				.filter(
+					(descriptor) =>
+						trees.has(descriptor.repoKey) ||
+						(showFailedRepos && failed.has(descriptor.repoKey)),
+				)
 				.map((descriptor) => ({
 					repoKey: descriptor.repoKey,
 					label: descriptor.label,
 					name: descriptor.name ?? descriptor.label,
 					avatarUrl: descriptor.avatarUrl,
 					cityData: trees.get(descriptor.repoKey)?.city ?? null,
+					error: trees.has(descriptor.repoKey)
+						? undefined
+						: failed.get(descriptor.repoKey),
+					retrying: retrying.has(descriptor.repoKey),
 					models: modelsFor(descriptor),
 				})),
 		// `modelsFor` reads `descriptors`, which is already a dependency.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[descriptors, trees],
+		[descriptors, trees, failed, retrying, showFailedRepos],
 	);
 
 	/** Repos whose checkout fetch has not settled yet (neither loaded nor failed). */
@@ -296,6 +355,7 @@ export function SubsystemReposMap({
 			repos={repos}
 			selectedRepoKeys={selectedRepoKeys}
 			onSelectRepo={onToggleRepo}
+			onRetryRepo={retryRepo}
 			onHoverRepo={onHoverRepo}
 			hoveredModelId={hoveredModelId}
 			onOpenFile={onOpenFile}

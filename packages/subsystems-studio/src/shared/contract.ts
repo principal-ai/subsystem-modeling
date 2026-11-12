@@ -98,6 +98,8 @@ export interface DefaultTabFlags {
 	maintenance: boolean;
 	/** OpenCode V2 debug / runtime tab. */
 	opencodeV2: boolean;
+	/** Recently merged GitHub pull requests across locally cloned repos. */
+	mergedPullRequests: boolean;
 }
 
 /** Tabs present on a fresh install and after Reset defaults. */
@@ -112,6 +114,7 @@ export const DEFAULT_TAB_FLAGS: DefaultTabFlags = {
 	constructs: false,
 	maintenance: false,
 	opencodeV2: false,
+	mergedPullRequests: false,
 };
 
 /** Backend that answers Jev-type questions. */
@@ -194,6 +197,8 @@ export interface JudgeProbeResult {
 
 export interface ViewerSettings {
 	defaultTabs: DefaultTabFlags;
+	/** Keep failed Subsystems repo cities visible with their error and retry action. */
+	showFailedRepoCityCards: boolean;
 	/**
 	 * When true, agent-proposed subsystem model corrections are applied
 	 * immediately. Default false — user confirms each proposal first.
@@ -281,6 +286,7 @@ export interface RegularAuditStatus {
 /** Partial update accepted by `setSettings` — nested objects are merged. */
 export interface PartialViewerSettings {
 	defaultTabs?: Partial<DefaultTabFlags>;
+	showFailedRepoCityCards?: boolean;
 	autoAcceptSubsystemModelProposals?: boolean;
 	/** Minimum Jev confidence (0-1) required to auto-accept. Clamped on write. */
 	autoAcceptSubsystemModelConfidenceThreshold?: number;
@@ -1461,6 +1467,28 @@ export interface PackageLayerRepoEntry {
 	} | null;
 }
 
+/** Locally cloned GitHub repository listed in the Merged PRs tab. */
+export interface MergedPullRequestRepo {
+	owner: string;
+	name: string;
+	path: string;
+	url: string;
+}
+
+/** A merged pull request returned by GitHub's search API. */
+export interface MergedPullRequest {
+	owner: string;
+	repo: string;
+	number: number;
+	title: string;
+	url: string;
+	author?: string;
+	authorAvatarUrl?: string;
+	mergedAt: string;
+	/** Changed repo-relative paths, fetched on demand when the PR is expanded. */
+	files?: string[];
+}
+
 /** Source-bound experimental Jev complexity estimate. */
 export interface ConstructComplexity {
 	/** Jev estimate from 0 (simple) to 1 (complex), not a static-analysis metric. */
@@ -1569,7 +1597,7 @@ export interface ConstructInventoryRepo extends Omit<VerifiedConstructRepo, "pac
 
 export interface TabSummary {
 	id: string;
-	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-c4" | "c4-sketch" | "subsystem-showcase" | "subsystems" | "shared-subsystems" | "remote-subsystem-model" | "constructs" | "maintenance" | "graphify" | "package-layers" | "opencode-v2";
+	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-c4" | "c4-sketch" | "subsystem-showcase" | "subsystems" | "shared-subsystems" | "remote-subsystem-model" | "constructs" | "maintenance" | "graphify" | "package-layers" | "opencode-v2" | "merged-pull-requests";
 	title: string;
 	mode?: ViewerMode;
 	/** For `subsystem-model` tabs — absolute path to the persisted JSON. */
@@ -2563,6 +2591,29 @@ export type StudioRequests = {
 	listGraphifyRepos: {
 		params: Record<string, never>;
 		response: { repos: GraphifyRepoEntry[]; graphify: GraphifyCliStatus };
+	};
+	listMergedPullRequestRepos: {
+		params: Record<string, never>;
+		response: { repos: MergedPullRequestRepo[] };
+	};
+	listMergedPullRequests: {
+		params: { owner: string; since?: string };
+		response: {
+			ok: boolean;
+			pullRequests: MergedPullRequest[];
+			error?: string;
+			errors?: string[];
+			truncatedRepos?: string[];
+		};
+	};
+	getMergedPullRequestFiles: {
+		params: { owner: string; repo: string; number: number };
+		response: {
+			ok: boolean;
+			files?: string[];
+		error?: string;
+			truncated?: boolean;
+		};
 	};
 	/**
 	 * Ensure a graphify graph for a repo. Cache hits may return immediately;

@@ -70,6 +70,17 @@ describe("settings HTTP", () => {
 		expect(defaultTabs.subsystems).toBe(true);
 		expect(defaultTabs.constructs).toBe(false);
 		expect(defaultTabs.maintenance).toBe(false);
+		expect(defaultViewerSettings().showFailedRepoCityCards).toBe(false);
+	});
+
+	test("PATCH persists the failed repo city card visibility setting", async () => {
+		const h = harness();
+		const res = await handleSettingsRequest(request("/api/settings", {
+			method: "PATCH",
+			body: JSON.stringify({ showFailedRepoCityCards: true }),
+		}), h.deps);
+		expect(res!.status).toBe(200);
+		expect(h.settings.showFailedRepoCityCards).toBe(true);
 	});
 
 	test("ignores unrelated paths and refuses non-loopback hosts", async () => {

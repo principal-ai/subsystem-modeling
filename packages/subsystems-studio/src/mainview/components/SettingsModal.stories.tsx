@@ -21,6 +21,9 @@ export const Default: Story = {};
  */
 export const Auditing: Story = { args: { initialTab: "auditing" } };
 
+/** Subsystems map diagnostics, including visibility of failed repo-city cards. */
+export const Subsystems: Story = { args: { initialTab: "subsystems" } };
+
 /**
  * The Second opinion pane — Jev | Ollama judge picker, the judge's key or
  * model, a one-shot "Test the judge", and the proposal auto-accept gate.

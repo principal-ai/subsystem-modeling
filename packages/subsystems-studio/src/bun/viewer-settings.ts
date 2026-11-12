@@ -29,6 +29,7 @@ export const AUTO_ACCEPT_CONFIDENCE_DEFAULT = 0.85;
 export function defaultViewerSettings(): ViewerSettings {
 	return {
 		defaultTabs: { ...DEFAULT_TAB_FLAGS },
+		showFailedRepoCityCards: false,
 		autoAcceptSubsystemModelProposals: false,
 		autoAcceptSubsystemModelConfidenceThreshold: AUTO_ACCEPT_CONFIDENCE_DEFAULT,
 		subsystemMaintainerModel: null,
@@ -129,7 +130,15 @@ function normalize(raw: unknown): ViewerSettings {
 			constructs: coerceBool(tabs["constructs"], defaults.defaultTabs.constructs),
 			maintenance: coerceBool(tabs["maintenance"], defaults.defaultTabs.maintenance),
 			opencodeV2: coerceBool(tabs["opencodeV2"], defaults.defaultTabs.opencodeV2),
+			mergedPullRequests: coerceBool(
+				tabs["mergedPullRequests"],
+				defaults.defaultTabs.mergedPullRequests,
+			),
 		},
+		showFailedRepoCityCards: coerceBool(
+			obj["showFailedRepoCityCards"],
+			defaults.showFailedRepoCityCards,
+		),
 		autoAcceptSubsystemModelProposals: coerceBool(
 			obj["autoAcceptSubsystemModelProposals"],
 			defaults.autoAcceptSubsystemModelProposals,
@@ -214,6 +223,8 @@ export function patchViewerSettings(
 			...current.defaultTabs,
 			...(patch.defaultTabs ?? {}),
 		},
+		showFailedRepoCityCards:
+			patch.showFailedRepoCityCards ?? current.showFailedRepoCityCards,
 		autoAcceptSubsystemModelProposals:
 			patch.autoAcceptSubsystemModelProposals ??
 			current.autoAcceptSubsystemModelProposals,

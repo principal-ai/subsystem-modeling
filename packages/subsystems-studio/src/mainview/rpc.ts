@@ -33,6 +33,11 @@ type StudioRPC = {
 // apply it to its own active-tab state.
 export const reloadSubscribers = new Set<(focusTabId?: string) => void>();
 
+/** The Subsystems map reacts immediately when its Settings flag changes. */
+export const showFailedRepoCityCardsSubscribers = new Set<
+	(enabled: boolean) => void
+>();
+
 // The mounted Agent Sessions view registers here so it re-fetches sessions the
 // host's warm-up worker just refreshed (their disk cache is now fresh). The
 // host fires `sessionsUpdated` after a live-refresh pass completes.

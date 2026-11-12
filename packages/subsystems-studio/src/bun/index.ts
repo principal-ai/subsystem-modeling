@@ -72,6 +72,11 @@ import {
 import { attachSignatureAugmentations } from "./augmentation-store";
 import { publishSubsystemModelGist } from "./gist-publish";
 import {
+	getMergedPullRequestFiles,
+	listMergedPullRequestRepos,
+	listMergedPullRequests,
+} from "./merged-pull-requests";
+import {
 	auditFixGroups,
 	buildAuditFingerprint,
 	deleteSubsystemModelAudit,
@@ -372,6 +377,7 @@ const MAINTENANCE_TAB_ID = "maintenance";
 const GRAPHIFY_TAB_ID = "graphify";
 const PACKAGE_LAYERS_TAB_ID = "package-layers";
 const OPENCODE_V2_TAB_ID = "opencode-v2";
+const MERGED_PULL_REQUESTS_TAB_ID = "merged-pull-requests";
 
 /** Permanent tabs controlled by `ViewerSettings.defaultTabs`. Order here is
  *  the strip order when all are enabled. */
@@ -387,7 +393,8 @@ const PERMANENT_TAB_DEFS: Array<{
 		| "graphify"
 		| "package-layers"
 		| "library"
-		| "opencode-v2";
+		| "opencode-v2"
+		| "merged-pull-requests";
 	title: string;
 	flag: keyof DefaultTabFlags;
 }> = [
@@ -444,6 +451,12 @@ const PERMANENT_TAB_DEFS: Array<{
 		kind: "opencode-v2",
 		title: "OpenCode V2",
 		flag: "opencodeV2",
+	},
+	{
+		id: MERGED_PULL_REQUESTS_TAB_ID,
+		kind: "merged-pull-requests",
+		title: "Merged PRs",
+		flag: "mergedPullRequests",
 	},
 	{
 		id: LIBRARY_TAB_ID,
@@ -598,6 +611,12 @@ interface OpencodeV2TabState {
 	title: "OpenCode V2";
 }
 
+interface MergedPullRequestsTabState {
+	id: typeof MERGED_PULL_REQUESTS_TAB_ID;
+	kind: "merged-pull-requests";
+	title: "Merged PRs";
+}
+
 interface SessionEventsTabState {
 	id: string;
 	kind: "session-events";
@@ -669,6 +688,7 @@ type TabState =
 	| GraphifyTabState
 	| PackageLayersTabState
 	| OpencodeV2TabState
+	| MergedPullRequestsTabState
 	| SessionEventsTabState
 	| SubsystemModelTabState
 	| SubsystemC4TabState
@@ -688,6 +708,7 @@ function permanentTabState(
 	| GraphifyTabState
 	| PackageLayersTabState
 	| OpencodeV2TabState
+	| MergedPullRequestsTabState
 	| LibraryTabState {
 	if (def.kind === "agent-sessions") {
 		return { id: AGENT_SESSIONS_TAB_ID, kind: "agent-sessions", title: "Agent Sessions" };
@@ -723,6 +744,13 @@ function permanentTabState(
 	}
 	if (def.kind === "opencode-v2") {
 		return { id: OPENCODE_V2_TAB_ID, kind: "opencode-v2", title: "OpenCode V2" };
+	}
+	if (def.kind === "merged-pull-requests") {
+		return {
+			id: MERGED_PULL_REQUESTS_TAB_ID,
+			kind: "merged-pull-requests",
+			title: "Merged PRs",
+		};
 	}
 	return { id: LIBRARY_TAB_ID, kind: "library", title: "Tours" };
 }
@@ -778,7 +806,11 @@ function ensurePermanentTab(id: string): void {
 				id === MAINTENANCE_TAB_ID || viewerSettings.defaultTabs.maintenance,
 			opencodeV2:
 				id === OPENCODE_V2_TAB_ID || viewerSettings.defaultTabs.opencodeV2,
+			mergedPullRequests:
+				id === MERGED_PULL_REQUESTS_TAB_ID ||
+				viewerSettings.defaultTabs.mergedPullRequests,
 		},
+		showFailedRepoCityCards: viewerSettings.showFailedRepoCityCards,
 		autoAcceptSubsystemModelProposals:
 			viewerSettings.autoAcceptSubsystemModelProposals,
 		autoAcceptSubsystemModelConfidenceThreshold:
@@ -1573,7 +1605,8 @@ function isStaticTab(
 	| MaintenanceTabState
 	| GraphifyTabState
 	| PackageLayersTabState
-	| OpencodeV2TabState {
+	| OpencodeV2TabState
+	| MergedPullRequestsTabState {
 	return (
 		tab.kind === "library" ||
 		tab.kind === "agent-sessions" ||
@@ -1584,7 +1617,8 @@ function isStaticTab(
 		tab.kind === "maintenance" ||
 		tab.kind === "graphify" ||
 		tab.kind === "package-layers" ||
-		tab.kind === "opencode-v2"
+		tab.kind === "opencode-v2" ||
+		tab.kind === "merged-pull-requests"
 	);
 }
 
@@ -2937,6 +2971,13 @@ const requests: RequestHandlers = {
 					cachedDetailedGraphifyStatus ?? getGraphifyStatus(),
 				),
 			}),
+			listMergedPullRequestRepos: async () => ({
+				repos: await listMergedPullRequestRepos(),
+			}),
+			listMergedPullRequests: async ({ owner, since }) =>
+				listMergedPullRequests({ owner, since }),
+			getMergedPullRequestFiles: async ({ owner, repo, number }) =>
+				getMergedPullRequestFiles({ owner, repo, number }),
 			ensureGraphifyGraph: async ({ purl, repoRoot, force }) => {
 				if (!resolveGraphifyBin()) {
 					const st = getGraphifyStatus();

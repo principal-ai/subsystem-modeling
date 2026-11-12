@@ -60,6 +60,7 @@ export function redactSettings(settings: ViewerSettings): Omit<ViewerSettings, "
 
 const SETTINGS_KEYS: ReadonlySet<keyof PartialViewerSettings> = new Set([
 	"defaultTabs",
+	"showFailedRepoCityCards",
 	"autoAcceptSubsystemModelProposals",
 	"autoAcceptSubsystemModelConfidenceThreshold",
 	"subsystemMaintainerModel",

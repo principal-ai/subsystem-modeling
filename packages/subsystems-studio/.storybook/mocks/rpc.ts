@@ -19,6 +19,8 @@ import type {
 	SubsystemModelProposal,
 	ViewerSettings,
   ConstructInventoryRepo,
+  MergedPullRequest,
+  MergedPullRequestRepo,
 } from "../../src/shared/contract";
 import type { ConstructTimelineMeta, ConstructTimelineSummary, ConstructTimelineFileSnapshot, ConstructTimelineCommit } from "../../src/shared/construct-timeline";
 
@@ -75,6 +77,8 @@ export const repoMonitorChangeSubscribers = new Set<unknown>();
 export function refreshLibrary(): void {}
 
 let store: SubsystemModelProposal[] = [];
+let mergedPullRequestRepos: MergedPullRequestRepo[] = [];
+let mergedPullRequests: MergedPullRequest[] = [];
 
 function pending(): SubsystemModelProposal[] {
   return store.filter((p) => p.status === "pending");
@@ -96,7 +100,9 @@ let viewerSettings: ViewerSettings = {
     constructs: false,
     maintenance: false,
     opencodeV2: false,
+    mergedPullRequests: false,
   },
+  showFailedRepoCityCards: false,
   autoAcceptSubsystemModelProposals: false,
   autoAcceptSubsystemModelConfidenceThreshold: 0.9,
   subsystemMaintainerModel: "opencode-go/deepseek-v4-flash",
@@ -112,6 +118,37 @@ let viewerSettings: ViewerSettings = {
 };
 
 const request: RpcRequest = {
+  getRepoFileTree: async (params) => {
+    const purl = (params as { purl?: string }).purl ?? "";
+    const files = purl.includes("file-city")
+      ? ["packages/file-city-react/src/camera.ts", "packages/file-city-react/src/city.tsx", "packages/file-city-react/src/layout.ts"]
+      : purl.includes("/docs")
+        ? ["README.md", "docs/setup.md", "docs/contributing.md"]
+        : ["packages/subsystems-studio/src/bun/merged-pull-requests.ts", "packages/subsystems-studio/src/mainview/views/MergedPullRequestsView.tsx", "packages/subsystems-studio/src/mainview/views/SubsystemModelsView.tsx", "packages/subsystems-studio/src/mainview/components/TabStrip.tsx"];
+    return { files: files.map((path) => ({ path, size: 256 })) };
+  },
+  listMergedPullRequestRepos: async () => ({ repos: mergedPullRequestRepos }),
+  listMergedPullRequests: async (params) => {
+    const { owner, since } = params as { owner: string; since?: string };
+      return {
+      ok: true,
+      pullRequests: mergedPullRequests.filter((pr) =>
+        pr.owner.toLowerCase() === owner.toLowerCase() &&
+        (!since || pr.mergedAt.slice(0, 10) >= since),
+      ),
+      errors: [],
+      truncatedRepos: [],
+    };
+  },
+  getMergedPullRequestFiles: async (params) => {
+    const { owner, repo, number } = params as { owner: string; repo: string; number: number };
+    const pullRequest = mergedPullRequests.find(
+      (pr) => pr.owner === owner && pr.repo === repo && pr.number === number,
+    );
+    return pullRequest
+      ? { ok: true, files: pullRequest.files ?? [] }
+      : { ok: false, error: "Pull request fixture not found." };
+  },
   searchConstructRepositories: async (params) => {
     const query = (params as { query: string }).query.trim().toLowerCase();
     return { ok: true, repos: query && inventoryRepo &&
@@ -422,6 +459,14 @@ let repoMonitorStatus: RepoMonitorDiagnostics = runningRepoMonitor();
 /** Shape the Settings → Repository monitor pane for a story. */
 export function mockRepoMonitorStatus(status: RepoMonitorDiagnostics): void {
   repoMonitorStatus = status;
+}
+
+export function mockMergedPullRequestData(
+  repos: MergedPullRequestRepo[],
+  pullRequests: MergedPullRequest[],
+): void {
+  mergedPullRequestRepos = repos;
+  mergedPullRequests = pullRequests;
 }
 
 let mockOverview: unknown = null;
