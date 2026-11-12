@@ -74,6 +74,9 @@ export const subsystemModelRunsChangeSubscribers = new Set<unknown>();
 export const regularAuditChangeSubscribers = new Set<unknown>();
 export const repoMonitorChangeSubscribers = new Set<unknown>();
 
+/** The Subsystems map and merged-PRs map react immediately when this flag changes. */
+export const showFailedRepoCityCardsSubscribers = new Set<(enabled: boolean) => void>();
+
 export function refreshLibrary(): void {}
 
 let store: SubsystemModelProposal[] = [];
@@ -120,6 +123,8 @@ let viewerSettings: ViewerSettings = {
 const request: RpcRequest = {
   getRepoFileTree: async (params) => {
     const purl = (params as { purl?: string }).purl ?? "";
+    const failure = [...repoFileTreeFailures.entries()].find(([key]) => purl.includes(key));
+    if (failure) return { files: [], error: failure[1] };
     const files = purl.includes("file-city")
       ? ["packages/file-city-react/src/camera.ts", "packages/file-city-react/src/city.tsx", "packages/file-city-react/src/layout.ts"]
       : purl.includes("/docs")
@@ -467,6 +472,22 @@ export function mockMergedPullRequestData(
 ): void {
   mergedPullRequestRepos = repos;
   mergedPullRequests = pullRequests;
+}
+
+/**
+ * Make `getRepoFileTree` fail for purls containing each key, so stories can
+ * show the failed-city cards (enable them first via the
+ * `showFailedRepoCityCards` viewer setting).
+ */
+let repoFileTreeFailures = new Map<string, string>();
+export function mockRepoFileTreeFailures(entries: ReadonlyMap<string, string>): void {
+  repoFileTreeFailures = new Map(entries);
+}
+
+/** Flip the failed-city visibility flag the maps read from settings. */
+export function mockShowFailedRepoCityCards(enabled: boolean): void {
+  viewerSettings = { ...viewerSettings, showFailedRepoCityCards: enabled };
+  for (const subscriber of showFailedRepoCityCardsSubscribers) subscriber(enabled);
 }
 
 let mockOverview: unknown = null;

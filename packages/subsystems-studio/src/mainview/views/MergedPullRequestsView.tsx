@@ -14,7 +14,7 @@ import type {
 	MergedPullRequest,
 	MergedPullRequestRepo,
 } from "../../shared/contract";
-import { electrobun } from "../rpc";
+import { electrobun, showFailedRepoCityCardsSubscribers } from "../rpc";
 import { CenteredMessage, relativeTime } from "../ui";
 import { MergedPullRequestRepoMap, pullRequestLayerId } from "./MergedPullRequestRepoMap";
 
@@ -80,6 +80,7 @@ export function MergedPullRequestsView() {
 	const [selectedRepos, setSelectedRepos] = useState<ReadonlySet<string>>(() => new Set());
 	const [selectedAuthors, setSelectedAuthors] = useState<ReadonlySet<string>>(() => new Set());
 	const [pullRequests, setPullRequests] = useState<MergedPullRequest[]>([]);
+	const [showFailedRepos, setShowFailedRepos] = useState(false);
 	const [hoveredRepoKey, setHoveredRepoKey] = useState<string | null>(null);
 	const [hoveredPullRequestId, setHoveredPullRequestId] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
@@ -134,6 +135,26 @@ export function MergedPullRequestsView() {
 			setError(err instanceof Error ? err.message : String(err));
 			setRepos([]);
 		}
+	}, []);
+
+	useEffect(() => {
+		let settingsChanged = false;
+		const onShowFailedRepoCityCards = (enabled: boolean) => {
+			settingsChanged = true;
+			setShowFailedRepos(enabled);
+		};
+		showFailedRepoCityCardsSubscribers.add(onShowFailedRepoCityCards);
+		void electrobun.rpc!.request
+			.getSettings({})
+			.then((settings) => {
+				if (!settingsChanged) {
+					setShowFailedRepos(settings.showFailedRepoCityCards);
+				}
+			})
+			.catch(() => {});
+		return () => {
+			showFailedRepoCityCardsSubscribers.delete(onShowFailedRepoCityCards);
+		};
 	}, []);
 
 	useEffect(() => {
@@ -428,6 +449,7 @@ export function MergedPullRequestsView() {
 					<MergedPullRequestRepoMap
 						repos={orgRepos}
 						pullRequests={mappedPullRequests}
+						showFailedRepos={showFailedRepos}
 						selectedRepoKeys={selectedRepos}
 						onToggleRepo={toggleRepo}
 						onHoverRepo={setHoveredRepoKey}

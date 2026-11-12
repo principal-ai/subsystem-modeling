@@ -1,6 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import type { MergedPullRequest, MergedPullRequestRepo } from "../../shared/contract";
-import { mockMergedPullRequestData } from "../../../.storybook/mocks/rpc";
+import {
+  mockMergedPullRequestData,
+  mockRepoFileTreeFailures,
+  mockShowFailedRepoCityCards,
+} from "../../../.storybook/mocks/rpc";
 import { MergedPullRequestsView } from "./MergedPullRequestsView";
 
 const repos: MergedPullRequestRepo[] = [
@@ -23,7 +27,11 @@ const meta = {
 	title: "Studio/Merged PRs",
 	component: MergedPullRequestsView,
 	decorators: [(Story) => <div style={{ height: "100vh", display: "flex" }}><Story /></div>],
-	beforeEach: () => mockMergedPullRequestData(repos, recentPullRequests()),
+	beforeEach: () => {
+		mockMergedPullRequestData(repos, recentPullRequests());
+		mockRepoFileTreeFailures(new Map());
+		mockShowFailedRepoCityCards(false);
+	},
 } satisfies Meta<typeof MergedPullRequestsView>;
 
 export default meta;
@@ -37,4 +45,15 @@ export const NoMergedPullRequests: Story = {
 
 export const NoLocalRepos: Story = {
 	beforeEach: () => mockMergedPullRequestData([], []),
+};
+
+/** A checkout the daemon cannot read stays visible with its error and a retry. */
+export const FailedRepoCity: Story = {
+	beforeEach: () => {
+		mockMergedPullRequestData(repos, recentPullRequests());
+		mockRepoFileTreeFailures(
+			new Map([["example-org/docs", "Request timeout: getFileTree"]]),
+		);
+		mockShowFailedRepoCityCards(true);
+	},
 };

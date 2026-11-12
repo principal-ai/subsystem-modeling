@@ -1,6 +1,6 @@
 {
   "name": "@principal-ai/subsystems-studio",
-  "version": "0.20.24",
+  "version": "0.20.25",
   "description": "Subsystems Studio — desktop host for subsystem models, trails, tours, and agent sessions. Pairs with the principal-ai CLI.",
   "type": "module",
   "os": [

@@ -27,6 +27,16 @@ export type RepoFile = { path: string; size: number };
 const LOG = "[principal-studio] repo-monitor:";
 const RETRY_AFTER_FAILURE_MS = 10_000;
 
+/**
+ * Per-request budget for daemon `register` / `getFileTree` calls. The
+ * client's 30 s default trips on a cold `register` of a large checkout (full
+ * git-aware scan) and surfaces as `Request timeout: register` /
+ * `Request timeout: getFileTree` city errors. The renderer's RPC ceiling is
+ * 120 s (`maxRequestTime` in mainview/rpc.ts), so 60 s plus the single
+ * timeout retry below stays inside it.
+ */
+const DAEMON_REQUEST_TIMEOUT_MS = 60_000;
+
 let client: RepoMonitorClient | null = null;
 let unavailableUntil = 0;
 let lastFailure: string | null = null;
@@ -112,6 +122,7 @@ function getClient(): RepoMonitorClient | null {
 		spawnedBy: "studio",
 		daemonEntryPath,
 		nodeBinary,
+		requestTimeoutMs: DAEMON_REQUEST_TIMEOUT_MS,
 		log: (level, message) => {
 			if (level === "debug") return;
 			(level === "info" ? console.log : console.warn)(`${LOG} ${message}`);
@@ -147,6 +158,42 @@ export async function ensureRepoMonitor(): Promise<RepoMonitorClient | null> {
 }
 
 /**
+ * `Request timeout: <type>` from the daemon client — the daemon was still
+ * working when the budget ran out, not broken, so one retry is worthwhile.
+ */
+export function isRepoMonitorTimeout(err: unknown): boolean {
+	return err instanceof Error && err.message.startsWith("Request timeout:");
+}
+
+/**
+ * Run one daemon request, retrying once when the daemon times out. A timed
+ * out `register` usually means the daemon was still scanning the checkout;
+ * by the retry it is warm and answers fast. Non-timeout failures throw
+ * through to the caller unchanged.
+ */
+export async function daemonRequestWithTimeoutRetry<T>(
+	label: string,
+	root: string,
+	run: () => Promise<T>,
+): Promise<T> {
+	try {
+		return await run();
+	} catch (err) {
+		if (!isRepoMonitorTimeout(err)) throw err;
+		console.warn(
+			`${LOG} ${label} for ${root} timed out after ${DAEMON_REQUEST_TIMEOUT_MS}ms; retrying once.`,
+		);
+		try {
+			return await run();
+		} catch (retryErr) {
+			throw new Error(
+				`repository monitor ${label} for ${root} timed out twice (${DAEMON_REQUEST_TIMEOUT_MS}ms each): ${(retryErr as Error).message}`,
+			);
+		}
+	}
+}
+
+/**
  * Relative file paths (with sizes) under `root` from the daemon's git-aware,
  * cached tree. Throws when the daemon is unavailable or cannot read the repo.
  */
@@ -154,10 +201,14 @@ export async function listRepoFiles(root: string): Promise<RepoFile[]> {
 	const c = await ensureRepoMonitor();
 	if (!c) throw new Error(`repository monitor unavailable: ${lastFailure ?? "not connected"}`);
 	if (!registered.has(root)) {
-		await c.request({ type: "register", path: root });
+		await daemonRequestWithTimeoutRetry("register", root, () =>
+			c.request({ type: "register", path: root }),
+		);
 		registered.add(root);
 	}
-	const tree = await c.request({ type: "getFileTree", path: root });
+	const tree = await daemonRequestWithTimeoutRetry("getFileTree", root, () =>
+		c.request({ type: "getFileTree", path: root }),
+	);
 	if (!tree) throw new Error(`repository monitor returned no file tree for ${root}`);
 	return tree.allFiles.map((f) => ({ path: f.path, size: f.size ?? 0 }));
 }
