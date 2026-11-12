@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import {
 	ChevronDown,
 	ChevronRight,
+	Check,
 	ExternalLink,
 	FileDiff,
 	GitPullRequest,
@@ -143,6 +144,11 @@ export function MergedPullRequestsView() {
 		() => [...new Set((repos ?? []).map((repo) => repo.owner))].sort((a, b) => a.localeCompare(b)),
 		[repos],
 	);
+	const repoCounts = useMemo(() => {
+		const counts = new Map<string, number>();
+		for (const repo of repos ?? []) counts.set(repo.owner, (counts.get(repo.owner) ?? 0) + 1);
+		return counts;
+	}, [repos]);
 	const orgRepos = useMemo(
 		() => (repos ?? []).filter((repo) => repo.owner === owner),
 		[repos, owner],
@@ -266,7 +272,10 @@ export function MergedPullRequestsView() {
 				fontFamily: theme.fonts.body,
 			}}
 		>
-			<style>{`.merged-pr-author-filters{scrollbar-width:none}.merged-pr-author-filters::-webkit-scrollbar{display:none;width:0;height:0}`}</style>
+			<style>{`.merged-pr-author-filters{scrollbar-width:none}.merged-pr-author-filters::-webkit-scrollbar{display:none;width:0;height:0}
+.merged-pr-org-option{background:transparent}
+.merged-pr-org-option:hover,.merged-pr-org-option:focus,.merged-pr-org-option[aria-checked="true"]{background:var(--merged-pr-org-hover)}
+.merged-pr-org-option:focus-visible{outline:1px solid var(--merged-pr-org-accent);outline-offset:-1px}`}</style>
 			<header
 				style={{
 					flexShrink: 0,
@@ -277,38 +286,32 @@ export function MergedPullRequestsView() {
 				}}
 			>
 			<div style={{ display: "flex", alignItems: "stretch", minHeight: 36 }}>
-				<label
+				<div
 					style={{
 						display: "flex",
 						alignItems: "center",
-						gap: 8,
+						gap: 10,
 						padding: "0 14px",
 						borderRight: `1px solid ${theme.colors.border ?? "#333"}`,
-						fontSize: theme.fontSizes[0],
-						color: muted,
-						textTransform: "uppercase",
-						letterSpacing: 0.3,
 					}}
 				>
-					Organization
-					<select
-						aria-label="GitHub organization"
-						value={owner}
-						onChange={(event) => setOwner(event.target.value)}
+					<span
 						style={{
-							maxWidth: 220,
-							border: `1px solid ${theme.colors.border ?? "#444"}`,
-							borderRadius: 4,
-							padding: "4px 8px",
-							background: theme.colors.background,
-							color: theme.colors.text,
-							fontFamily: theme.fonts.body,
-							fontSize: theme.fontSizes[1],
+							fontSize: theme.fontSizes[0],
+							color: muted,
+							textTransform: "uppercase",
+							letterSpacing: 0.3,
 						}}
 					>
-						{owners.map((item) => <option key={item} value={item}>{item}</option>)}
-					</select>
-				</label>
+						Organization
+					</span>
+					<OrganizationSelector
+						owners={owners}
+						owner={owner}
+						repoCounts={repoCounts}
+						onChange={setOwner}
+					/>
+				</div>
 				<div style={{ flex: 1, minWidth: 0, display: "flex" }}>
 					{WINDOWS.map(({ key, label }, index) => {
 						const active = window === key;
@@ -416,6 +419,9 @@ export function MergedPullRequestsView() {
 						width: "42%",
 						minWidth: 300,
 						minHeight: 0,
+						display: "flex",
+						flexDirection: "column",
+						overflow: "hidden",
 						borderRight: `1px solid ${theme.colors.border ?? "#333"}`,
 					}}
 				>
@@ -465,6 +471,252 @@ export function MergedPullRequestsView() {
 					)}
 				</main>
 			</div>
+		</div>
+	);
+}
+
+function orgAvatarUrl(org: string): string {
+	return `https://github.com/${org}.png?size=64`;
+}
+
+function OrgAvatar({ org, size = 20 }: { org: string; size?: number }) {
+	const { theme } = useTheme();
+	const [broken, setBroken] = useState(false);
+	const border = theme.colors.border ?? "#333";
+	if (broken) {
+		return (
+			<span
+				aria-hidden="true"
+				style={{
+					width: size,
+					height: size,
+					flexShrink: 0,
+					borderRadius: 6,
+					display: "inline-flex",
+					alignItems: "center",
+					justifyContent: "center",
+					background: theme.colors.backgroundSecondary ?? theme.colors.background,
+					border: `1px solid ${border}`,
+					color: theme.colors.textSecondary ?? theme.colors.text,
+					fontSize: size * 0.55,
+					fontWeight: 700,
+				}}
+			>
+				{org.slice(0, 1).toUpperCase()}
+			</span>
+		);
+	}
+	return (
+		<img
+			src={orgAvatarUrl(org)}
+			alt=""
+			width={size}
+			height={size}
+			onError={() => setBroken(true)}
+			style={{
+				width: size,
+				height: size,
+				flexShrink: 0,
+				borderRadius: 6,
+				objectFit: "cover",
+				border: `1px solid ${border}`,
+				background: theme.colors.backgroundSecondary ?? theme.colors.background,
+			}}
+		/>
+	);
+}
+
+function OrganizationSelector({
+	owners,
+	owner,
+	repoCounts,
+	onChange,
+}: {
+	owners: readonly string[];
+	owner: string;
+	repoCounts: ReadonlyMap<string, number>;
+	onChange: (owner: string) => void;
+}) {
+	const { theme } = useTheme();
+	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
+	const [open, setOpen] = useState(false);
+	const [triggerHovered, setTriggerHovered] = useState(false);
+	const root = useRef<HTMLDivElement>(null);
+	const trigger = useRef<HTMLButtonElement>(null);
+	const menu = useRef<HTMLDivElement>(null);
+	const menuId = useId();
+
+	useEffect(() => {
+		if (!open) return;
+		menu.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus();
+		const dismiss = (event: PointerEvent) => {
+			if (!root.current?.contains(event.target as Node)) setOpen(false);
+		};
+		document.addEventListener("pointerdown", dismiss);
+		return () => document.removeEventListener("pointerdown", dismiss);
+	}, [open ]);
+	const close = useCallback(() => {
+		setOpen(false);
+		trigger.current?.focus();
+	}, []);
+
+	if (owners.length <= 1) {
+		return (
+			<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+				<OrgAvatar org={owner} size={20} />
+				<span style={{ fontFamily: theme.fonts.body, fontSize: theme.fontSizes[1], fontWeight: 600, color: theme.colors.text }}>
+					{owner}
+				</span>
+			</span>
+		);
+	}
+
+	const highlighted = open || triggerHovered;
+	return (
+		<div
+			ref={root}
+			style={{
+				position: "relative",
+				"--merged-pr-org-hover": theme.colors.backgroundSecondary ?? theme.colors.background,
+				"--merged-pr-org-accent": theme.colors.primary,
+			} as CSSProperties}
+			onBlur={(event) => {
+				if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+			}}
+			onKeyDown={(event) => {
+				if (event.key === "Escape" && open) {
+					event.preventDefault();
+					event.stopPropagation();
+					close();
+				}
+			}}
+		>
+			<button
+				ref={trigger}
+				type="button"
+				aria-label="GitHub organization"
+				aria-haspopup="menu"
+				aria-expanded={open}
+				aria-controls={open ? menuId : undefined}
+				onClick={() => setOpen((value) => !value)}
+				onMouseEnter={() => setTriggerHovered(true)}
+				onMouseLeave={() => setTriggerHovered(false)}
+				onKeyDown={(event) => {
+					if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+						event.preventDefault();
+						setOpen(true);
+					}
+				}}
+				style={{
+					display: "inline-flex",
+					alignItems: "center",
+					gap: 8,
+					maxWidth: 240,
+					padding: "4px 2px",
+					border: "none",
+					background: "transparent",
+					color: highlighted ? theme.colors.primary : theme.colors.text,
+					cursor: "pointer",
+					fontFamily: theme.fonts.body,
+					fontSize: theme.fontSizes[1],
+					fontWeight: 600,
+					transition: "color 120ms ease",
+				}}
+			>
+				<OrgAvatar org={owner} size={20} />
+				<span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+					{owner}
+				</span>
+				<ChevronDown
+					size={14}
+					aria-hidden="true"
+					style={{
+						flexShrink: 0,
+						color: highlighted ? theme.colors.primary : muted,
+						transform: open ? "rotate(180deg)" : undefined,
+						transition: "transform 120ms ease",
+					}}
+				/>
+			</button>
+			{open && (
+				<div
+					ref={menu}
+					id={menuId}
+					role="menu"
+					aria-label="GitHub organizations"
+					style={{
+						position: "absolute",
+						left: 0,
+						top: "calc(100% + 8px)",
+						zIndex: 20,
+						minWidth: 240,
+						maxWidth: 320,
+						maxHeight: 320,
+						overflowY: "auto",
+						padding: 4,
+						background: theme.colors.background,
+						border: `1px solid ${theme.colors.border ?? "#333"}`,
+						borderRadius: 8,
+						boxShadow: "0 8px 24px #0005",
+					}}
+					onKeyDown={(event) => {
+						if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+						event.preventDefault();
+						const options = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')];
+						const index = options.indexOf(document.activeElement as HTMLButtonElement);
+						const next =
+							event.key === "Home"
+								? 0
+								: event.key === "End"
+									? options.length - 1
+									: (index + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length;
+						options[next]?.focus();
+					}}
+				>
+					{owners.map((item) => {
+						const selected = item === owner;
+						const count = repoCounts.get(item) ?? 0;
+						return (
+							<button
+								key={item}
+								type="button"
+								role="menuitemradio"
+								aria-checked={selected}
+								tabIndex={-1}
+								className="merged-pr-org-option"
+								onClick={() => {
+									onChange(item);
+									setOpen(false);
+									trigger.current?.focus();
+								}}
+								style={{
+									display: "flex",
+									alignItems: "center",
+									gap: 10,
+									width: "100%",
+									padding: "7px 9px",
+									border: 0,
+									borderRadius: 6,
+									color: selected ? theme.colors.primary : theme.colors.text,
+									fontFamily: theme.fonts.body,
+									fontSize: theme.fontSizes[1],
+									cursor: "pointer",
+									textAlign: "left",
+								}}
+							>
+								<OrgAvatar org={item} size={24} />
+								<span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: selected ? 600 : 400 }}>
+									{item}
+								</span>
+								<span style={{ flexShrink: 0, fontFamily: theme.fonts.monospace, fontSize: theme.fontSizes[0], color: muted }}>
+									{count} {count === 1 ? "repo" : "repos"}
+								</span>
+								{selected && <Check size={14} aria-hidden="true" style={{ flexShrink: 0 }} />}
+							</button>
+						);
+					})}
+				</div>
+			)}
 		</div>
 	);
 }
