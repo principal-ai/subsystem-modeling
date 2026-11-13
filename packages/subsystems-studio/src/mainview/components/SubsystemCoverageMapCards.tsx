@@ -25,7 +25,7 @@ import {
 	type CityData,
 	type HighlightLayer,
 } from "@principal-ai/file-city-react";
-import { FolderGit2, LayoutDashboard } from "lucide-react";
+import { FastForward, FolderGit2, LayoutDashboard } from "lucide-react";
 
 /** Layer colors in assignment order — distinct glows on the dark city base. */
 export const MODEL_LAYER_COLORS = [
@@ -66,6 +66,19 @@ export interface SubsystemCoverageRepo {
 	error?: string;
 	/** True while a retry request is in flight. */
 	retrying?: boolean;
+	/**
+	 * Fast-forward affordance state. Present only when the host offers
+	 * fast-forward for this repo (repo-activity tabs); absent cards render
+	 * no button.
+	 */
+	fastForward?: {
+		/** True while the merge is running. */
+		running: boolean;
+		/** Last outcome (`Already up to date`, `Advanced main …`); shown as a tooltip. */
+		message?: string;
+		/** Last refusal/failure; shown as a tooltip in the error color. */
+		error?: string;
+	};
 	models: readonly SubsystemCoverageModel[];
 	/** Optional copy overrides when layers represent something besides models. */
 	layerSingular?: string;
@@ -180,6 +193,8 @@ export interface SubsystemCoverageMapCardProps {
 	onOpenFile?: (file: { repoKey: string; displayPath: string }) => void;
 	/** Retry loading a failed repo city. */
 	onRetry?: () => void;
+	/** Fast-forward this checkout toward its upstream (`git merge --ff-only`). */
+	onFastForwardRepo?: () => void;
 }
 
 /**
@@ -195,6 +210,7 @@ export function SubsystemCoverageMapCard({
 	onHoverRepo,
 	hoveredModelId,
 	onRetry,
+	onFastForwardRepo,
 }: SubsystemCoverageMapCardProps) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -361,6 +377,48 @@ export function SubsystemCoverageMapCard({
 							</span>
 						</div>
 					</div>
+					{onFastForwardRepo && (
+						<button
+							type="button"
+							disabled={repo.fastForward?.running}
+							title={
+								repo.fastForward?.running
+									? "Fast-forwarding…"
+									: (repo.fastForward?.error ??
+										repo.fastForward?.message ??
+										"Fast-forward this checkout to its upstream (git merge --ff-only)")
+							}
+							aria-label={
+								repo.fastForward?.running
+									? `Fast-forwarding ${repo.label}`
+									: `Fast-forward ${repo.label} to its upstream`
+							}
+							onClick={(event) => {
+								event.stopPropagation();
+								onFastForwardRepo();
+							}}
+							style={{
+								flexShrink: 0,
+								width: 28,
+								height: 28,
+								display: "inline-flex",
+								alignItems: "center",
+								justifyContent: "center",
+								borderRadius: 6,
+								border: `1px solid ${border}`,
+								background: "transparent",
+								color: repo.fastForward?.error
+									? (theme.colors.error ?? "#e5534b")
+									: repo.fastForward?.message
+										? (theme.colors.success ?? theme.colors.primary)
+										: muted,
+								cursor: repo.fastForward?.running ? "default" : "pointer",
+								opacity: repo.fastForward?.running ? 0.65 : 1,
+							}}
+						>
+							<FastForward size={14} aria-hidden="true" />
+						</button>
+					)}
 				</div>
 
 				{/* Coverage bar: share of repo files represented by these layers. */}
@@ -496,6 +554,8 @@ export interface SubsystemCoverageMapCardsProps {
 	onOpenFile?: (file: { repoKey: string; displayPath: string }) => void;
 	/** Retry a failed repo city by repo key. */
 	onRetryRepo?: (repoKey: string) => void;
+	/** Fast-forward a checkout toward its upstream, by repo key. */
+	onFastForwardRepo?: (repoKey: string) => void;
 	/** Minimum card width before the grid adds another column. */
 	minColumnWidth?: number;
 	/** Accessible label for this map grid. */
@@ -515,6 +575,7 @@ export function SubsystemCoverageMapCards({
 	onSelectRepo,
 	onOpenFile,
 	onRetryRepo,
+	onFastForwardRepo,
 	onHoverRepo,
 	hoveredModelId,
 	minColumnWidth = 300,
@@ -593,6 +654,9 @@ export function SubsystemCoverageMapCards({
 							}
 							onOpenFile={onOpenFile}
 							onRetry={onRetryRepo ? () => onRetryRepo(repo.repoKey) : undefined}
+							onFastForwardRepo={
+								onFastForwardRepo ? () => onFastForwardRepo(repo.repoKey) : undefined
+							}
 						/>
 					</div>
 				))}

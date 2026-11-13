@@ -167,6 +167,7 @@ import { repoHistoryBounds } from "./git-repo";
 import { buildMaintenanceOverview } from "./maintenance-overview";
 import { ensurePackageLayers, listPackageLayers, listPackageLayerRepos } from "./package-layer-store";
 import {
+	fastForwardRepoMonitorRepo,
 	getRepoMonitorStatus,
 	listRepoFiles,
 	onRepoMonitorChanged,
@@ -2022,6 +2023,18 @@ const requests: RequestHandlers = {
 			startRepoMonitor: async () => startRepoMonitor(),
 			restartRepoMonitor: async () => restartRepoMonitor(),
 			rebuildRepoMonitorRepo: async ({ path }) => rebuildRepoMonitorRepo(path),
+			fastForwardRepo: async ({ purl }) => {
+				const root = resolveRepoRootForComponent(purl);
+				if (!root) {
+					return { ok: false, error: "no local checkout for this repo" };
+				}
+				try {
+					const result = await fastForwardRepoMonitorRepo(root);
+					return { ...result, repoRoot: root };
+				} catch (err) {
+					return { ok: false, repoRoot: root, error: (err as Error).message };
+				}
+			},
 			getServerSessions: async () => listRecentServerSessions(),
 			setServerEventWatch: async ({ active }) => {
 				setServerEventWatch(active, active ? broadcastServerEvents : undefined);

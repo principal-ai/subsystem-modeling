@@ -226,6 +226,10 @@ export function RepoCommitsView() {
 			return next;
 		});
 	}, []);
+	// After a checkout moves, re-read the local log against the new HEAD.
+	const handleRepoFastForwarded = useCallback(() => {
+		loadCommits();
+	}, [loadCommits]);
 	if (repos === null) return <CenteredMessage title="Loading local repositories…" />;
 	if (repos.length === 0) {
 		return (
@@ -416,6 +420,7 @@ export function RepoCommitsView() {
 						listLabel="Commit maps"
 						emptyTitle="No repo maps available"
 						emptyDetail="The locally cloned repositories could not be turned into File Cities."
+						onRepoFastForwarded={handleRepoFastForwarded}
 					/>
 				</div>
 				<main style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>

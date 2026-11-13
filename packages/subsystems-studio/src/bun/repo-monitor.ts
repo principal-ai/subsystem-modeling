@@ -19,6 +19,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import {
 	RepoMonitorClient,
+	type FastForwardResult,
 	type RepoMonitorDiagnostics,
 } from "@principal-ai/repository-monitoring-server/client";
 
@@ -254,6 +255,32 @@ export async function rebuildRepoMonitorRepo(path: string): Promise<{ ok: boolea
 	} catch (err) {
 		return { ok: false, error: (err as Error).message };
 	}
+}
+
+/**
+ * Fast-forward the checked-out branch of the repo at `root` toward its
+ * upstream. Refusals (dirty tree, detached HEAD, no upstream, diverged) come
+ * back as `{ ok: false, error }` — the daemon never touches the repo except
+ * by fast-forward. Retried once on daemon timeout: the op is idempotent
+ * (a completed merge re-reports the same HEAD, a refusal re-refuses).
+ */
+export async function fastForwardRepoMonitorRepo(root: string): Promise<FastForwardResult> {
+	const c = await ensureRepoMonitor();
+	if (!c) {
+		return {
+			ok: false,
+			branch: "",
+			upstream: "",
+			before: null,
+			after: null,
+			moved: false,
+			fetched: false,
+			error: lastFailure ?? "daemon unavailable",
+		};
+	}
+	return daemonRequestWithTimeoutRetry("fastForward", root, () =>
+		c.request({ type: "fastForward", path: root }),
+	);
 }
 
 export function onRepoMonitorChanged(fn: (status: RepoMonitorDiagnostics) => void): () => void {

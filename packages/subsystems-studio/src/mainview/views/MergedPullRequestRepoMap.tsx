@@ -17,6 +17,7 @@ export function MergedPullRequestRepoMap({
 	onToggleRepo,
 	onHoverRepo,
 	hoveredPullRequestId,
+	onRepoFastForwarded,
 }: {
 	repos: MergedPullRequestRepo[];
 	pullRequests: MergedPullRequest[];
@@ -26,6 +27,8 @@ export function MergedPullRequestRepoMap({
 	onToggleRepo: (repoKey: string) => void;
 	onHoverRepo: (repoKey: string | null) => void;
 	hoveredPullRequestId: string | null;
+	/** Fired after a repo's checkout moves, so the host view can refetch. */
+	onRepoFastForwarded?: (repoKey: string) => void;
 }) {
 	const layersByRepo = useMemo(() => {
 		const byRepo = new Map<string, Array<{ id: string; title: string; files: string[] }>>();
@@ -56,6 +59,7 @@ export function MergedPullRequestRepoMap({
 			listLabel="Merged pull request maps"
 			emptyTitle="No repo maps available"
 			emptyDetail="The locally cloned repositories could not be turned into File Cities."
+			onRepoFastForwarded={onRepoFastForwarded}
 		/>
 	);
 }

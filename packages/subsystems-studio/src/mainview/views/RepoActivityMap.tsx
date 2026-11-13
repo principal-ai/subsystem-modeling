@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	MultiVersionCityBuilder,
 	type CityData,
@@ -46,6 +46,7 @@ export function RepoActivityMap({
 	listLabel,
 	emptyTitle,
 	emptyDetail,
+	onRepoFastForwarded,
 }: {
 	repos: MergedPullRequestRepo[];
 	layersByRepo: ReadonlyMap<string, RepoActivityLayer[]>;
@@ -62,15 +63,73 @@ export function RepoActivityMap({
 	listLabel: string;
 	emptyTitle: string;
 	emptyDetail: string;
+	/** Fired after a repo's checkout moves, so the host view can refetch its activity. */
+	onRepoFastForwarded?: (repoKey: string) => void;
 }) {
 	const [cities, setCities] = useState<Map<string, CityData>>(() => new Map());
 	const [failed, setFailed] = useState<ReadonlyMap<string, string>>(() => new Map());
 	const [retrying, setRetrying] = useState<ReadonlySet<string>>(() => new Set());
+	const [fastForward, setFastForward] = useState<
+		Map<string, { running: boolean; message?: string; error?: string }>
+	>(() => new Map());
 	const retryRepo = useCallback((repoKey: string) => {
 		setRetrying((prev) =>
 			prev.has(repoKey) ? prev : new Set(prev).add(repoKey),
 		);
 	}, []);
+	// Held outside state so the double-click guard below reads the current set.
+	const ffInFlight = useRef<Set<string>>(new Set());
+	const fastForwardRepo = useCallback(
+		async (repoKey: string) => {
+			// Synchronous guard against double-clicks while the running flag
+			// is still propagating through state.
+			if (ffInFlight.current.has(repoKey)) return;
+			ffInFlight.current.add(repoKey);
+			setFastForward((previous) => new Map(previous).set(repoKey, { running: true }));
+			try {
+				const result = await electrobun.rpc!.request.fastForwardRepo({ purl: repoKey });
+				if (!result.ok) {
+					setFastForward((previous) =>
+						new Map(previous).set(repoKey, {
+							running: false,
+							error: result.error ?? "Fast-forward failed.",
+						}),
+					);
+					return;
+				}
+				const short = (sha: string | null | undefined) => sha?.slice(0, 7) ?? "?";
+				setFastForward((previous) =>
+					new Map(previous).set(repoKey, {
+						running: false,
+						message: result.moved
+							? `Advanced ${result.branch ?? ""} ${short(result.before)} → ${short(result.after)}`
+							: "Already up to date",
+					}),
+				);
+				if (result.moved) {
+					// The checkout changed under the city — drop it so the
+					// loader effect below rebuilds it from the new tree.
+					setCities((previous) => {
+						if (!previous.has(repoKey)) return previous;
+						const next = new Map(previous);
+						next.delete(repoKey);
+						return next;
+					});
+					onRepoFastForwarded?.(repoKey);
+				}
+			} catch (error) {
+				setFastForward((previous) =>
+					new Map(previous).set(repoKey, {
+						running: false,
+						error: error instanceof Error ? error.message : String(error),
+					}),
+				);
+			} finally {
+				ffInFlight.current.delete(repoKey);
+			}
+		},
+		[onRepoFastForwarded],
+	);
 
 	useEffect(() => {
 		const repoKeyOf = (repo: MergedPullRequestRepo) =>
@@ -167,6 +226,7 @@ export function RepoActivityMap({
 					cityData: cities.get(repoKey) ?? null,
 					error: cities.has(repoKey) ? undefined : failed.get(repoKey),
 					retrying: retrying.has(repoKey),
+					fastForward: fastForward.get(repoKey),
 					models: layers,
 					layerSingular,
 					layerPlural,
@@ -174,7 +234,7 @@ export function RepoActivityMap({
 					coverageTitle: `${layers.reduce((count, layer) => count + layer.files.length, 0)} ${coverageNoun} across ${layerPlural}`,
 				};
 			});
-	}, [repos, layersByRepo, cities, failed, retrying, showFailedRepos, layerSingular, layerPlural, coverageNoun]);
+	}, [repos, layersByRepo, cities, failed, retrying, fastForward, showFailedRepos, layerSingular, layerPlural, coverageNoun]);
 
 	const pending = repos.filter((repo) => {
 		const key = `pkg:github/${repo.owner}/${repo.name}`;
@@ -189,6 +249,7 @@ export function RepoActivityMap({
 			selectedRepoKeys={selectedRepoKeys}
 			onSelectRepo={onToggleRepo}
 			onRetryRepo={retryRepo}
+			onFastForwardRepo={fastForwardRepo}
 			onHoverRepo={onHoverRepo}
 			hoveredModelId={hoveredLayerId}
 			minColumnWidth={300}

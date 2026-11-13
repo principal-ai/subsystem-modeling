@@ -2827,6 +2827,26 @@ export type StudioRequests = {
 		params: { path: string };
 		response: { ok: boolean; error?: string };
 	};
+	/**
+	 * Fast-forward the checked-out branch of the repo behind `purl` toward
+	 * its upstream. Refusals (dirty tree, detached HEAD, no upstream,
+	 * diverged) come back as `{ ok: false, error }`; the daemon never touches
+	 * the repo except by fast-forward.
+	 */
+	fastForwardRepo: {
+		params: { purl: string };
+		response: {
+			ok: boolean;
+			branch?: string;
+			upstream?: string;
+			before?: string | null;
+			after?: string | null;
+			moved?: boolean;
+			fetched?: boolean;
+			repoRoot?: string;
+			error?: string;
+		};
+	};
 }
 
 /** Host → renderer notifications. Keyed by message name. */

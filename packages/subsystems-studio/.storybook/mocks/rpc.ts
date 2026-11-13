@@ -169,6 +169,15 @@ const request: RpcRequest = {
       ? { ok: true, files: pullRequest.files ?? [] }
       : { ok: false, error: "Pull request fixture not found." };
   },
+  fastForwardRepo: async () => ({
+    ok: true,
+    branch: "main",
+    upstream: "origin/main",
+    before: "abc1234",
+    after: "abc1234",
+    moved: false,
+    fetched: true,
+  }),
   searchConstructRepositories: async (params) => {
     const query = (params as { query: string }).query.trim().toLowerCase();
     return { ok: true, repos: query && inventoryRepo &&

@@ -305,6 +305,10 @@ export function MergedPullRequestsView() {
 			return next;
 		});
 	}, []);
+	// After a checkout moves, re-check for merges against the new HEAD.
+	const handleRepoFastForwarded = useCallback(() => {
+		loadPullRequests();
+	}, [loadPullRequests]);
 	if (repos === null) return <CenteredMessage title="Loading local repositories…" />;
 	if (repos.length === 0) {
 		return (
@@ -500,6 +504,7 @@ export function MergedPullRequestsView() {
 						onToggleRepo={toggleRepo}
 						onHoverRepo={setHoveredRepoKey}
 						hoveredPullRequestId={hoveredPullRequestId}
+						onRepoFastForwarded={handleRepoFastForwarded}
 					/>
 				</div>
 				<main style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
