@@ -630,7 +630,9 @@ export interface SubsystemComponentGraphProps {
    * with its members folded away and their lines rolled up onto it, the way a
    * C4 container view reads. The user opens frames from the card, by
    * double-click, or from the Containers list; a `persistKey` remembers the
-   * result. Default true; pass `false` to start with every frame laid out.
+   * result. Default true, except a model with a single container frame starts
+   * open (there is nothing to compare collapsed cards against); pass `false`
+   * to start with every frame laid out, `true` to force even a lone frame shut.
    */
   defaultFramesCollapsed?: boolean;
 }
@@ -747,7 +749,7 @@ interface InnerProps extends SubsystemComponentGraphProps {
   onSidebarTrailChange: (trailId: string | null) => void;
 }
 
-function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, refocusOnLayoutFlip = true, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, stepEmphasis, onRemoveStepEmphasis, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, onAutoPlayStep, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, notes, canvasOverlay, interactive = true, canvasBackground = 'theme', onLayoutReady, onNodeRects, sidebarExtra, sidebarAfterDescription, issues, showIssues, filesActive, sidebarScope, onSidebarTrailChange, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, regionDetails, defaultFramesCollapsed = true, containersActive, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
+function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirection: layoutDirectionProp, defaultLayoutDirection = 'horizontal', onLayoutDirectionChange, hideLayoutToggle = false, refocusOnLayoutFlip = true, initialTrailId, onTrailSelect, onTrailStepHover, onReorderTrails, stepEmphasis, onRemoveStepEmphasis, onSelect, onEdgeSelect, measured: _measured, maxNodeWidth, showEdgeLabels, showSingletonFrames = true, moduleNesting, edgeView, hideSidebar, trailStepMode = 'focus', autoPlayTrails = false, trailAutoPlayIntervalMs = TRAIL_PLAY_PAUSE_MS, onAutoPlayStep, zoomOnTrailFocus = true, trailFocusDurationMs = 300, graphTitle, showTrailTitle = false, description, notes, canvasOverlay, interactive = true, canvasBackground = 'theme', onLayoutReady, onNodeRects, sidebarExtra, sidebarAfterDescription, issues, showIssues, filesActive, sidebarScope, onSidebarTrailChange, focusIssueCategory, laneStatus, onSelectIssue, onApplyIssueFix, onHoverIssue, renderFileViewer, renderTrailViewer, onFileSelect, componentVerification, onInspectSymbol, boundaryColors, codeProcessKeys, regionDetails, defaultFramesCollapsed, containersActive, hideDrawer = false, persistKey, liveEvents, agentsPanel }: InnerProps) {
   const { theme } = useTheme();
   const { fitView, fitBounds } = useReactFlow();
   const [descriptionOpen, setDescriptionOpen] = useState(false);
@@ -879,8 +881,23 @@ function Inner({ components, trails, graphifyRelations, orderByLine, layoutDirec
   // Stored as a default plus exceptions so "close all" needs no knowledge of
   // which frames the layout will produce: `framesCollapsed` is the default
   // every card frame takes, `toggledGroupIds` the frames flipped away from it.
+  // A lone container starts open — a single collapsed card hides the whole
+  // model behind one box with nothing to compare it against. An explicit
+  // `defaultFramesCollapsed` still wins; so does a persisted choice.
+  const resolvedDefaultFramesCollapsed = useMemo(() => {
+    if (defaultFramesCollapsed !== undefined) return defaultFramesCollapsed;
+    try {
+      const count = buildBoundaryLayoutGroups(
+        { components },
+        { showSingletonFrames, moduleNesting, codeProcessKeys },
+      ).filter((g) => isCardFrame(g.region)).length;
+      return count <= 1 ? false : true;
+    } catch {
+      return true;
+    }
+  }, [components, showSingletonFrames, moduleNesting, codeProcessKeys, defaultFramesCollapsed]);
   const [framesCollapsed, setFramesCollapsed] = useState<boolean>(
-    () => persisted.framesCollapsed ?? defaultFramesCollapsed,
+    () => persisted.framesCollapsed ?? resolvedDefaultFramesCollapsed,
   );
   const [toggledGroupIds, setToggledGroupIds] = useState<ReadonlySet<string>>(
     () => new Set(persisted.toggledFrames ?? []),

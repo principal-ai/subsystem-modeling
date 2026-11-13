@@ -85,7 +85,7 @@
     "@principal-ai/principal-view-react": "^0.15.10",
     "@principal-ai/repository-monitoring-server": "^4.0.3",
     "@principal-ai/subsystems-core": "^0.51.5",
-    "@principal-ai/subsystems-react": "^0.56.32",
+    "@principal-ai/subsystems-react": "^0.56.34",
     "@react-spring/three": "^10.1.2",
     "@react-three/drei": "^10.7.9",
     "@react-three/fiber": "^9.8.1",
