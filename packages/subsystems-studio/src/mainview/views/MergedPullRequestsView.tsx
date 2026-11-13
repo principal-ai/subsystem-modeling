@@ -18,7 +18,7 @@ import { electrobun, showFailedRepoCityCardsSubscribers } from "../rpc";
 import { CenteredMessage, relativeTime } from "../ui";
 import { MergedPullRequestRepoMap, pullRequestLayerId } from "./MergedPullRequestRepoMap";
 
-type MergedWindow = "today" | "yesterday" | "week" | "all";
+type MergedWindow = "today" | "yesterday" | "week";
 type PullRequestDiffState = {
 	files?: string[];
 	loading: boolean;
@@ -26,15 +26,19 @@ type PullRequestDiffState = {
 	truncated?: boolean;
 };
 
+/** Max PRs the tab auto-loads diffs for. Beyond this the user expands cards
+ *  manually — bounds GitHub files-API fan-out for busy org-weeks. */
+const AUTO_LOAD_DIFF_LIMIT = 200;
+/** Parallel files-API requests while progressively filling the repo map. */
+const DIFF_LOAD_CONCURRENCY = 4;
+
 const WINDOWS: ReadonlyArray<{ key: MergedWindow; label: string }> = [
 	{ key: "today", label: "Today" },
 	{ key: "yesterday", label: "Yesterday" },
 	{ key: "week", label: "This week" },
-	{ key: "all", label: "All" },
 ];
 
-function windowStart(window: MergedWindow, now = new Date()): Date | null {
-	if (window === "all") return null;
+function windowStart(window: MergedWindow, now = new Date()): Date {
 	const today = new Date(now);
 	today.setHours(0, 0, 0, 0);
 	if (window === "today") return today;
@@ -48,15 +52,14 @@ function windowStart(window: MergedWindow, now = new Date()): Date | null {
 }
 
 function windowEnd(window: MergedWindow, now = new Date()): Date | null {
-	if (window === "all" || window === "week") return null;
+	if (window === "week") return null;
 	const end = new Date(now);
 	if (window === "today") return end;
 	end.setHours(0, 0, 0, 0);
 	return end;
 }
 
-function asQueryDate(date: Date | null): string | undefined {
-	if (!date) return undefined;
+function asQueryDate(date: Date): string {
 	const year = date.getFullYear();
 	const month = String(date.getMonth() + 1).padStart(2, "0");
 	const day = String(date.getDate()).padStart(2, "0");
@@ -64,10 +67,9 @@ function asQueryDate(date: Date | null): string | undefined {
 }
 
 function inWindow(mergedAt: string, window: MergedWindow, now: Date): boolean {
-	if (window === "all") return true;
 	const time = Date.parse(mergedAt);
 	if (!Number.isFinite(time)) return false;
-	const start = windowStart(window, now)!.getTime();
+	const start = windowStart(window, now).getTime();
 	const end = windowEnd(window, now)?.getTime() ?? now.getTime();
 	return time >= start && (window === "yesterday" ? time < end : time <= end);
 }
@@ -76,7 +78,7 @@ export function MergedPullRequestsView() {
 	const { theme } = useTheme();
 	const [repos, setRepos] = useState<MergedPullRequestRepo[] | null>(null);
 	const [owner, setOwner] = useState("");
-	const [window, setWindow] = useState<MergedWindow>("week");
+	const [window, setWindow] = useState<MergedWindow>("today");
 	const [selectedRepos, setSelectedRepos] = useState<ReadonlySet<string>>(() => new Set());
 	const [selectedAuthors, setSelectedAuthors] = useState<ReadonlySet<string>>(() => new Set());
 	const [pullRequests, setPullRequests] = useState<MergedPullRequest[]>([]);
@@ -199,7 +201,7 @@ export function MergedPullRequestsView() {
 		const id = ++requestId.current;
 		const sinceStart = windowStart(window);
 		// Query a day wider than the local window; GitHub indexes merge dates in UTC.
-		if (sinceStart) sinceStart.setDate(sinceStart.getDate() - 1);
+		sinceStart.setDate(sinceStart.getDate() - 1);
 		const since = asQueryDate(sinceStart);
 		setLoading(true);
 		setError(null);
@@ -254,6 +256,41 @@ export function MergedPullRequestsView() {
 		})),
 		[authorFilteredPullRequests, fileDiffs],
 	);
+	// Progressively load changed paths so the repo map fills in without
+	// waiting on every PR. Bounded concurrency + an auto-load cap keep the
+	// GitHub files-API fan-out predictable; the rest load on expand.
+	const diffProgress = useMemo(() => {
+		let loaded = 0;
+		for (const pr of authorFilteredPullRequests) {
+			if (fileDiffs.get(pullRequestLayerId(pr))?.files !== undefined) loaded++;
+		}
+		return { loaded, total: authorFilteredPullRequests.length };
+	}, [authorFilteredPullRequests, fileDiffs]);
+	const diffsCapped = diffProgress.total > AUTO_LOAD_DIFF_LIMIT;
+	useEffect(() => {
+		const pending = authorFilteredPullRequests.filter((pr) => {
+			const state = fileDiffsRef.current.get(pullRequestLayerId(pr));
+			return !state || (!state.files && !state.loading && !state.error);
+		});
+		// Only the first slice auto-loads; the card's expand path loads the rest.
+		const queue = pending.slice(0, AUTO_LOAD_DIFF_LIMIT);
+		if (queue.length === 0) return;
+		let cancelled = false;
+		const workers = Array.from(
+			{ length: Math.min(DIFF_LOAD_CONCURRENCY, queue.length) },
+			async () => {
+				while (!cancelled) {
+					const pr = queue.shift();
+					if (!pr) return;
+					await loadPullRequestFiles(pr);
+				}
+			},
+		);
+		void Promise.all(workers);
+		return () => {
+			cancelled = true;
+		};
+	}, [authorFilteredPullRequests, loadPullRequestFiles]);
 	const visiblePullRequests = useMemo(
 		() =>
 			authorFilteredPullRequests.filter((pr) => {
@@ -371,8 +408,19 @@ export function MergedPullRequestsView() {
 						fontSize: theme.fontSizes[0],
 						whiteSpace: "nowrap",
 					}}
+					title={
+						diffsCapped
+							? `Auto-loading diffs for the first ${AUTO_LOAD_DIFF_LIMIT} PRs; expand a card to load the rest.`
+							: undefined
+					}
 				>
-					{loading ? "Loading…" : `${visiblePullRequests.length} merged`}
+					{loading
+						? "Loading…"
+						: diffProgress.total === 0
+							? `${visiblePullRequests.length} merged`
+							: diffProgress.loaded < Math.min(diffProgress.total, AUTO_LOAD_DIFF_LIMIT)
+								? `${visiblePullRequests.length} merged · diffs ${diffProgress.loaded}/${Math.min(diffProgress.total, AUTO_LOAD_DIFF_LIMIT)}`
+								: `${visiblePullRequests.length} merged · diffs loaded`}
 				</div>
 				<button
 					type="button"
@@ -846,6 +894,7 @@ function MergedPullRequestCard({
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 	const [expanded, setExpanded] = useState(false);
+	const [avatarBroken, setAvatarBroken] = useState(false);
 	const mergedTime = Date.parse(pullRequest.mergedAt);
 	const files = diff?.files ?? pullRequest.files ?? [];
 	const filesLoaded = diff?.files !== undefined || pullRequest.files !== undefined;
@@ -886,7 +935,44 @@ function MergedPullRequestCard({
 					onClick={onOpen}
 				/>
 			</div>
-			<div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 5, paddingLeft: 22, fontSize: theme.fontSizes[0], fontFamily: theme.fonts.monospace, color: muted }}>
+			<div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 5, paddingLeft: 0, fontSize: theme.fontSizes[0], fontFamily: theme.fonts.monospace, color: muted }}>
+				<span
+					aria-hidden="true"
+					title={pullRequest.author ? `Merged by ${pullRequest.author}` : undefined}
+					style={{ width: 14, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+				>
+					{pullRequest.author ? (
+						pullRequest.authorAvatarUrl && !avatarBroken ? (
+							<img
+								src={pullRequest.authorAvatarUrl}
+								alt=""
+								width={14}
+								height={14}
+								onError={() => setAvatarBroken(true)}
+								style={{ width: 14, height: 14, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+							/>
+						) : (
+							<span
+								aria-hidden="true"
+								style={{
+									width: 14,
+									height: 14,
+									borderRadius: "50%",
+									display: "inline-flex",
+									alignItems: "center",
+									justifyContent: "center",
+									background: theme.colors.backgroundSecondary ?? "#333",
+									color: muted,
+									fontSize: 8,
+									fontWeight: 700,
+									flexShrink: 0,
+								}}
+							>
+								{pullRequest.author.slice(0, 1).toUpperCase()}
+							</span>
+						)
+					) : null}
+				</span>
 				<span>{pullRequest.owner}/{pullRequest.repo}</span>
 				{pullRequest.author && <span>· {pullRequest.author}</span>}
 				<span>· {filesLoaded ? `${files.length} file${files.length === 1 ? "" : "s"}` : "diff not loaded"}</span>

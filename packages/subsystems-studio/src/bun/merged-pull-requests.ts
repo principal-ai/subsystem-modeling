@@ -80,14 +80,14 @@ export function repoIdentityFromIssue(item: {
 async function searchOrgMergedPullRequests(
 	owner: string,
 	token: string,
-	since: string | undefined,
+	since: string,
 	localRepos: ReadonlyMap<string, MergedPullRequestRepo>,
 ): Promise<SearchResult> {
 	const query = [
 		`org:${owner}`,
 		"is:pr",
 		"is:merged",
-		since ? `merged:>=${since.slice(0, 10)}` : "",
+		`merged:>=${since.slice(0, 10)}`,
 	]
 		.filter(Boolean)
 		.join(" ");
@@ -224,10 +224,12 @@ export async function getMergedPullRequestFiles(opts: {
 	}
 }
 
-/** Search merged PR activity for an org, then retain only repos cloned locally. */
+/** Search merged PR activity for an org, then retain only repos cloned locally.
+ * `since` (YYYY-MM-DD) is required — unbounded lifetime queries are rejected
+ * to keep GitHub search fan-out predictable. */
 export async function listMergedPullRequests(opts: {
 	owner: string;
-	since?: string;
+	since: string;
 }): Promise<{
 	ok: boolean;
 	pullRequests: MergedPullRequest[];
@@ -237,6 +239,10 @@ export async function listMergedPullRequests(opts: {
 }> {
 	const owner = opts.owner.trim();
 	if (!owner) return { ok: false, pullRequests: [], error: "Choose a GitHub organization." };
+	const since = (opts.since ?? "").trim().slice(0, 10);
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(since)) {
+		return { ok: false, pullRequests: [], error: "Choose a time window to load merged PRs." };
+	}
 	const repos = (await listMergedPullRequestRepos()).filter(
 		(repo) => repo.owner.toLowerCase() === owner.toLowerCase(),
 	);
@@ -255,7 +261,7 @@ export async function listMergedPullRequests(opts: {
 	);
 	let searchResult: SearchResult;
 	try {
-		searchResult = await searchOrgMergedPullRequests(owner, token, opts.since, localRepos);
+		searchResult = await searchOrgMergedPullRequests(owner, token, since, localRepos);
 	} catch (error) {
 		return {
 			ok: false,
