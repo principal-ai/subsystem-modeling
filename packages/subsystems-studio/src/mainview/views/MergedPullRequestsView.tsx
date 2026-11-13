@@ -19,6 +19,7 @@ import { CenteredMessage, relativeTime } from "../ui";
 import { MergedPullRequestRepoMap, pullRequestLayerId } from "./MergedPullRequestRepoMap";
 import {
 	ACTIVITY_WINDOWS as WINDOWS,
+	ACTIVITY_POLL_INTERVAL_MS,
 	asQueryDate,
 	inActivityWindow as inWindow,
 	windowStart,
@@ -159,8 +160,8 @@ export function MergedPullRequestsView() {
 		});
 	}, []);
 
-	useEffect(() => {
-		if (!owner || repos === null) return;
+	const loadPullRequests = useCallback(() => {
+		if (!owner || repos === null) return undefined;
 		const id = ++requestId.current;
 		const sinceStart = windowStart(window);
 		// Query a day wider than the local window; GitHub indexes merge dates in UTC.
@@ -187,10 +188,25 @@ export function MergedPullRequestsView() {
 			.finally(() => {
 				if (id === requestId.current) setLoading(false);
 			});
-		return () => {
-			if (id === requestId.current) requestId.current++;
-		};
+		return id;
 	}, [owner, repos, window]);
+
+	useEffect(() => {
+		const id = loadPullRequests();
+		return () => {
+			if (id !== undefined && id === requestId.current) requestId.current++;
+		};
+	}, [loadPullRequests]);
+
+	// Re-check for new merges on a timer; skipped while the window is hidden
+	// to avoid GitHub API fan-out for a background tab.
+	useEffect(() => {
+		const timer = setInterval(() => {
+			if (document.hidden) return;
+			loadPullRequests();
+		}, ACTIVITY_POLL_INTERVAL_MS);
+		return () => clearInterval(timer);
+	}, [loadPullRequests]);
 
 	const mergedInWindow = useMemo(() => {
 		const now = new Date();

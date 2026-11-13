@@ -23,6 +23,7 @@ import {
 } from "./MergedPullRequestsView";
 import {
 	ACTIVITY_WINDOWS as WINDOWS,
+	ACTIVITY_POLL_INTERVAL_MS,
 	asQueryDate,
 	inActivityWindow as inWindow,
 	windowStart,
@@ -126,8 +127,8 @@ export function RepoCommitsView() {
 		});
 	}, []);
 
-	useEffect(() => {
-		if (!owner || repos === null) return;
+	const loadCommits = useCallback(() => {
+		if (!owner || repos === null) return undefined;
 		const id = ++requestId.current;
 		const sinceStart = windowStart(window);
 		// Query a day wider than the local window; local checkouts may sit in
@@ -155,10 +156,25 @@ export function RepoCommitsView() {
 			.finally(() => {
 				if (id === requestId.current) setLoading(false);
 			});
-		return () => {
-			if (id === requestId.current) requestId.current++;
-		};
+		return id;
 	}, [owner, repos, window]);
+
+	useEffect(() => {
+		const id = loadCommits();
+		return () => {
+			if (id !== undefined && id === requestId.current) requestId.current++;
+		};
+	}, [loadCommits]);
+
+	// Re-check for new commits on a timer; skipped while the window is hidden
+	// to avoid GitHub API fan-out for a background tab.
+	useEffect(() => {
+		const timer = setInterval(() => {
+			if (document.hidden) return;
+			loadCommits();
+		}, ACTIVITY_POLL_INTERVAL_MS);
+		return () => clearInterval(timer);
+	}, [loadCommits]);
 
 	const commitsInWindow = useMemo(() => {
 		const now = new Date();

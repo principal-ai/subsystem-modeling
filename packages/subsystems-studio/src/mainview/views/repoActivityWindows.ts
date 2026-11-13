@@ -9,6 +9,9 @@
 
 export type ActivityWindow = "today" | "yesterday" | "week";
 
+/** Re-check interval for the repo-activity tabs (Merged PRs, Commits). */
+export const ACTIVITY_POLL_INTERVAL_MS = 5 * 60_000;
+
 export const ACTIVITY_WINDOWS: ReadonlyArray<{ key: ActivityWindow; label: string }> = [
 	{ key: "today", label: "Today" },
 	{ key: "yesterday", label: "Yesterday" },
