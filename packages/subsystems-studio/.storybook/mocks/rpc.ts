@@ -21,6 +21,7 @@ import type {
   ConstructInventoryRepo,
   MergedPullRequest,
   MergedPullRequestRepo,
+  RepoCommit,
 } from "../../src/shared/contract";
 import type { ConstructTimelineMeta, ConstructTimelineSummary, ConstructTimelineFileSnapshot, ConstructTimelineCommit } from "../../src/shared/construct-timeline";
 
@@ -82,6 +83,7 @@ export function refreshLibrary(): void {}
 let store: SubsystemModelProposal[] = [];
 let mergedPullRequestRepos: MergedPullRequestRepo[] = [];
 let mergedPullRequests: MergedPullRequest[] = [];
+let repoCommits: RepoCommit[] = [];
 
 function pending(): SubsystemModelProposal[] {
   return store.filter((p) => p.status === "pending");
@@ -104,6 +106,7 @@ let viewerSettings: ViewerSettings = {
     maintenance: false,
     opencodeV2: false,
     mergedPullRequests: false,
+    recentCommits: false,
   },
   showFailedRepoCityCards: false,
   autoAcceptSubsystemModelProposals: false,
@@ -133,6 +136,18 @@ const request: RpcRequest = {
     return { files: files.map((path) => ({ path, size: 256 })) };
   },
   listMergedPullRequestRepos: async () => ({ repos: mergedPullRequestRepos }),
+  listRepoCommits: async (params) => {
+    const { owner, since } = params as { owner: string; since?: string };
+    return {
+      ok: true,
+      commits: repoCommits.filter((commit) =>
+        commit.owner.toLowerCase() === owner.toLowerCase() &&
+        (!since || commit.committedAt.slice(0, 10) >= since),
+      ),
+      errors: [],
+      truncatedRepos: [],
+    };
+  },
   listMergedPullRequests: async (params) => {
     const { owner, since } = params as { owner: string; since?: string };
       return {
@@ -472,6 +487,14 @@ export function mockMergedPullRequestData(
 ): void {
   mergedPullRequestRepos = repos;
   mergedPullRequests = pullRequests;
+}
+
+export function mockRecentCommitData(
+  repos: MergedPullRequestRepo[],
+  commits: RepoCommit[],
+): void {
+  mergedPullRequestRepos = repos;
+  repoCommits = commits;
 }
 
 /**

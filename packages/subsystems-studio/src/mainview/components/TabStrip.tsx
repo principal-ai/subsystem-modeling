@@ -15,6 +15,7 @@ import {
 	Container,
 	FileText,
 	Gauge,
+	GitCommitHorizontal,
 	GitPullRequest,
 	LayoutDashboard,
 	LayoutGrid,
@@ -49,6 +50,7 @@ const KIND_ICONS: Partial<Record<TabSummary["kind"], LucideIcon>> = {
 	"package-layers": Container,
 	"opencode-v2": Terminal,
 	"merged-pull-requests": GitPullRequest,
+	"recent-commits": GitCommitHorizontal,
 };
 
 export interface TabDropPoint {
@@ -171,7 +173,8 @@ export function TabStrip({
 					tab.kind === "graphify" ||
 					tab.kind === "package-layers" ||
 					tab.kind === "opencode-v2" ||
-					tab.kind === "merged-pull-requests";
+					tab.kind === "merged-pull-requests" ||
+				tab.kind === "recent-commits";
 				const canCopyPath =
 					tab.kind === "subsystem-model" && typeof tab.path === "string";
 				const canDetach = !isPermanent && onDetach !== undefined;

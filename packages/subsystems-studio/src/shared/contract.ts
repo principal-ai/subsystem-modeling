@@ -100,6 +100,8 @@ export interface DefaultTabFlags {
 	opencodeV2: boolean;
 	/** Recently merged GitHub pull requests across locally cloned repos. */
 	mergedPullRequests: boolean;
+	/** Recent local-branch commits across locally cloned repos. */
+	recentCommits: boolean;
 }
 
 /** Tabs present on a fresh install and after Reset defaults. */
@@ -115,6 +117,7 @@ export const DEFAULT_TAB_FLAGS: DefaultTabFlags = {
 	maintenance: false,
 	opencodeV2: false,
 	mergedPullRequests: false,
+	recentCommits: false,
 };
 
 /** Backend that answers Jev-type questions. */
@@ -1489,6 +1492,28 @@ export interface MergedPullRequest {
 	files?: string[];
 }
 
+/** A commit on a locally cloned repo's current branch, from `git log`. */
+export interface RepoCommit {
+	owner: string;
+	repo: string;
+	sha: string;
+	/** First line of the commit message. */
+	message: string;
+	/** Local branch the commit was read from, when known. */
+	branch?: string;
+	/** Author display: GitHub login when the email is a noreply address, else the git author name. */
+	author?: string;
+	authorEmail?: string;
+	authorAvatarUrl?: string;
+	/** Author date (ISO 8601 with offset), from `git log %aI`. */
+	committedAt: string;
+	/** Changed repo-relative paths, inline from the local log. Merge commits
+	 *  report their diff against the first parent. */
+	files?: string[];
+	/** True when the commit has more than one parent. */
+	merge?: boolean;
+}
+
 /** Source-bound experimental Jev complexity estimate. */
 export interface ConstructComplexity {
 	/** Jev estimate from 0 (simple) to 1 (complex), not a static-analysis metric. */
@@ -1597,7 +1622,7 @@ export interface ConstructInventoryRepo extends Omit<VerifiedConstructRepo, "pac
 
 export interface TabSummary {
 	id: string;
-	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-c4" | "c4-sketch" | "subsystem-showcase" | "subsystems" | "shared-subsystems" | "remote-subsystem-model" | "constructs" | "maintenance" | "graphify" | "package-layers" | "opencode-v2" | "merged-pull-requests";
+	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-c4" | "c4-sketch" | "subsystem-showcase" | "subsystems" | "shared-subsystems" | "remote-subsystem-model" | "constructs" | "maintenance" | "graphify" | "package-layers" | "opencode-v2" | "merged-pull-requests" | "recent-commits";
 	title: string;
 	mode?: ViewerMode;
 	/** For `subsystem-model` tabs — absolute path to the persisted JSON. */
@@ -2613,6 +2638,16 @@ export type StudioRequests = {
 			files?: string[];
 		error?: string;
 			truncated?: boolean;
+		};
+	};
+	listRepoCommits: {
+		params: { owner: string; since: string };
+		response: {
+			ok: boolean;
+			commits: RepoCommit[];
+			error?: string;
+			errors?: string[];
+			truncatedRepos?: string[];
 		};
 	};
 	/**

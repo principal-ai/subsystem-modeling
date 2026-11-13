@@ -134,6 +134,10 @@ function normalize(raw: unknown): ViewerSettings {
 				tabs["mergedPullRequests"],
 				defaults.defaultTabs.mergedPullRequests,
 			),
+			recentCommits: coerceBool(
+				tabs["recentCommits"],
+				defaults.defaultTabs.recentCommits,
+			),
 		},
 		showFailedRepoCityCards: coerceBool(
 			obj["showFailedRepoCityCards"],

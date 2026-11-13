@@ -17,8 +17,13 @@ import type {
 import { electrobun, showFailedRepoCityCardsSubscribers } from "../rpc";
 import { CenteredMessage, relativeTime } from "../ui";
 import { MergedPullRequestRepoMap, pullRequestLayerId } from "./MergedPullRequestRepoMap";
-
-type MergedWindow = "today" | "yesterday" | "week";
+import {
+	ACTIVITY_WINDOWS as WINDOWS,
+	asQueryDate,
+	inActivityWindow as inWindow,
+	windowStart,
+	type ActivityWindow as MergedWindow,
+} from "./repoActivityWindows";
 type PullRequestDiffState = {
 	files?: string[];
 	loading: boolean;
@@ -31,48 +36,6 @@ type PullRequestDiffState = {
 const AUTO_LOAD_DIFF_LIMIT = 200;
 /** Parallel files-API requests while progressively filling the repo map. */
 const DIFF_LOAD_CONCURRENCY = 4;
-
-const WINDOWS: ReadonlyArray<{ key: MergedWindow; label: string }> = [
-	{ key: "today", label: "Today" },
-	{ key: "yesterday", label: "Yesterday" },
-	{ key: "week", label: "This week" },
-];
-
-function windowStart(window: MergedWindow, now = new Date()): Date {
-	const today = new Date(now);
-	today.setHours(0, 0, 0, 0);
-	if (window === "today") return today;
-	if (window === "yesterday") {
-		today.setDate(today.getDate() - 1);
-		return today;
-	}
-	const day = today.getDay();
-	today.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
-	return today;
-}
-
-function windowEnd(window: MergedWindow, now = new Date()): Date | null {
-	if (window === "week") return null;
-	const end = new Date(now);
-	if (window === "today") return end;
-	end.setHours(0, 0, 0, 0);
-	return end;
-}
-
-function asQueryDate(date: Date): string {
-	const year = date.getFullYear();
-	const month = String(date.getMonth() + 1).padStart(2, "0");
-	const day = String(date.getDate()).padStart(2, "0");
-	return `${year}-${month}-${day}`;
-}
-
-function inWindow(mergedAt: string, window: MergedWindow, now: Date): boolean {
-	const time = Date.parse(mergedAt);
-	if (!Number.isFinite(time)) return false;
-	const start = windowStart(window, now).getTime();
-	const end = windowEnd(window, now)?.getTime() ?? now.getTime();
-	return time >= start && (window === "yesterday" ? time < end : time <= end);
-}
 
 export function MergedPullRequestsView() {
 	const { theme } = useTheme();
@@ -299,6 +262,25 @@ export function MergedPullRequestsView() {
 			}),
 		[authorFilteredPullRequests, orgRepoKeys, selectedRepos],
 	);
+	// Cities follow the PR list: only repos with at least one visible PR get
+	// a card. Layers are the visible PRs (with loaded diffs), so repo/author
+	// filters stay in sync between the map and the list.
+	const mappedVisiblePullRequests = useMemo(
+		() =>
+			mappedPullRequests.filter((pr) => {
+				const key = `pkg:github/${pr.owner}/${pr.repo}`;
+				return orgRepoKeys.has(key) && (selectedRepos.size === 0 || selectedRepos.has(key));
+			}),
+		[mappedPullRequests, orgRepoKeys, selectedRepos],
+	);
+	const visibleRepoKeys = useMemo(
+		() => new Set(visiblePullRequests.map((pr) => `pkg:github/${pr.owner}/${pr.repo}`)),
+		[visiblePullRequests],
+	);
+	const filteredOrgRepos = useMemo(
+		() => orgRepos.filter((repo) => visibleRepoKeys.has(`pkg:github/${repo.owner}/${repo.name}`)),
+		[orgRepos, visibleRepoKeys],
+	);
 	const toggleAuthor = useCallback((login: string) => {
 		setSelectedAuthors((current) => {
 			const next = new Set(current);
@@ -495,8 +477,8 @@ export function MergedPullRequestsView() {
 					}}
 				>
 					<MergedPullRequestRepoMap
-						repos={orgRepos}
-						pullRequests={mappedPullRequests}
+						repos={filteredOrgRepos}
+						pullRequests={mappedVisiblePullRequests}
 						showFailedRepos={showFailedRepos}
 						selectedRepoKeys={selectedRepos}
 						onToggleRepo={toggleRepo}
@@ -596,7 +578,7 @@ function OrgAvatar({ org, size = 20 }: { org: string; size?: number }) {
 	);
 }
 
-function OrganizationSelector({
+export function OrganizationSelector({
 	owners,
 	owner,
 	repoCounts,
@@ -791,7 +773,7 @@ function OrganizationSelector({
 	);
 }
 
-function AuthorFilterChip({
+export function AuthorFilterChip({
 	login,
 	avatarUrl,
 	count,
@@ -1051,7 +1033,7 @@ function ActionButton({
 	);
 }
 
-function Notice({
+export function Notice({
 	theme,
 	children,
 	danger = false,

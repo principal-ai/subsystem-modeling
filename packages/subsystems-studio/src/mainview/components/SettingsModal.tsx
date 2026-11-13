@@ -88,6 +88,11 @@ const TAB_TOGGLES: Array<{
 		label: "Merged PRs",
 		description: "Recently merged pull requests across locally cloned GitHub repos",
 	},
+	{
+		key: "recentCommits",
+		label: "Commits",
+		description: "Recent commits on the checked-out branches of locally cloned GitHub repos",
+	},
 ];
 
 const REGULAR_AUDIT_INTERVAL_OPTIONS = [

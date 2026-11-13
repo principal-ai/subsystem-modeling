@@ -76,6 +76,7 @@ import {
 	listMergedPullRequestRepos,
 	listMergedPullRequests,
 } from "./merged-pull-requests";
+import { listRecentCommits } from "./recent-commits";
 import {
 	auditFixGroups,
 	buildAuditFingerprint,
@@ -378,6 +379,7 @@ const GRAPHIFY_TAB_ID = "graphify";
 const PACKAGE_LAYERS_TAB_ID = "package-layers";
 const OPENCODE_V2_TAB_ID = "opencode-v2";
 const MERGED_PULL_REQUESTS_TAB_ID = "merged-pull-requests";
+const RECENT_COMMITS_TAB_ID = "recent-commits";
 
 /** Permanent tabs controlled by `ViewerSettings.defaultTabs`. Order here is
  *  the strip order when all are enabled. */
@@ -394,7 +396,8 @@ const PERMANENT_TAB_DEFS: Array<{
 		| "package-layers"
 		| "library"
 		| "opencode-v2"
-		| "merged-pull-requests";
+		| "merged-pull-requests"
+		| "recent-commits";
 	title: string;
 	flag: keyof DefaultTabFlags;
 }> = [
@@ -457,6 +460,12 @@ const PERMANENT_TAB_DEFS: Array<{
 		kind: "merged-pull-requests",
 		title: "Merged PRs",
 		flag: "mergedPullRequests",
+	},
+	{
+		id: RECENT_COMMITS_TAB_ID,
+		kind: "recent-commits",
+		title: "Commits",
+		flag: "recentCommits",
 	},
 	{
 		id: LIBRARY_TAB_ID,
@@ -617,6 +626,12 @@ interface MergedPullRequestsTabState {
 	title: "Merged PRs";
 }
 
+interface RecentCommitsTabState {
+	id: typeof RECENT_COMMITS_TAB_ID;
+	kind: "recent-commits";
+	title: "Commits";
+}
+
 interface SessionEventsTabState {
 	id: string;
 	kind: "session-events";
@@ -689,6 +704,7 @@ type TabState =
 	| PackageLayersTabState
 	| OpencodeV2TabState
 	| MergedPullRequestsTabState
+	| RecentCommitsTabState
 	| SessionEventsTabState
 	| SubsystemModelTabState
 	| SubsystemC4TabState
@@ -709,6 +725,7 @@ function permanentTabState(
 	| PackageLayersTabState
 	| OpencodeV2TabState
 	| MergedPullRequestsTabState
+	| RecentCommitsTabState
 	| LibraryTabState {
 	if (def.kind === "agent-sessions") {
 		return { id: AGENT_SESSIONS_TAB_ID, kind: "agent-sessions", title: "Agent Sessions" };
@@ -750,6 +767,13 @@ function permanentTabState(
 			id: MERGED_PULL_REQUESTS_TAB_ID,
 			kind: "merged-pull-requests",
 			title: "Merged PRs",
+		};
+	}
+	if (def.kind === "recent-commits") {
+		return {
+			id: RECENT_COMMITS_TAB_ID,
+			kind: "recent-commits",
+			title: "Commits",
 		};
 	}
 	return { id: LIBRARY_TAB_ID, kind: "library", title: "Tours" };
@@ -809,6 +833,9 @@ function ensurePermanentTab(id: string): void {
 			mergedPullRequests:
 				id === MERGED_PULL_REQUESTS_TAB_ID ||
 				viewerSettings.defaultTabs.mergedPullRequests,
+			recentCommits:
+				id === RECENT_COMMITS_TAB_ID ||
+				viewerSettings.defaultTabs.recentCommits,
 		},
 		showFailedRepoCityCards: viewerSettings.showFailedRepoCityCards,
 		autoAcceptSubsystemModelProposals:
@@ -1606,7 +1633,8 @@ function isStaticTab(
 	| GraphifyTabState
 	| PackageLayersTabState
 	| OpencodeV2TabState
-	| MergedPullRequestsTabState {
+	| MergedPullRequestsTabState
+	| RecentCommitsTabState {
 	return (
 		tab.kind === "library" ||
 		tab.kind === "agent-sessions" ||
@@ -1618,7 +1646,8 @@ function isStaticTab(
 		tab.kind === "graphify" ||
 		tab.kind === "package-layers" ||
 		tab.kind === "opencode-v2" ||
-		tab.kind === "merged-pull-requests"
+		tab.kind === "merged-pull-requests" ||
+		tab.kind === "recent-commits"
 	);
 }
 
@@ -2978,6 +3007,8 @@ const requests: RequestHandlers = {
 				listMergedPullRequests({ owner, since }),
 			getMergedPullRequestFiles: async ({ owner, repo, number }) =>
 				getMergedPullRequestFiles({ owner, repo, number }),
+			listRepoCommits: async ({ owner, since }) =>
+				listRecentCommits({ owner, since }),
 			ensureGraphifyGraph: async ({ purl, repoRoot, force }) => {
 				if (!resolveGraphifyBin()) {
 					const st = getGraphifyStatus();
