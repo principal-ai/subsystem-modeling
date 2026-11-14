@@ -1478,6 +1478,27 @@ export interface MergedPullRequestRepo {
 	url: string;
 }
 
+/** How a file changed in a commit or pull request. */
+export type FileChangeStatus =
+	| "added"
+	| "modified"
+	| "deleted"
+	| "renamed"
+	| "copied";
+
+/** One changed path with its change kind and line counts. */
+export interface FileChange {
+	/** Repo-relative path after the change. */
+	path: string;
+	status: FileChangeStatus;
+	/** Original path for renames and copies. */
+	previousPath?: string;
+	/** Lines added in this file, when known. */
+	additions?: number;
+	/** Lines deleted in this file, when known. */
+	deletions?: number;
+}
+
 /** A merged pull request returned by GitHub's search API. */
 export interface MergedPullRequest {
 	owner: string;
@@ -1490,6 +1511,8 @@ export interface MergedPullRequest {
 	mergedAt: string;
 	/** Changed repo-relative paths, fetched on demand when the PR is expanded. */
 	files?: string[];
+	/** Preloaded change statuses, used by fixtures or warm caches. */
+	changes?: FileChange[];
 }
 
 /** A commit on a locally cloned repo's current branch, from `git log`. */
@@ -1510,6 +1533,12 @@ export interface RepoCommit {
 	/** Changed repo-relative paths, inline from the local log. Merge commits
 	 *  report their diff against the first parent. */
 	files?: string[];
+	/** Same paths with added / modified / deleted / renamed status. */
+	changes?: FileChange[];
+	/** Total lines added across this commit, when available. */
+	additions?: number;
+	/** Total lines deleted across this commit, when available. */
+	deletions?: number;
 	/** True when the commit has more than one parent. */
 	merge?: boolean;
 }
@@ -2636,7 +2665,8 @@ export type StudioRequests = {
 		response: {
 			ok: boolean;
 			files?: string[];
-		error?: string;
+			changes?: FileChange[];
+			error?: string;
 			truncated?: boolean;
 		};
 	};

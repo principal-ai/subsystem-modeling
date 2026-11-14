@@ -2,20 +2,29 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import type { CSSProperties, ReactNode } from "react";
 import {
 	ChevronDown,
-	ChevronRight,
 	Check,
-	ExternalLink,
 	FileDiff,
 	GitPullRequest,
+	Loader2,
 	RefreshCw,
 } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import type {
+	FileChange,
 	MergedPullRequest,
 	MergedPullRequestRepo,
 } from "../../shared/contract";
 import { electrobun, showFailedRepoCityCardsSubscribers } from "../rpc";
 import { CenteredMessage, relativeTime } from "../ui";
+import {
+	ContributorAvatarFan,
+	groupContributorsByRepo,
+} from "../components/ContributorAvatarFan";
+import { FileChangeList, summarizeFileChanges } from "../components/FileChangeList";
+import { LineChangeScaleBar, type LineStats } from "../components/LineChangeBar";
+import { MergeDayHeatmap } from "../components/MergeDayHeatmap";
+import { PullRequestListSkeleton } from "../components/PullRequestListSkeleton";
+import { MODEL_LAYER_COLORS } from "../components/SubsystemCoverageMapCards";
 import { MergedPullRequestRepoMap, pullRequestLayerId } from "./MergedPullRequestRepoMap";
 import {
 	ACTIVITY_WINDOWS as WINDOWS,
@@ -27,6 +36,7 @@ import {
 } from "./repoActivityWindows";
 type PullRequestDiffState = {
 	files?: string[];
+	changes?: FileChange[];
 	loading: boolean;
 	error?: string;
 	truncated?: boolean;
@@ -45,6 +55,7 @@ export function MergedPullRequestsView() {
 	const [window, setWindow] = useState<MergedWindow>("today");
 	const [selectedRepos, setSelectedRepos] = useState<ReadonlySet<string>>(() => new Set());
 	const [selectedAuthors, setSelectedAuthors] = useState<ReadonlySet<string>>(() => new Set());
+	const [authorsOpen, setAuthorsOpen] = useState(false);
 	const [pullRequests, setPullRequests] = useState<MergedPullRequest[]>([]);
 	const [showFailedRepos, setShowFailedRepos] = useState(false);
 	const [hoveredRepoKey, setHoveredRepoKey] = useState<string | null>(null);
@@ -77,7 +88,12 @@ export function MergedPullRequestsView() {
 			updateFileDiff(
 				id,
 				result.ok
-					? { loading: false, files: result.files ?? [], truncated: result.truncated }
+					? {
+							loading: false,
+							files: result.files ?? [],
+							changes: result.changes,
+							truncated: result.truncated,
+						}
 					: { loading: false, error: result.error ?? "Could not load PR files." },
 			);
 		} catch (error) {
@@ -149,6 +165,7 @@ export function MergedPullRequestsView() {
 	}, [owner]);
 	useEffect(() => {
 		setSelectedAuthors(new Set());
+		setAuthorsOpen(false);
 	}, [owner, window]);
 
 	const toggleRepo = useCallback((repoKey: string) => {
@@ -210,8 +227,24 @@ export function MergedPullRequestsView() {
 
 	const mergedInWindow = useMemo(() => {
 		const now = new Date();
-		return pullRequests.filter((pr) => inWindow(pr.mergedAt, window, now));
-	}, [pullRequests, window]);
+		return pullRequests.filter(
+			(pr) =>
+				orgRepoKeys.has(`pkg:github/${pr.owner}/${pr.repo}`) &&
+				inWindow(pr.mergedAt, window, now),
+		);
+	}, [pullRequests, window, orgRepoKeys]);
+	const contributorsByRepo = useMemo(
+		() =>
+			groupContributorsByRepo(
+				mergedInWindow,
+				(pr) => `pkg:github/${pr.owner}/${pr.repo}`,
+				(pr) =>
+					pr.author
+						? { login: pr.author, avatarUrl: pr.authorAvatarUrl }
+						: undefined,
+			),
+		[mergedInWindow],
+	);
 	const authors = useMemo(() => {
 		const byLogin = new Map<string, { login: string; avatarUrl?: string; count: number }>();
 		for (const pr of mergedInWindow) {
@@ -222,6 +255,16 @@ export function MergedPullRequestsView() {
 		}
 		return [...byLogin.values()].sort((a, b) => b.count - a.count || a.login.localeCompare(b.login));
 	}, [mergedInWindow]);
+	const authorColors = useMemo(
+		() =>
+			new Map(
+				authors.map((author, index) => [
+					author.login,
+					MODEL_LAYER_COLORS[index % MODEL_LAYER_COLORS.length]!,
+				]),
+			),
+		[authors],
+	);
 	const authorFilteredPullRequests = useMemo(
 		() => selectedAuthors.size === 0
 			? mergedInWindow
@@ -278,6 +321,44 @@ export function MergedPullRequestsView() {
 			}),
 		[authorFilteredPullRequests, orgRepoKeys, selectedRepos],
 	);
+	const lineSummaryByPr = useMemo(() => {
+		const byPr = new Map<
+			string,
+			ReturnType<typeof summarizeFileChanges>
+		>();
+		for (const pr of visiblePullRequests) {
+			const diff = fileDiffs.get(pullRequestLayerId(pr));
+			const files = diff?.files ?? pr.files ?? [];
+			const changes =
+				diff?.changes ??
+				pr.changes ??
+				files.map((path) => ({ path, status: "modified" as const }));
+			byPr.set(pullRequestLayerId(pr), summarizeFileChanges(changes));
+		}
+		return byPr;
+	}, [visiblePullRequests, fileDiffs]);
+	const lineStatsByRepo = useMemo(() => {
+		const byRepo = new Map<string, LineStats>();
+		for (const pr of visiblePullRequests) {
+			const summary = lineSummaryByPr.get(pullRequestLayerId(pr));
+			if (!summary?.known) continue;
+			const key = `pkg:github/${pr.owner}/${pr.repo}`;
+			const current = byRepo.get(key) ?? { additions: 0, deletions: 0 };
+			current.additions += summary.additions;
+			current.deletions += summary.deletions;
+			byRepo.set(key, current);
+		}
+		return byRepo;
+	}, [visiblePullRequests, lineSummaryByPr]);
+	const maxLineChanges = useMemo(() => {
+		let max = 0;
+		for (const summary of lineSummaryByPr.values()) {
+			if (summary.known) {
+				max = Math.max(max, summary.additions + summary.deletions);
+			}
+		}
+		return max;
+	}, [lineSummaryByPr]);
 	// Cities follow the PR list: only repos with at least one visible PR get
 	// a card. Layers are the visible PRs (with loaded diffs), so repo/author
 	// filters stay in sync between the map and the list.
@@ -297,6 +378,16 @@ export function MergedPullRequestsView() {
 		() => orgRepos.filter((repo) => visibleRepoKeys.has(`pkg:github/${repo.owner}/${repo.name}`)),
 		[orgRepos, visibleRepoKeys],
 	);
+	// No merged PRs in the window is a different state from "PRs exist but the
+	// current filters hide them". In the former, still show every local org
+	// checkout so the map never looks like the org has no repos at all.
+	const mapRepos = useMemo(
+		() => (mergedInWindow.length === 0 ? orgRepos : filteredOrgRepos),
+		[mergedInWindow.length, orgRepos, filteredOrgRepos],
+	);
+	// With a single repo card there is nothing to disambiguate, so keep city
+	// hover from tinting every PR row. PR hover still drives the map below.
+	const highlightRowsFromRepoHover = mapRepos.length > 1;
 	const toggleAuthor = useCallback((login: string) => {
 		setSelectedAuthors((current) => {
 			const next = new Set(current);
@@ -309,7 +400,7 @@ export function MergedPullRequestsView() {
 	const handleRepoFastForwarded = useCallback(() => {
 		loadPullRequests();
 	}, [loadPullRequests]);
-	if (repos === null) return <CenteredMessage title="Loading local repositories…" />;
+	if (repos === null) return <CenteredMessage loading title="Loading local repositories…" />;
 	if (repos.length === 0) {
 		return (
 			<CenteredMessage
@@ -400,6 +491,63 @@ export function MergedPullRequestsView() {
 						);
 					})}
 				</div>
+				{authors.length > 0 && (
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							padding: "0 10px",
+							borderLeft: `1px solid ${theme.colors.border ?? "#333"}`,
+						}}
+					>
+						{authors.length === 1 ? (
+							<AuthorFilterChip
+								login={authors[0]!.login}
+								avatarUrl={authors[0]!.avatarUrl}
+								count={authors[0]!.count}
+								color={authorColors.get(authors[0]!.login)}
+								selected={selectedAuthors.has(authors[0]!.login)}
+								onClick={() => toggleAuthor(authors[0]!.login)}
+							/>
+						) : (
+							<button
+								type="button"
+								aria-label="Toggle author filters"
+								aria-expanded={authorsOpen}
+								title={`${authors.length} authors · ${authorsOpen ? "Hide" : "Show"} author filters`}
+								onClick={() => setAuthorsOpen((open) => !open)}
+								style={{
+									display: "inline-flex",
+									alignItems: "center",
+									gap: 6,
+									padding: "2px 4px",
+									border: "none",
+									background: "transparent",
+									color: selectedAuthors.size > 0 ? theme.colors.primary : muted,
+									cursor: "pointer",
+								}}
+							>
+								<ContributorAvatarFan
+									contributors={authors}
+									size={20}
+									max={4}
+									activityNoun="merge"
+									ringColor={
+										theme.colors.backgroundSecondary ?? theme.colors.background
+									}
+								/>
+								<ChevronDown
+									size={12}
+									aria-hidden="true"
+									style={{
+										transform: authorsOpen ? "rotate(180deg)" : undefined,
+										transition: "transform 120ms ease",
+									}}
+								/>
+							</button>
+						)}
+					</div>
+				)}
 				<div
 					style={{
 						display: "flex",
@@ -416,13 +564,18 @@ export function MergedPullRequestsView() {
 							: undefined
 					}
 				>
-					{loading
-						? "Loading…"
-						: diffProgress.total === 0
-							? `${visiblePullRequests.length} merged`
-							: diffProgress.loaded < Math.min(diffProgress.total, AUTO_LOAD_DIFF_LIMIT)
-								? `${visiblePullRequests.length} merged · diffs ${diffProgress.loaded}/${Math.min(diffProgress.total, AUTO_LOAD_DIFF_LIMIT)}`
-								: `${visiblePullRequests.length} merged · diffs loaded`}
+					{loading ? (
+						<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+							<Loader2 size={11} className="principal-studio-spin" aria-hidden="true" />
+							Loading…
+						</span>
+					) : diffProgress.total === 0 ? (
+						`${visiblePullRequests.length} merged`
+					) : diffProgress.loaded < Math.min(diffProgress.total, AUTO_LOAD_DIFF_LIMIT) ? (
+						`${visiblePullRequests.length} merged · diffs ${diffProgress.loaded}/${Math.min(diffProgress.total, AUTO_LOAD_DIFF_LIMIT)}`
+					) : (
+						`${visiblePullRequests.length} merged · diffs loaded`
+					)}
 				</div>
 				<button
 					type="button"
@@ -443,7 +596,7 @@ export function MergedPullRequestsView() {
 					<RefreshCw size={14} aria-hidden="true" />
 				</button>
 			</div>
-			{authors.length > 0 && (
+			{authors.length > 1 && authorsOpen && (
 				<div
 					role="group"
 					aria-label="Filter merged pull requests by author"
@@ -476,6 +629,7 @@ export function MergedPullRequestsView() {
 							login={author.login}
 							avatarUrl={author.avatarUrl}
 							count={author.count}
+							color={authorColors.get(author.login)}
 							selected={selectedAuthors.has(author.login)}
 							onClick={() => toggleAuthor(author.login)}
 						/>
@@ -497,8 +651,11 @@ export function MergedPullRequestsView() {
 					}}
 				>
 					<MergedPullRequestRepoMap
-						repos={filteredOrgRepos}
+						repos={mapRepos}
 						pullRequests={mappedVisiblePullRequests}
+						contributorsByRepo={contributorsByRepo}
+						lineStatsByRepo={lineStatsByRepo}
+						authorColors={authorColors}
 						showFailedRepos={showFailedRepos}
 						selectedRepoKeys={selectedRepos}
 						onToggleRepo={toggleRepo}
@@ -507,7 +664,23 @@ export function MergedPullRequestsView() {
 						onRepoFastForwarded={handleRepoFastForwarded}
 					/>
 				</div>
-				<main style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
+				<div
+					style={{
+						flex: 1,
+						minWidth: 0,
+						minHeight: 0,
+						display: "flex",
+						flexDirection: "column",
+					}}
+				>
+					<div style={{ flexShrink: 0 }}>
+						<MergeDayHeatmap
+							pullRequests={mergedInWindow}
+							day={windowStart(window === "yesterday" ? "yesterday" : "today")}
+							dayLabel={window === "yesterday" ? "yesterday" : "today"}
+						/>
+					</div>
+					<main style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: "auto" }}>
 					{error && <Notice theme={theme} danger>{error}</Notice>}
 					{repoErrors.map((item) => <Notice key={item} theme={theme} danger>{item}</Notice>)}
 					{truncatedRepos.length > 0 && (
@@ -515,12 +688,20 @@ export function MergedPullRequestsView() {
 							GitHub search is limited to 1,000 results for: {truncatedRepos.join(", ")}.
 						</Notice>
 					)}
-					{loading && pullRequests.length === 0 ? (
-						<CenteredMessage title="Loading merged pull requests…" />
+					{loading && visiblePullRequests.length === 0 ? (
+						<PullRequestListSkeleton />
 					) : visiblePullRequests.length === 0 ? (
 						<CenteredMessage
 							title={error ? "Could not load merged pull requests" : "No merged pull requests"}
-							detail={error ? undefined : selectedRepos.size ? "No merges for the selected repos in this window." : `No merges for ${owner} in this window.`}
+							detail={
+								error
+									? undefined
+									: mergedInWindow.length === 0
+										? `No merged PRs for ${owner} in this window. Showing the local checkout cities instead.`
+										: selectedRepos.size
+											? "No merges for the selected repos in this window."
+											: `No merges for ${owner} in this window.`
+							}
 						/>
 					) : (
 						<div style={{ maxWidth: 960, margin: "0 auto" }}>
@@ -532,7 +713,12 @@ export function MergedPullRequestsView() {
 										key={id}
 										pullRequest={pr}
 										diff={fileDiffs.get(id)}
-										highlighted={hoveredRepoKey === repoKey}
+										lineSummary={lineSummaryByPr.get(id)}
+										maxLineChanges={maxLineChanges}
+										highlighted={
+											highlightRowsFromRepoHover &&
+											hoveredRepoKey === repoKey
+										}
 										onHover={() => setHoveredPullRequestId(id)}
 										onLeave={() => setHoveredPullRequestId(null)}
 										onLoadFiles={() => void loadPullRequestFiles(pr)}
@@ -543,6 +729,7 @@ export function MergedPullRequestsView() {
 						</div>
 					)}
 				</main>
+				</div>
 			</div>
 		</div>
 	);
@@ -798,24 +985,31 @@ export function AuthorFilterChip({
 	login,
 	avatarUrl,
 	count,
+	color,
 	selected,
 	onClick,
+	activityNoun = "merged pull request",
 }: {
 	login: string;
 	avatarUrl?: string;
 	count: number;
+	/** Highlight color used for this author's map layers. */
+	color?: string;
 	selected: boolean;
 	onClick: () => void;
+	/** Singular noun for the accessible label and tooltip. */
+	activityNoun?: string;
 }) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 	const [avatarBroken, setAvatarBroken] = useState(false);
+	const activity = `${count} ${activityNoun}${count === 1 ? "" : "s"}`;
 	return (
 		<button
 			type="button"
 			aria-pressed={selected}
-			aria-label={`Filter by ${login}, ${count} merged pull request${count === 1 ? "" : "s"}`}
-			title={`${login} · ${count} merged PR${count === 1 ? "" : "s"}`}
+			aria-label={`Filter by ${login}, ${activity}`}
+			title={`${login} · ${activity}`}
 			onClick={onClick}
 			style={{
 				flexShrink: 0,
@@ -823,8 +1017,8 @@ export function AuthorFilterChip({
 				alignItems: "center",
 				gap: 6,
 				padding: "3px 8px 3px 4px",
-				border: `1px solid ${selected ? theme.colors.primary : theme.colors.border ?? "#444"}`,
-				borderRadius: 999,
+				border: `1px solid ${color ?? (selected ? theme.colors.primary : theme.colors.border ?? "#444")}`,
+				borderRadius: 8,
 				background: selected ? `${theme.colors.primary}22` : "transparent",
 				color: selected ? theme.colors.primary : theme.colors.text,
 				cursor: "pointer",
@@ -880,6 +1074,8 @@ export function AuthorFilterChip({
 function MergedPullRequestCard({
 	pullRequest,
 	diff,
+	lineSummary,
+	maxLineChanges,
 	highlighted,
 	onHover,
 	onLeave,
@@ -888,6 +1084,8 @@ function MergedPullRequestCard({
 }: {
 	pullRequest: MergedPullRequest;
 	diff?: PullRequestDiffState;
+	lineSummary?: ReturnType<typeof summarizeFileChanges>;
+	maxLineChanges?: number;
 	highlighted: boolean;
 	onHover: () => void;
 	onLeave: () => void;
@@ -898,98 +1096,223 @@ function MergedPullRequestCard({
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 	const [expanded, setExpanded] = useState(false);
 	const [avatarBroken, setAvatarBroken] = useState(false);
+	const [numberHovered, setNumberHovered] = useState(false);
+	const [rowHovered, setRowHovered] = useState(false);
 	const mergedTime = Date.parse(pullRequest.mergedAt);
 	const files = diff?.files ?? pullRequest.files ?? [];
+	const changes: FileChange[] =
+		diff?.changes ??
+		pullRequest.changes ??
+		files.map((path) => ({ path, status: "modified" }));
+	const computedLineSummary = summarizeFileChanges(changes);
+	const summary = lineSummary ?? computedLineSummary;
 	const filesLoaded = diff?.files !== undefined || pullRequest.files !== undefined;
+	const toggleExpanded = () => {
+		const nextExpanded = !expanded;
+		setExpanded(nextExpanded);
+		if (nextExpanded && !filesLoaded && !diff?.loading) onLoadFiles();
+	};
 	return (
 		<div
 			data-merged-pull-request={`${pullRequest.owner}/${pullRequest.repo}#${pullRequest.number}`}
-			onMouseEnter={onHover}
-			onMouseLeave={onLeave}
+			role="button"
+			tabIndex={0}
+			aria-expanded={expanded}
+			onClick={toggleExpanded}
+			onKeyDown={(event) => {
+				if (event.target !== event.currentTarget) return;
+				if (event.key === "Enter" || event.key === " ") {
+					event.preventDefault();
+					toggleExpanded();
+				}
+			}}
+			onMouseEnter={() => {
+				setRowHovered(true);
+				onHover();
+			}}
+			onMouseLeave={() => {
+				setRowHovered(false);
+				onLeave();
+			}}
 			style={{
-				padding: 12,
-				minHeight: 52,
+				padding: "16px 12px",
+				minHeight: 72,
+				cursor: "pointer",
 				borderBottom: `1px solid ${theme.colors.border ?? "#333"}`,
-				background: highlighted ? `${theme.colors.primary}12` : "transparent",
+				background: highlighted
+					? `${theme.colors.primary}12`
+					: rowHovered
+						? `${theme.colors.primary}0a`
+						: "transparent",
 				transition: "background 120ms ease",
 			}}
 		>
-			<div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-				<div style={{ flex: "1 1 220px", minWidth: 0, display: "flex", alignItems: "center", gap: 8 }}>
-					<GitPullRequest size={14} style={{ flexShrink: 0, color: theme.colors.success ?? "#3d9a5f" }} aria-hidden="true" />
-					<div style={{ minWidth: 0, overflowWrap: "anywhere", color: highlighted ? theme.colors.primary : theme.colors.text }}>
-						{pullRequest.title}
-					</div>
-				</div>
-				<ActionButton
-					icon={expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-					label={expanded ? "Hide files" : diff?.loading ? "Loading…" : filesLoaded ? `Files · ${files.length}` : "Load diff"}
-					ariaLabel={`${expanded ? "Hide" : "Load and show"} changed files for ${pullRequest.title}`}
-					onClick={() => {
-						const nextExpanded = !expanded;
-						setExpanded(nextExpanded);
-						if (nextExpanded && !filesLoaded && !diff?.loading) onLoadFiles();
-					}}
-				/>
-				<ActionButton
-					icon={<ExternalLink size={12} />}
-					label={`#${pullRequest.number}`}
-					ariaLabel={`Open pull request ${pullRequest.number} on GitHub`}
-					onClick={onOpen}
-				/>
-			</div>
-			<div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 5, paddingLeft: 0, fontSize: theme.fontSizes[0], fontFamily: theme.fonts.monospace, color: muted }}>
-				<span
-					aria-hidden="true"
-					title={pullRequest.author ? `Merged by ${pullRequest.author}` : undefined}
-					style={{ width: 14, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
-				>
-					{pullRequest.author ? (
-						pullRequest.authorAvatarUrl && !avatarBroken ? (
+			<div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+				{pullRequest.author && (
+					<span
+						aria-hidden="true"
+						title={`Merged by ${pullRequest.author}`}
+						style={{
+							width: 42,
+							height: 42,
+							flexShrink: 0,
+							display: "inline-flex",
+							alignItems: "center",
+							justifyContent: "center",
+						}}
+					>
+						{pullRequest.authorAvatarUrl && !avatarBroken ? (
 							<img
 								src={pullRequest.authorAvatarUrl}
 								alt=""
-								width={14}
-								height={14}
+								width={42}
+								height={42}
 								onError={() => setAvatarBroken(true)}
-								style={{ width: 14, height: 14, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+								style={{
+									width: 42,
+									height: 42,
+									borderRadius: "50%",
+									objectFit: "cover",
+									flexShrink: 0,
+								}}
 							/>
 						) : (
 							<span
 								aria-hidden="true"
 								style={{
-									width: 14,
-									height: 14,
+									width: 42,
+									height: 42,
 									borderRadius: "50%",
 									display: "inline-flex",
 									alignItems: "center",
 									justifyContent: "center",
 									background: theme.colors.backgroundSecondary ?? "#333",
 									color: muted,
-									fontSize: 8,
+									fontSize: 15,
 									fontWeight: 700,
 									flexShrink: 0,
 								}}
 							>
 								{pullRequest.author.slice(0, 1).toUpperCase()}
 							</span>
-						)
-					) : null}
-				</span>
-				<span>{pullRequest.owner}/{pullRequest.repo}</span>
-				{pullRequest.author && <span>· {pullRequest.author}</span>}
-				<span>· {filesLoaded ? `${files.length} file${files.length === 1 ? "" : "s"}` : "diff not loaded"}</span>
-				{Number.isFinite(mergedTime) && <time dateTime={pullRequest.mergedAt} title={new Date(mergedTime).toLocaleString()}>· merged {relativeTime(mergedTime)}</time>}
+						)}
+					</span>
+				)}
+				<div
+					style={{
+						flex: 1,
+						minWidth: 0,
+						display: "flex",
+						flexDirection: "column",
+						gap: 4,
+						transform: "translateY(-1px)",
+					}}
+				>
+					<div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, fontSize: theme.fontSizes[0], fontFamily: theme.fonts.monospace, color: muted }}>
+						{Number.isFinite(mergedTime) && (
+							<time dateTime={pullRequest.mergedAt} title={new Date(mergedTime).toLocaleString()}>
+								merged {relativeTime(mergedTime)}
+							</time>
+						)}
+						{summary.known && (
+							<span
+								title={`${summary.additions} additions, ${summary.deletions} deletions`}
+							>
+								{Number.isFinite(mergedTime) ? "· " : ""}
+								<span style={{ color: theme.colors.success ?? "#3d9a5f" }}>
+									+{summary.additions}
+								</span>{" "}
+								<span style={{ color: theme.colors.error ?? "#e5534b" }}>
+									−{summary.deletions}
+								</span>
+							</span>
+						)}
+						<span>
+							{Number.isFinite(mergedTime) || summary.known
+								? `· ${pullRequest.repo}`
+								: pullRequest.repo}
+						</span>
+						{pullRequest.author && (
+							<span>· {pullRequest.author}</span>
+						)}
+					</div>
+					<div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+						<div style={{ flex: "1 1 220px", minWidth: 0 }}>
+							<div style={{ minWidth: 0, overflowWrap: "anywhere", color: highlighted ? theme.colors.primary : theme.colors.text }}>
+								{pullRequest.title}
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+				<button
+					type="button"
+					onClick={(event) => {
+						event.stopPropagation();
+						onOpen();
+					}}
+					onMouseEnter={() => setNumberHovered(true)}
+					onMouseLeave={() => setNumberHovered(false)}
+					aria-label={`Open pull request ${pullRequest.number} on GitHub`}
+					title={`Open pull request #${pullRequest.number} on GitHub`}
+					style={{
+						flexShrink: 0,
+						display: "inline-flex",
+						alignItems: "center",
+						gap: 4,
+						padding: 0,
+						border: "none",
+						background: "transparent",
+						color: numberHovered ? theme.colors.primary : muted,
+						cursor: "pointer",
+						fontFamily: theme.fonts.monospace,
+						fontSize: theme.fontSizes[0],
+						textDecoration: numberHovered ? "underline" : "none",
+					}}
+				>
+					<GitPullRequest
+						size={14}
+						style={{
+							flexShrink: 0,
+							color: theme.colors.success ?? "#3d9a5f",
+						}}
+						aria-hidden="true"
+					/>
+					#{pullRequest.number}
+				</button>
+				{summary.known && summary.additions + summary.deletions > 0 ? (
+					<div style={{ flex: 1, minWidth: 0 }}>
+						<LineChangeScaleBar
+							additions={summary.additions}
+							deletions={summary.deletions}
+							maxTotal={maxLineChanges ?? 0}
+						/>
+					</div>
+				) : (
+					<div
+						style={{
+							flex: 1,
+							height: 12,
+							borderRadius: 2,
+							background: theme.colors.border ?? "#333",
+							opacity: 0.35,
+						}}
+					/>
+				)}
 			</div>
 			<div style={{ display: "grid", gridTemplateRows: expanded ? "1fr" : "0fr", transition: "grid-template-rows 220ms cubic-bezier(0.4, 0, 0.2, 1)" }}>
 				<div inert={!expanded} style={{ minHeight: 0, overflow: "hidden" }}>
 					{expanded && (
-						<div style={{ marginTop: 8, marginLeft: 22, paddingTop: 8, borderTop: `1px solid ${theme.colors.border ?? "#333"}`, display: "flex", flexDirection: "column", gap: 4 }}>
+						<div onClick={(event) => event.stopPropagation()} style={{ marginTop: 8, marginLeft: 22, paddingTop: 8, borderTop: `1px solid ${theme.colors.border ?? "#333"}`, display: "flex", flexDirection: "column", gap: 4 }}>
 							<div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2, fontSize: theme.fontSizes[0], color: muted }}>
 								<FileDiff size={12} aria-hidden="true" /> Changed paths · highlighted in repo map
 							</div>
 							{diff?.loading ? (
-								<div style={{ fontSize: theme.fontSizes[1], color: muted }}>Loading changed paths from GitHub…</div>
+								<div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: theme.fontSizes[1], color: muted }}>
+									<Loader2 size={12} className="principal-studio-spin" aria-hidden="true" />
+									Loading changed paths from GitHub…
+								</div>
 							) : diff?.error ? (
 								<div style={{ fontSize: theme.fontSizes[1], color: theme.colors.error ?? "#e5534b" }}>
 									{diff.error}{" "}
@@ -999,58 +1322,15 @@ function MergedPullRequestCard({
 								<div style={{ fontSize: theme.fontSizes[1], color: muted }}>Expand this PR to load its changed paths and highlight the repo map.</div>
 							) : files.length === 0 ? (
 								<div style={{ fontSize: theme.fontSizes[1], color: muted }}>No changed-file paths were returned by GitHub.</div>
-							) : files.map((path) => (
-								<div key={path} title={path} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: theme.fonts.monospace, fontSize: theme.fontSizes[0] }}>
-									{path}
-								</div>
-							))}
+							) : (
+								<FileChangeList changes={changes} />
+							)}
 							{diff?.truncated && <div style={{ marginTop: 4, fontSize: theme.fontSizes[0], color: muted }}>Showing the first 300 changed paths.</div>}
 						</div>
 					)}
 				</div>
 			</div>
 		</div>
-	);
-}
-
-function ActionButton({
-	icon,
-	label,
-	ariaLabel,
-	onClick,
-}: {
-	icon: ReactNode;
-	label: string;
-	ariaLabel: string;
-	onClick: () => void;
-}) {
-	const { theme } = useTheme();
-	const [hovered, setHovered] = useState(false);
-	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
-	return (
-		<button
-			type="button"
-			aria-label={ariaLabel}
-			onClick={onClick}
-			onMouseEnter={() => setHovered(true)}
-			onMouseLeave={() => setHovered(false)}
-			style={{
-				flexShrink: 0,
-				display: "inline-flex",
-				alignItems: "center",
-				gap: 4,
-				padding: "4px 8px",
-				borderRadius: 4,
-				border: `1px solid ${hovered ? theme.colors.primary : theme.colors.border ?? "#333"}`,
-				background: "transparent",
-				color: hovered ? theme.colors.primary : muted,
-				cursor: "pointer",
-				fontSize: theme.fontSizes[0],
-				fontFamily: theme.fonts.body,
-			}}
-		>
-			{icon}{label}
-		</button>
 	);
 }
 

@@ -25,7 +25,14 @@ import {
 	type CityData,
 	type HighlightLayer,
 } from "@principal-ai/file-city-react";
-import { FastForward, FolderGit2, LayoutDashboard } from "lucide-react";
+import { FastForward, FolderGit2, LayoutDashboard, Loader2 } from "lucide-react";
+import {
+	ContributorAvatarFan,
+	type AvatarContributor,
+} from "./ContributorAvatarFan";
+import { RepoCitySkeletonCard } from "./RepoCitySkeleton";
+import { SkeletonStyles } from "./Skeleton";
+import type { LineStats } from "./LineChangeBar";
 
 /** Layer colors in assignment order — distinct glows on the dark city base. */
 export const MODEL_LAYER_COLORS = [
@@ -48,6 +55,11 @@ export interface SubsystemCoverageModel {
 	 * trail step/file sites). Paths outside the checkout are ignored.
 	 */
 	files: readonly string[];
+	/**
+	 * Optional stable identity for color assignment. Layers that share a key
+	 * (e.g. the same activity author) share a color. Defaults to `id`.
+	 */
+	colorKey?: string;
 	/** Override the palette color; the grid assigns one by index otherwise. */
 	color?: string;
 }
@@ -80,7 +92,15 @@ export interface SubsystemCoverageRepo {
 		error?: string;
 	};
 	models: readonly SubsystemCoverageModel[];
-	/** Optional copy overrides when layers represent something besides models. */
+	/**
+	 * People who contributed activity to this repo in the current window. The
+	 * card fans their avatars over the map's bottom-left corner.
+	 */
+	contributors?: readonly AvatarContributor[];
+	/** Noun used in contributor tooltips ("commit", "merge"). */
+	contributorNoun?: string;
+	/** Line totals for this repo in the current window, shown in the footer. */
+	lineStats?: LineStats;	/** Optional copy overrides when layers represent something besides models. */
 	layerSingular?: string;
 	layerPlural?: string;
 	coverageVerb?: string;
@@ -157,21 +177,30 @@ export function coverageLayers(
 }
 
 /**
- * One stable color per model id across every repo, so a model spanning two
- * checkouts keeps the same layer color in both cards.
+ * One color per color key across every repo, so a key spanning two checkouts
+ * keeps the same layer color in both cards. Layers with the same `colorKey`
+ * (for the activity tabs, the same author) share a color.
  */
 export function collectModelColors(
 	repos: readonly SubsystemCoverageRepo[],
 ): Map<string, string> {
 	const colors = new Map<string, string>();
+	const keyColors = new Map<string, string>();
 	for (const repo of repos) {
 		for (const model of repo.models) {
 			if (colors.has(model.id)) continue;
-			colors.set(
-				model.id,
-				model.color ??
-					MODEL_LAYER_COLORS[colors.size % MODEL_LAYER_COLORS.length]!,
-			);
+			if (model.color) {
+				colors.set(model.id, model.color);
+				continue;
+			}
+			const key = model.colorKey ?? `layer:${model.id}`;
+			let color = keyColors.get(key);
+			if (!color) {
+				color =
+					MODEL_LAYER_COLORS[keyColors.size % MODEL_LAYER_COLORS.length]!;
+				keyColors.set(key, color);
+			}
+			colors.set(model.id, color);
 		}
 	}
 	return colors;
@@ -215,6 +244,10 @@ export function SubsystemCoverageMapCard({
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 	const border = theme.colors.border ?? "#333";
+	const footerBackground =
+		theme.colors.surface ??
+		theme.colors.backgroundSecondary ??
+		theme.colors.background;
 	const [cardHovered, setCardHovered] = useState(false);
 	const [avatarBroken, setAvatarBroken] = useState(false);
 
@@ -233,6 +266,17 @@ export function SubsystemCoverageMapCard({
 		() => coverageForRepo(repo.cityData, coloredModels),
 		[repo.cityData, coloredModels],
 	);
+	const netLineChange = repo.lineStats
+		? repo.lineStats.additions - repo.lineStats.deletions
+		: null;
+	const netLineChangeLabel =
+		netLineChange == null
+			? ""
+			: netLineChange > 0
+				? `+${netLineChange}`
+				: netLineChange < 0
+					? `−${Math.abs(netLineChange)}`
+					: "0";
 	const layerSingular = repo.layerSingular ?? "model";
 	const layerPlural = repo.layerPlural ?? `${layerSingular}s`;
 	const coverageVerb = repo.coverageVerb ?? "covered";
@@ -448,93 +492,168 @@ export function SubsystemCoverageMapCard({
 				style={{
 					flex: 1,
 					minHeight: 0,
-					position: "relative",
 					display: "flex",
-					alignItems: "center",
-					justifyContent: "center",
+					flexDirection: "column",
 					overflow: "hidden",
 					background: theme.colors.background,
 					borderTop: `1px solid ${border}`,
 				}}
 			>
-				{repo.error ? (
+				<div
+					style={{
+						flex: 1,
+						minHeight: 0,
+						position: "relative",
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
+						overflow: "hidden",
+					}}
+				>
+					{repo.error ? (
+						<div
+							role="alert"
+							style={{
+								maxWidth: "90%",
+								padding: 16,
+								textAlign: "center",
+								fontSize: theme.fontSizes[0],
+								lineHeight: 1.5,
+								color: theme.colors.error ?? "#e5534b",
+								overflowWrap: "anywhere",
+							}}
+						>
+							<FolderGit2 size={30} style={{ opacity: 0.6 }} />
+							<div style={{ fontWeight: 600 }}>Could not load repo city</div>
+							<div>{repo.error}</div>
+							{onRetry && (
+								<button
+									type="button"
+									disabled={repo.retrying}
+									onClick={(event) => {
+										event.stopPropagation();
+										onRetry();
+									}}
+									style={{
+										marginTop: 8,
+										padding: "5px 12px",
+										borderRadius: 6,
+										border: `1px solid ${border}`,
+										background: theme.colors.surface ?? theme.colors.background,
+										color: theme.colors.text,
+										font: "inherit",
+										cursor: repo.retrying ? "default" : "pointer",
+										opacity: repo.retrying ? 0.65 : 1,
+									}}
+								>
+									{repo.retrying ? "Retrying…" : "Retry"}
+								</button>
+							)}
+						</div>
+					) : repo.cityData ? (
+						<ArchitectureMapHighlightLayers
+							cityData={repo.cityData}
+							highlightLayers={displayLayers}
+							fullSize
+							showFileNames={false}
+							showFileTypeIcons={false}
+							enableHover={false}
+							isolationMode="collapse"
+							dimOpacity={0.25}
+							canvasBackgroundColor={theme.colors.background}
+							maxCanvasSize={1024}
+							onBuildingClick={
+								onOpenFile
+									? (building) =>
+											onOpenFile({
+												repoKey: repo.repoKey,
+												displayPath: building.path,
+											})
+									: undefined
+							}
+						/>
+					) : (
+						<div
+							style={{
+								display: "flex",
+								flexDirection: "column",
+								alignItems: "center",
+								gap: 8,
+								color: muted,
+								fontSize: theme.fontSizes[0],
+							}}
+						>
+							<Loader2
+								size={24}
+								className="principal-studio-spin"
+								aria-hidden="true"
+								style={{ opacity: 0.6 }}
+							/>
+							Building city…
+						</div>
+					)}
+				</div>
+
+				{(repo.contributors?.length || repo.lineStats) && (
 					<div
-						role="alert"
 						style={{
-							maxWidth: "90%",
-							padding: 16,
-							textAlign: "center",
-							fontSize: theme.fontSizes[0],
-							lineHeight: 1.5,
-							color: theme.colors.error ?? "#e5534b",
-							overflowWrap: "anywhere",
-						}}
-					>
-						<FolderGit2 size={30} style={{ opacity: 0.6 }} />
-						<div style={{ fontWeight: 600 }}>Could not load repo city</div>
-						<div>{repo.error}</div>
-						{onRetry && (
-							<button
-								type="button"
-								disabled={repo.retrying}
-								onClick={(event) => {
-									event.stopPropagation();
-									onRetry();
-								}}
-								style={{
-									marginTop: 8,
-									padding: "5px 12px",
-									borderRadius: 6,
-									border: `1px solid ${border}`,
-									background: theme.colors.surface ?? theme.colors.background,
-									color: theme.colors.text,
-									font: "inherit",
-									cursor: repo.retrying ? "default" : "pointer",
-									opacity: repo.retrying ? 0.65 : 1,
-								}}
-							>
-								{repo.retrying ? "Retrying…" : "Retry"}
-							</button>
-						)}
-					</div>
-				) : repo.cityData ? (
-					<ArchitectureMapHighlightLayers
-						cityData={repo.cityData}
-						highlightLayers={displayLayers}
-						fullSize
-						showFileNames={false}
-						showFileTypeIcons={false}
-						enableHover={false}
-						isolationMode="collapse"
-						dimOpacity={0.25}
-						canvasBackgroundColor={theme.colors.background}
-						maxCanvasSize={1024}
-						onBuildingClick={
-							onOpenFile
-								? (building) =>
-										onOpenFile({
-											repoKey: repo.repoKey,
-											displayPath: building.path,
-										})
-								: undefined
-						}
-					/>
-				) : (
-					<div
-						style={{
+							flexShrink: 0,
 							display: "flex",
-							flexDirection: "column",
 							alignItems: "center",
 							gap: 8,
-							color: muted,
-							fontSize: theme.fontSizes[0],
+							minHeight: 34,
+							padding: "5px 8px",
+							borderTop: `1px solid ${border}`,
+							background: footerBackground,
 						}}
 					>
-						<FolderGit2 size={30} style={{ opacity: 0.5 }} />
-						Building city…
+						{repo.contributors && repo.contributors.length > 0 && (
+							<>
+								<ContributorAvatarFan
+									contributors={repo.contributors}
+									size={20}
+									max={4}
+									activityNoun={repo.contributorNoun}
+									ringColor={footerBackground}
+								/>
+								<span
+									style={{
+										minWidth: 0,
+										overflow: "hidden",
+										textOverflow: "ellipsis",
+										whiteSpace: "nowrap",
+										fontFamily: theme.fonts.monospace,
+										fontSize: theme.fontSizes[0],
+										color: muted,
+									}}
+								>
+									{repo.contributors.length} contributor
+									{repo.contributors.length === 1 ? "" : "s"}
+								</span>
+							</>
+						)}
+						{repo.lineStats && netLineChange !== null && (
+							<span
+								style={{
+									marginLeft: "auto",
+									flexShrink: 0,
+									fontFamily: theme.fonts.monospace,
+									fontSize: theme.fontSizes[0],
+									fontWeight: 600,
+									color:
+										netLineChange > 0
+											? (theme.colors.success ?? "#3d9a5f")
+											: netLineChange < 0
+												? (theme.colors.error ?? "#e5534b")
+												: muted,
+								}}
+								title={`${repo.lineStats.additions} additions, ${repo.lineStats.deletions} deletions · net ${netLineChangeLabel}`}
+							>
+								{netLineChangeLabel}
+							</span>
+						)}
 					</div>
 				)}
-
 			</div>
 		</div>
 	);
@@ -563,6 +682,10 @@ export interface SubsystemCoverageMapCardsProps {
 	/** Empty-state copy for non-subsystem uses of these cards. */
 	emptyTitle?: string;
 	emptyDetail?: string;
+	/** Placeholder repo cards rendered while cities are still loading. */
+	skeletonCount?: number;
+	/** Total cities still loading, shown beneath the grid. */
+	pendingCount?: number;
 }
 
 /**
@@ -582,12 +705,15 @@ export function SubsystemCoverageMapCards({
 	listLabel = "Subsystem coverage maps",
 	emptyTitle = "No repo cities to map",
 	emptyDetail = "Repos referenced by subsystem models will appear here, with their covered files lit on the map.",
+	skeletonCount = 0,
+	pendingCount = 0,
 }: SubsystemCoverageMapCardsProps) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 	const modelColors = useMemo(() => collectModelColors(repos), [repos]);
+	const singleRepo = repos.length + skeletonCount === 1;
 
-	if (repos.length === 0) {
+	if (repos.length === 0 && skeletonCount === 0) {
 		return (
 			<div
 				style={{
@@ -631,12 +757,17 @@ export function SubsystemCoverageMapCards({
 				background: theme.colors.background,
 			}}
 		>
+			{skeletonCount > 0 && <SkeletonStyles />}
 			<div
 				role="list"
 				aria-label={listLabel}
 				style={{
 					display: "grid",
-					gridTemplateColumns: `repeat(auto-fill, minmax(${minColumnWidth}px, 1fr))`,
+					// A lone repo should fill the map pane instead of sitting in
+					// one column of an auto-filled grid with empty tracks beside it.
+					gridTemplateColumns: singleRepo
+						? "minmax(0, 1fr)"
+						: `repeat(auto-fill, minmax(${minColumnWidth}px, 1fr))`,
 					gap: 16,
 					alignItems: "start",
 				}}
@@ -660,7 +791,24 @@ export function SubsystemCoverageMapCards({
 						/>
 					</div>
 				))}
+				{Array.from({ length: skeletonCount }, (_, index) => (
+					<div key={`repo-city-skeleton-${index}`} role="listitem">
+						<RepoCitySkeletonCard index={index} />
+					</div>
+				))}
 			</div>
+			{pendingCount > 0 && (
+				<div
+					style={{
+						marginTop: 12,
+						color: muted,
+						fontFamily: theme.fonts.monospace,
+						fontSize: theme.fontSizes[0],
+					}}
+				>
+					Building {pendingCount} repo {pendingCount === 1 ? "city" : "cities"}…
+				</div>
+			)}
 		</div>
 	);
 }

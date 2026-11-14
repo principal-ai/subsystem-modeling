@@ -13,8 +13,9 @@ import {
 	type SubsystemCoverageModel,
 	type SubsystemCoverageRepo,
 } from "../components/SubsystemCoverageMapCards";
+import type { ContributorsByRepo } from "../components/ContributorAvatarFan";
+import type { LineStats } from "../components/LineChangeBar";
 import { electrobun } from "../rpc";
-import { CenteredMessage } from "../ui";
 
 function buildCity(files: Array<{ path: string; size?: number }>): CityData {
 	const tree = new GitFileTreeBuilder().build({
@@ -30,11 +31,18 @@ export interface RepoActivityLayer {
 	id: string;
 	title: string;
 	files: string[];
+	/** Stable color identity — activity tabs use the author's login. */
+	colorKey?: string;
+	/** Explicit highlight color, so the map matches the author chip. */
+	color?: string;
 }
 
 export function RepoActivityMap({
 	repos,
 	layersByRepo,
+	contributorsByRepo,
+	lineStatsByRepo,
+	contributorNoun = "commit",
 	showFailedRepos = false,
 	selectedRepoKeys,
 	onToggleRepo,
@@ -50,6 +58,12 @@ export function RepoActivityMap({
 }: {
 	repos: MergedPullRequestRepo[];
 	layersByRepo: ReadonlyMap<string, RepoActivityLayer[]>;
+	/** Contributors per repo key, fanned over each card's bottom-left corner. */
+	contributorsByRepo?: ContributorsByRepo;
+	/** Line totals per repo key, shown in the card footer. */
+	lineStatsByRepo?: ReadonlyMap<string, LineStats>;
+	/** Noun used in contributor tooltips ("commit", "merge"). */
+	contributorNoun?: string;
 	/** Include failed repo cards with their load errors instead of hiding them. */
 	showFailedRepos?: boolean;
 	selectedRepoKeys: ReadonlySet<string>;
@@ -217,6 +231,8 @@ export function RepoActivityMap({
 					id: layer.id,
 					title: layer.title,
 					files: layer.files ?? [],
+					colorKey: layer.colorKey,
+					color: layer.color,
 				}));
 				return {
 					repoKey,
@@ -228,24 +244,26 @@ export function RepoActivityMap({
 					retrying: retrying.has(repoKey),
 					fastForward: fastForward.get(repoKey),
 					models: layers,
+					contributors: contributorsByRepo?.get(repoKey),
+					lineStats: lineStatsByRepo?.get(repoKey),
+					contributorNoun,
 					layerSingular,
 					layerPlural,
 					coverageVerb: "changed",
 					coverageTitle: `${layers.reduce((count, layer) => count + layer.files.length, 0)} ${coverageNoun} across ${layerPlural}`,
 				};
 			});
-	}, [repos, layersByRepo, cities, failed, retrying, fastForward, showFailedRepos, layerSingular, layerPlural, coverageNoun]);
+	}, [repos, layersByRepo, contributorsByRepo, lineStatsByRepo, contributorNoun, cities, failed, retrying, fastForward, showFailedRepos, layerSingular, layerPlural, coverageNoun]);
 
 	const pending = repos.filter((repo) => {
 		const key = `pkg:github/${repo.owner}/${repo.name}`;
 		return !cities.has(key) && !failed.has(key);
 	}).length;
-	if (cards.length === 0 && pending > 0) {
-		return <CenteredMessage title="Loading repo cities…" detail={`${pending} local checkouts remaining.`} />;
-	}
 	return (
 		<SubsystemCoverageMapCards
 			repos={cards}
+			skeletonCount={Math.min(pending, 6)}
+			pendingCount={pending}
 			selectedRepoKeys={selectedRepoKeys}
 			onSelectRepo={onToggleRepo}
 			onRetryRepo={retryRepo}

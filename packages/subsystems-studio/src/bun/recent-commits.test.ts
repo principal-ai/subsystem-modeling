@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	listLocalRepoCommits,
+	parseNameStatus,
 	parseNoreplyLogin,
 } from "./recent-commits";
 
@@ -38,6 +39,33 @@ describe("parseNoreplyLogin", () => {
 	});
 });
 
+describe("parseNameStatus", () => {
+	test("maps status letters and consumes rename paths", () => {
+		expect(
+			parseNameStatus([
+				"M",
+				"src/changed.ts",
+				"A",
+				"src/added.ts",
+				"D",
+				"src/removed.ts",
+				"R100",
+				"src/old.ts",
+				"src/new.ts",
+				"C75",
+				"src/source.ts",
+				"src/copy.ts",
+			]),
+		).toEqual([
+			{ path: "src/changed.ts", status: "modified" },
+			{ path: "src/added.ts", status: "added" },
+			{ path: "src/removed.ts", status: "deleted" },
+			{ path: "src/new.ts", status: "renamed", previousPath: "src/old.ts" },
+			{ path: "src/copy.ts", status: "copied", previousPath: "src/source.ts" },
+		]);
+	});
+});
+
 describe("listLocalRepoCommits", () => {
 	test("lists branch commits with files, including merges", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "recent-commits-test-"));
@@ -61,8 +89,16 @@ describe("listLocalRepoCommits", () => {
 		const merge = commits[0]!;
 		expect(merge.merge).toBe(true);
 		expect(merge.files).toContain("b.txt");
+		expect(merge.changes).toEqual([
+			{ path: "b.txt", status: "added", additions: 1, deletions: 0 },
+		]);
+		expect(merge.additions).toBe(1);
+		expect(merge.deletions).toBe(0);
 		expect(commits[1]!.merge).toBe(false);
 		expect(commits[1]!.files).toContain("a.txt");
+		expect(commits[1]!.changes).toEqual([
+			{ path: "a.txt", status: "added", additions: 1, deletions: 0 },
+		]);
 		expect(merge.committedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 		expect(merge.author).toBe("Test Author");
 	});

@@ -3,6 +3,7 @@
  */
 
 import type { ReactNode } from "react";
+import { Loader2 } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 
 export function relativeTime(ms: number): string {
@@ -17,14 +18,19 @@ export function CenteredMessage({
 	title,
 	detail,
 	children,
+	loading = false,
 }: {
 	title: string;
 	detail?: string;
 	children?: ReactNode;
+	/** Show an animated spinner above the copy. */
+	loading?: boolean;
 }) {
 	const { theme } = useTheme();
 	return (
 		<div
+			role={loading ? "status" : undefined}
+			aria-live={loading ? "polite" : undefined}
 			style={{
 				width: "100%",
 				height: "100%",
@@ -37,6 +43,18 @@ export function CenteredMessage({
 			}}
 		>
 			<div style={{ textAlign: "center", maxWidth: 640, padding: 24 }}>
+				{loading && (
+					<Loader2
+						size={20}
+						className="principal-studio-spin"
+						aria-hidden="true"
+						style={{
+							display: "block",
+							margin: "0 auto 10px",
+							color: theme.colors.primary,
+						}}
+					/>
+				)}
 				<div style={{ fontSize: theme.fontSizes[3], marginBottom: 8 }}>{title}</div>
 				{detail && (
 					<div

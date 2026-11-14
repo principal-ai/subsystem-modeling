@@ -166,7 +166,7 @@ const request: RpcRequest = {
       (pr) => pr.owner === owner && pr.repo === repo && pr.number === number,
     );
     return pullRequest
-      ? { ok: true, files: pullRequest.files ?? [] }
+      ? { ok: true, files: pullRequest.files ?? [], changes: pullRequest.changes }
       : { ok: false, error: "Pull request fixture not found." };
   },
   fastForwardRepo: async () => ({

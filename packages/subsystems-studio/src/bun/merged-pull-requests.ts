@@ -1,5 +1,7 @@
 import { existsSync } from "node:fs";
 import type {
+	FileChange,
+	FileChangeStatus,
 	MergedPullRequest,
 	MergedPullRequestRepo,
 } from "../shared/contract";
@@ -11,7 +13,26 @@ const SEARCH_PAGE_SIZE = 100;
 const SEARCH_PAGE_LIMIT = 10;
 const FILE_PAGE_SIZE = 100;
 const FILE_PAGE_LIMIT = 3;
-const pullRequestFilesCache = new Map<string, { files: string[]; truncated: boolean }>();
+const pullRequestFilesCache = new Map<
+	string,
+	{ files: string[]; changes: FileChange[]; truncated: boolean }
+>();
+
+function pullRequestFileStatus(status: string | undefined): FileChangeStatus {
+	switch ((status ?? "").toLowerCase()) {
+		case "added":
+			return "added";
+		case "removed":
+		case "deleted":
+			return "deleted";
+		case "renamed":
+			return "renamed";
+		case "copied":
+			return "copied";
+		default:
+			return "modified";
+	}
+}
 
 interface SearchIssue {
 	number: number;
@@ -151,11 +172,12 @@ async function searchOrgMergedPullRequests(
 async function mergedPullRequestFiles(
 	pullRequest: Pick<MergedPullRequest, "owner" | "repo" | "number">,
 	token: string,
-): Promise<{ files: string[]; truncated: boolean }> {
+): Promise<{ files: string[]; changes: FileChange[]; truncated: boolean }> {
 	const cacheKey = `${pullRequest.owner}/${pullRequest.repo}#${pullRequest.number}`.toLowerCase();
 	const cached = pullRequestFilesCache.get(cacheKey);
 	if (cached) return cached;
 	const files: string[] = [];
+	const changes: FileChange[] = [];
 	let truncated = false;
 	for (let page = 1; page <= FILE_PAGE_LIMIT; page++) {
 		const response = await fetch(
@@ -181,14 +203,28 @@ async function mergedPullRequestFiles(
 					: `Could not load PR files (${response.status})`,
 			);
 		}
-		const body = (Array.isArray(raw) ? raw : []) as Array<{ filename?: string }>;
+		const body = (Array.isArray(raw) ? raw : []) as Array<{
+			filename?: string;
+			status?: string;
+			previous_filename?: string;
+			additions?: number;
+			deletions?: number;
+		}>;
 		for (const file of body) {
-			if (file.filename) files.push(file.filename);
+			if (!file.filename) continue;
+			files.push(file.filename);
+			changes.push({
+				path: file.filename,
+				status: pullRequestFileStatus(file.status),
+				previousPath: file.previous_filename,
+				additions: file.additions ?? 0,
+				deletions: file.deletions ?? 0,
+			});
 		}
 		if (body.length < FILE_PAGE_SIZE) break;
 		if (page === FILE_PAGE_LIMIT) truncated = true;
 	}
-	const result = { files, truncated };
+	const result = { files, changes, truncated };
 	pullRequestFilesCache.set(cacheKey, result);
 	return result;
 }
@@ -198,7 +234,13 @@ export async function getMergedPullRequestFiles(opts: {
 	owner: string;
 	repo: string;
 	number: number;
-}): Promise<{ ok: boolean; files?: string[]; error?: string; truncated?: boolean }> {
+}): Promise<{
+	ok: boolean;
+	files?: string[];
+	changes?: FileChange[];
+	error?: string;
+	truncated?: boolean;
+}> {
 	const owner = opts.owner.trim();
 	const repo = opts.repo.trim();
 	if (!owner || !repo || !Number.isInteger(opts.number) || opts.number < 1) {

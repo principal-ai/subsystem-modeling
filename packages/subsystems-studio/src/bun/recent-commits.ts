@@ -1,5 +1,7 @@
 import { existsSync } from "node:fs";
 import type {
+	FileChange,
+	FileChangeStatus,
 	MergedPullRequestRepo,
 	RepoCommit,
 } from "../shared/contract";
@@ -22,6 +24,131 @@ export function commitAvatarUrl(login: string): string {
 	return `https://github.com/${login}.png?size=64`;
 }
 
+function fileChangeStatus(letter: string): FileChangeStatus {
+	switch (letter.toUpperCase()) {
+		case "A":
+			return "added";
+		case "D":
+			return "deleted";
+		case "R":
+			return "renamed";
+		case "C":
+			return "copied";
+		default:
+			return "modified";
+	}
+}
+
+/**
+ * Parse the NUL-separated token stream from `git ... --name-status -z`.
+ * Each entry is `status`, `path`, or `status`, `old path`, `new path` for
+ * renames/copies. A tiny state machine beats matching filename text.
+ */
+export function parseNameStatus(tokens: readonly string[]): FileChange[] {
+	const clean = (value: string | undefined) =>
+		(value ?? "").replace(/^\n/, "").trim();
+	const changes: FileChange[] = [];
+	let index = 0;
+	while (index < tokens.length) {
+		const statusToken = clean(tokens[index++]);
+		if (!statusToken) continue;
+		const letter = statusToken[0] ?? "M";
+		if (letter.toUpperCase() === "R" || letter.toUpperCase() === "C") {
+			const previousPath = clean(tokens[index++]);
+			const path = clean(tokens[index++]);
+			if (!path) continue;
+			changes.push({
+				path,
+				previousPath: previousPath || undefined,
+				status: fileChangeStatus(letter),
+			});
+			continue;
+		}
+		const path = clean(tokens[index++]);
+		if (path) changes.push({ path, status: fileChangeStatus(letter) });
+	}
+	return changes;
+}
+
+interface LineStat {
+	additions: number;
+	deletions: number;
+}
+
+function parseNumstatToken(
+	token: string,
+): { path: string; stat: LineStat } | null {
+	const raw = token.replace(/^\n/, "");
+	if (!raw) return null;
+	const first = raw.indexOf("\t");
+	const second = first >= 0 ? raw.indexOf("\t", first + 1) : -1;
+	if (first < 0 || second < 0) return null;
+	const addRaw = raw.slice(0, first).trim();
+	const delRaw = raw.slice(first + 1, second).trim();
+	const path = raw.slice(second + 1).trim();
+	if (!path) return null;
+	return {
+		path,
+		stat: {
+			additions: addRaw === "-" ? 0 : Number(addRaw) || 0,
+			deletions: delRaw === "-" ? 0 : Number(delRaw) || 0,
+		},
+	};
+}
+
+function parseNumstatTokens(tokens: readonly string[]): Map<string, LineStat> {
+	const stats = new Map<string, LineStat>();
+	for (const token of tokens) {
+		const parsed = parseNumstatToken(token);
+		if (parsed) stats.set(parsed.path, parsed.stat);
+	}
+	return stats;
+}
+
+/**
+ * Parse `git log --numstat -z --format=%x00COMMIT%x00%H` into per-commit
+ * path stats. The status stream from `--name-status` is separate because git
+ * emits only one of the two formats when both flags are present.
+ */
+function parseNumstatLog(
+	tokens: readonly string[],
+): Map<string, Map<string, LineStat>> {
+	const bySha = new Map<string, Map<string, LineStat>>();
+	let current: Map<string, LineStat> | null = null;
+	for (let index = 0; index < tokens.length; index++) {
+		const token = tokens[index] ?? "";
+		if (token === "COMMIT") {
+			const sha = (tokens[++index] ?? "").trim();
+			current = new Map();
+			if (sha) bySha.set(sha, current);
+			continue;
+		}
+		if (!current) continue;
+		const parsed = parseNumstatToken(token);
+		if (parsed) current.set(parsed.path, parsed.stat);
+	}
+	return bySha;
+}
+
+function applyLineStats(
+	changes: FileChange[],
+	stats: ReadonlyMap<string, LineStat> | undefined,
+): LineStat | null {
+	let known = false;
+	let additions = 0;
+	let deletions = 0;
+	for (const change of changes) {
+		const stat = stats?.get(change.path);
+		if (!stat) continue;
+		change.additions = stat.additions;
+		change.deletions = stat.deletions;
+		known = true;
+		additions += stat.additions;
+		deletions += stat.deletions;
+	}
+	return known ? { additions, deletions } : null;
+}
+
 /**
  * Commits on the checkout's current branch since `since` (YYYY-MM-DD, local
  * time), newest first, with changed paths inline. Merge commits are included;
@@ -41,7 +168,7 @@ export async function listLocalRepoCommits(
 		"--first-parent",
 		`--since=${since}`,
 		`--max-count=${MAX_COMMITS_PER_REPO + 1}`,
-		"--name-only",
+		"--name-status",
 		"-z",
 		"--format=%x00COMMIT%x00%H%x00%an%x00%ae%x00%aI%x00%P%x00%s",
 		"HEAD",
@@ -59,12 +186,13 @@ export async function listLocalRepoCommits(
 		date: string;
 		parents: string;
 		subject: string;
-		files: string[];
+		fileTokens: string[];
 	} | null = null;
 	let fieldIndex = -1;
 	const pushCurrent = () => {
 		if (!current) return;
 		const login = parseNoreplyLogin(current.email);
+		const changes = parseNameStatus(current.fileTokens);
 		commits.push({
 			owner,
 			repo: name,
@@ -75,14 +203,15 @@ export async function listLocalRepoCommits(
 			authorEmail: current.email || undefined,
 			authorAvatarUrl: login ? commitAvatarUrl(login) : undefined,
 			committedAt: current.date,
-			files: current.files,
+			files: changes.map((change) => change.path),
+			changes,
 			merge: current.parents.trim().split(/\s+/).filter(Boolean).length > 1,
 		});
 	};
 	for (const raw of log.split("\0")) {
 		if (raw === "COMMIT") {
 			pushCurrent();
-			current = { sha: "", author: "", email: "", date: "", parents: "", subject: "", files: [] };
+			current = { sha: "", author: "", email: "", date: "", parents: "", subject: "", fileTokens: [] };
 			fieldIndex = 0;
 			continue;
 		}
@@ -100,29 +229,78 @@ export async function listLocalRepoCommits(
 			fieldIndex++;
 			continue;
 		}
-		// Changed paths follow the header until the next COMMIT marker. Each
-		// path arrives with a leading newline from git's own formatting.
-		const path = raw.replace(/^\n/, "").trim();
-		if (path) current.files.push(path);
+		// Status/path tokens follow the header until the next COMMIT marker.
+		current.fileTokens.push(raw);
 	}
 	pushCurrent();
 
-	// Plain `--name-only` omits merge diffs; backfill them against the first
+	// Line counts need a second pass: git emits either status or numstat, not
+	// both, when both flags are present. Same range/SHAs, so the stats map
+	// lines up with the commits parsed above.
+	const numstatLog = await gitStdout(repoPath, [
+		"log",
+		"--first-parent",
+		`--since=${since}`,
+		`--max-count=${MAX_COMMITS_PER_REPO + 1}`,
+		"--numstat",
+		"-z",
+		"--format=%x00COMMIT%x00%H",
+		"HEAD",
+		"--",
+	]);
+	const statsBySha = numstatLog
+		? parseNumstatLog(numstatLog.split("\0"))
+		: new Map<string, Map<string, LineStat>>();
+	for (const commit of commits) {
+		const totals = applyLineStats(
+			commit.changes ?? [],
+			statsBySha.get(commit.sha),
+		);
+		if (totals) {
+			commit.additions = totals.additions;
+			commit.deletions = totals.deletions;
+		}
+	}
+
+	// Plain `--name-status` omits merge diffs; backfill them against the first
 	// parent so merge commits highlight like everything else. Merges are rare,
 	// so one targeted call each stays cheap.
 	for (const commit of commits) {
-		if (commit.files!.length > 0 || !commit.merge) continue;
+		if ((commit.changes?.length ?? 0) > 0 || !commit.merge) continue;
 		const out = await gitStdout(repoPath, [
 			"diff-tree",
 			"--no-commit-id",
-			"--name-only",
+			"--name-status",
 			"-r",
+			"-z",
 			`${commit.sha}^1`,
 			commit.sha,
 			"--",
 		]);
-		if (out != null) {
-			commit.files = out.split("\n").map((line) => line.trim()).filter(Boolean);
+		if (out == null) continue;
+		const changes = parseNameStatus(out.split("\0"));
+		commit.changes = changes;
+		commit.files = changes.map((change) => change.path);
+
+		const statOut = await gitStdout(repoPath, [
+			"diff-tree",
+			"--no-commit-id",
+			"--numstat",
+			"-r",
+			"-z",
+			`${commit.sha}^1`,
+			commit.sha,
+			"--",
+		]);
+		if (statOut != null) {
+			const totals = applyLineStats(
+				changes,
+				parseNumstatTokens(statOut.split("\0")),
+			);
+			if (totals) {
+				commit.additions = totals.additions;
+				commit.deletions = totals.deletions;
+			}
 		}
 	}
 	const truncated = commits.length > MAX_COMMITS_PER_REPO;

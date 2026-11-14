@@ -1,21 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
 import {
 	ChevronDown,
-	ChevronRight,
-	ExternalLink,
 	FileDiff,
 	GitCommitHorizontal,
+	Loader2,
 	RefreshCw,
 } from "lucide-react";
 import { useTheme } from "@principal-ade/industry-theme";
 import type {
+	FileChange,
 	MergedPullRequestRepo,
 	RepoCommit,
 } from "../../shared/contract";
 import { electrobun, showFailedRepoCityCardsSubscribers } from "../rpc";
 import { CenteredMessage, relativeTime } from "../ui";
-import { RepoActivityMap } from "./RepoActivityMap";
+import { groupContributorsByRepo, ContributorAvatarFan } from "../components/ContributorAvatarFan";
+import { FileChangeList, summarizeFileChanges } from "../components/FileChangeList";
+import { LineChangeScaleBar, type LineStats } from "../components/LineChangeBar";
+import { MODEL_LAYER_COLORS } from "../components/SubsystemCoverageMapCards";
+import { RepoActivityMap, type RepoActivityLayer } from "./RepoActivityMap";
 import {
 	AuthorFilterChip,
 	Notice,
@@ -45,6 +48,7 @@ export function RepoCommitsView() {
 	const [window, setWindow] = useState<CommitWindow>("today");
 	const [selectedRepos, setSelectedRepos] = useState<ReadonlySet<string>>(() => new Set());
 	const [selectedAuthors, setSelectedAuthors] = useState<ReadonlySet<string>>(() => new Set());
+	const [authorsOpen, setAuthorsOpen] = useState(false);
 	const [commits, setCommits] = useState<RepoCommit[]>([]);
 	const [showFailedRepos, setShowFailedRepos] = useState(false);
 	const [hoveredRepoKey, setHoveredRepoKey] = useState<string | null>(null);
@@ -116,6 +120,7 @@ export function RepoCommitsView() {
 	}, [owner]);
 	useEffect(() => {
 		setSelectedAuthors(new Set());
+		setAuthorsOpen(false);
 	}, [owner, window]);
 
 	const toggleRepo = useCallback((repoKey: string) => {
@@ -178,8 +183,12 @@ export function RepoCommitsView() {
 
 	const commitsInWindow = useMemo(() => {
 		const now = new Date();
-		return commits.filter((commit) => inWindow(commit.committedAt, window, now));
-	}, [commits, window]);
+		return commits.filter(
+			(commit) =>
+				orgRepoKeys.has(`pkg:github/${commit.owner}/${commit.repo}`) &&
+				inWindow(commit.committedAt, window, now),
+		);
+	}, [commits, window, orgRepoKeys]);
 	const authors = useMemo(() => {
 		const byLogin = new Map<string, { login: string; avatarUrl?: string; count: number }>();
 		for (const commit of commitsInWindow) {
@@ -190,14 +199,59 @@ export function RepoCommitsView() {
 		}
 		return [...byLogin.values()].sort((a, b) => b.count - a.count || a.login.localeCompare(b.login));
 	}, [commitsInWindow]);
+	const authorColors = useMemo(
+		() =>
+			new Map(
+				authors.map((author, index) => [
+					author.login,
+					MODEL_LAYER_COLORS[index % MODEL_LAYER_COLORS.length]!,
+				]),
+			),
+		[authors],
+	);
 	const authorFilteredCommits = useMemo(
 		() => selectedAuthors.size === 0
 			? commitsInWindow
 			: commitsInWindow.filter((commit) => commit.author != null && selectedAuthors.has(commit.author)),
 		[commitsInWindow, selectedAuthors],
 	);
+	const contributorsByRepo = useMemo(
+		() =>
+			groupContributorsByRepo(
+				commitsInWindow,
+				(commit) => `pkg:github/${commit.owner}/${commit.repo}`,
+				(commit) =>
+					commit.author
+						? { login: commit.author, avatarUrl: commit.authorAvatarUrl }
+						: undefined,
+			),
+		[commitsInWindow],
+	);
+	const lineStatsByRepo = useMemo(() => {
+		const byRepo = new Map<string, LineStats>();
+		for (const commit of commitsInWindow) {
+			const changes =
+				commit.changes ??
+				(commit.files ?? []).map((path) => ({
+					path,
+					status: "modified" as const,
+				}));
+			const summary = summarizeFileChanges(changes);
+			const known =
+				commit.additions !== undefined ||
+				commit.deletions !== undefined ||
+				summary.known;
+			if (!known) continue;
+			const key = `pkg:github/${commit.owner}/${commit.repo}`;
+			const current = byRepo.get(key) ?? { additions: 0, deletions: 0 };
+			current.additions += commit.additions ?? summary.additions;
+			current.deletions += commit.deletions ?? summary.deletions;
+			byRepo.set(key, current);
+		}
+		return byRepo;
+	}, [commitsInWindow]);
 	const layersByRepo = useMemo(() => {
-		const byRepo = new Map<string, Array<{ id: string; title: string; files: string[] }>>();
+		const byRepo = new Map<string, RepoActivityLayer[]>();
 		for (const commit of authorFilteredCommits) {
 			const key = `pkg:github/${commit.owner}/${commit.repo}`;
 			const list = byRepo.get(key) ?? [];
@@ -205,11 +259,13 @@ export function RepoCommitsView() {
 				id: commitLayerId(commit),
 				title: `${commit.sha.slice(0, 7)} · ${commit.message}`,
 				files: commit.files ?? [],
+				colorKey: commit.author ? `author:${commit.author}` : undefined,
+				color: commit.author ? authorColors.get(commit.author) : undefined,
 			});
 			byRepo.set(key, list);
 		}
 		return byRepo;
-	}, [authorFilteredCommits]);
+	}, [authorFilteredCommits, authorColors]);
 	const visibleCommits = useMemo(
 		() =>
 			authorFilteredCommits.filter((commit) => {
@@ -218,6 +274,27 @@ export function RepoCommitsView() {
 			}),
 		[authorFilteredCommits, orgRepoKeys, selectedRepos],
 	);
+	const maxLineChanges = useMemo(() => {
+		let max = 0;
+		for (const commit of visibleCommits) {
+			const changes =
+				commit.changes ??
+				(commit.files ?? []).map((path) => ({
+					path,
+					status: "modified" as const,
+				}));
+			const summary = summarizeFileChanges(changes);
+			const known =
+				commit.additions !== undefined ||
+				commit.deletions !== undefined ||
+				summary.known;
+			if (!known) continue;
+			const additions = commit.additions ?? summary.additions;
+			const deletions = commit.deletions ?? summary.deletions;
+			max = Math.max(max, additions + deletions);
+		}
+		return max;
+	}, [visibleCommits]);
 	const toggleAuthor = useCallback((login: string) => {
 		setSelectedAuthors((current) => {
 			const next = new Set(current);
@@ -230,7 +307,7 @@ export function RepoCommitsView() {
 	const handleRepoFastForwarded = useCallback(() => {
 		loadCommits();
 	}, [loadCommits]);
-	if (repos === null) return <CenteredMessage title="Loading local repositories…" />;
+	if (repos === null) return <CenteredMessage loading title="Loading local repositories…" />;
 	if (repos.length === 0) {
 		return (
 			<CenteredMessage
@@ -321,6 +398,64 @@ export function RepoCommitsView() {
 						);
 					})}
 				</div>
+				{authors.length > 0 && (
+					<div
+						style={{
+							display: "flex",
+							alignItems: "center",
+							padding: "0 10px",
+							borderLeft: `1px solid ${theme.colors.border ?? "#333"}`,
+						}}
+					>
+						{authors.length === 1 ? (
+							<AuthorFilterChip
+								login={authors[0]!.login}
+								avatarUrl={authors[0]!.avatarUrl}
+								count={authors[0]!.count}
+								color={authorColors.get(authors[0]!.login)}
+								selected={selectedAuthors.has(authors[0]!.login)}
+								onClick={() => toggleAuthor(authors[0]!.login)}
+								activityNoun="commit"
+							/>
+						) : (
+							<button
+								type="button"
+								aria-label="Toggle author filters"
+								aria-expanded={authorsOpen}
+								title={`${authors.length} authors · ${authorsOpen ? "Hide" : "Show"} author filters`}
+								onClick={() => setAuthorsOpen((open) => !open)}
+								style={{
+									display: "inline-flex",
+									alignItems: "center",
+									gap: 6,
+									padding: "2px 4px",
+									border: "none",
+									background: "transparent",
+									color: selectedAuthors.size > 0 ? theme.colors.primary : muted,
+									cursor: "pointer",
+								}}
+							>
+								<ContributorAvatarFan
+									contributors={authors}
+									size={20}
+									max={4}
+									activityNoun="commit"
+									ringColor={
+										theme.colors.backgroundSecondary ?? theme.colors.background
+									}
+								/>
+								<ChevronDown
+									size={12}
+									aria-hidden="true"
+									style={{
+										transform: authorsOpen ? "rotate(180deg)" : undefined,
+										transition: "transform 120ms ease",
+									}}
+								/>
+							</button>
+						)}
+					</div>
+				)}
 				<div
 					style={{
 						display: "flex",
@@ -332,7 +467,14 @@ export function RepoCommitsView() {
 						whiteSpace: "nowrap",
 					}}
 				>
-					{loading ? "Loading…" : `${visibleCommits.length} commits`}
+					{loading ? (
+						<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+							<Loader2 size={11} className="principal-studio-spin" aria-hidden="true" />
+							Loading…
+						</span>
+					) : (
+						`${visibleCommits.length} commits`
+					)}
 				</div>
 				<button
 					type="button"
@@ -353,7 +495,7 @@ export function RepoCommitsView() {
 					<RefreshCw size={14} aria-hidden="true" />
 				</button>
 			</div>
-			{authors.length > 0 && (
+			{authors.length > 1 && authorsOpen && (
 				<div
 					role="group"
 					aria-label="Filter commits by author"
@@ -386,8 +528,10 @@ export function RepoCommitsView() {
 							login={author.login}
 							avatarUrl={author.avatarUrl}
 							count={author.count}
+							color={authorColors.get(author.login)}
 							selected={selectedAuthors.has(author.login)}
 							onClick={() => toggleAuthor(author.login)}
+							activityNoun="commit"
 						/>
 					))}
 				</div>
@@ -409,6 +553,9 @@ export function RepoCommitsView() {
 					<RepoActivityMap
 						repos={orgRepos}
 						layersByRepo={layersByRepo}
+						contributorsByRepo={contributorsByRepo}
+						lineStatsByRepo={lineStatsByRepo}
+						contributorNoun="commit"
 						showFailedRepos={showFailedRepos}
 						selectedRepoKeys={selectedRepos}
 						onToggleRepo={toggleRepo}
@@ -431,8 +578,8 @@ export function RepoCommitsView() {
 							Showing the newest 100 commits per repo for: {truncatedRepos.join(", ")}.
 						</Notice>
 					)}
-					{loading && commits.length === 0 ? (
-						<CenteredMessage title="Loading recent commits…" />
+					{loading && visibleCommits.length === 0 ? (
+						<CenteredMessage loading title="Loading recent commits…" />
 					) : visibleCommits.length === 0 ? (
 						<CenteredMessage
 							title={error ? "Could not load commits" : "No commits"}
@@ -447,6 +594,7 @@ export function RepoCommitsView() {
 									<RepoCommitCard
 										key={id}
 										commit={commit}
+										maxLineChanges={maxLineChanges}
 										highlighted={hoveredRepoKey === repoKey}
 										onHover={() => setHoveredCommitId(id)}
 										onLeave={() => setHoveredCommitId(null)}
@@ -464,12 +612,14 @@ export function RepoCommitsView() {
 
 function RepoCommitCard({
 	commit,
+	maxLineChanges,
 	highlighted,
 	onHover,
 	onLeave,
 	onOpen,
 }: {
 	commit: RepoCommit;
+	maxLineChanges?: number;
 	highlighted: boolean;
 	onHover: () => void;
 	onLeave: () => void;
@@ -479,107 +629,225 @@ function RepoCommitCard({
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 	const [expanded, setExpanded] = useState(false);
 	const [avatarBroken, setAvatarBroken] = useState(false);
+	const [numberHovered, setNumberHovered] = useState(false);
+	const [rowHovered, setRowHovered] = useState(false);
 	const committedTime = Date.parse(commit.committedAt);
 	const files = commit.files ?? [];
+	const changes: FileChange[] =
+		commit.changes ?? files.map((path) => ({ path, status: "modified" }));
+	const lineSummary = summarizeFileChanges(changes);
+	const additions = commit.additions ?? lineSummary.additions;
+	const deletions = commit.deletions ?? lineSummary.deletions;
+	const showLineStats =
+		commit.additions !== undefined ||
+		commit.deletions !== undefined ||
+		lineSummary.known;
+	const toggleExpanded = () => setExpanded((value) => !value);
 	return (
 		<div
 			data-repo-commit={`${commit.owner}/${commit.repo}@${commit.sha.slice(0, 12)}`}
-			onMouseEnter={onHover}
-			onMouseLeave={onLeave}
+			role="button"
+			tabIndex={0}
+			aria-expanded={expanded}
+			onClick={toggleExpanded}
+			onKeyDown={(event) => {
+				if (event.target !== event.currentTarget) return;
+				if (event.key === "Enter" || event.key === " ") {
+					event.preventDefault();
+					toggleExpanded();
+				}
+			}}
+			onMouseEnter={() => {
+				setRowHovered(true);
+				onHover();
+			}}
+			onMouseLeave={() => {
+				setRowHovered(false);
+				onLeave();
+			}}
 			style={{
-				padding: 12,
-				minHeight: 52,
+				padding: "16px 12px",
+				minHeight: 72,
+				cursor: "pointer",
 				borderBottom: `1px solid ${theme.colors.border ?? "#333"}`,
-				background: highlighted ? `${theme.colors.primary}12` : "transparent",
+				background: highlighted
+					? `${theme.colors.primary}12`
+					: rowHovered
+						? `${theme.colors.primary}0a`
+						: "transparent",
 				transition: "background 120ms ease",
 			}}
 		>
-			<div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-				<div style={{ flex: "1 1 220px", minWidth: 0, display: "flex", alignItems: "center", gap: 8 }}>
-					<GitCommitHorizontal
-						size={14}
-						style={{ flexShrink: 0, color: commit.merge ? (theme.colors.success ?? "#3d9a5f") : muted }}
+			<div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+				{commit.author && (
+					<span
 						aria-hidden="true"
-					/>
-					<div
-						title={commit.merge ? "Merge commit" : undefined}
-						style={{ minWidth: 0, overflowWrap: "anywhere", color: highlighted ? theme.colors.primary : theme.colors.text }}
+						title={`Committed by ${commit.author}`}
+						style={{
+							width: 42,
+							height: 42,
+							flexShrink: 0,
+							display: "inline-flex",
+							alignItems: "center",
+							justifyContent: "center",
+						}}
 					>
-						{commit.message || "(no message)"}
-					</div>
-				</div>
-				<ActionButton
-					icon={expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-					label={expanded ? "Hide files" : `Files · ${files.length}`}
-					ariaLabel={`${expanded ? "Hide" : "Show"} changed files for ${commit.message}`}
-					onClick={() => setExpanded((value) => !value)}
-				/>
-				<ActionButton
-					icon={<ExternalLink size={12} />}
-					label={`#${commit.sha.slice(0, 7)}`}
-					ariaLabel={`Open commit ${commit.sha.slice(0, 12)} on GitHub`}
-					onClick={onOpen}
-				/>
-			</div>
-			<div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 5, paddingLeft: 0, fontSize: theme.fontSizes[0], fontFamily: theme.fonts.monospace, color: muted }}>
-				<span
-					aria-hidden="true"
-					title={commit.author ? `Committed by ${commit.author}` : undefined}
-					style={{ width: 14, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
-				>
-					{commit.author ? (
-						commit.authorAvatarUrl && !avatarBroken ? (
+						{commit.authorAvatarUrl && !avatarBroken ? (
 							<img
 								src={commit.authorAvatarUrl}
 								alt=""
-								width={14}
-								height={14}
+								width={42}
+								height={42}
 								onError={() => setAvatarBroken(true)}
-								style={{ width: 14, height: 14, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+								style={{
+									width: 42,
+									height: 42,
+									borderRadius: "50%",
+									objectFit: "cover",
+									flexShrink: 0,
+								}}
 							/>
 						) : (
 							<span
 								aria-hidden="true"
 								style={{
-									width: 14,
-									height: 14,
+									width: 42,
+									height: 42,
 									borderRadius: "50%",
 									display: "inline-flex",
 									alignItems: "center",
 									justifyContent: "center",
 									background: theme.colors.backgroundSecondary ?? "#333",
 									color: muted,
-									fontSize: 8,
+									fontSize: 15,
 									fontWeight: 700,
 									flexShrink: 0,
 								}}
 							>
 								{commit.author.slice(0, 1).toUpperCase()}
 							</span>
-						)
-					) : null}
-				</span>
-				<span>{commit.owner}/{commit.repo}</span>
-				{commit.author && <span>· {commit.author}</span>}
-				<span>· {files.length} file{files.length === 1 ? "" : "s"}</span>
-				{commit.branch && <span>· {commit.branch}</span>}
-				{commit.merge && <span>· merge</span>}
-				{Number.isFinite(committedTime) && <time dateTime={commit.committedAt} title={new Date(committedTime).toLocaleString()}>· committed {relativeTime(committedTime)}</time>}
+						)}
+					</span>
+				)}
+				<div
+					style={{
+						flex: 1,
+						minWidth: 0,
+						display: "flex",
+						flexDirection: "column",
+						gap: 4,
+						transform: "translateY(-1px)",
+					}}
+				>
+					<div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, fontSize: theme.fontSizes[0], fontFamily: theme.fonts.monospace, color: muted }}>
+						{commit.author ? (
+							<>
+								<span>{commit.author}</span>
+								<span>· {commit.repo}</span>
+							</>
+						) : (
+							<span>{commit.repo}</span>
+						)}
+						{showLineStats && (
+							<span
+								title={`${additions} additions, ${deletions} deletions`}
+							>
+								·{" "}
+								<span style={{ color: theme.colors.success ?? "#3d9a5f" }}>
+									+{additions}
+								</span>{" "}
+								<span style={{ color: theme.colors.error ?? "#e5534b" }}>
+									−{deletions}
+								</span>
+							</span>
+						)}
+						<span>· {files.length} file{files.length === 1 ? "" : "s"}</span>
+						{commit.branch && <span>· {commit.branch}</span>}
+						{commit.merge && <span>· merge</span>}
+						{Number.isFinite(committedTime) && <time dateTime={commit.committedAt} title={new Date(committedTime).toLocaleString()}>· committed {relativeTime(committedTime)}</time>}
+					</div>
+					<div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+						<div style={{ flex: "1 1 220px", minWidth: 0 }}>
+							<div
+								title={commit.merge ? "Merge commit" : undefined}
+								style={{ minWidth: 0, overflowWrap: "anywhere", color: highlighted ? theme.colors.primary : theme.colors.text }}
+							>
+								{commit.message || "(no message)"}
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+				<button
+					type="button"
+					onClick={(event) => {
+						event.stopPropagation();
+						onOpen();
+					}}
+					onMouseEnter={() => setNumberHovered(true)}
+					onMouseLeave={() => setNumberHovered(false)}
+					aria-label={`Open commit ${commit.sha.slice(0, 12)} on GitHub`}
+					title={`Open commit #${commit.sha.slice(0, 7)} on GitHub`}
+					style={{
+						flexShrink: 0,
+						display: "inline-flex",
+						alignItems: "center",
+						gap: 4,
+						padding: 0,
+						border: "none",
+						background: "transparent",
+						color: numberHovered ? theme.colors.primary : muted,
+						cursor: "pointer",
+						fontFamily: theme.fonts.monospace,
+						fontSize: theme.fontSizes[0],
+						textDecoration: numberHovered ? "underline" : "none",
+					}}
+				>
+					<GitCommitHorizontal
+						size={14}
+						style={{
+							flexShrink: 0,
+							color: commit.merge
+								? (theme.colors.success ?? "#3d9a5f")
+								: muted,
+						}}
+						aria-hidden="true"
+					/>
+					#{commit.sha.slice(0, 7)}
+				</button>
+				{showLineStats && additions + deletions > 0 ? (
+					<div style={{ flex: 1, minWidth: 0 }}>
+						<LineChangeScaleBar
+							additions={additions}
+							deletions={deletions}
+							maxTotal={maxLineChanges ?? 0}
+						/>
+					</div>
+				) : (
+					<div
+						style={{
+							flex: 1,
+							height: 12,
+							borderRadius: 2,
+							background: theme.colors.border ?? "#333",
+							opacity: 0.35,
+						}}
+					/>
+				)}
 			</div>
 			<div style={{ display: "grid", gridTemplateRows: expanded ? "1fr" : "0fr", transition: "grid-template-rows 220ms cubic-bezier(0.4, 0, 0.2, 1)" }}>
 				<div inert={!expanded} style={{ minHeight: 0, overflow: "hidden" }}>
 					{expanded && (
-						<div style={{ marginTop: 8, marginLeft: 22, paddingTop: 8, borderTop: `1px solid ${theme.colors.border ?? "#333"}`, display: "flex", flexDirection: "column", gap: 4 }}>
+						<div onClick={(event) => event.stopPropagation()} style={{ marginTop: 8, marginLeft: 22, paddingTop: 8, borderTop: `1px solid ${theme.colors.border ?? "#333"}`, display: "flex", flexDirection: "column", gap: 4 }}>
 							<div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2, fontSize: theme.fontSizes[0], color: muted }}>
 								<FileDiff size={12} aria-hidden="true" /> Changed paths · highlighted in repo map
 							</div>
 							{files.length === 0 ? (
 								<div style={{ fontSize: theme.fontSizes[1], color: muted }}>No changed-file paths were recorded for this commit.</div>
-							) : files.map((path) => (
-								<div key={path} title={path} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: theme.fonts.monospace, fontSize: theme.fontSizes[0] }}>
-									{path}
-								</div>
-							))}
+							) : (
+								<FileChangeList changes={changes} />
+							)}
 						</div>
 					)}
 				</div>
@@ -588,44 +856,4 @@ function RepoCommitCard({
 	);
 }
 
-function ActionButton({
-	icon,
-	label,
-	ariaLabel,
-	onClick,
-}: {
-	icon: ReactNode;
-	label: string;
-	ariaLabel: string;
-	onClick: () => void;
-}) {
-	const { theme } = useTheme();
-	const [hovered, setHovered] = useState(false);
-	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
-	return (
-		<button
-			type="button"
-			aria-label={ariaLabel}
-			onClick={onClick}
-			onMouseEnter={() => setHovered(true)}
-			onMouseLeave={() => setHovered(false)}
-			style={{
-				flexShrink: 0,
-				display: "inline-flex",
-				alignItems: "center",
-				gap: 4,
-				padding: "4px 8px",
-				borderRadius: 4,
-				border: `1px solid ${hovered ? theme.colors.primary : theme.colors.border ?? "#333"}`,
-				background: "transparent",
-				color: hovered ? theme.colors.primary : muted,
-				cursor: "pointer",
-				fontSize: theme.fontSizes[0],
-				fontFamily: theme.fonts.body,
-			}}
-		>
-			{icon}{label}
-		</button>
-	);
-}
 

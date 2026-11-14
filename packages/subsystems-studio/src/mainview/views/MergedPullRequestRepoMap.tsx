@@ -3,7 +3,9 @@ import type {
 	MergedPullRequest,
 	MergedPullRequestRepo,
 } from "../../shared/contract";
-import { RepoActivityMap } from "./RepoActivityMap";
+import type { ContributorsByRepo } from "../components/ContributorAvatarFan";
+import type { LineStats } from "../components/LineChangeBar";
+import { RepoActivityMap, type RepoActivityLayer } from "./RepoActivityMap";
 
 function pullRequestLayerId(pr: MergedPullRequest): string {
 	return `${pr.owner}/${pr.repo}#${pr.number}`;
@@ -12,6 +14,9 @@ function pullRequestLayerId(pr: MergedPullRequest): string {
 export function MergedPullRequestRepoMap({
 	repos,
 	pullRequests,
+	contributorsByRepo,
+	lineStatsByRepo,
+	authorColors,
 	showFailedRepos = false,
 	selectedRepoKeys,
 	onToggleRepo,
@@ -21,6 +26,12 @@ export function MergedPullRequestRepoMap({
 }: {
 	repos: MergedPullRequestRepo[];
 	pullRequests: MergedPullRequest[];
+	/** Contributors per repo key, fanned over each card's bottom-left corner. */
+	contributorsByRepo?: ContributorsByRepo;
+	/** Line totals per repo key, shown in the card footer. */
+	lineStatsByRepo?: ReadonlyMap<string, LineStats>;
+	/** Author login → highlight layer color, so map and chips agree. */
+	authorColors?: ReadonlyMap<string, string>;
 	/** Include failed repo cards with their load errors instead of hiding them. */
 	showFailedRepos?: boolean;
 	selectedRepoKeys: ReadonlySet<string>;
@@ -31,7 +42,7 @@ export function MergedPullRequestRepoMap({
 	onRepoFastForwarded?: (repoKey: string) => void;
 }) {
 	const layersByRepo = useMemo(() => {
-		const byRepo = new Map<string, Array<{ id: string; title: string; files: string[] }>>();
+		const byRepo = new Map<string, RepoActivityLayer[]>();
 		for (const pr of pullRequests) {
 			const key = `pkg:github/${pr.owner}/${pr.repo}`;
 			const list = byRepo.get(key) ?? [];
@@ -39,15 +50,20 @@ export function MergedPullRequestRepoMap({
 				id: pullRequestLayerId(pr),
 				title: `#${pr.number} · ${pr.title}`,
 				files: pr.files ?? [],
+				colorKey: pr.author ? `author:${pr.author}` : undefined,
+				color: pr.author ? authorColors?.get(pr.author) : undefined,
 			});
 			byRepo.set(key, list);
 		}
 		return byRepo;
-	}, [pullRequests]);
+	}, [pullRequests, authorColors]);
 	return (
 		<RepoActivityMap
 			repos={repos}
 			layersByRepo={layersByRepo}
+			contributorsByRepo={contributorsByRepo}
+			lineStatsByRepo={lineStatsByRepo}
+			contributorNoun="merge"
 			showFailedRepos={showFailedRepos}
 			selectedRepoKeys={selectedRepoKeys}
 			onToggleRepo={onToggleRepo}
