@@ -70,6 +70,7 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 	const [loading, setLoading] = useState(false);
 	const loadingRef = useRef(false);
 	const [queryProgress, setQueryProgress] = useState({ queried: 0, total: 0 });
+	const [searchedRepoKeys, setSearchedRepoKeys] = useState<ReadonlySet<string>>(() => new Set());
 	const [error, setError] = useState<string | null>(null);
 	const [repoErrors, setRepoErrors] = useState<string[]>([]);
 	const [truncatedRepos, setTruncatedRepos] = useState<string[]>([]);
@@ -201,6 +202,7 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 		setTruncatedRepos([]);
 		setPullRequests([]);
 		setQueryProgress({ queried: 0, total: orgRepos.length });
+		setSearchedRepoKeys(new Set());
 		void (async () => {
 			const accumulated = new Map<string, MergedPullRequest>();
 			const errors: string[] = [];
@@ -219,6 +221,10 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 							setError(result.error ?? "Could not load merged pull requests.");
 							setQueryProgress({ queried: index + 1, total: orgRepos.length });
 							break;
+						}
+						if (result.ok) {
+							const repoKey = `pkg:github/${repo.owner}/${repo.name}`;
+							setSearchedRepoKeys((current) => new Set(current).add(repoKey));
 						}
 						for (const pr of result.pullRequests) {
 							accumulated.set(`${pr.owner}/${pr.repo}#${pr.number}`, pr);
@@ -416,9 +422,9 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 		}
 		return max;
 	}, [lineSummaryByPr]);
-	// Cities follow the PR list: only repos with at least one visible PR get
-	// a card. Layers are the visible PRs (with loaded diffs), so repo/author
-	// filters stay in sync between the map and the list.
+	// Keep repos visible until a successful search has checked them. After
+	// that, hide repos with no currently visible PRs; the layer data follows
+	// the same author/time/repo filters as the list.
 	const mappedVisiblePullRequests = useMemo(
 		() =>
 			mappedPullRequests.filter((pr) => {
@@ -431,16 +437,13 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 		() => new Set(visiblePullRequests.map((pr) => `pkg:github/${pr.owner}/${pr.repo}`)),
 		[visiblePullRequests],
 	);
-	const filteredOrgRepos = useMemo(
-		() => orgRepos.filter((repo) => visibleRepoKeys.has(`pkg:github/${repo.owner}/${repo.name}`)),
-		[orgRepos, visibleRepoKeys],
-	);
-	// No merged PRs in the window is a different state from "PRs exist but the
-	// current filters hide them". In the former, still show every local org
-	// checkout so the map never looks like the org has no repos at all.
 	const mapRepos = useMemo(
-		() => (mergedInWindow.length === 0 ? orgRepos : filteredOrgRepos),
-		[mergedInWindow.length, orgRepos, filteredOrgRepos],
+		() =>
+			orgRepos.filter((repo) => {
+				const key = `pkg:github/${repo.owner}/${repo.name}`;
+				return !searchedRepoKeys.has(key) || visibleRepoKeys.has(key);
+			}),
+		[orgRepos, searchedRepoKeys, visibleRepoKeys],
 	);
 	// With a single repo card there is nothing to disambiguate, so keep city
 	// hover from tinting every PR row. PR hover still drives the map below.
