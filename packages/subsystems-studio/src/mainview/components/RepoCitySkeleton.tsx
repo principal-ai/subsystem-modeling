@@ -7,7 +7,7 @@
  */
 
 import { useTheme } from "@principal-ade/industry-theme";
-import { SkeletonBar } from "./Skeleton";
+import { SkeletonBar, SkeletonStyles } from "./Skeleton";
 
 const CITY_BLOCKS = [
 	{ left: "10%", top: "18%", width: "16%", height: "24%", delay: 0 },
@@ -110,6 +110,46 @@ export function RepoCitySkeletonCard({ index = 0 }: { index?: number }) {
 					}}
 				/>
 			</div>
+		</div>
+	);
+}
+
+/** Edge-to-edge city-only placeholder for views that don't use a repo card. */
+export function RepoCitySkeleton() {
+	const { theme } = useTheme();
+	const base =
+		theme.colors.backgroundSecondary ??
+		theme.colors.surface ??
+		theme.colors.border;
+	return (
+		<div aria-hidden="true" style={{ position: "absolute", inset: 0, overflow: "hidden", background: theme.colors.background }}>
+			<SkeletonStyles />
+			{CITY_BLOCKS.map((block, index) => (
+				<div
+					key={index}
+					className="principal-skeleton-pulse"
+					style={{
+						position: "absolute",
+						left: block.left,
+						top: block.top,
+						width: block.width,
+						height: block.height,
+						borderRadius: 4,
+						background: base,
+						opacity: 0.55,
+						animation: `principal-skeleton-pulse 1.8s ease-in-out ${block.delay}ms infinite`,
+					}}
+				/>
+			))}
+			<span
+				className="principal-skeleton-sweep"
+				style={{
+					position: "absolute",
+					inset: 0,
+					background: `linear-gradient(90deg, transparent, ${theme.colors.text}10, transparent)`,
+					animation: "principal-skeleton-sweep 1.8s ease-in-out infinite",
+				}}
+			/>
 		</div>
 	);
 }

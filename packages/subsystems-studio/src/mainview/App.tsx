@@ -36,6 +36,7 @@ import { PackageLayersReposView } from "./views/PackageLayersReposView";
 import { OpencodeV2DebugView } from "./views/OpencodeV2DebugView";
 import { MergedPullRequestsView } from "./views/MergedPullRequestsView";
 import { RepoCommitsView } from "./views/RepoCommitsView";
+import { RepoInsightsView } from "./views/RepoInsightsView";
 import { SessionEventsView } from "./views/SessionEventsView";
 import { SubsystemModelView } from "./views/SubsystemModelView";
 import { SubsystemC4View } from "./views/SubsystemC4View";
@@ -178,6 +179,15 @@ function ActiveTab({
 					});
 					return;
 				}
+				if (tab.kind === "repo-insights") {
+					setState({
+						kind: "repo-insights",
+						id: tab.id,
+						owner: tab.repoOwner ?? "",
+						repo: tab.repoName ?? "",
+					});
+					return;
+				}
 				if (tab.kind === "remote-subsystem-model") {
 					setState({ kind: "remote-subsystem-model", id: tab.id, sourceId: tab.sourceId ?? "", modelKey: tab.modelKey ?? "" });
 					return;
@@ -300,6 +310,9 @@ function ActiveTab({
 	}
 	if (state.kind === "session-events") {
 		return <SessionEventsView sessionId={state.sessionId} />;
+	}
+	if (state.kind === "repo-insights") {
+		return <RepoInsightsView owner={state.owner} repo={state.repo} />;
 	}
 	if (state.kind === "remote-subsystem-model") {
 		return <RemoteSubsystemModelView sourceId={state.sourceId} modelKey={state.modelKey} />;

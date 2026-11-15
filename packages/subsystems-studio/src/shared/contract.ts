@@ -1484,6 +1484,28 @@ export interface MergedPullRequestRepo {
 	url: string;
 }
 
+/** Overview stats for a locally cloned repository shown beside its File City. */
+export interface RepoInsights {
+	createdAt?: string;
+	lastMergeAt?: string;
+	lastCommit?: {
+		sha: string;
+		message: string;
+		committedAt: string;
+	};
+	lineCount?: number;
+	fileCount?: number;
+	contributorCount?: number;
+	contributors: Array<{
+		id: string;
+		name: string;
+		lines: number;
+		files: string[];
+		avatarUrl?: string;
+	}>;
+	warnings?: string[];
+}
+
 /** How a file changed in a commit or pull request. */
 export type FileChangeStatus =
 	| "added"
@@ -1657,7 +1679,7 @@ export interface ConstructInventoryRepo extends Omit<VerifiedConstructRepo, "pac
 
 export interface TabSummary {
 	id: string;
-	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "subsystem-model" | "subsystem-c4" | "c4-sketch" | "subsystem-showcase" | "subsystems" | "shared-subsystems" | "remote-subsystem-model" | "constructs" | "maintenance" | "graphify" | "package-layers" | "opencode-v2" | "merged-pull-requests" | "recent-commits";
+	kind: "library" | "tour" | "agent-sessions" | "maintenance-sessions" | "session-events" | "repo-insights" | "subsystem-model" | "subsystem-c4" | "c4-sketch" | "subsystem-showcase" | "subsystems" | "shared-subsystems" | "remote-subsystem-model" | "constructs" | "maintenance" | "graphify" | "package-layers" | "opencode-v2" | "merged-pull-requests" | "recent-commits";
 	title: string;
 	mode?: ViewerMode;
 	/** For `subsystem-model` tabs — absolute path to the persisted JSON. */
@@ -1676,6 +1698,9 @@ export interface TabFullState {
 	repoRoot?: string;
 	tourFilePath?: string;
 	sessionId?: string;
+	/** For `repo-insights` tabs — the repository identity the view renders. */
+	repoOwner?: string;
+	repoName?: string;
 	/** For `session-events` tabs — agent label when known. */
 	agent?: string;
 	/** For `subsystem-model` tabs — the graph id the tab renders. */
@@ -1972,6 +1997,10 @@ export type StudioRequests = {
 	};
 	openSessionEventsTab: {
 		params: { sessionId: string; title?: string; agent?: string };
+		response: { ok: boolean; error?: string; tabId?: string };
+	};
+	openRepoInsightsTab: {
+		params: { owner: string; repo: string };
 		response: { ok: boolean; error?: string; tabId?: string };
 	};
 	getSubsystemModel: {
@@ -2674,6 +2703,34 @@ export type StudioRequests = {
 			changes?: FileChange[];
 			error?: string;
 			truncated?: boolean;
+		};
+	};
+	getRepoCreatedAt: {
+		params: { owner: string; repo: string };
+		response: { ok: boolean; createdAt?: string; error?: string };
+	};
+	getRepoLastMerge: {
+		params: { owner: string; repo: string };
+		response: { ok: boolean; lastMergeAt?: string; error?: string };
+	};
+	getRepoGitSummary: {
+		params: { owner: string; repo: string };
+		response: {
+			ok: boolean;
+			lastCommit?: RepoInsights["lastCommit"];
+			contributorCount?: number;
+			error?: string;
+		};
+	};
+	getRepoLineBreakdown: {
+		params: { owner: string; repo: string };
+		response: {
+			ok: boolean;
+			lineCount?: number;
+			fileCount?: number;
+			contributors?: Array<{ id: string; name: string; lines: number; files: string[]; avatarUrl?: string }>;
+			warnings?: string[];
+			error?: string;
 		};
 	};
 	listRepoCommits: {

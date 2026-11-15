@@ -76,6 +76,12 @@ import {
 	listMergedPullRequestRepos,
 	listMergedPullRequests,
 } from "./merged-pull-requests";
+import {
+	getRepoCreatedAt,
+	getRepoGitSummary,
+	getRepoLastMerge,
+	getRepoLineBreakdown,
+} from "./repo-insights";
 import { listRecentCommits } from "./recent-commits";
 import {
 	auditFixGroups,
@@ -642,6 +648,14 @@ interface SessionEventsTabState {
 	agent?: string;
 }
 
+interface RepoInsightsTabState {
+	id: string;
+	kind: "repo-insights";
+	title: string;
+	owner: string;
+	repo: string;
+}
+
 interface SubsystemModelTabState {
 	id: string;
 	kind: "subsystem-model";
@@ -708,6 +722,7 @@ type TabState =
 	| MergedPullRequestsTabState
 	| RecentCommitsTabState
 	| SessionEventsTabState
+	| RepoInsightsTabState
 	| SubsystemModelTabState
 	| SubsystemC4TabState
 	| C4SketchTabState
@@ -1137,6 +1152,34 @@ function openSessionEventsTab(
 	});
 	suggestedTabId = id;
 	console.log(`[principal-studio] session-events tab ${id} added: ${sessionId}`);
+	broadcastTabsChanged(id);
+	return id;
+}
+
+function openRepoInsightsTab(owner: string, repo: string): string {
+	const normalizedOwner = owner.trim();
+	const normalizedRepo = repo.trim();
+	for (const existing of tabs.values()) {
+		if (
+			existing.kind === "repo-insights" &&
+			existing.owner.toLowerCase() === normalizedOwner.toLowerCase() &&
+			existing.repo.toLowerCase() === normalizedRepo.toLowerCase()
+		) {
+			suggestTab(existing.id);
+			broadcastTabsChanged(existing.id);
+			return existing.id;
+		}
+	}
+	const requestWindow = currentRequestWindowId;
+	const id = String(nextTabId++);
+	tabs.set(id, {
+		id,
+		kind: "repo-insights",
+		title: `${normalizedOwner}/${normalizedRepo}`,
+		owner: normalizedOwner,
+		repo: normalizedRepo,
+	});
+	placeNewTab(id, requestWindow);
 	broadcastTabsChanged(id);
 	return id;
 }
@@ -1664,6 +1707,9 @@ function summarize(tab: TabState): TabSummary {
 	if (tab.kind === "remote-subsystem-model") {
 		return { id: tab.id, kind: tab.kind, title: tab.title };
 	}
+	if (tab.kind === "repo-insights") {
+		return { id: tab.id, kind: tab.kind, title: tab.title };
+	}
 	if (tab.kind === "session-events") {
 		return { id: tab.id, kind: "session-events", title: tab.title };
 	}
@@ -1704,6 +1750,16 @@ function summarize(tab: TabState): TabSummary {
 function fullState(tab: TabState): TabFullState {
 	if (tab.kind === "remote-subsystem-model") {
 		return { ok: true, id: tab.id, kind: tab.kind, title: tab.title, sourceId: tab.sourceId, modelKey: tab.modelKey };
+	}
+	if (tab.kind === "repo-insights") {
+		return {
+			ok: true,
+			id: tab.id,
+			kind: tab.kind,
+			title: tab.title,
+			repoOwner: tab.owner,
+			repoName: tab.repo,
+		};
 	}
 	if (tab.kind === "session-events") {
 		return {
@@ -3290,6 +3346,21 @@ const requests: RequestHandlers = {
 				const tabId = openSessionEventsTab(sessionId, title, agent);
 				return { ok: true, tabId };
 			},
+			openRepoInsightsTab: async ({ owner, repo }) => {
+				if (!owner.trim() || !repo.trim()) {
+					return { ok: false, error: "Choose a repository." };
+				}
+				const tabId = openRepoInsightsTab(owner, repo);
+				return { ok: true, tabId };
+			},
+			getRepoCreatedAt: async ({ owner, repo }) =>
+				getRepoCreatedAt({ owner, repo }),
+			getRepoLastMerge: async ({ owner, repo }) =>
+				getRepoLastMerge({ owner, repo }),
+			getRepoGitSummary: async ({ owner, repo }) =>
+				getRepoGitSummary({ owner, repo }),
+			getRepoLineBreakdown: async ({ owner, repo }) =>
+				getRepoLineBreakdown({ owner, repo }),
 		};
 
 /**

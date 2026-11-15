@@ -25,7 +25,7 @@ import {
 	type CityData,
 	type HighlightLayer,
 } from "@principal-ai/file-city-react";
-import { FastForward, FolderGit2, LayoutDashboard, Loader2 } from "lucide-react";
+import { ArrowUpRight, FastForward, FolderGit2, LayoutDashboard, Loader2 } from "lucide-react";
 import {
 	ContributorAvatarFan,
 	type AvatarContributor,
@@ -224,6 +224,8 @@ export interface SubsystemCoverageMapCardProps {
 	onRetry?: () => void;
 	/** Fast-forward this checkout toward its upstream (`git merge --ff-only`). */
 	onFastForwardRepo?: () => void;
+	/** Open a dedicated tab with repository details and its map. */
+	onOpenDetails?: () => void;
 }
 
 /**
@@ -240,6 +242,7 @@ export function SubsystemCoverageMapCard({
 	hoveredModelId,
 	onRetry,
 	onFastForwardRepo,
+	onOpenDetails,
 }: SubsystemCoverageMapCardProps) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -421,6 +424,32 @@ export function SubsystemCoverageMapCard({
 							</span>
 						</div>
 					</div>
+					{onOpenDetails && (
+						<button
+							type="button"
+							title={`Open ${repo.label} overview`}
+							aria-label={`Open ${repo.label} repository overview`}
+							onClick={(event) => {
+								event.stopPropagation();
+								onOpenDetails();
+							}}
+							style={{
+								flexShrink: 0,
+								width: 28,
+								height: 28,
+								display: "inline-flex",
+								alignItems: "center",
+								justifyContent: "center",
+								borderRadius: 6,
+								border: `1px solid ${border}`,
+								background: "transparent",
+								color: muted,
+								cursor: "pointer",
+							}}
+						>
+							<ArrowUpRight size={14} aria-hidden="true" />
+						</button>
+					)}
 					{onFastForwardRepo && (
 						<button
 							type="button"
@@ -675,6 +704,8 @@ export interface SubsystemCoverageMapCardsProps {
 	onRetryRepo?: (repoKey: string) => void;
 	/** Fast-forward a checkout toward its upstream, by repo key. */
 	onFastForwardRepo?: (repoKey: string) => void;
+	/** Open a repo detail tab, by repo key. */
+	onOpenDetails?: (repoKey: string) => void;
 	/** Minimum card width before the grid adds another column. */
 	minColumnWidth?: number;
 	/** Accessible label for this map grid. */
@@ -699,6 +730,7 @@ export function SubsystemCoverageMapCards({
 	onOpenFile,
 	onRetryRepo,
 	onFastForwardRepo,
+	onOpenDetails,
 	onHoverRepo,
 	hoveredModelId,
 	minColumnWidth = 300,
@@ -787,6 +819,9 @@ export function SubsystemCoverageMapCards({
 							onRetry={onRetryRepo ? () => onRetryRepo(repo.repoKey) : undefined}
 							onFastForwardRepo={
 								onFastForwardRepo ? () => onFastForwardRepo(repo.repoKey) : undefined
+							}
+							onOpenDetails={
+								onOpenDetails ? () => onOpenDetails(repo.repoKey) : undefined
 							}
 						/>
 					</div>

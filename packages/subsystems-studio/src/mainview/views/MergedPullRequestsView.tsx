@@ -417,6 +417,16 @@ export function MergedPullRequestsView() {
 	const handleRepoFastForwarded = useCallback(() => {
 		loadPullRequests();
 	}, [loadPullRequests]);
+	const handleOpenRepoInsights = useCallback((repoKey: string) => {
+		const repo = orgRepos.find((candidate) => `pkg:github/${candidate.owner}/${candidate.name}` === repoKey);
+		if (!repo) return;
+		void electrobun.rpc!.request
+			.openRepoInsightsTab({ owner: repo.owner, repo: repo.name })
+			.then((result) => {
+				if (!result.ok) setError(result.error ?? "Could not open repository overview.");
+			})
+			.catch((err) => setError(err instanceof Error ? err.message : String(err)));
+	}, [orgRepos]);
 	if (repos === null) return <CenteredMessage loading title="Loading local repositories…" />;
 	if (repos.length === 0) {
 		return (
@@ -670,6 +680,7 @@ export function MergedPullRequestsView() {
 						onHoverRepo={setHoveredRepoKey}
 						hoveredPullRequestId={hoveredPullRequestId}
 						onRepoFastForwarded={handleRepoFastForwarded}
+						onOpenRepoDetails={handleOpenRepoInsights}
 					/>
 				</div>
 				<div

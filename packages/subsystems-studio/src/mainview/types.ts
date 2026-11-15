@@ -23,6 +23,7 @@ export type TabState =
 	| { kind: "package-layers" }
 	| { kind: "opencode-v2" }
 	| { kind: "merged-pull-requests" }
+	| { kind: "repo-insights"; id: string; owner: string; repo: string }
 	| { kind: "recent-commits" }
 	| { kind: "session-events"; id: string; sessionId: string }
 	| {
