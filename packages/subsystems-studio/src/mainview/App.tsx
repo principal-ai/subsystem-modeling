@@ -142,7 +142,7 @@ function renderStaticView(tabId: string, active: boolean): ReactNode | null {
 	if (state.kind === "graphify") return <GraphifyReposView />;
 	if (state.kind === "package-layers") return <PackageLayersReposView />;
 	if (state.kind === "opencode-v2") return <OpencodeV2DebugView />;
-	if (state.kind === "merged-pull-requests") return <MergedPullRequestsView />;
+	if (state.kind === "merged-pull-requests") return <MergedPullRequestsView active={active} />;
 	if (state.kind === "recent-commits") return <RepoCommitsView />;
 	return null;
 }

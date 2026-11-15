@@ -2693,7 +2693,7 @@ export type StudioRequests = {
 		response: { repos: MergedPullRequestRepo[] };
 	};
 	listMergedPullRequests: {
-		params: { owner: string; since: string };
+		params: { owner: string; since: string; repo?: string };
 		response: {
 			ok: boolean;
 			pullRequests: MergedPullRequest[];

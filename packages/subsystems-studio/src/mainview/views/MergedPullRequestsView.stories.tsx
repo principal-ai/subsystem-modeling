@@ -25,17 +25,17 @@ function recentPullRequests(): MergedPullRequest[] {
 
 const meta = {
 	title: "Studio/Merged PRs",
-	component: MergedPullRequestsView,
+	component: () => <MergedPullRequestsView active />,
 	decorators: [(Story) => <div style={{ height: "100vh", display: "flex" }}><Story /></div>],
 	beforeEach: () => {
 		mockMergedPullRequestData(repos, recentPullRequests());
 		mockRepoFileTreeFailures(new Map());
 		mockShowFailedRepoCityCards(false);
 	},
-} satisfies Meta<typeof MergedPullRequestsView>;
+} satisfies Meta<{ active?: boolean }>;
 
 export default meta;
-type Story = StoryObj<typeof meta>;
+type Story = StoryObj<{ active?: boolean }>;
 
 export const RecentActivity: Story = {};
 

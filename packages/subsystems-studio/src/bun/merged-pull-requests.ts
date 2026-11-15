@@ -12,8 +12,12 @@ import { gitHeadSha } from "./graphify-store";
 const SEARCH_PAGE_SIZE = 100;
 const SEARCH_PAGE_LIMIT = 10;
 const SEARCH_REPO_CONCURRENCY = 4;
+/** Leave room beneath GitHub's authenticated Search API ceiling of 30/minute. */
+const SEARCH_REQUEST_INTERVAL_MS = 6_100;
 const FILE_PAGE_SIZE = 100;
 const FILE_PAGE_LIMIT = 3;
+let searchRequestQueue = Promise.resolve();
+let nextSearchRequestAt = 0;
 const pullRequestFilesCache = new Map<
 	string,
 	{ files: string[]; changes: FileChange[]; truncated: boolean }
@@ -54,6 +58,17 @@ interface SearchResponse {
 interface SearchResult {
 	pullRequests: MergedPullRequest[];
 	truncated: boolean;
+}
+
+/** Process-wide pacing applies to every Search API page, not just each repo. */
+function waitForSearchRequestSlot(): Promise<void> {
+	const scheduled = searchRequestQueue.then(async () => {
+		const delay = Math.max(0, nextSearchRequestAt - Date.now());
+		if (delay > 0) await Bun.sleep(delay);
+		nextSearchRequestAt = Date.now() + SEARCH_REQUEST_INTERVAL_MS;
+	});
+	searchRequestQueue = scheduled.catch(() => {});
+	return scheduled;
 }
 
 /** Locally cloned GitHub repos, deduplicated to one checkout per owner/name. */
@@ -122,6 +137,7 @@ async function searchRepoMergedPullRequests(
 			sort: "updated",
 			order: "desc",
 		});
+		await waitForSearchRequestSlot();
 		const response = await fetch(
 			`https://api.github.com/search/issues?${params.toString()}`,
 			{
@@ -275,6 +291,8 @@ export async function getMergedPullRequestFiles(opts: {
 export async function listMergedPullRequests(opts: {
 	owner: string;
 	since: string;
+	/** Optional single repo; the renderer uses this to report incremental progress. */
+	repo?: string;
 }): Promise<{
 	ok: boolean;
 	pullRequests: MergedPullRequest[];
@@ -289,7 +307,9 @@ export async function listMergedPullRequests(opts: {
 		return { ok: false, pullRequests: [], error: "Choose a time window to load merged PRs." };
 	}
 	const repos = (await listMergedPullRequestRepos()).filter(
-		(repo) => repo.owner.toLowerCase() === owner.toLowerCase(),
+		(repo) =>
+			repo.owner.toLowerCase() === owner.toLowerCase() &&
+			(!opts.repo || repo.name.toLowerCase() === opts.repo.trim().toLowerCase()),
 	);
 	if (repos.length === 0) return { ok: true, pullRequests: [] };
 	const token = resolveGithubToken();

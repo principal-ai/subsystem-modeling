@@ -54,7 +54,7 @@ const AUTO_LOAD_DIFF_LIMIT = 200;
 /** Parallel files-API requests while progressively filling the repo map. */
 const DIFF_LOAD_CONCURRENCY = 4;
 
-export function MergedPullRequestsView() {
+export function MergedPullRequestsView({ active = true }: { active?: boolean } = {}) {
 	const { theme } = useTheme();
 	const [repos, setRepos] = useState<MergedPullRequestRepo[] | null>(null);
 	const [owner, setOwner] = useState("");
@@ -68,6 +68,8 @@ export function MergedPullRequestsView() {
 	const [hoveredRepoKey, setHoveredRepoKey] = useState<string | null>(null);
 	const [hoveredPullRequestId, setHoveredPullRequestId] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
+	const loadingRef = useRef(false);
+	const [queryProgress, setQueryProgress] = useState({ queried: 0, total: 0 });
 	const [error, setError] = useState<string | null>(null);
 	const [repoErrors, setRepoErrors] = useState<string[]>([]);
 	const [truncatedRepos, setTruncatedRepos] = useState<string[]>([]);
@@ -186,52 +188,90 @@ export function MergedPullRequestsView() {
 	}, []);
 
 	const loadPullRequests = useCallback(() => {
-		if (!owner || repos === null) return undefined;
+		if (!active || !owner || repos === null) return undefined;
 		const id = ++requestId.current;
 		const sinceStart = windowStart(window);
 		// Query a day wider than the local window; GitHub indexes merge dates in UTC.
 		sinceStart.setDate(sinceStart.getDate() - 1);
 		const since = asQueryDate(sinceStart);
 		setLoading(true);
+		loadingRef.current = true;
 		setError(null);
 		setRepoErrors([]);
 		setTruncatedRepos([]);
-		void electrobun.rpc!.request
-			.listMergedPullRequests({ owner, since })
-			.then((result) => {
-				if (id !== requestId.current) return;
-				setPullRequests(result.pullRequests);
-				setError(result.ok ? null : (result.error ?? "Could not load merged PRs."));
-				setRepoErrors(result.errors ?? []);
-				setTruncatedRepos(result.truncatedRepos ?? []);
-			})
-			.catch((err) => {
-				if (id !== requestId.current) return;
-				setPullRequests([]);
-				setError(err instanceof Error ? err.message : String(err));
-			})
-			.finally(() => {
-				if (id === requestId.current) setLoading(false);
-			});
+		setPullRequests([]);
+		setQueryProgress({ queried: 0, total: orgRepos.length });
+		void (async () => {
+			const accumulated = new Map<string, MergedPullRequest>();
+			const errors: string[] = [];
+			const truncated = new Set<string>();
+			try {
+				for (const [index, repo] of orgRepos.entries()) {
+					if (id !== requestId.current) return;
+					try {
+						const result = await electrobun.rpc!.request.listMergedPullRequests({
+							owner,
+							since,
+							repo: repo.name,
+						});
+						if (id !== requestId.current) return;
+						if (!result.ok && !result.errors?.length) {
+							setError(result.error ?? "Could not load merged pull requests.");
+							setQueryProgress({ queried: index + 1, total: orgRepos.length });
+							break;
+						}
+						for (const pr of result.pullRequests) {
+							accumulated.set(`${pr.owner}/${pr.repo}#${pr.number}`, pr);
+						}
+						errors.push(...(result.errors ?? []));
+						for (const item of result.truncatedRepos ?? []) truncated.add(item);
+						setPullRequests(
+							[...accumulated.values()].sort(
+								(a, b) => Date.parse(b.mergedAt) - Date.parse(a.mergedAt),
+							),
+						);
+						setRepoErrors([...errors]);
+						setTruncatedRepos([...truncated]);
+					} catch (err) {
+						if (id !== requestId.current) return;
+						errors.push(
+							`${repo.owner}/${repo.name}: ${err instanceof Error ? err.message : String(err)}`,
+						);
+						setRepoErrors([...errors]);
+					}
+					setQueryProgress({ queried: index + 1, total: orgRepos.length });
+				}
+			} finally {
+				if (id === requestId.current) {
+					loadingRef.current = false;
+					setLoading(false);
+				}
+			}
+		})();
 		return id;
-	}, [owner, repos, window]);
+	}, [active, owner, orgRepos, repos, window]);
 
 	useEffect(() => {
 		const id = loadPullRequests();
 		return () => {
-			if (id !== undefined && id === requestId.current) requestId.current++;
+			if (id !== undefined && id === requestId.current) {
+				requestId.current++;
+				loadingRef.current = false;
+				setLoading(false);
+			}
 		};
 	}, [loadPullRequests]);
 
-	// Re-check for new merges on a timer; skipped while the window is hidden
-	// to avoid GitHub API fan-out for a background tab.
+	// Re-check for new merges while this tab is active, but never overlap a
+	// multi-repo pass or spend Search quota while the tab is in the background.
 	useEffect(() => {
+		if (!active) return;
 		const timer = setInterval(() => {
-			if (document.hidden) return;
+			if (document.hidden || loadingRef.current) return;
 			loadPullRequests();
 		}, ACTIVITY_POLL_INTERVAL_MS);
 		return () => clearInterval(timer);
-	}, [loadPullRequests]);
+	}, [active, loadPullRequests]);
 
 	const mergedInWindow = useMemo(() => {
 		const now = new Date();
@@ -586,15 +626,18 @@ export function MergedPullRequestsView() {
 						whiteSpace: "nowrap",
 					}}
 					title={
-						diffsCapped
-							? `Auto-loading diffs for the first ${AUTO_LOAD_DIFF_LIMIT} PRs; expand a card to load the rest.`
-							: undefined
+						[
+							diffsCapped
+								? `Auto-loading diffs for the first ${AUTO_LOAD_DIFF_LIMIT} PRs; expand a card to load the rest.`
+								: "",
+							"GitHub Search requests are paced to at most 10 per minute.",
+						].filter(Boolean).join("\n")
 					}
 				>
 					{loading ? (
-						<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+						<span role="status" aria-live="polite" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
 							<Loader2 size={11} className="principal-studio-spin" aria-hidden="true" />
-							Loading…
+							Repos searched {queryProgress.queried}/{queryProgress.total}
 						</span>
 					) : diffProgress.total === 0 ? (
 						`${visiblePullRequests.length} merged`

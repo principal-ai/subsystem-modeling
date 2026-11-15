@@ -3076,8 +3076,8 @@ const requests: RequestHandlers = {
 			listMergedPullRequestRepos: async () => ({
 				repos: await listMergedPullRequestRepos(),
 			}),
-			listMergedPullRequests: async ({ owner, since }) =>
-				listMergedPullRequests({ owner, since }),
+			listMergedPullRequests: async ({ owner, since, repo }) =>
+				listMergedPullRequests({ owner, since, repo }),
 			getMergedPullRequestFiles: async ({ owner, repo, number }) =>
 				getMergedPullRequestFiles({ owner, repo, number }),
 			listRepoCommits: async ({ owner, since }) =>
