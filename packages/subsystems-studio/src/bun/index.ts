@@ -83,6 +83,7 @@ import {
 	getRepoLineBreakdown,
 } from "./repo-insights";
 import { listRecentCommits } from "./recent-commits";
+import { getGithubApiRateLimit } from "./github-rate-limit";
 import {
 	auditFixGroups,
 	buildAuditFingerprint,
@@ -3361,6 +3362,7 @@ const requests: RequestHandlers = {
 				getRepoGitSummary({ owner, repo }),
 			getRepoLineBreakdown: async ({ owner, repo }) =>
 				getRepoLineBreakdown({ owner, repo }),
+			getGithubApiRateLimit: async () => getGithubApiRateLimit(),
 		};
 
 /**

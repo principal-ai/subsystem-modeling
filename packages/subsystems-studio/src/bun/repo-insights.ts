@@ -8,7 +8,7 @@ const BLAME_CONCURRENCY = 5;
 let localReposPromise: Promise<MergedPullRequestRepo[]> | null = null;
 let localReposCachedAt = 0;
 
-type GitHubRepository = { created_at?: string };
+type GitHubRepository = { created_at?: string; description?: string | null };
 type GitHubPullRequest = { merged_at?: string | null };
 
 async function githubJson<T>(url: string, token?: string | null): Promise<T> {
@@ -84,7 +84,7 @@ async function currentLineBreakdown(
 		lineCount,
 		fileCount: files.length,
 		contributors: [...byEmail.entries()]
-			.sort(([, a], [, b]) => b.lastAuthoredAt - a.lastAuthoredAt || b.lines - a.lines || a.name.localeCompare(b.name))
+			.sort(([, a], [, b]) => b.lines - a.lines || b.lastAuthoredAt - a.lastAuthoredAt || a.name.localeCompare(b.name))
 			.map(([id, { name, lines, files, avatarUrl }]) => ({
 				id,
 				name,
@@ -113,7 +113,7 @@ async function findLocalRepo(owner: string, name: string) {
 export async function getRepoCreatedAt(opts: {
 	owner: string;
 	repo: string;
-}): Promise<{ ok: boolean; createdAt?: string; error?: string }> {
+}): Promise<{ ok: boolean; createdAt?: string; description?: string; error?: string }> {
 	const owner = opts.owner.trim();
 	const name = opts.repo.trim();
 	if (!owner || !name) return { ok: false, error: "Choose a repository." };
@@ -125,7 +125,11 @@ export async function getRepoCreatedAt(opts: {
 			resolveGithubToken(),
 		);
 		return repository.created_at
-			? { ok: true, createdAt: repository.created_at }
+			? {
+					ok: true,
+					createdAt: repository.created_at,
+					description: repository.description ?? undefined,
+				}
 			: { ok: false, error: "GitHub did not return a repository creation date." };
 	} catch (error) {
 		return { ok: false, error: error instanceof Error ? error.message : String(error) };

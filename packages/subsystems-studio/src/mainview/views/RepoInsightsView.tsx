@@ -61,6 +61,7 @@ export function RepoInsightsView({ owner, repo }: { owner: string; repo: string 
 					setInsights((current) => ({
 						...(current ?? { contributors: [] }),
 						createdAt: result.createdAt,
+						description: result.description,
 					}));
 				}
 			})
@@ -164,7 +165,14 @@ export function RepoInsightsView({ owner, repo }: { owner: string; repo: string 
 							/>
 						)}
 					</div>
-					<div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: theme.fontSizes[3], fontWeight: 650 }}>{repo}</div>
+					<div style={{ minWidth: 0 }}>
+						<div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: theme.fontSizes[3], fontWeight: 650 }}>{repo}</div>
+						{insights?.description && (
+							<div title={insights.description} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: muted, fontSize: theme.fontSizes[0] }}>
+								{insights.description}
+							</div>
+						)}
+					</div>
 				</div>
 				<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
 					<button
@@ -245,7 +253,7 @@ export function RepoInsightsView({ owner, repo }: { owner: string; repo: string 
 								<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, fontSize: theme.fontSizes[2], fontWeight: 650 }}>
 									<Users size={16} aria-hidden="true" /> Contributor lines
 								</div>
-								<div style={{ marginBottom: 12, color: muted, fontSize: theme.fontSizes[0] }}>Most recently active first · current tracked lines attributed by Git blame.</div>
+								<div style={{ marginBottom: 12, color: muted, fontSize: theme.fontSizes[0] }}>Most lines first · current tracked lines attributed by Git blame.</div>
 								{linesLoading ? (
 									<div role="status" aria-label="Loading contributor line attribution" style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: 12 }}>
 										<SkeletonStyles />

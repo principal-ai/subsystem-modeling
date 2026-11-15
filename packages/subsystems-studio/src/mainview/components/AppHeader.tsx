@@ -12,6 +12,7 @@ import { createPortal } from "react-dom";
 import {
 	Download,
 	ExternalLink,
+	Gauge,
 	GitBranch,
 	Info,
 	Loader2,
@@ -23,6 +24,7 @@ import {
 import { useTheme } from "@principal-ade/industry-theme";
 import { FileCityLogo } from "@principal-ai/logo-component";
 import type {
+	GithubApiRateLimit,
 	StudioVersionStatus,
 	UserIdentity,
 } from "../../shared/contract";
@@ -53,6 +55,43 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 			});
 		return () => {
 			alive = false;
+		};
+	}, []);
+
+	const [githubQuota, setGithubQuota] = useState<{
+		ok: boolean;
+		authenticated?: boolean;
+		core?: GithubApiRateLimit;
+		search?: GithubApiRateLimit;
+		error?: string;
+	} | null>(null);
+	useEffect(() => {
+		let alive = true;
+		let inFlight = false;
+		const refresh = async () => {
+			if (!alive || inFlight || document.hidden) return;
+			inFlight = true;
+			try {
+				const result = await electrobun.rpc!.request.getGithubApiRateLimit({});
+				if (alive) setGithubQuota(result);
+			} catch (error) {
+				if (alive) {
+					setGithubQuota({
+						ok: false,
+						error: error instanceof Error ? error.message : String(error),
+					});
+				}
+			} finally {
+				inFlight = false;
+			}
+		};
+		void refresh();
+		const interval = window.setInterval(() => void refresh(), 60_000);
+		window.addEventListener("focus", refresh);
+		return () => {
+			alive = false;
+			window.clearInterval(interval);
+			window.removeEventListener("focus", refresh);
 		};
 	}, []);
 
@@ -243,6 +282,7 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 					</span>
 				</button>
 			)}
+			<GithubQuotaChip quota={githubQuota} />
 			{(showStudioUpdate || studioUpdateBusy) && (
 				<button
 					type="button"
@@ -354,6 +394,76 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 		)}
 		</>
 	);
+}
+
+function GithubQuotaChip({
+	quota,
+}: {
+	quota: {
+		ok: boolean;
+		authenticated?: boolean;
+		core?: GithubApiRateLimit;
+		search?: GithubApiRateLimit;
+		error?: string;
+	} | null;
+}) {
+	const { theme } = useTheme();
+	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
+	const isLow = [quota?.core, quota?.search].some(
+		(resource) => resource && resource.remaining <= Math.max(10, resource.limit * 0.05),
+	);
+	const color = isLow ? (theme.colors.error ?? "#e5534b") : muted;
+	const title = !quota
+		? "Loading GitHub API quota…"
+		: quota.ok
+			? [
+					quota.authenticated
+						? "Authenticated GitHub quota"
+						: "Unauthenticated GitHub quota (shared IP limit)",
+					formatQuotaDetails("Core", quota.core),
+					formatQuotaDetails("Search", quota.search),
+				].filter(Boolean).join("\n")
+			: `GitHub API quota unavailable: ${quota.error ?? "unknown error"}${quota.authenticated === false ? "\nRun `gh auth login` for an authenticated quota." : ""}`;
+	return (
+		<div
+			role="status"
+			aria-label={quota?.ok ? "GitHub API rate limit" : "GitHub API rate limit status"}
+			title={title}
+			style={{
+				display: "flex",
+				alignItems: "center",
+				gap: 6,
+				height: 32,
+				padding: "0 9px",
+				border: `1px solid ${isLow ? color : theme.colors.border}`,
+				borderRadius: 6,
+				color,
+				fontFamily: theme.fonts.monospace,
+				fontSize: theme.fontSizes[0],
+				whiteSpace: "nowrap",
+				flexShrink: 0,
+			}}
+		>
+			{quota ? <Gauge size={14} aria-hidden="true" /> : <Loader2 size={14} className="principal-studio-spin" aria-hidden="true" />}
+			<span>
+				{quota?.ok
+					? `Core ${formatQuotaShort(quota.core)} · Search ${formatQuotaShort(quota.search)}`
+					: quota
+						? "GitHub quota unavailable"
+						: "GitHub quota…"}
+			</span>
+		</div>
+	);
+}
+
+function formatQuotaShort(resource?: GithubApiRateLimit): string {
+	if (!resource) return "—";
+	return `${new Intl.NumberFormat().format(resource.remaining)}/${new Intl.NumberFormat().format(resource.limit)}`;
+}
+
+function formatQuotaDetails(label: string, resource?: GithubApiRateLimit): string {
+	if (!resource) return "";
+	return `${label}: ${new Intl.NumberFormat().format(resource.remaining)} of ${new Intl.NumberFormat().format(resource.limit)} remaining · resets ${new Date(resource.resetAt).toLocaleTimeString()}`;
 }
 
 // ---------------------------------------------------------------------------

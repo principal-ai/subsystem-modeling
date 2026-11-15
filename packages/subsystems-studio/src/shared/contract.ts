@@ -1486,6 +1486,7 @@ export interface MergedPullRequestRepo {
 
 /** Overview stats for a locally cloned repository shown beside its File City. */
 export interface RepoInsights {
+	description?: string;
 	createdAt?: string;
 	lastMergeAt?: string;
 	lastCommit?: {
@@ -1504,6 +1505,12 @@ export interface RepoInsights {
 		avatarUrl?: string;
 	}>;
 	warnings?: string[];
+}
+
+export interface GithubApiRateLimit {
+	limit: number;
+	remaining: number;
+	resetAt: string;
 }
 
 /** How a file changed in a commit or pull request. */
@@ -2707,7 +2714,7 @@ export type StudioRequests = {
 	};
 	getRepoCreatedAt: {
 		params: { owner: string; repo: string };
-		response: { ok: boolean; createdAt?: string; error?: string };
+		response: { ok: boolean; createdAt?: string; description?: string; error?: string };
 	};
 	getRepoLastMerge: {
 		params: { owner: string; repo: string };
@@ -2730,6 +2737,16 @@ export type StudioRequests = {
 			fileCount?: number;
 			contributors?: Array<{ id: string; name: string; lines: number; files: string[]; avatarUrl?: string }>;
 			warnings?: string[];
+			error?: string;
+		};
+	};
+	getGithubApiRateLimit: {
+		params: Record<string, never>;
+		response: {
+			ok: boolean;
+			authenticated?: boolean;
+			core?: GithubApiRateLimit;
+			search?: GithubApiRateLimit;
 			error?: string;
 		};
 	};
