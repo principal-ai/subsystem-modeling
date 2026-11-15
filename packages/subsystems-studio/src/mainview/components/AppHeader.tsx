@@ -408,6 +408,11 @@ function GithubQuotaChip({
 	} | null;
 }) {
 	const { theme } = useTheme();
+	const [now, setNow] = useState(() => Date.now());
+	useEffect(() => {
+		const interval = window.setInterval(() => setNow(Date.now()), 1_000);
+		return () => window.clearInterval(interval);
+	}, []);
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 	const isLow = [quota?.core, quota?.search].some(
 		(resource) => resource && resource.remaining <= Math.max(10, resource.limit * 0.05),
@@ -415,11 +420,15 @@ function GithubQuotaChip({
 	const color = isLow ? (theme.colors.error ?? "#e5534b") : muted;
 	const remainingRatio = [quota?.core, quota?.search]
 		.filter((resource): resource is GithubApiRateLimit => Boolean(resource && resource.limit > 0))
-		.reduce(
-			(minimum, resource) =>
-				Math.min(minimum, Math.max(0, Math.min(1, resource.remaining / resource.limit))),
-			1,
-		);
+			.reduce(
+				(minimum, resource) =>
+					Math.min(minimum, Math.max(0, Math.min(1, resource.remaining / resource.limit))),
+				1,
+			);
+	const resetTimes = [quota?.core?.resetAt, quota?.search?.resetAt]
+		.map((value) => value ? Date.parse(value) : Number.NaN)
+		.filter((value) => Number.isFinite(value));
+	const nextResetAt = resetTimes.length ? Math.min(...resetTimes) : undefined;
 	const quotaBorder =
 		quota?.ok && (quota.core || quota.search)
 			? `hsl(${Math.round(remainingRatio * 120)} 70% 42%)`
@@ -434,8 +443,9 @@ function GithubQuotaChip({
 						? "Authenticated GitHub quota"
 						: "Unauthenticated GitHub quota (shared IP limit)",
 					"Border color reflects the tighter remaining quota.",
-					formatQuotaDetails("Core", quota.core),
-					formatQuotaDetails("Search", quota.search),
+					nextResetAt === undefined ? "" : `Next reset in ${formatQuotaCountdown(nextResetAt - now)}.`,
+					formatQuotaDetails("Core", quota.core, now),
+					formatQuotaDetails("Search", quota.search, now),
 				].filter(Boolean).join("\n")
 			: `GitHub API quota unavailable: ${quota.error ?? "unknown error"}${quota.authenticated === false ? "\nRun `gh auth login` for an authenticated quota." : ""}`;
 	return (
@@ -461,7 +471,7 @@ function GithubQuotaChip({
 			{quota ? <Gauge size={14} aria-hidden="true" /> : <Loader2 size={14} className="principal-studio-spin" aria-hidden="true" />}
 			<span>
 			{quota?.ok
-					? `Core used ${formatQuotaShort(quota.core)} · Search used ${formatQuotaShort(quota.search)}`
+					? `Core used ${formatQuotaShort(quota.core)} · Search used ${formatQuotaShort(quota.search)}${nextResetAt === undefined ? "" : ` · reset in ${formatQuotaCountdown(nextResetAt - now)}`}`
 					: quota
 						? "GitHub quota unavailable"
 						: "GitHub quota…"}
@@ -476,11 +486,24 @@ function formatQuotaShort(resource?: GithubApiRateLimit): string {
 	return `${new Intl.NumberFormat().format(used)}/${new Intl.NumberFormat().format(resource.limit)}`;
 }
 
-function formatQuotaDetails(label: string, resource?: GithubApiRateLimit): string {
+function formatQuotaDetails(label: string, resource: GithubApiRateLimit | undefined, now: number): string {
 	if (!resource) return "";
 	const format = new Intl.NumberFormat();
 	const used = Math.max(0, resource.limit - resource.remaining);
-	return `${label}: ${format.format(used)} of ${format.format(resource.limit)} used · ${format.format(resource.remaining)} remaining · resets ${new Date(resource.resetAt).toLocaleTimeString()}`;
+	const resetAt = Date.parse(resource.resetAt);
+	return `${label}: ${format.format(used)} of ${format.format(resource.limit)} used · ${format.format(resource.remaining)} remaining · resets in ${formatQuotaCountdown(resetAt - now)} (${new Date(resetAt).toLocaleTimeString()})`;
+}
+
+function formatQuotaCountdown(milliseconds: number): string {
+	if (!Number.isFinite(milliseconds)) return "—";
+	if (milliseconds <= 0) return "now";
+	const totalSeconds = Math.ceil(milliseconds / 1_000);
+	const hours = Math.floor(totalSeconds / 3_600);
+	const minutes = Math.floor((totalSeconds % 3_600) / 60);
+	const seconds = totalSeconds % 60;
+	if (hours) return `${hours}h ${minutes}m`;
+	if (minutes) return `${minutes}m ${seconds}s`;
+	return `${seconds}s`;
 }
 
 // ---------------------------------------------------------------------------
