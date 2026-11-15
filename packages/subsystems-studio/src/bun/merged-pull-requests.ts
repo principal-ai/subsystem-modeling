@@ -305,20 +305,27 @@ export async function listMergedPullRequests(opts: {
 	const errors: string[] = [];
 	for (let start = 0; start < repos.length; start += SEARCH_REPO_CONCURRENCY) {
 		const batch = repos.slice(start, start + SEARCH_REPO_CONCURRENCY);
-		const batchResults = await Promise.all(
+		const batchResults: Array<
+			| { repo: MergedPullRequestRepo; result: SearchResult }
+			| { repo: MergedPullRequestRepo; error: string }
+		> = await Promise.all(
 			batch.map(async (repo) => {
 				try {
-					return { result: await searchRepoMergedPullRequests(repo, token, since) };
+					return {
+						repo,
+						result: await searchRepoMergedPullRequests(repo, token, since),
+					};
 				} catch (error) {
 					return {
+						repo,
 						error: `${repo.owner}/${repo.name}: ${error instanceof Error ? error.message : String(error)}`,
 					};
 				}
 			}),
 		);
-		for (const [index, result] of batchResults.entries()) {
+		for (const result of batchResults) {
 			if ("result" in result) {
-				searchResults.push({ repo: batch[index]!, result: result.result });
+				searchResults.push(result);
 			} else {
 				errors.push(result.error);
 			}

@@ -200,9 +200,11 @@ export function RepoActivityMonthHeatmap({
 								color: theme.colors.text,
 								opacity: isTodayEmpty
 									? 1
-									: isToday || count > 0
+									: isToday
 										? undefined
-										: 0.45,
+										: count > 0
+											? strength
+											: 0.45,
 								boxShadow: isToday
 									? `inset 0 0 0 2px ${theme.colors.primary}`
 									: undefined,
