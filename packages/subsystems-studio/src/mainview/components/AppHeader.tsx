@@ -413,6 +413,19 @@ function GithubQuotaChip({
 		(resource) => resource && resource.remaining <= Math.max(10, resource.limit * 0.05),
 	);
 	const color = isLow ? (theme.colors.error ?? "#e5534b") : muted;
+	const remainingRatio = [quota?.core, quota?.search]
+		.filter((resource): resource is GithubApiRateLimit => Boolean(resource && resource.limit > 0))
+		.reduce(
+			(minimum, resource) =>
+				Math.min(minimum, Math.max(0, Math.min(1, resource.remaining / resource.limit))),
+			1,
+		);
+	const quotaBorder =
+		quota?.ok && (quota.core || quota.search)
+			? `hsl(${Math.round(remainingRatio * 120)} 70% 42%)`
+			: quota && !quota.ok
+				? (theme.colors.error ?? "#e5534b")
+				: theme.colors.border;
 	const title = !quota
 		? "Loading GitHub API quota…"
 		: quota.ok
@@ -420,6 +433,7 @@ function GithubQuotaChip({
 					quota.authenticated
 						? "Authenticated GitHub quota"
 						: "Unauthenticated GitHub quota (shared IP limit)",
+					"Border color reflects the tighter remaining quota.",
 					formatQuotaDetails("Core", quota.core),
 					formatQuotaDetails("Search", quota.search),
 				].filter(Boolean).join("\n")
@@ -435,7 +449,7 @@ function GithubQuotaChip({
 				gap: 6,
 				height: 32,
 				padding: "0 9px",
-				border: `1px solid ${isLow ? color : theme.colors.border}`,
+				border: `1px solid ${quotaBorder}`,
 				borderRadius: 6,
 				color,
 				fontFamily: theme.fonts.monospace,
@@ -446,8 +460,8 @@ function GithubQuotaChip({
 		>
 			{quota ? <Gauge size={14} aria-hidden="true" /> : <Loader2 size={14} className="principal-studio-spin" aria-hidden="true" />}
 			<span>
-				{quota?.ok
-					? `Core ${formatQuotaShort(quota.core)} · Search ${formatQuotaShort(quota.search)}`
+			{quota?.ok
+					? `Core used ${formatQuotaShort(quota.core)} · Search used ${formatQuotaShort(quota.search)}`
 					: quota
 						? "GitHub quota unavailable"
 						: "GitHub quota…"}
@@ -458,12 +472,15 @@ function GithubQuotaChip({
 
 function formatQuotaShort(resource?: GithubApiRateLimit): string {
 	if (!resource) return "—";
-	return `${new Intl.NumberFormat().format(resource.remaining)}/${new Intl.NumberFormat().format(resource.limit)}`;
+	const used = Math.max(0, resource.limit - resource.remaining);
+	return `${new Intl.NumberFormat().format(used)}/${new Intl.NumberFormat().format(resource.limit)}`;
 }
 
 function formatQuotaDetails(label: string, resource?: GithubApiRateLimit): string {
 	if (!resource) return "";
-	return `${label}: ${new Intl.NumberFormat().format(resource.remaining)} of ${new Intl.NumberFormat().format(resource.limit)} remaining · resets ${new Date(resource.resetAt).toLocaleTimeString()}`;
+	const format = new Intl.NumberFormat();
+	const used = Math.max(0, resource.limit - resource.remaining);
+	return `${label}: ${format.format(used)} of ${format.format(resource.limit)} used · ${format.format(resource.remaining)} remaining · resets ${new Date(resource.resetAt).toLocaleTimeString()}`;
 }
 
 // ---------------------------------------------------------------------------
