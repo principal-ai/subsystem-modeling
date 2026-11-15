@@ -13,6 +13,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { handleRemoteModelRequest, type OpenRemoteModelsHandler } from "./remote-model-http";
 import { handleSettingsRequest, type SettingsHttpHandlers } from "./settings-http";
+import { handleThemeRequest } from "./theme-http";
 import {
 	getGraphifyStatus,
 	installGraphify,
@@ -344,6 +345,11 @@ export async function handleSubsystemModelRequest(
 
 	const remote = await handleRemoteModelRequest(req, onOpenRemoteModels);
 	if (remote) return remote;
+
+	if (settings) {
+		const theme = await handleThemeRequest(req, settings);
+		if (theme) return theme;
+	}
 
 	if (settings) {
 		const configured = await handleSettingsRequest(req, { settings });

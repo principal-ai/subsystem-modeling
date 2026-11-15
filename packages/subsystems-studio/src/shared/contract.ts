@@ -199,6 +199,10 @@ export interface JudgeProbeResult {
 }
 
 export interface ViewerSettings {
+	/** Theme used by all Studio windows. */
+	selectedTheme: string;
+	/** Per-theme dotted-property overrides, persisted by the theme bridge. */
+	themeOverrides: Record<string, Record<string, unknown>>;
 	defaultTabs: DefaultTabFlags;
 	/** Keep failed Subsystems repo cities visible with their error and retry action. */
 	showFailedRepoCityCards: boolean;
@@ -288,6 +292,8 @@ export interface RegularAuditStatus {
 
 /** Partial update accepted by `setSettings` — nested objects are merged. */
 export interface PartialViewerSettings {
+	selectedTheme?: string;
+	themeOverrides?: Record<string, Record<string, unknown>>;
 	defaultTabs?: Partial<DefaultTabFlags>;
 	showFailedRepoCityCards?: boolean;
 	autoAcceptSubsystemModelProposals?: boolean;
@@ -2881,6 +2887,11 @@ export type StudioRequests = {
 
 /** Host → renderer notifications. Keyed by message name. */
 export type StudioMessages = {
+	/** Active theme changed in the host or through the local HTTP bridge. */
+	themeChanged: {
+		themeName: string;
+		theme: import("@principal-ade/industry-theme").Theme;
+	};
 	/** Fired when the tab list changes (LOAD_TRAIL, close, host-initiated
 	 *  opens). The renderer refreshes its registry from listTabs. `focusTabId`
 	 *  is present when the host wants a specific tab on screen (a tab it just

@@ -106,6 +106,8 @@ const REGULAR_AUDIT_INTERVAL_OPTIONS = [
 ] as const;
 
 const FALLBACK_SETTINGS: ViewerSettings = {
+	selectedTheme: "slateNeon",
+	themeOverrides: {},
 	defaultTabs: { ...DEFAULT_TAB_FLAGS },
 	autoAcceptSubsystemModelProposals: false,
 	autoAcceptSubsystemModelConfidenceThreshold: 0.85,

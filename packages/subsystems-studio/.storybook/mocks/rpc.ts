@@ -94,6 +94,8 @@ function proposalId(params: unknown): string {
 }
 
 let viewerSettings: ViewerSettings = {
+  selectedTheme: "slateNeon",
+  themeOverrides: {},
   defaultTabs: {
     sessions: true,
     maintenanceSessions: true,

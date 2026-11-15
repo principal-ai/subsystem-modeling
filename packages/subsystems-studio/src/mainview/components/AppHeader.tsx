@@ -161,9 +161,7 @@ export function AppHeader({ libraryActive }: { libraryActive: boolean }) {
 						width={40}
 						height={40}
 						mark="P"
-						primary="#ff6b35"
-						accent="#0893d2"
-						color="#d0e5ea"
+						theme={theme}
 						background="transparent"
 					/>
 				</div>

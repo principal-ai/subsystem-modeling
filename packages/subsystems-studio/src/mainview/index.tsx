@@ -23,15 +23,20 @@ import resetStyles from "./index.css" with { type: "text" };
 
 import mermaid from "mermaid";
 import { createRoot } from "react-dom/client";
+import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import {
 	ThemeProvider,
 	slateNeonTheme,
+	type Theme,
 } from "@principal-ade/industry-theme";
 import { App, ErrorBoundary } from "./App";
 import {
 	setPrettierProvider,
 	type PrettierBundle,
 } from "@principal-ai/subsystems-react";
+import { electrobun, themeChangeSubscribers } from "./rpc";
+import { resolveStudioTheme } from "../shared/studio-theme";
 
 // Register the esbuild-vendored Prettier (loaded as a classic <script> in
 // index.html, outside the Cottontail bundle). Cottontail mangles the in-bundle
@@ -87,12 +92,46 @@ function injectStyles(): void {
 }
 injectStyles();
 
+function StudioThemeRoot({ children }: { children: ReactNode }) {
+	const [theme, setTheme] = useState<Theme>(slateNeonTheme);
+	const changeVersion = useRef(0);
+
+	useEffect(() => {
+		const onThemeChanged = (payload: { themeName: string; theme: Theme }) => {
+			changeVersion.current += 1;
+			setTheme(payload.theme);
+		};
+		themeChangeSubscribers.add(onThemeChanged);
+
+		void electrobun.rpc!.request.getSettings({}).then((settings) => {
+			if (changeVersion.current !== 0) return;
+			setTheme(resolveStudioTheme(
+				settings.selectedTheme,
+				settings.themeOverrides[settings.selectedTheme],
+			));
+		}).catch((error) => {
+			console.warn("[principal-studio] could not load saved theme:", error);
+		});
+		return () => {
+			themeChangeSubscribers.delete(onThemeChanged);
+		};
+	}, []);
+
+	useEffect(() => {
+		document.body.style.background = theme.colors.background;
+		document.body.style.color = theme.colors.text;
+		document.body.style.fontFamily = theme.fonts.body;
+	}, [theme]);
+
+	return <ThemeProvider theme={theme}>{children}</ThemeProvider>;
+}
+
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("Missing #root");
 createRoot(rootEl).render(
-	<ThemeProvider theme={slateNeonTheme}>
+	<StudioThemeRoot>
 		<ErrorBoundary>
 			<App />
 		</ErrorBoundary>
-	</ThemeProvider>,
+	</StudioThemeRoot>,
 );

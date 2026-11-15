@@ -227,6 +227,7 @@ import { maintenanceRuns } from "./subsystem-maintenance-runs";
 import { createMaintenanceOutcomeSender } from "./maintenance-outcome-delivery";
 import { SpanKind, SpanStatusCode } from "@opentelemetry/api";
 import { initializeStudioTelemetry, withStudioSpan } from "../shared/telemetry";
+import { resolveStudioTheme } from "../shared/studio-theme";
 
 initializeStudioTelemetry("subsystems-studio-host");
 
@@ -811,6 +812,8 @@ function ensurePermanentTab(id: string): void {
 	if (!def || !isPermanentTabAvailable(def) || tabs.has(id)) return;
 	// Insert at the permanent-tab position: rebuild with this tab forced on.
 	const forced: ViewerSettings = {
+		selectedTheme: viewerSettings.selectedTheme,
+		themeOverrides: viewerSettings.themeOverrides,
 		defaultTabs: {
 			sessions:
 				id === AGENT_SESSIONS_TAB_ID || viewerSettings.defaultTabs.sessions,
@@ -4549,7 +4552,16 @@ startHttpServer(
  * and the loopback HTTP API so both paths behave identically.
  */
 function applySettingsPatch(patch: PartialViewerSettings): ViewerSettings {
+	const activeThemeBefore = JSON.stringify({
+		name: viewerSettings.selectedTheme,
+		overrides: viewerSettings.themeOverrides[viewerSettings.selectedTheme] ?? {},
+	});
 	viewerSettings = patchViewerSettings(viewerSettings, patch);
+	const activeThemeAfter = JSON.stringify({
+		name: viewerSettings.selectedTheme,
+		overrides: viewerSettings.themeOverrides[viewerSettings.selectedTheme] ?? {},
+	});
+	if (activeThemeAfter !== activeThemeBefore) broadcastThemeChanged();
 	const prevSuggested = suggestedTabId;
 	syncPermanentTabs(viewerSettings);
 	regularAuditScheduler.sync(viewerSettings);
@@ -4557,4 +4569,14 @@ function applySettingsPatch(patch: PartialViewerSettings): ViewerSettings {
 		suggestedTabId !== prevSuggested ? suggestedTabId : undefined,
 	);
 	return viewerSettings;
+}
+
+function broadcastThemeChanged(): void {
+	sendToAllWindows("themeChanged", {
+		themeName: viewerSettings.selectedTheme,
+		theme: resolveStudioTheme(
+			viewerSettings.selectedTheme,
+			viewerSettings.themeOverrides[viewerSettings.selectedTheme],
+		),
+	});
 }

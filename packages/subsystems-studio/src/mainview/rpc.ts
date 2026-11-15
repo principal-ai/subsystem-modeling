@@ -33,6 +33,11 @@ type StudioRPC = {
 // apply it to its own active-tab state.
 export const reloadSubscribers = new Set<(focusTabId?: string) => void>();
 
+/** The root theme provider follows host/bridge theme changes. */
+export const themeChangeSubscribers = new Set<
+	(payload: StudioMessages["themeChanged"]) => void
+>();
+
 /** The Subsystems map reacts immediately when its Settings flag changes. */
 export const showFailedRepoCityCardsSubscribers = new Set<
 	(enabled: boolean) => void
@@ -134,6 +139,9 @@ const rpc = Electroview.defineRPC<StudioRPC>({
 	handlers: {
 		requests: {},
 		messages: {
+			themeChanged: (payload) => {
+				for (const fn of themeChangeSubscribers) fn(payload);
+			},
 			tabsChanged: (payload) => {
 				for (const fn of reloadSubscribers) fn(payload?.focusTabId);
 			},

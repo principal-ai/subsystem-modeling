@@ -15,6 +15,7 @@ import {
 	type SecondOpinionProvider,
 	type ViewerSettings,
 } from "../shared/contract";
+import { isStudioThemeName } from "../shared/studio-theme";
 
 const STORE_PATH = join(homedir(), ".principal", "principal-studio-settings.json");
 
@@ -28,6 +29,8 @@ export const AUTO_ACCEPT_CONFIDENCE_DEFAULT = 0.85;
 
 export function defaultViewerSettings(): ViewerSettings {
 	return {
+		selectedTheme: "slateNeon",
+		themeOverrides: {},
 		defaultTabs: { ...DEFAULT_TAB_FLAGS },
 		showFailedRepoCityCards: false,
 		autoAcceptSubsystemModelProposals: false,
@@ -104,6 +107,17 @@ export function coerceRegularAuditIntervalMinutes(value: unknown): number {
 	return Math.max(REGULAR_AUDIT_INTERVAL_MIN_MINUTES, Math.round(n));
 }
 
+function coerceThemeOverrides(value: unknown): Record<string, Record<string, unknown>> {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+	const result: Record<string, Record<string, unknown>> = {};
+	for (const [name, overrides] of Object.entries(value)) {
+		if (isStudioThemeName(name) && typeof overrides === "object" && overrides !== null && !Array.isArray(overrides)) {
+			result[name] = overrides as Record<string, unknown>;
+		}
+	}
+	return result;
+}
+
 function normalize(raw: unknown): ViewerSettings {
 	const defaults = defaultViewerSettings();
 	if (typeof raw !== "object" || raw === null) return defaults;
@@ -113,6 +127,10 @@ function normalize(raw: unknown): ViewerSettings {
 			? (obj["defaultTabs"] as Record<string, unknown>)
 			: {};
 	return {
+		selectedTheme: isStudioThemeName(obj["selectedTheme"])
+			? obj["selectedTheme"]
+			: defaults.selectedTheme,
+		themeOverrides: coerceThemeOverrides(obj["themeOverrides"]),
 		defaultTabs: {
 			sessions: coerceBool(tabs["sessions"], defaults.defaultTabs.sessions),
 			maintenanceSessions: coerceBool(
@@ -223,6 +241,12 @@ export function patchViewerSettings(
 	patch: PartialViewerSettings,
 ): ViewerSettings {
 	const next: ViewerSettings = {
+		selectedTheme: patch.selectedTheme !== undefined && isStudioThemeName(patch.selectedTheme)
+			? patch.selectedTheme
+			: current.selectedTheme,
+		themeOverrides: patch.themeOverrides !== undefined
+			? coerceThemeOverrides(patch.themeOverrides)
+			: current.themeOverrides,
 		defaultTabs: {
 			...current.defaultTabs,
 			...(patch.defaultTabs ?? {}),
