@@ -7,7 +7,7 @@
  * uses checkout-local time) and the client narrows to the exact window.
  */
 
-export type ActivityWindow = "today" | "yesterday" | "week";
+export type ActivityWindow = "today" | "yesterday" | "week" | "month";
 
 /** Re-check interval for the repo-activity tabs (Merged PRs, Commits). */
 export const ACTIVITY_POLL_INTERVAL_MS = 5 * 60_000;
@@ -16,6 +16,7 @@ export const ACTIVITY_WINDOWS: ReadonlyArray<{ key: ActivityWindow; label: strin
 	{ key: "today", label: "Today" },
 	{ key: "yesterday", label: "Yesterday" },
 	{ key: "week", label: "This week" },
+	{ key: "month", label: "This month" },
 ];
 
 export function windowStart(window: ActivityWindow, now = new Date()): Date {
@@ -26,13 +27,16 @@ export function windowStart(window: ActivityWindow, now = new Date()): Date {
 		today.setDate(today.getDate() - 1);
 		return today;
 	}
-	const day = today.getDay();
-	today.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
+	if (window === "month") {
+		today.setDate(1);
+		return today;
+	}
+	today.setDate(today.getDate() - today.getDay());
 	return today;
 }
 
 export function windowEnd(window: ActivityWindow, now = new Date()): Date | null {
-	if (window === "week") return null;
+	if (window === "week" || window === "month") return null;
 	const end = new Date(now);
 	if (window === "today") return end;
 	end.setHours(0, 0, 0, 0);

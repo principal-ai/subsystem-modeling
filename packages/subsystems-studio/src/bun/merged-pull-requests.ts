@@ -11,6 +11,7 @@ import { gitHeadSha } from "./graphify-store";
 
 const SEARCH_PAGE_SIZE = 100;
 const SEARCH_PAGE_LIMIT = 10;
+const SEARCH_REPO_CONCURRENCY = 4;
 const FILE_PAGE_SIZE = 100;
 const FILE_PAGE_LIMIT = 3;
 const pullRequestFilesCache = new Map<
@@ -98,14 +99,13 @@ export function repoIdentityFromIssue(item: {
 	return null;
 }
 
-async function searchOrgMergedPullRequests(
-	owner: string,
+async function searchRepoMergedPullRequests(
+	repo: MergedPullRequestRepo,
 	token: string,
 	since: string,
-	localRepos: ReadonlyMap<string, MergedPullRequestRepo>,
 ): Promise<SearchResult> {
 	const query = [
-		`org:${owner}`,
+		`repo:${repo.owner}/${repo.name}`,
 		"is:pr",
 		"is:merged",
 		`merged:>=${since.slice(0, 10)}`,
@@ -144,10 +144,13 @@ async function searchOrgMergedPullRequests(
 		for (const item of body.items ?? []) {
 			if (!item.pull_request || !item.closed_at) continue;
 			const identity = repoIdentityFromIssue(item);
-			if (!identity) continue;
-			const repoKey = `${identity.owner}/${identity.name}`.toLowerCase();
-			const repo = localRepos.get(repoKey);
-			if (!repo) continue;
+			if (
+				!identity ||
+				identity.owner.toLowerCase() !== repo.owner.toLowerCase() ||
+				identity.name.toLowerCase() !== repo.name.toLowerCase()
+			) {
+				continue;
+			}
 			pullRequests.push({
 				owner: repo.owner,
 				repo: repo.name,
@@ -298,25 +301,47 @@ export async function listMergedPullRequests(opts: {
 		};
 	}
 
-	const localRepos = new Map(
-		repos.map((repo) => [`${repo.owner}/${repo.name}`.toLowerCase(), repo]),
-	);
-	let searchResult: SearchResult;
-	try {
-		searchResult = await searchOrgMergedPullRequests(owner, token, since, localRepos);
-	} catch (error) {
+	const searchResults: Array<{ repo: MergedPullRequestRepo; result: SearchResult }> = [];
+	const errors: string[] = [];
+	for (let start = 0; start < repos.length; start += SEARCH_REPO_CONCURRENCY) {
+		const batch = repos.slice(start, start + SEARCH_REPO_CONCURRENCY);
+		const batchResults = await Promise.all(
+			batch.map(async (repo) => {
+				try {
+					return { result: await searchRepoMergedPullRequests(repo, token, since) };
+				} catch (error) {
+					return {
+						error: `${repo.owner}/${repo.name}: ${error instanceof Error ? error.message : String(error)}`,
+					};
+				}
+			}),
+		);
+		for (const [index, result] of batchResults.entries()) {
+			if ("result" in result) {
+				searchResults.push({ repo: batch[index]!, result: result.result });
+			} else {
+				errors.push(result.error);
+			}
+		}
+	}
+
+	if (searchResults.length === 0 && errors.length > 0) {
 		return {
 			ok: false,
 			pullRequests: [],
-			error: error instanceof Error ? error.message : String(error),
+			error: "Could not load merged pull requests for any local repositories.",
+			errors,
 		};
 	}
 
-	const pullRequests = searchResult.pullRequests;
+	const pullRequests = searchResults.flatMap(({ result }) => result.pullRequests);
 	pullRequests.sort((a, b) => Date.parse(b.mergedAt) - Date.parse(a.mergedAt));
 	return {
 		ok: true,
 		pullRequests,
-		truncatedRepos: searchResult.truncated ? [owner] : [],
+		errors: errors.length > 0 ? errors : undefined,
+		truncatedRepos: searchResults.flatMap(({ repo, result }) =>
+			result.truncated ? [`${repo.owner}/${repo.name}`] : [],
+		),
 	};
 }

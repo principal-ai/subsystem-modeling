@@ -297,10 +297,7 @@ export function RepoCommitsView() {
 	}, [visibleCommits]);
 	const toggleAuthor = useCallback((login: string) => {
 		setSelectedAuthors((current) => {
-			const next = new Set(current);
-			if (next.has(login)) next.delete(login);
-			else next.add(login);
-			return next;
+			return current.has(login) ? new Set<string>() : new Set([login]);
 		});
 	}, []);
 	// After a checkout moves, re-read the local log against the new HEAD.
@@ -420,9 +417,9 @@ export function RepoCommitsView() {
 						) : (
 							<button
 								type="button"
-								aria-label="Toggle author filters"
+								aria-label="Toggle contributor filters"
 								aria-expanded={authorsOpen}
-								title={`${authors.length} authors · ${authorsOpen ? "Hide" : "Show"} author filters`}
+								title={`${authors.length} contributors · ${authorsOpen ? "Hide" : "Show"} contributor filters`}
 								onClick={() => setAuthorsOpen((open) => !open)}
 								style={{
 									display: "inline-flex",
@@ -498,7 +495,7 @@ export function RepoCommitsView() {
 			{authors.length > 1 && authorsOpen && (
 				<div
 					role="group"
-					aria-label="Filter commits by author"
+					aria-label="Filter commits by contributor"
 					className="repo-commits-author-filters"
 					style={{
 						display: "flex",
@@ -511,17 +508,8 @@ export function RepoCommitsView() {
 					}}
 				>
 					<span style={{ flexShrink: 0, color: muted, fontSize: theme.fontSizes[0], textTransform: "uppercase", letterSpacing: 0.3 }}>
-						Authors
+						Contributors
 					</span>
-					{selectedAuthors.size > 0 && (
-						<button
-							type="button"
-							onClick={() => setSelectedAuthors(new Set())}
-							style={{ flexShrink: 0, border: "none", background: "transparent", color: theme.colors.primary, cursor: "pointer", fontFamily: theme.fonts.body, fontSize: theme.fontSizes[0] }}
-						>
-							Clear
-						</button>
-					)}
 					{authors.map((author) => (
 						<AuthorFilterChip
 							key={author.login}
@@ -855,5 +843,3 @@ function RepoCommitCard({
 		</div>
 	);
 }
-
-

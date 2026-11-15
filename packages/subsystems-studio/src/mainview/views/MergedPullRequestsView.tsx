@@ -23,6 +23,8 @@ import {
 import { FileChangeList, summarizeFileChanges } from "../components/FileChangeList";
 import { LineChangeScaleBar, type LineStats } from "../components/LineChangeBar";
 import { MergeDayHeatmap } from "../components/MergeDayHeatmap";
+import { MergeMonthHeatmap } from "../components/MergeMonthHeatmap";
+import { MergeWeekHeatmap } from "../components/MergeWeekHeatmap";
 import { PullRequestListSkeleton } from "../components/PullRequestListSkeleton";
 import { MODEL_LAYER_COLORS } from "../components/SubsystemCoverageMapCards";
 import { MergedPullRequestRepoMap, pullRequestLayerId } from "./MergedPullRequestRepoMap";
@@ -390,10 +392,7 @@ export function MergedPullRequestsView() {
 	const highlightRowsFromRepoHover = mapRepos.length > 1;
 	const toggleAuthor = useCallback((login: string) => {
 		setSelectedAuthors((current) => {
-			const next = new Set(current);
-			if (next.has(login)) next.delete(login);
-			else next.add(login);
-			return next;
+			return current.has(login) ? new Set<string>() : new Set([login]);
 		});
 	}, []);
 	// After a checkout moves, re-check for merges against the new HEAD.
@@ -512,9 +511,9 @@ export function MergedPullRequestsView() {
 						) : (
 							<button
 								type="button"
-								aria-label="Toggle author filters"
+								aria-label="Toggle contributor filters"
 								aria-expanded={authorsOpen}
-								title={`${authors.length} authors · ${authorsOpen ? "Hide" : "Show"} author filters`}
+								title={`${authors.length} contributors · ${authorsOpen ? "Hide" : "Show"} contributor filters`}
 								onClick={() => setAuthorsOpen((open) => !open)}
 								style={{
 									display: "inline-flex",
@@ -599,7 +598,7 @@ export function MergedPullRequestsView() {
 			{authors.length > 1 && authorsOpen && (
 				<div
 					role="group"
-					aria-label="Filter merged pull requests by author"
+					aria-label="Filter merged pull requests by contributor"
 					className="merged-pr-author-filters"
 					style={{
 						display: "flex",
@@ -612,17 +611,8 @@ export function MergedPullRequestsView() {
 					}}
 				>
 					<span style={{ flexShrink: 0, color: muted, fontSize: theme.fontSizes[0], textTransform: "uppercase", letterSpacing: 0.3 }}>
-						Authors
+						Contributors
 					</span>
-					{selectedAuthors.size > 0 && (
-						<button
-							type="button"
-							onClick={() => setSelectedAuthors(new Set())}
-							style={{ flexShrink: 0, border: "none", background: "transparent", color: theme.colors.primary, cursor: "pointer", fontFamily: theme.fonts.body, fontSize: theme.fontSizes[0] }}
-						>
-							Clear
-						</button>
-					)}
 					{authors.map((author) => (
 						<AuthorFilterChip
 							key={author.login}
@@ -674,18 +664,30 @@ export function MergedPullRequestsView() {
 					}}
 				>
 					<div style={{ flexShrink: 0 }}>
-						<MergeDayHeatmap
-							pullRequests={mergedInWindow}
-							day={windowStart(window === "yesterday" ? "yesterday" : "today")}
-							dayLabel={window === "yesterday" ? "yesterday" : "today"}
-						/>
+						{window === "week" ? (
+							<MergeWeekHeatmap
+								pullRequests={mergedInWindow}
+								weekStart={windowStart("week")}
+							/>
+						) : window === "month" ? (
+							<MergeMonthHeatmap
+								pullRequests={mergedInWindow}
+								monthStart={windowStart("month")}
+							/>
+						) : (
+							<MergeDayHeatmap
+								pullRequests={mergedInWindow}
+								day={windowStart(window)}
+								dayLabel={window}
+							/>
+						)}
 					</div>
 					<main style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: "auto" }}>
 					{error && <Notice theme={theme} danger>{error}</Notice>}
 					{repoErrors.map((item) => <Notice key={item} theme={theme} danger>{item}</Notice>)}
 					{truncatedRepos.length > 0 && (
 						<Notice theme={theme}>
-							GitHub search is limited to 1,000 results for: {truncatedRepos.join(", ")}.
+							GitHub search is limited to 1,000 results per repository: {truncatedRepos.join(", ")}.
 						</Notice>
 					)}
 					{loading && visiblePullRequests.length === 0 ? (
