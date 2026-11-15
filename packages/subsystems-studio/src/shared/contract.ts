@@ -2702,6 +2702,15 @@ export type StudioRequests = {
 			truncatedRepos?: string[];
 		};
 	};
+	searchMergedPullRequestsByAuthor: {
+		params: { owner: string; since: string; author: string };
+		response: {
+			ok: boolean;
+			pullRequests: MergedPullRequest[];
+			truncated?: boolean;
+			error?: string;
+		};
+	};
 	getMergedPullRequestFiles: {
 		params: { owner: string; repo: string; number: number };
 		response: {

@@ -58,6 +58,8 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 	const { theme } = useTheme();
 	const [repos, setRepos] = useState<MergedPullRequestRepo[] | null>(null);
 	const [owner, setOwner] = useState("");
+	const [githubLogin, setGithubLogin] = useState<string | null>(null);
+	const [identityReady, setIdentityReady] = useState(false);
 	const [window, setWindow] = useState<MergedWindow>("today");
 	const [selectedRepos, setSelectedRepos] = useState<ReadonlySet<string>>(() => new Set());
 	const [selectedAuthors, setSelectedAuthors] = useState<ReadonlySet<string>>(() => new Set());
@@ -70,6 +72,7 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 	const [loading, setLoading] = useState(false);
 	const loadingRef = useRef(false);
 	const [queryProgress, setQueryProgress] = useState({ queried: 0, total: 0 });
+	const [queryStage, setQueryStage] = useState<"priority" | "repos" | "done">("repos");
 	const [searchedRepoKeys, setSearchedRepoKeys] = useState<ReadonlySet<string>>(() => new Set());
 	const [error, setError] = useState<string | null>(null);
 	const [repoErrors, setRepoErrors] = useState<string[]>([]);
@@ -152,6 +155,23 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 	useEffect(() => {
 		void refreshRepos();
 	}, [refreshRepos]);
+	useEffect(() => {
+		let cancelled = false;
+		void electrobun.rpc!.request
+			.getUserIdentity({})
+			.then((identity) => {
+				if (!cancelled && identity.source === "gh") {
+					setGithubLogin(identity.login ?? null);
+				}
+			})
+			.catch(() => {})
+			.finally(() => {
+				if (!cancelled) setIdentityReady(true);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
 	const owners = useMemo(
 		() => [...new Set((repos ?? []).map((repo) => repo.owner))].sort((a, b) => a.localeCompare(b)),
@@ -189,7 +209,7 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 	}, []);
 
 	const loadPullRequests = useCallback(() => {
-		if (!active || !owner || repos === null) return undefined;
+		if (!active || !owner || repos === null || !identityReady) return undefined;
 		const id = ++requestId.current;
 		const sinceStart = windowStart(window);
 		// Query a day wider than the local window; GitHub indexes merge dates in UTC.
@@ -203,12 +223,64 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 		setPullRequests([]);
 		setQueryProgress({ queried: 0, total: orgRepos.length });
 		setSearchedRepoKeys(new Set());
+		setQueryStage(githubLogin ? "priority" : "repos");
 		void (async () => {
 			const accumulated = new Map<string, MergedPullRequest>();
 			const errors: string[] = [];
 			const truncated = new Set<string>();
 			try {
-				for (const [index, repo] of orgRepos.entries()) {
+				const priorityRepoKeys = new Set<string>();
+				if (githubLogin) {
+					try {
+						const priority = await electrobun.rpc!.request.searchMergedPullRequestsByAuthor({
+							owner,
+							since,
+							author: githubLogin,
+						});
+						if (id !== requestId.current) return;
+						if (priority.ok) {
+							for (const pr of priority.pullRequests) {
+								const repoKey = `pkg:github/${pr.owner}/${pr.repo}`;
+								if (!orgRepoKeys.has(repoKey)) continue;
+								priorityRepoKeys.add(repoKey.toLowerCase());
+								accumulated.set(`${pr.owner}/${pr.repo}#${pr.number}`, pr);
+							}
+							setPullRequests(
+								[...accumulated.values()].sort(
+									(a, b) => Date.parse(b.mergedAt) - Date.parse(a.mergedAt),
+								),
+							);
+						} else if (priority.error) {
+							errors.push(`Signed-in user PR search: ${priority.error}`);
+							setRepoErrors([...errors]);
+							if (/403|rate.?limit/i.test(priority.error)) {
+								setError(priority.error);
+								return;
+							}
+						}
+					} catch (err) {
+						if (id !== requestId.current) return;
+						const message = err instanceof Error ? err.message : String(err);
+						errors.push(`Signed-in user PR search: ${message}`);
+						setRepoErrors([...errors]);
+						if (/403|rate.?limit/i.test(message)) {
+							setError(message);
+							return;
+						}
+					}
+				}
+				if (id !== requestId.current) return;
+				setQueryStage("repos");
+				const orderedRepos = [
+					...orgRepos.filter((repo) =>
+						priorityRepoKeys.has(`pkg:github/${repo.owner}/${repo.name}`.toLowerCase()),
+					),
+					...orgRepos.filter(
+						(repo) =>
+							!priorityRepoKeys.has(`pkg:github/${repo.owner}/${repo.name}`.toLowerCase()),
+					),
+				];
+				for (const [index, repo] of orderedRepos.entries()) {
 					if (id !== requestId.current) return;
 					try {
 						const result = await electrobun.rpc!.request.listMergedPullRequests({
@@ -251,11 +323,12 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 				if (id === requestId.current) {
 					loadingRef.current = false;
 					setLoading(false);
+					setQueryStage("done");
 				}
 			}
 		})();
 		return id;
-	}, [active, owner, orgRepos, repos, window]);
+	}, [active, githubLogin, identityReady, orgRepoKeys, owner, orgRepos, repos, window]);
 
 	useEffect(() => {
 		const id = loadPullRequests();
@@ -640,7 +713,9 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 					{loading ? (
 						<span role="status" aria-live="polite" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
 							<Loader2 size={11} className="principal-studio-spin" aria-hidden="true" />
-							Repos searched {queryProgress.queried}/{queryProgress.total}
+							{queryStage === "priority"
+								? "Finding your PR repos…"
+								: `Repos searched ${queryProgress.queried}/${queryProgress.total}`}
 						</span>
 					) : diffProgress.total === 0 ? (
 						`${visiblePullRequests.length} merged`

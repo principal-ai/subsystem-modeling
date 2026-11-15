@@ -188,6 +188,107 @@ async function searchRepoMergedPullRequests(
 	};
 }
 
+/** Find the signed-in user's merged PRs across an org to prioritize repo scans. */
+export async function searchMergedPullRequestsByAuthor(opts: {
+	owner: string;
+	since: string;
+	author: string;
+}): Promise<{
+	ok: boolean;
+	pullRequests: MergedPullRequest[];
+	truncated?: boolean;
+	error?: string;
+}> {
+	const owner = opts.owner.trim();
+	const author = opts.author.trim();
+	const since = (opts.since ?? "").trim().slice(0, 10);
+	if (!/^[a-z\d-]+$/i.test(owner) || !/^[a-z\d-]+$/i.test(author)) {
+		return { ok: false, pullRequests: [], error: "Choose a valid GitHub organization and author." };
+	}
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(since)) {
+		return { ok: false, pullRequests: [], error: "Choose a time window to load merged PRs." };
+	}
+	const token = resolveGithubToken();
+	if (!token) {
+		return {
+			ok: false,
+			pullRequests: [],
+			error: "No GitHub CLI token found. Sign in with `gh auth login` to load merged PRs.",
+		};
+	}
+
+	const query = [
+		`org:${owner}`,
+		"is:pr",
+		"is:merged",
+		`author:${author}`,
+		`merged:>=${since}`,
+	].join(" ");
+	const pullRequests: MergedPullRequest[] = [];
+	let total = 0;
+	try {
+		for (let page = 1; page <= SEARCH_PAGE_LIMIT; page++) {
+			const params = new URLSearchParams({
+				q: query,
+				per_page: String(SEARCH_PAGE_SIZE),
+				page: String(page),
+				sort: "updated",
+				order: "desc",
+			});
+			await waitForSearchRequestSlot();
+			const response = await fetch(
+				`https://api.github.com/search/issues?${params.toString()}`,
+				{
+					headers: {
+						Accept: "application/vnd.github+json",
+						Authorization: `Bearer ${token}`,
+						"X-GitHub-Api-Version": "2022-11-28",
+					},
+				},
+			);
+			const body = (await response.json().catch(() => ({}))) as SearchResponse;
+			if (!response.ok) {
+				throw new Error(
+					body.message
+						? `GitHub API ${response.status}: ${body.message}`
+						: `GitHub API request failed (${response.status})`,
+				);
+			}
+			if (page === 1) total = body.total_count ?? 0;
+			for (const item of body.items ?? []) {
+				if (!item.pull_request || !item.closed_at) continue;
+				const identity = repoIdentityFromIssue(item);
+				if (!identity || identity.owner.toLowerCase() !== owner.toLowerCase()) continue;
+				pullRequests.push({
+					owner: identity.owner,
+					repo: identity.name,
+					number: item.number,
+					title: item.title,
+					url: item.html_url,
+					author: item.user?.login,
+					authorAvatarUrl: item.user?.avatar_url,
+					mergedAt: item.closed_at,
+				});
+			}
+			if ((body.items?.length ?? 0) < SEARCH_PAGE_SIZE || page * SEARCH_PAGE_SIZE >= total) {
+				break;
+			}
+		}
+		pullRequests.sort((a, b) => Date.parse(b.mergedAt) - Date.parse(a.mergedAt));
+		return {
+			ok: true,
+			pullRequests,
+			truncated: total > SEARCH_PAGE_SIZE * SEARCH_PAGE_LIMIT,
+		};
+	} catch (error) {
+		return {
+			ok: false,
+			pullRequests: [],
+			error: error instanceof Error ? error.message : String(error),
+		};
+	}
+}
+
 async function mergedPullRequestFiles(
 	pullRequest: Pick<MergedPullRequest, "owner" | "repo" | "number">,
 	token: string,

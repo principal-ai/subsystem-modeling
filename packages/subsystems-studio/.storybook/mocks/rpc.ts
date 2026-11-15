@@ -151,15 +151,29 @@ const request: RpcRequest = {
     };
   },
   listMergedPullRequests: async (params) => {
-    const { owner, since } = params as { owner: string; since?: string };
+    const { owner, since, repo } = params as { owner: string; since?: string; repo?: string };
       return {
       ok: true,
       pullRequests: mergedPullRequests.filter((pr) =>
         pr.owner.toLowerCase() === owner.toLowerCase() &&
+        (!repo || pr.repo.toLowerCase() === repo.toLowerCase()) &&
         (!since || pr.mergedAt.slice(0, 10) >= since),
       ),
       errors: [],
       truncatedRepos: [],
+    };
+  },
+  getUserIdentity: async () => ({ source: "gh", login: "octocat" }),
+  searchMergedPullRequestsByAuthor: async (params) => {
+    const { owner, since, author } = params as { owner: string; since: string; author: string };
+    return {
+      ok: true,
+      pullRequests: mergedPullRequests.filter((pr) =>
+        pr.owner.toLowerCase() === owner.toLowerCase() &&
+        pr.author?.toLowerCase() === author.toLowerCase() &&
+        pr.mergedAt.slice(0, 10) >= since,
+      ),
+      truncated: false,
     };
   },
   getMergedPullRequestFiles: async (params) => {

@@ -75,6 +75,7 @@ import {
 	getMergedPullRequestFiles,
 	listMergedPullRequestRepos,
 	listMergedPullRequests,
+	searchMergedPullRequestsByAuthor,
 } from "./merged-pull-requests";
 import {
 	getRepoCreatedAt,
@@ -3078,6 +3079,8 @@ const requests: RequestHandlers = {
 			}),
 			listMergedPullRequests: async ({ owner, since, repo }) =>
 				listMergedPullRequests({ owner, since, repo }),
+			searchMergedPullRequestsByAuthor: async ({ owner, since, author }) =>
+				searchMergedPullRequestsByAuthor({ owner, since, author }),
 			getMergedPullRequestFiles: async ({ owner, repo, number }) =>
 				getMergedPullRequestFiles({ owner, repo, number }),
 			listRepoCommits: async ({ owner, since }) =>
