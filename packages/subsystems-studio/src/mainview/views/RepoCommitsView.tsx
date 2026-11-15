@@ -17,6 +17,13 @@ import { CenteredMessage, relativeTime } from "../ui";
 import { groupContributorsByRepo, ContributorAvatarFan } from "../components/ContributorAvatarFan";
 import { FileChangeList, summarizeFileChanges } from "../components/FileChangeList";
 import { LineChangeScaleBar, type LineStats } from "../components/LineChangeBar";
+import { RepoActivityDayHeatmap } from "../components/RepoActivityDayHeatmap";
+import { RepoActivityMonthHeatmap } from "../components/RepoActivityMonthHeatmap";
+import { RepoActivityWeekHeatmap } from "../components/RepoActivityWeekHeatmap";
+import {
+	isInActivityTimeRange,
+	type ActivityTimeRange,
+} from "../components/activityTimeRange";
 import { MODEL_LAYER_COLORS } from "../components/SubsystemCoverageMapCards";
 import { RepoActivityMap, type RepoActivityLayer } from "./RepoActivityMap";
 import {
@@ -48,6 +55,7 @@ export function RepoCommitsView() {
 	const [window, setWindow] = useState<CommitWindow>("today");
 	const [selectedRepos, setSelectedRepos] = useState<ReadonlySet<string>>(() => new Set());
 	const [selectedAuthors, setSelectedAuthors] = useState<ReadonlySet<string>>(() => new Set());
+	const [selectedTimeRange, setSelectedTimeRange] = useState<ActivityTimeRange | null>(null);
 	const [authorsOpen, setAuthorsOpen] = useState(false);
 	const [commits, setCommits] = useState<RepoCommit[]>([]);
 	const [showFailedRepos, setShowFailedRepos] = useState(false);
@@ -121,6 +129,7 @@ export function RepoCommitsView() {
 	useEffect(() => {
 		setSelectedAuthors(new Set());
 		setAuthorsOpen(false);
+		setSelectedTimeRange(null);
 	}, [owner, window]);
 
 	const toggleRepo = useCallback((repoKey: string) => {
@@ -209,11 +218,20 @@ export function RepoCommitsView() {
 			),
 		[authors],
 	);
+	const timeFilteredCommits = useMemo(
+		() =>
+			selectedTimeRange
+				? commitsInWindow.filter((commit) =>
+						isInActivityTimeRange(commit.committedAt, selectedTimeRange),
+					)
+				: commitsInWindow,
+		[commitsInWindow, selectedTimeRange],
+	);
 	const authorFilteredCommits = useMemo(
 		() => selectedAuthors.size === 0
-			? commitsInWindow
-			: commitsInWindow.filter((commit) => commit.author != null && selectedAuthors.has(commit.author)),
-		[commitsInWindow, selectedAuthors],
+			? timeFilteredCommits
+			: timeFilteredCommits.filter((commit) => commit.author != null && selectedAuthors.has(commit.author)),
+		[timeFilteredCommits, selectedAuthors],
 	);
 	const contributorsByRepo = useMemo(
 		() =>
@@ -299,6 +317,9 @@ export function RepoCommitsView() {
 		setSelectedAuthors((current) => {
 			return current.has(login) ? new Set<string>() : new Set([login]);
 		});
+	}, []);
+	const selectTimeRange = useCallback((range: ActivityTimeRange) => {
+		setSelectedTimeRange((current) => current?.key === range.key ? null : range);
 	}, []);
 	// After a checkout moves, re-read the local log against the new HEAD.
 	const handleRepoFastForwarded = useCallback(() => {
@@ -558,7 +579,36 @@ export function RepoCommitsView() {
 						onRepoFastForwarded={handleRepoFastForwarded}
 					/>
 				</div>
-				<main style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
+				<div style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
+					<div style={{ flexShrink: 0 }}>
+						{window === "week" ? (
+							<RepoActivityWeekHeatmap
+								timestamps={commitsInWindow.map((commit) => commit.committedAt)}
+								weekStart={windowStart("week")}
+								activityNoun="commit"
+								selectedRangeKey={selectedTimeRange?.key}
+								onSelectRange={selectTimeRange}
+							/>
+						) : window === "month" ? (
+							<RepoActivityMonthHeatmap
+								timestamps={commitsInWindow.map((commit) => commit.committedAt)}
+								monthStart={windowStart("month")}
+								activityNoun="commit"
+								selectedRangeKey={selectedTimeRange?.key}
+								onSelectRange={selectTimeRange}
+							/>
+						) : (
+							<RepoActivityDayHeatmap
+								timestamps={commitsInWindow.map((commit) => commit.committedAt)}
+								day={windowStart(window)}
+								dayLabel={window}
+								activityNoun="commit"
+								selectedRangeKey={selectedTimeRange?.key}
+								onSelectRange={selectTimeRange}
+							/>
+						)}
+					</div>
+					<main style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: "auto" }}>
 					{error && <Notice theme={theme} danger>{error}</Notice>}
 					{repoErrors.map((item) => <Notice key={item} theme={theme} danger>{item}</Notice>)}
 					{truncatedRepos.length > 0 && (
@@ -592,7 +642,8 @@ export function RepoCommitsView() {
 							})}
 						</div>
 					)}
-				</main>
+					</main>
+				</div>
 			</div>
 		</div>
 	);

@@ -1,14 +1,17 @@
 /**
- * MergeDayHeatmap — one day of merged-PR activity in ten-minute buckets.
+ * RepoActivityDayHeatmap — one day of repo activity in ten-minute buckets.
  *
  * A 24 × 6 grid: one column per hour and one row per ten-minute block, so the
- * day's rhythm reads as a block map. Cell color tracks merge count; the
+ * day's rhythm reads as a block map. Cell color tracks activity count; the
  * current ten-minute cell pulses on today. Hover gives the exact interval.
  */
 
 import type { CSSProperties } from "react";
 import { useTheme } from "@principal-ade/industry-theme";
-import type { MergedPullRequest } from "../../shared/contract";
+import {
+	createActivityTimeRange,
+	type ActivityTimeRange,
+} from "./activityTimeRange";
 
 const BUCKETS_PER_HOUR = 6;
 const BUCKETS_PER_DAY = 24 * BUCKETS_PER_HOUR;
@@ -31,28 +34,34 @@ function bucketTime(index: number): string {
 	return `${label(start)}–${label(end)}`;
 }
 
-export function MergeDayHeatmap({
-	pullRequests,
+export function RepoActivityDayHeatmap({
+	timestamps,
 	day,
 	dayLabel,
+	activityNoun,
+	selectedRangeKey,
+	onSelectRange,
 }: {
-	pullRequests: readonly MergedPullRequest[];
+	timestamps: readonly string[];
 	/** Local day start whose 24 hours are shown. */
 	day: Date;
 	/** Copy for the summary, e.g. "today" or "yesterday". */
 	dayLabel: string;
+	activityNoun: "merge" | "commit";
+	selectedRangeKey?: string;
+	onSelectRange?: (range: ActivityTimeRange) => void;
 }) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 	const border = theme.colors.border ?? "#333";
 	const buckets = new Array<number>(BUCKETS_PER_DAY).fill(0);
 
-	for (const pr of pullRequests) {
-		const merged = new Date(pr.mergedAt);
-		if (Number.isNaN(merged.getTime()) || !sameLocalDay(merged, day)) continue;
+	for (const timestamp of timestamps) {
+		const activity = new Date(timestamp);
+		if (Number.isNaN(activity.getTime()) || !sameLocalDay(activity, day)) continue;
 		const index =
-			merged.getHours() * BUCKETS_PER_HOUR +
-			Math.floor(merged.getMinutes() / 10);
+			activity.getHours() * BUCKETS_PER_HOUR +
+			Math.floor(activity.getMinutes() / 10);
 		if (index >= 0 && index < BUCKETS_PER_DAY) buckets[index]! += 1;
 	}
 
@@ -72,11 +81,17 @@ export function MergeDayHeatmap({
 		? now.getHours() * BUCKETS_PER_HOUR + Math.floor(now.getMinutes() / 10)
 		: -1;
 	const peakLabel = peakIndex >= 0 ? bucketTime(peakIndex) : null;
+	const activityPlural = `${activityNoun}s`;
+	const activityCount = `${total} ${total === 1 ? activityNoun : activityPlural}`;
+	const activitySummary =
+		activityNoun === "merge"
+			? `${total} merged ${dayLabel}`
+			: `${activityCount} ${dayLabel}`;
 
 	return (
 		<div
-			role="img"
-			aria-label={`Merge activity for ${dayLabel}: ${total} merged pull request${total === 1 ? "" : "s"}${peakLabel ? `, busiest ${peakLabel}` : ""}`}
+			role="group"
+			aria-label={`${activityNoun === "merge" ? "Merge" : "Commit"} activity for ${dayLabel}: ${activityCount}${peakLabel ? `, busiest ${peakLabel}` : ""}`}
 			style={{
 				maxWidth: 960,
 				margin: "0 auto",
@@ -101,7 +116,7 @@ export function MergeDayHeatmap({
 						color: theme.colors.text,
 					}}
 				>
-					Merge rhythm
+					{activityNoun === "merge" ? "Merge rhythm" : "Commit rhythm"}
 				</span>
 				<span
 					style={{
@@ -111,27 +126,27 @@ export function MergeDayHeatmap({
 						whiteSpace: "nowrap",
 					}}
 				>
-					{total} merged {dayLabel}
+					{activitySummary}
 					{peakLabel && peak > 0 ? ` · busiest ${peakLabel}` : ""}
 				</span>
 			</div>
 
 			<style>{`
-@keyframes merge-now-blink {
+@keyframes activity-now-blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }
 }
-@keyframes merge-now-border-pulse {
-  0%, 100% { box-shadow: inset 0 0 0 1px var(--merge-now-ring), 0 0 0 0 var(--merge-now-glow); }
-  50% { box-shadow: inset 0 0 0 1px var(--merge-now-ring), 0 0 0 3px var(--merge-now-glow); }
+@keyframes activity-now-border-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 1px var(--activity-now-ring), 0 0 0 0 var(--activity-now-glow); }
+  50% { box-shadow: inset 0 0 0 1px var(--activity-now-ring), 0 0 0 3px var(--activity-now-glow); }
 }
-.merge-now-cell { animation: merge-now-blink 2.4s ease-in-out infinite; }
-.merge-now-empty-cell { animation: merge-now-border-pulse 2.4s ease-in-out infinite; }
+.activity-now-cell { animation: activity-now-blink 2.4s ease-in-out infinite; }
+.activity-now-empty-cell { animation: activity-now-border-pulse 2.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .merge-now-cell { animation: none; }
-  .merge-now-empty-cell {
+  .activity-now-cell { animation: none; }
+  .activity-now-empty-cell {
     animation: none;
-    box-shadow: inset 0 0 0 1px var(--merge-now-ring);
+    box-shadow: inset 0 0 0 1px var(--activity-now-ring);
   }
 }
 `}</style>
@@ -141,8 +156,8 @@ export function MergeDayHeatmap({
 					gridTemplateColumns: "repeat(24, minmax(0, 1fr))",
 					gridTemplateRows: `repeat(${BUCKETS_PER_HOUR}, auto)`,
 					gap: 2,
-					"--merge-now-ring": theme.colors.primary,
-					"--merge-now-glow": `${theme.colors.primary}55`,
+					"--activity-now-ring": theme.colors.primary,
+					"--activity-now-glow": `${theme.colors.primary}55`,
 				} as CSSProperties}
 			>
 				{Array.from({ length: BUCKETS_PER_HOUR }, (_, row) =>
@@ -155,18 +170,41 @@ export function MergeDayHeatmap({
 							count > 0 ? 0.25 + 0.75 * Math.sqrt(count / peak) : 0;
 						const isNow = index === currentBucketIndex;
 						const isNowEmpty = isNow && count === 0;
+						const start = new Date(day);
+						start.setHours(
+							Math.floor(index / BUCKETS_PER_HOUR),
+							(index % BUCKETS_PER_HOUR) * 10,
+							0,
+							0,
+						);
+						const end = new Date(start);
+						end.setMinutes(end.getMinutes() + 10);
+						const range = createActivityTimeRange(
+							start,
+							end,
+							`${dayLabel} · ${bucketTime(index)}`,
+						);
+						const isSelected = selectedRangeKey === range.key;
 						return (
-							<div
+							<button
+								type="button"
 								key={index}
-								title={`${bucketTime(index)} · ${count} merge${count === 1 ? "" : "s"}`}
+								aria-label={`${dayLabel}, ${bucketTime(index)} · ${count} ${count === 1 ? activityNoun : activityPlural}`}
+								aria-pressed={isSelected}
+								title={`${bucketTime(index)} · ${count} ${count === 1 ? activityNoun : activityPlural}`}
+								onClick={() => onSelectRange?.(range)}
 								className={
 									isNowEmpty
-										? "merge-now-empty-cell"
+										? "activity-now-empty-cell"
 										: isNow
-											? "merge-now-cell"
+											? "activity-now-cell"
 											: undefined
 								}
 								style={{
+									appearance: "none",
+									border: "none",
+									padding: 0,
+									cursor: "pointer",
 									aspectRatio: "1 / 1",
 									width: "100%",
 									minWidth: 0,
@@ -183,6 +221,10 @@ export function MergeDayHeatmap({
 											: count > 0
 												? strength
 												: 0.45,
+									outline: isSelected
+										? `2px solid ${theme.colors.text}`
+										: undefined,
+									outlineOffset: -2,
 								}}
 							/>
 						);

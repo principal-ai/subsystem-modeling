@@ -22,9 +22,13 @@ import {
 } from "../components/ContributorAvatarFan";
 import { FileChangeList, summarizeFileChanges } from "../components/FileChangeList";
 import { LineChangeScaleBar, type LineStats } from "../components/LineChangeBar";
-import { MergeDayHeatmap } from "../components/MergeDayHeatmap";
-import { MergeMonthHeatmap } from "../components/MergeMonthHeatmap";
-import { MergeWeekHeatmap } from "../components/MergeWeekHeatmap";
+import { RepoActivityDayHeatmap } from "../components/RepoActivityDayHeatmap";
+import { RepoActivityMonthHeatmap } from "../components/RepoActivityMonthHeatmap";
+import { RepoActivityWeekHeatmap } from "../components/RepoActivityWeekHeatmap";
+import {
+	isInActivityTimeRange,
+	type ActivityTimeRange,
+} from "../components/activityTimeRange";
 import { PullRequestListSkeleton } from "../components/PullRequestListSkeleton";
 import { MODEL_LAYER_COLORS } from "../components/SubsystemCoverageMapCards";
 import { MergedPullRequestRepoMap, pullRequestLayerId } from "./MergedPullRequestRepoMap";
@@ -57,6 +61,7 @@ export function MergedPullRequestsView() {
 	const [window, setWindow] = useState<MergedWindow>("today");
 	const [selectedRepos, setSelectedRepos] = useState<ReadonlySet<string>>(() => new Set());
 	const [selectedAuthors, setSelectedAuthors] = useState<ReadonlySet<string>>(() => new Set());
+	const [selectedTimeRange, setSelectedTimeRange] = useState<ActivityTimeRange | null>(null);
 	const [authorsOpen, setAuthorsOpen] = useState(false);
 	const [pullRequests, setPullRequests] = useState<MergedPullRequest[]>([]);
 	const [showFailedRepos, setShowFailedRepos] = useState(false);
@@ -168,6 +173,7 @@ export function MergedPullRequestsView() {
 	useEffect(() => {
 		setSelectedAuthors(new Set());
 		setAuthorsOpen(false);
+		setSelectedTimeRange(null);
 	}, [owner, window]);
 
 	const toggleRepo = useCallback((repoKey: string) => {
@@ -267,11 +273,20 @@ export function MergedPullRequestsView() {
 			),
 		[authors],
 	);
+	const timeFilteredPullRequests = useMemo(
+		() =>
+			selectedTimeRange
+				? mergedInWindow.filter((pr) =>
+						isInActivityTimeRange(pr.mergedAt, selectedTimeRange),
+					)
+				: mergedInWindow,
+		[mergedInWindow, selectedTimeRange],
+	);
 	const authorFilteredPullRequests = useMemo(
 		() => selectedAuthors.size === 0
-			? mergedInWindow
-			: mergedInWindow.filter((pr) => pr.author != null && selectedAuthors.has(pr.author)),
-		[mergedInWindow, selectedAuthors],
+			? timeFilteredPullRequests
+			: timeFilteredPullRequests.filter((pr) => pr.author != null && selectedAuthors.has(pr.author)),
+		[timeFilteredPullRequests, selectedAuthors],
 	);
 	const mappedPullRequests = useMemo(
 		() => authorFilteredPullRequests.map((pr) => ({
@@ -394,6 +409,9 @@ export function MergedPullRequestsView() {
 		setSelectedAuthors((current) => {
 			return current.has(login) ? new Set<string>() : new Set([login]);
 		});
+	}, []);
+	const selectTimeRange = useCallback((range: ActivityTimeRange) => {
+		setSelectedTimeRange((current) => current?.key === range.key ? null : range);
 	}, []);
 	// After a checkout moves, re-check for merges against the new HEAD.
 	const handleRepoFastForwarded = useCallback(() => {
@@ -665,20 +683,29 @@ export function MergedPullRequestsView() {
 				>
 					<div style={{ flexShrink: 0 }}>
 						{window === "week" ? (
-							<MergeWeekHeatmap
-								pullRequests={mergedInWindow}
+							<RepoActivityWeekHeatmap
+								timestamps={mergedInWindow.map((pr) => pr.mergedAt)}
 								weekStart={windowStart("week")}
+								activityNoun="merge"
+								selectedRangeKey={selectedTimeRange?.key}
+								onSelectRange={selectTimeRange}
 							/>
 						) : window === "month" ? (
-							<MergeMonthHeatmap
-								pullRequests={mergedInWindow}
+							<RepoActivityMonthHeatmap
+								timestamps={mergedInWindow.map((pr) => pr.mergedAt)}
 								monthStart={windowStart("month")}
+								activityNoun="merge"
+								selectedRangeKey={selectedTimeRange?.key}
+								onSelectRange={selectTimeRange}
 							/>
 						) : (
-							<MergeDayHeatmap
-								pullRequests={mergedInWindow}
+							<RepoActivityDayHeatmap
+								timestamps={mergedInWindow.map((pr) => pr.mergedAt)}
 								day={windowStart(window)}
 								dayLabel={window}
+								activityNoun="merge"
+								selectedRangeKey={selectedTimeRange?.key}
+								onSelectRange={selectTimeRange}
 							/>
 						)}
 					</div>

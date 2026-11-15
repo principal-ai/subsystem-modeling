@@ -1,12 +1,16 @@
 /**
- * MergeWeekHeatmap — merged-PR activity across a Sunday–Saturday week.
+ * RepoActivityWeekHeatmap — hourly activity across a Sunday–Saturday week.
  *
  * Each weekday has four columns and six rows of hourly intervals. Time runs
- * bottom-up within each six-hour column; MergeDayHeatmap keeps finer detail.
+ * left-to-right across each row, then bottom-up; the daily map keeps finer detail.
  */
 
+import type { CSSProperties } from "react";
 import { useTheme } from "@principal-ade/industry-theme";
-import type { MergedPullRequest } from "../../shared/contract";
+import {
+	createActivityTimeRange,
+	type ActivityTimeRange,
+} from "./activityTimeRange";
 
 const BUCKETS_PER_DAY = 24;
 const ROWS_PER_COLUMN = 6;
@@ -36,13 +40,19 @@ function formatInterval(bucket: number): string {
 	return `${String(startHour).padStart(2, "0")}:00–${String(endHour).padStart(2, "0")}:00`;
 }
 
-export function MergeWeekHeatmap({
-	pullRequests,
+export function RepoActivityWeekHeatmap({
+	timestamps,
 	weekStart,
+	activityNoun,
+	selectedRangeKey,
+	onSelectRange,
 }: {
-	pullRequests: readonly MergedPullRequest[];
+	timestamps: readonly string[];
 	/** Local Sunday at the beginning of the week. */
 	weekStart: Date;
+	activityNoun: "merge" | "commit";
+	selectedRangeKey?: string;
+	onSelectRange?: (range: ActivityTimeRange) => void;
 }) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -56,14 +66,16 @@ export function MergeWeekHeatmap({
 		new Array<number>(BUCKETS_PER_DAY).fill(0),
 	);
 
-	for (const pr of pullRequests) {
-		const merged = new Date(pr.mergedAt);
-		if (Number.isNaN(merged.getTime())) continue;
-		const dayIndex = days.findIndex((day) => sameLocalDay(day, merged));
+	for (const timestamp of timestamps) {
+		const activity = new Date(timestamp);
+		if (Number.isNaN(activity.getTime())) continue;
+		const dayIndex = days.findIndex((day) => sameLocalDay(day, activity));
 		if (dayIndex >= 0) {
-			buckets[dayIndex]![merged.getHours()]! += 1;
+			buckets[dayIndex]![activity.getHours()]! += 1;
 		}
 	}
+	const activityPlural = `${activityNoun}s`;
+	const activityTitle = activityNoun === "merge" ? "Merge" : "Commit";
 
 	let total = 0;
 	let peak = 0;
@@ -79,6 +91,7 @@ export function MergeWeekHeatmap({
 			}
 		});
 	});
+	const activityCount = `${total} ${total === 1 ? activityNoun : activityPlural}`;
 
 	const now = new Date();
 	const todayIndex = days.findIndex((day) => sameLocalDay(day, now));
@@ -89,14 +102,16 @@ export function MergeWeekHeatmap({
 
 	return (
 		<div
-			role="img"
-			aria-label={`Merge activity this week: ${total} merged pull request${total === 1 ? "" : "s"}${peakLabel ? `, busiest ${peakLabel}` : ""}`}
+			role="group"
+			aria-label={`${activityTitle} activity this week: ${total} ${total === 1 ? activityNoun : activityPlural}${peakLabel ? `, busiest ${peakLabel}` : ""}`}
 			style={{
 				maxWidth: 960,
 				margin: "0 auto",
 				padding: "10px 12px 9px",
 				borderBottom: `1px solid ${border}`,
-			}}
+				"--activity-week-now-ring": theme.colors.primary,
+				"--activity-week-now-glow": `${theme.colors.primary}55`,
+			} as CSSProperties}
 		>
 			<div
 				style={{
@@ -115,7 +130,7 @@ export function MergeWeekHeatmap({
 						color: theme.colors.text,
 					}}
 				>
-					Weekly merge rhythm
+					Weekly {activityNoun} rhythm
 				</span>
 				<span
 					style={{
@@ -125,19 +140,28 @@ export function MergeWeekHeatmap({
 						whiteSpace: "nowrap",
 					}}
 				>
-					{total} merged this week
+					{activityCount} this week
 					{peakLabel && peak > 0 ? ` · busiest ${peakLabel}` : ""}
 				</span>
 			</div>
 
 			<style>{`
-@keyframes merge-week-now-blink {
+@keyframes activity-week-now-blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }
 }
-.merge-week-now-cell { animation: merge-week-now-blink 2.4s ease-in-out infinite; }
+@keyframes activity-week-now-border-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 1px var(--activity-week-now-ring), 0 0 0 0 var(--activity-week-now-glow); }
+  50% { box-shadow: inset 0 0 0 1px var(--activity-week-now-ring), 0 0 0 3px var(--activity-week-now-glow); }
+}
+.activity-week-now-cell { animation: activity-week-now-blink 2.4s ease-in-out infinite; }
+.activity-week-now-empty-cell { animation: activity-week-now-border-pulse 2.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .merge-week-now-cell { animation: none; }
+  .activity-week-now-cell { animation: none; }
+  .activity-week-now-empty-cell {
+    animation: none;
+    box-shadow: inset 0 0 0 1px var(--activity-week-now-ring);
+  }
 }
 `}</style>
 
@@ -160,28 +184,56 @@ export function MergeWeekHeatmap({
 						{Array.from({ length: ROWS_PER_COLUMN }, (_, row) =>
 							Array.from({ length: COLUMNS_PER_DAY }, (_, column) => {
 								const bucket =
-									column * ROWS_PER_COLUMN +
-									(ROWS_PER_COLUMN - 1 - row);
+									(ROWS_PER_COLUMN - 1 - row) * COLUMNS_PER_DAY +
+									column;
 								const count = buckets[dayIndex]![bucket]!;
 								const isNow =
 									dayIndex === todayIndex &&
 									now.getHours() === bucket;
+								const isNowEmpty = isNow && count === 0;
 								const strength =
 									count > 0 ? 0.25 + 0.75 * Math.sqrt(count / peak) : 0;
+								const start = new Date(day);
+								start.setHours(bucket, 0, 0, 0);
+								const end = new Date(start);
+								end.setHours(end.getHours() + 1);
+								const range = createActivityTimeRange(
+									start,
+									end,
+									`${formatDay(day)} · ${formatInterval(bucket)}`,
+								);
+								const isSelected = selectedRangeKey === range.key;
 								return (
-									<div
+									<button
+										type="button"
 										key={bucket}
-										title={`${formatDay(day)} · ${formatInterval(bucket)} · ${count} merge${count === 1 ? "" : "s"}`}
-										className={isNow ? "merge-week-now-cell" : undefined}
+										aria-label={`${formatDay(day)}, ${formatInterval(bucket)} · ${count} ${count === 1 ? activityNoun : activityPlural}`}
+										aria-pressed={isSelected}
+										title={`${formatDay(day)} · ${formatInterval(bucket)} · ${count} ${count === 1 ? activityNoun : activityPlural}`}
+										onClick={() => onSelectRange?.(range)}
+										className={
+											isNowEmpty
+												? "activity-week-now-empty-cell"
+												: isNow
+													? "activity-week-now-cell"
+													: undefined
+										}
 										style={{
+											appearance: "none",
+											border: "none",
+											padding: 0,
+											cursor: "pointer",
 											aspectRatio: "1 / 1",
 											minWidth: 0,
 											borderRadius: 2,
-											background:
-												isNow || count > 0
+											background: isNowEmpty
+												? "transparent"
+												: isNow || count > 0
 													? theme.colors.primary
 													: border,
-											opacity: isNow
+											opacity: isNowEmpty
+												? 1
+												: isNow
 												? undefined
 												: count > 0
 													? strength
@@ -189,6 +241,10 @@ export function MergeWeekHeatmap({
 											boxShadow: isNow
 												? `inset 0 0 0 1px ${theme.colors.primary}`
 												: undefined,
+											outline: isSelected
+												? `2px solid ${theme.colors.text}`
+												: undefined,
+											outlineOffset: -2,
 										}}
 									/>
 								);

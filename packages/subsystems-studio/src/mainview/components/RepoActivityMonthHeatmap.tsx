@@ -1,9 +1,13 @@
 /**
- * MergeMonthHeatmap — daily merged-PR activity in a Sunday-first calendar.
+ * RepoActivityMonthHeatmap — daily repo activity in a Sunday-first calendar.
  */
 
+import type { CSSProperties } from "react";
 import { useTheme } from "@principal-ade/industry-theme";
-import type { MergedPullRequest } from "../../shared/contract";
+import {
+	createActivityTimeRange,
+	type ActivityTimeRange,
+} from "./activityTimeRange";
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -22,13 +26,19 @@ function formatDay(day: Date): string {
 	});
 }
 
-export function MergeMonthHeatmap({
-	pullRequests,
+export function RepoActivityMonthHeatmap({
+	timestamps,
 	monthStart,
+	activityNoun,
+	selectedRangeKey,
+	onSelectRange,
 }: {
-	pullRequests: readonly MergedPullRequest[];
+	timestamps: readonly string[];
 	/** Local first day of the month. */
 	monthStart: Date;
+	activityNoun: "merge" | "commit";
+	selectedRangeKey?: string;
+	onSelectRange?: (range: ActivityTimeRange) => void;
 }) {
 	const { theme } = useTheme();
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
@@ -40,10 +50,10 @@ export function MergeMonthHeatmap({
 	const weekCount = Math.ceil((firstWeekday + daysInMonth) / 7);
 	const dailyCounts = new Map<string, number>();
 
-	for (const pr of pullRequests) {
-		const merged = new Date(pr.mergedAt);
-		if (Number.isNaN(merged.getTime())) continue;
-		const key = localDateKey(merged);
+	for (const timestamp of timestamps) {
+		const activity = new Date(timestamp);
+		if (Number.isNaN(activity.getTime())) continue;
+		const key = localDateKey(activity);
 		dailyCounts.set(key, (dailyCounts.get(key) ?? 0) + 1);
 	}
 
@@ -65,17 +75,22 @@ export function MergeMonthHeatmap({
 	const todayKey = localDateKey(new Date());
 	const peakLabel = peakDay ? formatDay(peakDay) : null;
 	const calendarCellCount = weekCount * DAY_LABELS.length;
+	const activityPlural = `${activityNoun}s`;
+	const activityTitle = activityNoun === "merge" ? "Merge" : "Commit";
+	const activityCount = `${total} ${total === 1 ? activityNoun : activityPlural}`;
 
 	return (
 		<div
-			role="img"
-			aria-label={`Merge activity this month: ${total} merged pull request${total === 1 ? "" : "s"}${peakLabel ? `, busiest ${peakLabel}` : ""}`}
+			role="group"
+			aria-label={`${activityTitle} activity this month: ${total} ${total === 1 ? activityNoun : activityPlural}${peakLabel ? `, busiest ${peakLabel}` : ""}`}
 			style={{
 				maxWidth: 960,
 				margin: "0 auto",
 				padding: "10px 12px 9px",
 				borderBottom: `1px solid ${border}`,
-			}}
+				"--activity-month-now-ring": theme.colors.primary,
+				"--activity-month-now-glow": `${theme.colors.primary}55`,
+			} as CSSProperties}
 		>
 			<div
 				style={{
@@ -94,7 +109,7 @@ export function MergeMonthHeatmap({
 						color: theme.colors.text,
 					}}
 				>
-					Monthly merge activity
+					Monthly {activityNoun} activity
 				</span>
 				<span
 					style={{
@@ -104,10 +119,30 @@ export function MergeMonthHeatmap({
 						whiteSpace: "nowrap",
 					}}
 				>
-					{total} merged this month
+					{activityCount} this month
 					{peakLabel && peakCount > 0 ? ` · busiest ${peakLabel}` : ""}
 				</span>
 			</div>
+
+			<style>{`
+@keyframes activity-month-now-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+@keyframes activity-month-now-border-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 1px var(--activity-month-now-ring), 0 0 0 0 var(--activity-month-now-glow); }
+  50% { box-shadow: inset 0 0 0 1px var(--activity-month-now-ring), 0 0 0 3px var(--activity-month-now-glow); }
+}
+.activity-month-now-cell { animation: activity-month-now-blink 2.4s ease-in-out infinite; }
+.activity-month-now-empty-cell { animation: activity-month-now-border-pulse 2.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .activity-month-now-cell { animation: none; }
+  .activity-month-now-empty-cell {
+    animation: none;
+    box-shadow: inset 0 0 0 1px var(--activity-month-now-ring);
+  }
+}
+`}</style>
 
 			<div
 				style={{
@@ -124,31 +159,64 @@ export function MergeMonthHeatmap({
 
 					const { day, count } = days[dayIndex]!;
 					const isToday = localDateKey(day) === todayKey;
+					const isTodayEmpty = isToday && count === 0;
 					const strength =
 						count > 0 ? 0.25 + 0.75 * Math.sqrt(count / peakCount) : 0;
+					const start = new Date(day);
+					const end = new Date(day);
+					end.setDate(end.getDate() + 1);
+					const range = createActivityTimeRange(start, end, formatDay(day));
+					const isSelected = selectedRangeKey === range.key;
 					return (
-						<div
+						<button
+							type="button"
 							key={localDateKey(day)}
-							title={`${formatDay(day)} · ${count} merge${count === 1 ? "" : "s"}`}
+							aria-label={`${formatDay(day)} · ${count} ${count === 1 ? activityNoun : activityPlural}`}
+							aria-pressed={isSelected}
+							title={`${formatDay(day)} · ${count} ${count === 1 ? activityNoun : activityPlural}`}
+							onClick={() => onSelectRange?.(range)}
+							className={
+								isTodayEmpty
+									? "activity-month-now-empty-cell"
+									: isToday
+										? "activity-month-now-cell"
+										: undefined
+							}
 							style={{
+								appearance: "none",
+								border: "none",
+								padding: 0,
+								cursor: "pointer",
 								aspectRatio: "1 / 1",
 								minWidth: 0,
 								display: "grid",
 								placeItems: "center",
 								borderRadius: 3,
-								background: count > 0 ? theme.colors.primary : border,
+								background: isTodayEmpty
+									? "transparent"
+									: count > 0
+										? theme.colors.primary
+										: border,
 								color: theme.colors.text,
-								opacity: count > 0 ? strength : 0.45,
+								opacity: isTodayEmpty
+									? 1
+									: isToday || count > 0
+										? undefined
+										: 0.45,
 								boxShadow: isToday
 									? `inset 0 0 0 2px ${theme.colors.primary}`
 									: undefined,
+								outline: isSelected
+									? `2px solid ${theme.colors.text}`
+									: undefined,
+								outlineOffset: -2,
 								fontFamily: theme.fonts.monospace,
 								fontSize: theme.fontSizes[0],
 								fontWeight: isToday ? 700 : 400,
 							}}
 						>
 							{day.getDate()}
-						</div>
+						</button>
 					);
 				})}
 			</div>
