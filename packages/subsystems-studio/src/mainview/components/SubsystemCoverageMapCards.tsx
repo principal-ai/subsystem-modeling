@@ -780,15 +780,19 @@ export function SubsystemCoverageMapCards({
 
 	return (
 		<div
+			className="subsystem-coverage-cards-scroll"
 			style={{
 				flex: 1,
 				minHeight: 0,
 				minWidth: 0,
 				overflowY: "auto",
+				scrollbarWidth: "none",
+				msOverflowStyle: "none",
 				padding: 16,
 				background: theme.colors.background,
 			}}
 		>
+			<style>{`.subsystem-coverage-cards-scroll::-webkit-scrollbar{display:none;width:0;height:0}`}</style>
 			{skeletonCount > 0 && <SkeletonStyles />}
 			<div
 				role="list"
