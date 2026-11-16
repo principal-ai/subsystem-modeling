@@ -18,7 +18,7 @@
  * sits beside) the File City canvas in `SubsystemReposMap`.
  */
 
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "@principal-ade/industry-theme";
 import {
 	ArchitectureMapHighlightLayers,
@@ -744,6 +744,51 @@ export function SubsystemCoverageMapCards({
 	const muted = theme.colors.textMuted ?? theme.colors.textSecondary;
 	const modelColors = useMemo(() => collectModelColors(repos), [repos]);
 	const singleRepo = repos.length + skeletonCount === 1;
+	// FLIP reorder animation: when recency sorting moves cards (e.g. a fresh
+	// merge/commit arrives via polling), slide each card from its previous
+	// grid position to its new one.
+	const gridRef = useRef<HTMLDivElement>(null);
+	const prevPositions = useRef(new Map<string, { x: number; y: number }>());
+	useLayoutEffect(() => {
+		const grid = gridRef.current;
+		if (!grid) return;
+		const record = () => {
+			const gridRect = grid.getBoundingClientRect();
+			const next = new Map<string, { x: number; y: number }>();
+			grid.querySelectorAll<HTMLElement>("[data-repo-key]").forEach((el) => {
+				const key = el.dataset["repoKey"];
+				if (!key) return;
+				const rect = el.getBoundingClientRect();
+				next.set(key, { x: rect.left - gridRect.left, y: rect.top - gridRect.top });
+			});
+			prevPositions.current = next;
+		};
+		if (
+			typeof window !== "undefined" &&
+			typeof window.matchMedia === "function" &&
+			window.matchMedia("(prefers-reduced-motion: reduce)").matches
+		) {
+			record();
+			return;
+		}
+		const gridRect = grid.getBoundingClientRect();
+		grid.querySelectorAll<HTMLElement>("[data-repo-key]").forEach((el) => {
+			const key = el.dataset["repoKey"];
+			if (!key) return;
+			const prev = prevPositions.current.get(key);
+			if (!prev) return;
+			const rect = el.getBoundingClientRect();
+			const dx = prev.x - (rect.left - gridRect.left);
+			const dy = prev.y - (rect.top - gridRect.top);
+			if (dx !== 0 || dy !== 0) {
+				el.animate(
+					[{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "translate(0, 0)" }],
+					{ duration: 350, easing: "cubic-bezier(0.4, 0, 0.2, 1)" },
+				);
+			}
+		});
+		record();
+	}, [repos]);
 
 	if (repos.length === 0 && skeletonCount === 0) {
 		return (
@@ -795,6 +840,7 @@ export function SubsystemCoverageMapCards({
 			<style>{`.subsystem-coverage-cards-scroll::-webkit-scrollbar{display:none;width:0;height:0}`}</style>
 			{skeletonCount > 0 && <SkeletonStyles />}
 			<div
+				ref={gridRef}
 				role="list"
 				aria-label={listLabel}
 				style={{
@@ -809,7 +855,7 @@ export function SubsystemCoverageMapCards({
 				}}
 			>
 				{repos.map((repo) => (
-					<div key={repo.repoKey} role="listitem">
+					<div key={repo.repoKey} role="listitem" data-repo-key={repo.repoKey}>
 						<SubsystemCoverageMapCard
 							repo={repo}
 							modelColors={modelColors}

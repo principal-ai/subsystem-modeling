@@ -545,14 +545,38 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 		() => new Set(visiblePullRequests.map((pr) => `pkg:github/${pr.owner}/${pr.repo}`)),
 		[visiblePullRequests],
 	);
-	const mapRepos = useMemo(
-		() =>
-			orgRepos.filter((repo) => {
+	const mapRepos = useMemo(() => {
+		// Most recently merged first, so the city grid tracks the PR list.
+		// Repos with no merged PRs in the current filter keep their
+		// registration order at the end (e.g. before search completes).
+		const latestByRepo = new Map<string, number>();
+		for (const pr of mappedVisiblePullRequests) {
+			const key = `pkg:github/${pr.owner}/${pr.repo}`;
+			const t = Date.parse(pr.mergedAt);
+			if (!Number.isFinite(t)) continue;
+			if ((latestByRepo.get(key) ?? -Infinity) < t) latestByRepo.set(key, t);
+		}
+		const indexByKey = new Map<string, number>(
+			orgRepos.map((repo, index) => [`pkg:github/${repo.owner}/${repo.name}`, index] as [string, number]),
+		);
+		return orgRepos
+			.filter((repo) => {
 				const key = `pkg:github/${repo.owner}/${repo.name}`;
 				return !searchedRepoKeys.has(key) || visibleRepoKeys.has(key);
-			}),
-		[orgRepos, searchedRepoKeys, visibleRepoKeys],
-	);
+			})
+			.sort((a, b) => {
+				const keyA = `pkg:github/${a.owner}/${a.name}`;
+				const keyB = `pkg:github/${b.owner}/${b.name}`;
+				const tA = latestByRepo.get(keyA);
+				const tB = latestByRepo.get(keyB);
+				if (tA == null && tB == null)
+					return (indexByKey.get(keyA) ?? 0) - (indexByKey.get(keyB) ?? 0);
+				if (tA == null) return 1;
+				if (tB == null) return -1;
+				if (tB !== tA) return tB - tA;
+				return (indexByKey.get(keyA) ?? 0) - (indexByKey.get(keyB) ?? 0);
+			});
+	}, [orgRepos, searchedRepoKeys, visibleRepoKeys, mappedVisiblePullRequests]);
 	// With a single repo card there is nothing to disambiguate, so keep city
 	// hover from tinting every PR row. PR hover still drives the map below.
 	const highlightRowsFromRepoHover = mapRepos.length > 1;

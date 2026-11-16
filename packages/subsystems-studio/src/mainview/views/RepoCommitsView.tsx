@@ -321,6 +321,33 @@ export function RepoCommitsView() {
 	const selectTimeRange = useCallback((range: ActivityTimeRange) => {
 		setSelectedTimeRange((current) => current?.key === range.key ? null : range);
 	}, []);
+	// Most recently committed first, so the city grid tracks the commit list.
+	// Repos with no commits in the current filter stay at the end in
+	// registration order.
+	const sortedRepos = useMemo(() => {
+		const latestByRepo = new Map<string, number>();
+		for (const commit of authorFilteredCommits) {
+			const key = `pkg:github/${commit.owner}/${commit.repo}`;
+			const t = Date.parse(commit.committedAt);
+			if (!Number.isFinite(t)) continue;
+			if ((latestByRepo.get(key) ?? -Infinity) < t) latestByRepo.set(key, t);
+		}
+		const indexByKey = new Map<string, number>(
+			orgRepos.map((repo, index) => [`pkg:github/${repo.owner}/${repo.name}`, index] as [string, number]),
+		);
+		return [...orgRepos].sort((a, b) => {
+			const keyA = `pkg:github/${a.owner}/${a.name}`;
+			const keyB = `pkg:github/${b.owner}/${b.name}`;
+			const tA = latestByRepo.get(keyA);
+			const tB = latestByRepo.get(keyB);
+			if (tA == null && tB == null)
+				return (indexByKey.get(keyA) ?? 0) - (indexByKey.get(keyB) ?? 0);
+			if (tA == null) return 1;
+			if (tB == null) return -1;
+			if (tB !== tA) return tB - tA;
+			return (indexByKey.get(keyA) ?? 0) - (indexByKey.get(keyB) ?? 0);
+		});
+	}, [orgRepos, authorFilteredCommits]);
 	// After a checkout moves, re-read the local log against the new HEAD.
 	const handleRepoFastForwarded = useCallback(() => {
 		loadCommits();
@@ -560,7 +587,7 @@ export function RepoCommitsView() {
 					}}
 				>
 					<RepoActivityMap
-						repos={orgRepos}
+						repos={sortedRepos}
 						layersByRepo={layersByRepo}
 						contributorsByRepo={contributorsByRepo}
 						lineStatsByRepo={lineStatsByRepo}
