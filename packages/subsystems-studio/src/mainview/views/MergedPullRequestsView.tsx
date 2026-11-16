@@ -80,6 +80,13 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 	const [fileDiffs, setFileDiffs] = useState<Map<string, PullRequestDiffState>>(() => new Map());
 	const fileDiffsRef = useRef(fileDiffs);
 	const requestId = useRef(0);
+	// Stale-while-revalidate: keep the previous search's PRs on screen while
+	// the next pass runs. loadPullRequests seeds from this ref instead of
+	// blanking the list, so a refresh/poll never flashes an empty merge tab.
+	const pullRequestsRef = useRef(pullRequests);
+	useEffect(() => {
+		pullRequestsRef.current = pullRequests;
+	}, [pullRequests]);
 
 	const updateFileDiff = useCallback((id: string, state: PullRequestDiffState) => {
 		const next = new Map(fileDiffsRef.current);
@@ -220,12 +227,22 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 		setError(null);
 		setRepoErrors([]);
 		setTruncatedRepos([]);
-		setPullRequests([]);
+		// Keep the previous search's results visible while the next pass runs;
+		// per-repo results below replace their own slice as each search lands.
 		setQueryProgress({ queried: 0, total: orgRepos.length });
-		setSearchedRepoKeys(new Set());
 		setQueryStage(githubLogin ? "priority" : "repos");
 		void (async () => {
+			// Seed from the previous search so the tab never blanks: keep PRs
+			// for the current org that still fall inside the new query range.
+			// Each repo's slice is replaced as its own search completes.
 			const accumulated = new Map<string, MergedPullRequest>();
+			for (const pr of pullRequestsRef.current) {
+				const repoKey = `pkg:github/${pr.owner}/${pr.repo}`;
+				if (!orgRepoKeys.has(repoKey)) continue;
+				if (!Number.isFinite(Date.parse(pr.mergedAt))) continue;
+				if (Date.parse(pr.mergedAt) < sinceStart.getTime()) continue;
+				accumulated.set(`${pr.owner}/${pr.repo}#${pr.number}`, pr);
+			}
 			const errors: string[] = [];
 			const truncated = new Set<string>();
 			try {
@@ -298,8 +315,17 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 							const repoKey = `pkg:github/${repo.owner}/${repo.name}`;
 							setSearchedRepoKeys((current) => new Set(current).add(repoKey));
 						}
-						for (const pr of result.pullRequests) {
-							accumulated.set(`${pr.owner}/${pr.repo}#${pr.number}`, pr);
+						// Replace this repo's previous slice so removed merges
+						// disappear as their own search lands (not all at once
+						// when the pass starts). On failure keep the stale
+						// slice instead of blanking it.
+						if (result.ok) {
+							for (const key of [...accumulated.keys()]) {
+								if (key.startsWith(`${owner}/${repo.name}#`)) accumulated.delete(key);
+							}
+							for (const pr of result.pullRequests) {
+								accumulated.set(`${pr.owner}/${pr.repo}#${pr.number}`, pr);
+							}
 						}
 						errors.push(...(result.errors ?? []));
 						for (const item of result.truncatedRepos ?? []) truncated.add(item);
@@ -360,6 +386,15 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 				inWindow(pr.mergedAt, window, now),
 		);
 	}, [pullRequests, window, orgRepoKeys]);
+	const heatmapPullRequests = useMemo(
+		() =>
+			selectedAuthors.size === 0
+				? mergedInWindow
+				: mergedInWindow.filter(
+						(pr) => pr.author != null && selectedAuthors.has(pr.author),
+					),
+		[mergedInWindow, selectedAuthors],
+	);
 	const contributorsByRepo = useMemo(
 		() =>
 			groupContributorsByRepo(
@@ -816,7 +851,7 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 					<div style={{ flexShrink: 0 }}>
 						{window === "week" ? (
 							<RepoActivityWeekHeatmap
-								timestamps={mergedInWindow.map((pr) => pr.mergedAt)}
+								timestamps={heatmapPullRequests.map((pr) => pr.mergedAt)}
 								weekStart={windowStart("week")}
 								activityNoun="merge"
 								selectedRangeKey={selectedTimeRange?.key}
@@ -824,7 +859,7 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 							/>
 						) : window === "month" ? (
 							<RepoActivityMonthHeatmap
-								timestamps={mergedInWindow.map((pr) => pr.mergedAt)}
+								timestamps={heatmapPullRequests.map((pr) => pr.mergedAt)}
 								monthStart={windowStart("month")}
 								activityNoun="merge"
 								selectedRangeKey={selectedTimeRange?.key}
@@ -832,7 +867,7 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 							/>
 						) : (
 							<RepoActivityDayHeatmap
-								timestamps={mergedInWindow.map((pr) => pr.mergedAt)}
+								timestamps={heatmapPullRequests.map((pr) => pr.mergedAt)}
 								day={windowStart(window)}
 								dayLabel={window}
 								activityNoun="merge"

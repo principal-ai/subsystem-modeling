@@ -135,7 +135,9 @@ export const repoMonitorChangeSubscribers = new Set<
 
 const rpc = Electroview.defineRPC<StudioRPC>({
 	// S3 source validation can read several pages before finding model previews.
-	maxRequestTime: 120000,
+	// Repo-monitor tree requests can exceed several minutes on a cold/large
+	// checkout: register and getFileTree each have a 120s timeout plus one retry.
+	maxRequestTime: 600_000,
 	handlers: {
 		requests: {},
 		messages: {

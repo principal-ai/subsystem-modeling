@@ -32,11 +32,11 @@ const RETRY_AFTER_FAILURE_MS = 10_000;
  * Per-request budget for daemon `register` / `getFileTree` calls. The
  * client's 30 s default trips on a cold `register` of a large checkout (full
  * git-aware scan) and surfaces as `Request timeout: register` /
- * `Request timeout: getFileTree` city errors. The renderer's RPC ceiling is
- * 120 s (`maxRequestTime` in mainview/rpc.ts), so 60 s plus the single
- * timeout retry below stays inside it.
+ * `Request timeout: getFileTree` city errors. Each request gets one retry;
+ * the renderer's RPC ceiling allows both register and getFileTree to use that
+ * full budget before the outer request expires.
  */
-const DAEMON_REQUEST_TIMEOUT_MS = 60_000;
+const DAEMON_REQUEST_TIMEOUT_MS = 120_000;
 
 let client: RepoMonitorClient | null = null;
 let unavailableUntil = 0;
