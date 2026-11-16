@@ -752,42 +752,45 @@ export function SubsystemCoverageMapCards({
 	useLayoutEffect(() => {
 		const grid = gridRef.current;
 		if (!grid) return;
-		const record = () => {
-			const gridRect = grid.getBoundingClientRect();
-			const next = new Map<string, { x: number; y: number }>();
-			grid.querySelectorAll<HTMLElement>("[data-repo-key]").forEach((el) => {
-				const key = el.dataset["repoKey"];
-				if (!key) return;
-				const rect = el.getBoundingClientRect();
-				next.set(key, { x: rect.left - gridRect.left, y: rect.top - gridRect.top });
-			});
-			prevPositions.current = next;
-		};
+		const items = [...grid.querySelectorAll<HTMLElement>("[data-repo-key]")];
+		// Cancel any still-running reorder slides before measuring. The merge
+		// tab refills progressively (one setState per repo as each search
+		// lands), so a new render often arrives mid-slide; getBoundingClientRect
+		// includes the in-flight transform, and without this the shifted rects
+		// read as fresh movement and retrigger slides for unchanged results.
+		items.forEach((el) => el.getAnimations().forEach((animation) => animation.cancel()));
+		const gridRect = grid.getBoundingClientRect();
+		const current = new Map<string, { x: number; y: number }>();
+		for (const el of items) {
+			const key = el.dataset["repoKey"];
+			if (!key) continue;
+			const rect = el.getBoundingClientRect();
+			current.set(key, { x: rect.left - gridRect.left, y: rect.top - gridRect.top });
+		}
 		if (
 			typeof window !== "undefined" &&
 			typeof window.matchMedia === "function" &&
 			window.matchMedia("(prefers-reduced-motion: reduce)").matches
 		) {
-			record();
+			prevPositions.current = current;
 			return;
 		}
-		const gridRect = grid.getBoundingClientRect();
-		grid.querySelectorAll<HTMLElement>("[data-repo-key]").forEach((el) => {
+		for (const el of items) {
 			const key = el.dataset["repoKey"];
-			if (!key) return;
+			if (!key) continue;
 			const prev = prevPositions.current.get(key);
-			if (!prev) return;
-			const rect = el.getBoundingClientRect();
-			const dx = prev.x - (rect.left - gridRect.left);
-			const dy = prev.y - (rect.top - gridRect.top);
+			const next = current.get(key);
+			if (!prev || !next) continue;
+			const dx = prev.x - next.x;
+			const dy = prev.y - next.y;
 			if (dx !== 0 || dy !== 0) {
 				el.animate(
 					[{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "translate(0, 0)" }],
 					{ duration: 350, easing: "cubic-bezier(0.4, 0, 0.2, 1)" },
 				);
 			}
-		});
-		record();
+		}
+		prevPositions.current = current;
 	}, [repos]);
 
 	if (repos.length === 0 && skeletonCount === 0) {
