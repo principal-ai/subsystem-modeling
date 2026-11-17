@@ -21,6 +21,7 @@ import type {
   ConstructInventoryRepo,
   MergedPullRequest,
   MergedPullRequestRepo,
+  PullRequestModelLink,
   RepoCommit,
 } from "../../src/shared/contract";
 import type { ConstructTimelineMeta, ConstructTimelineSummary, ConstructTimelineFileSnapshot, ConstructTimelineCommit } from "../../src/shared/construct-timeline";
@@ -83,6 +84,7 @@ export function refreshLibrary(): void {}
 let store: SubsystemModelProposal[] = [];
 let mergedPullRequestRepos: MergedPullRequestRepo[] = [];
 let mergedPullRequests: MergedPullRequest[] = [];
+let pullRequestModelLinks: PullRequestModelLink[] = [];
 let repoCommits: RepoCommit[] = [];
 
 function pending(): SubsystemModelProposal[] {
@@ -163,6 +165,8 @@ const request: RpcRequest = {
       truncatedRepos: [],
     };
   },
+  listPullRequestModelLinks: async () => ({ links: pullRequestModelLinks }),
+  linkSubsystemModelPullRequests: async () => ({ ok: true }),
   getUserIdentity: async () => ({ source: "gh", login: "octocat" }),
   searchMergedPullRequestsByAuthor: async (params) => {
     const { owner, since, author } = params as { owner: string; since: string; author: string };
@@ -512,6 +516,11 @@ export function mockMergedPullRequestData(
 ): void {
   mergedPullRequestRepos = repos;
   mergedPullRequests = pullRequests;
+}
+
+/** Seed PR → subsystem-model associations for the merge-tab badge/group stories. */
+export function mockPullRequestModelLinks(links: PullRequestModelLink[]): void {
+  pullRequestModelLinks = structuredClone(links);
 }
 
 export function mockRecentCommitData(

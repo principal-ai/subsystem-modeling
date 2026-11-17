@@ -28,8 +28,10 @@ import {
 import {
 	getSubsystemModel,
 	isRepoPurl,
+	linkSubsystemModelPullRequests,
 	listSubsystemModels,
 	normalizeDeclarationProvenance,
+	normalizePullRequestRefs,
 	purlRepoKey,
 	subsystemModelFilePath,
 	updateSubsystemModel,
@@ -68,6 +70,13 @@ import {
 } from "./c4-sketch-store";
 import type { SubsystemModelProposalChange, SubsystemC4Source } from "../shared/contract";
 import { resolveStudioHttpPort } from "./studio-http-port";
+import {
+	lookupStudioRoutes,
+	MAX_STUDIO_ROUTE_LOOKUPS,
+	STUDIO_ROUTE_METHODS,
+	studioRouteCatalog,
+	type StudioRouteLookupRequest,
+} from "./route-catalog";
 const PORT = resolveStudioHttpPort();
 
 /** Callback invoked when an agent requests a graph be opened in a tab. */
@@ -373,6 +382,81 @@ export async function handleSubsystemModelRequest(
 		return json({ status: "ok", graphify: getGraphifyStatus() });
 	}
 
+	// Route discovery — same GET index / POST lookup shape as the desktop
+	// bridge, so agents can find Studio's HTTP surface without scraping code.
+	if (path === "/routes" && method === "GET") {
+		return json({
+			service: "Principal Studio HTTP Bridge",
+			port: PORT,
+			groups: studioRouteCatalog.map(({ name, description, routes }) => ({
+				name,
+				description,
+				routes: routes.map(({ method: routeMethod, path: routePath, summary }) => ({
+					method: routeMethod,
+					path: routePath,
+					summary,
+				})),
+			})),
+			lookup: {
+				method: "POST",
+				path: "/routes",
+				maxRoutes: MAX_STUDIO_ROUTE_LOOKUPS,
+				body: { routes: [{ path: "/api/subsystem-model", method: "POST" }] },
+				note: "Use exact route patterns from this index, without query strings. Omit method to return every method for a path. Unknown matches are reported per entry.",
+			},
+		});
+	}
+
+	if (path === "/routes" && method === "POST") {
+		const body = (await parseBody(req)) as { routes?: unknown } | null;
+		const routes = body?.routes;
+		if (
+			!Array.isArray(routes) ||
+			routes.length === 0 ||
+			routes.length > MAX_STUDIO_ROUTE_LOOKUPS
+		) {
+			return error(
+				`routes must be an array of 1-${MAX_STUDIO_ROUTE_LOOKUPS} { path, method? } entries`,
+			);
+		}
+		const requests: StudioRouteLookupRequest[] = [];
+		for (const [index, value] of routes.entries()) {
+			if (!value || typeof value !== "object" || Array.isArray(value)) {
+				return error(
+					`routes[${index}] must have an absolute route pattern without query strings, fragments, or whitespace, and an optional valid HTTP method`,
+				);
+			}
+			const { path: routePath, method: routeMethod } = value as Record<
+				string,
+				unknown
+			>;
+			if (
+				typeof routePath !== "string" ||
+				!routePath.startsWith("/") ||
+				/[\s?#\\]/.test(routePath) ||
+				routePath.includes("//")
+			) {
+				return error(
+					`routes[${index}] must have an absolute route pattern without query strings, fragments, or whitespace, and an optional valid HTTP method`,
+				);
+			}
+			if (routeMethod === undefined) {
+				requests.push({ path: routePath });
+				continue;
+			}
+			if (
+				typeof routeMethod !== "string" ||
+				!STUDIO_ROUTE_METHODS.has(routeMethod.toUpperCase())
+			) {
+				return error(
+					`routes[${index}] must have an absolute route pattern without query strings, fragments, or whitespace, and an optional valid HTTP method`,
+				);
+			}
+			requests.push({ path: routePath, method: routeMethod.toUpperCase() });
+		}
+		return json({ success: true, results: lookupStudioRoutes(requests) });
+	}
+
 	// Maintainer liveness probe — the maintain agent's Step-0 tool call. Landing
 	// it proves the model can actually run tools headless before a long run.
 	if (path === "/api/maintainer/probe" && method === "POST") {
@@ -415,6 +499,12 @@ export async function handleSubsystemModelRequest(
 		// Fold a re-create onto the existing model when it has the same subject
 		// identity (normalized title + referenced purl set) instead of minting a
 		// duplicate. `force: true` opts out and always creates a new record.
+		// Accept a single `pullRequest` or a `pullRequests` array so an authoring
+		// bot can associate the model in the same call that creates it.
+		const pullRequests = normalizePullRequestRefs(
+			body["pullRequests"] ??
+				(body["pullRequest"] !== undefined ? [body["pullRequest"]] : undefined),
+		);
 		const { record, action } = await upsertSubsystemModel(
 			{
 				title: body["title"] as string,
@@ -422,6 +512,7 @@ export async function handleSubsystemModelRequest(
 				notes: typeof body["notes"] === "string" ? body["notes"] : undefined,
 				components: body["components"] as SubsystemModelDocument["components"],
 				trails: body["trails"] as StoredSubsystemModel["trails"],
+				pullRequests,
 			},
 			{ force: body["force"] === true },
 		);
@@ -739,6 +830,50 @@ export async function handleSubsystemModelRequest(
 		const { buildC4ProjectionForModel } = await import("./c4-projection");
 		const projection = await buildC4ProjectionForModel(graph, raw);
 		return json({ ok: true, ...projection });
+	}
+
+	// PR associations — the bot-facing small mutation. Create/update accept
+	// `pullRequests` too; this endpoint avoids resending a whole model to add
+	// or remove one link.
+	const pullRequestLinksMatch = path.match(
+		/^\/api\/subsystem-model\/([^/]+)\/pull-requests$/,
+	);
+	if (pullRequestLinksMatch) {
+		const id = pullRequestLinksMatch[1]!;
+		const existing = await getSubsystemModel(id);
+		if (!existing) return error("Graph not found", 404);
+		if (method === "GET") {
+			return json({ ok: true, pullRequests: existing.pullRequests ?? [] });
+		}
+		if (method !== "POST" && method !== "DELETE") {
+			return error("Method not allowed", 405);
+		}
+		const body = (await parseBody(req)) as Record<string, unknown> | null;
+		const rawRefs =
+			body?.["pullRequests"] ??
+			(body?.["pullRequest"] !== undefined ? [body["pullRequest"]] : undefined);
+		let incoming = normalizePullRequestRefs(rawRefs);
+		if (!incoming && method === "DELETE") {
+			// Also allow ?owner=&repo=&number= for a curl-friendly unlink.
+			incoming = normalizePullRequestRefs([
+				{
+					owner: url.searchParams.get("owner"),
+					repo: url.searchParams.get("repo"),
+					number: url.searchParams.get("number"),
+				},
+			]);
+		}
+		if (!incoming) return error("pullRequests is required", 400);
+		const requestedMode = body?.["mode"];
+		const mode =
+			method === "DELETE"
+				? "remove"
+				: requestedMode === "replace" || requestedMode === "remove"
+					? requestedMode
+					: "add";
+		const updated = await linkSubsystemModelPullRequests(id, incoming, { mode });
+		if (!updated) return error("Graph not found", 404);
+		return json({ ok: true, graph: updated });
 	}
 
 	// Get / Open / Update / Delete by id

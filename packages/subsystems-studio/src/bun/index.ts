@@ -52,7 +52,7 @@ import {
 	placeWindowAtDropPoint,
 	TabWindowRegistry,
 } from "./tab-windows";
-import { deleteSubsystemModel, getSubsystemModel, listSubsystemModels, purlRepoKey, resolveRepoRootForComponent, setSubsystemModelChangeListener, stampVerifiedCommits, startSubsystemModelDirWatcher, subsystemModelFilePath, touchSubsystemModelOpened, updateSubsystemModel } from "./subsystem-model-store";
+import { deleteSubsystemModel, getSubsystemModel, linkSubsystemModelPullRequests, listSubsystemModels, purlRepoKey, resolveRepoRootForComponent, setSubsystemModelChangeListener, stampVerifiedCommits, startSubsystemModelDirWatcher, subsystemModelFilePath, touchSubsystemModelOpened, updateSubsystemModel } from "./subsystem-model-store";
 import { buildC4ProjectionForModel } from "./c4-projection";
 import {
 	deleteC4Sketch,
@@ -2266,6 +2266,11 @@ const requests: RequestHandlers = {
 				if (!updated) return { ok: false, error: `unknown graph: ${graphId}` };
 				return { ok: true, graph: updated };
 			},
+			linkSubsystemModelPullRequests: async ({ graphId, pullRequests, mode }) => {
+				const updated = await linkSubsystemModelPullRequests(graphId, pullRequests, { mode });
+				if (!updated) return { ok: false, error: `unknown graph: ${graphId}` };
+				return { ok: true, graph: updated };
+			},
 			getComposedSubsystemModel: async ({ repoKey, modelIds }) => {
 				const entries = await listSubsystemModels();
 				// A showcase tab passes its id set; without one, compose every
@@ -2370,6 +2375,7 @@ const requests: RequestHandlers = {
 								: undefined,
 								path: subsystemModelFilePath(e.id),
 									gist: e.gist ?? full?.gist,
+									pullRequests: e.pullRequests ?? full?.pullRequests,
 									graphify,
 									lastAudit,
 									createdAtCommits: full?.createdAtCommits,
@@ -2390,6 +2396,21 @@ const requests: RequestHandlers = {
 						return { graphs };
 					},
 				),
+			listPullRequestModelLinks: async () => {
+				// Index-only: the merge tab polls this while open, so it must not
+				// pay the per-model graphify/audit/freshness cost of
+				// listSubsystemModels.
+				const entries = await listSubsystemModels();
+				const links = entries.flatMap((entry) =>
+					(entry.pullRequests ?? []).map((pullRequest) => ({
+						pullRequest,
+						modelId: entry.id,
+						modelTitle: entry.title,
+						modelUpdatedAt: entry.updatedAt,
+					})),
+				);
+				return { links };
+			},
 			searchConstructRepositories: async ({ query }) => {
 				try {
 					return { ok: true, repos: searchConstructRepositories(query) };

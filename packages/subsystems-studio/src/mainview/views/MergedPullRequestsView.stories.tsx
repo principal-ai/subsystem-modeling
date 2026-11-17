@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import type { MergedPullRequest, MergedPullRequestRepo } from "../../shared/contract";
 import {
   mockMergedPullRequestData,
+  mockPullRequestModelLinks,
   mockRepoFileTreeFailures,
   mockShowFailedRepoCityCards,
 } from "../../../.storybook/mocks/rpc";
@@ -29,6 +30,7 @@ const meta = {
 	decorators: [(Story) => <div style={{ height: "100vh", display: "flex" }}><Story /></div>],
 	beforeEach: () => {
 		mockMergedPullRequestData(repos, recentPullRequests());
+		mockPullRequestModelLinks([]);
 		mockRepoFileTreeFailures(new Map());
 		mockShowFailedRepoCityCards(false);
 	},
@@ -38,6 +40,46 @@ export default meta;
 type Story = StoryObj<{ active?: boolean }>;
 
 export const RecentActivity: Story = {};
+
+/** PRs with authored models show a badge; “By model” groups them. */
+export const WithSubsystemModels: Story = {
+	beforeEach: () =>
+		mockPullRequestModelLinks([
+			{
+				pullRequest: {
+					owner: "principal-ai",
+					repo: "subsystem-modeling",
+					number: 1842,
+					title: "Add merged pull request activity tab",
+				},
+				modelId: "sg-1842-merge-activity",
+				modelTitle: "Merge activity pipeline",
+				modelUpdatedAt: new Date().toISOString(),
+			},
+			{
+				pullRequest: {
+					owner: "principal-ai",
+					repo: "subsystem-modeling",
+					number: 1842,
+					title: "Add merged pull request activity tab",
+				},
+				modelId: "sg-1842-studio-tab",
+				modelTitle: "Studio merge tab",
+				modelUpdatedAt: new Date().toISOString(),
+			},
+			{
+				pullRequest: {
+					owner: "principal-ai",
+					repo: "subsystem-modeling",
+					number: 1839,
+					title: "Improve repository summary loading",
+				},
+				modelId: "sg-1839-summary",
+				modelTitle: "Repository summary loading",
+				modelUpdatedAt: new Date().toISOString(),
+			},
+		]),
+};
 
 export const NoMergedPullRequests: Story = {
 	beforeEach: () => mockMergedPullRequestData(repos, []),

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import {
 	ChevronDown,
 	Check,
 	FileDiff,
 	GitPullRequest,
+	Layers,
 	Loader2,
 	RefreshCw,
 } from "lucide-react";
@@ -13,8 +14,14 @@ import type {
 	FileChange,
 	MergedPullRequest,
 	MergedPullRequestRepo,
+	PullRequestModelLink,
 } from "../../shared/contract";
-import { electrobun, showFailedRepoCityCardsSubscribers } from "../rpc";
+import { pullRequestRefKey } from "../../shared/pull-request-ref";
+import {
+	electrobun,
+	showFailedRepoCityCardsSubscribers,
+	subsystemModelChangeSubscribers,
+} from "../rpc";
 import { CenteredMessage, relativeTime } from "../ui";
 import {
 	ContributorAvatarFan,
@@ -80,6 +87,10 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 	const [fileDiffs, setFileDiffs] = useState<Map<string, PullRequestDiffState>>(() => new Map());
 	const fileDiffsRef = useRef(fileDiffs);
 	const requestId = useRef(0);
+	/** PR → stored subsystem-model associations, read from the host index. */
+	const [modelLinks, setModelLinks] = useState<PullRequestModelLink[]>([]);
+	/** Flat "latest merge" list vs. grouped by associated subsystem model. */
+	const [groupByModel, setGroupByModel] = useState(false);
 	// Stale-while-revalidate: keep the previous search's PRs on screen while
 	// the next pass runs. loadPullRequests seeds from this ref instead of
 	// blanking the list, so a refresh/poll never flashes an empty merge tab.
@@ -158,6 +169,30 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 			showFailedRepoCityCardsSubscribers.delete(onShowFailedRepoCityCards);
 		};
 	}, []);
+
+	// PR assemblies the hourly authoring bot writes are model metadata; the
+	// store's change broadcast keeps this list live without polling. The call
+	// is index-only, so re-reading on every model write is cheap.
+	useEffect(() => {
+		if (!active) return;
+		let cancelled = false;
+		const loadLinks = () => {
+			void electrobun.rpc!.request
+				.listPullRequestModelLinks({})
+				.then((result) => {
+					if (!cancelled) setModelLinks(result.links);
+				})
+				.catch(() => {
+					// A transient host hiccup keeps the last known badges.
+				});
+		};
+		void loadLinks();
+		subsystemModelChangeSubscribers.add(loadLinks);
+		return () => {
+			cancelled = true;
+			subsystemModelChangeSubscribers.delete(loadLinks);
+		};
+	}, [active]);
 
 	useEffect(() => {
 		void refreshRepos();
@@ -492,6 +527,61 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 			}),
 		[authorFilteredPullRequests, orgRepoKeys, selectedRepos],
 	);
+	const modelLinksByPullRequest = useMemo(() => {
+		const byKey = new Map<string, PullRequestModelLink[]>();
+		for (const link of modelLinks) {
+			const key = pullRequestRefKey(link.pullRequest);
+			const list = byKey.get(key) ?? [];
+			list.push(link);
+			byKey.set(key, list);
+		}
+		for (const list of byKey.values()) {
+			list.sort((a, b) =>
+				a.modelTitle.localeCompare(b.modelTitle) || a.modelId.localeCompare(b.modelId),
+			);
+		}
+		return byKey;
+	}, [modelLinks]);
+	const groupedPullRequests = useMemo(() => {
+		if (!groupByModel) return [];
+		const groups = new Map<
+			string,
+			{ modelId: string; modelTitle: string; pullRequests: MergedPullRequest[] }
+		>();
+		const unlinked: MergedPullRequest[] = [];
+		for (const pr of visiblePullRequests) {
+			const links = modelLinksByPullRequest.get(pullRequestRefKey(pr)) ?? [];
+			if (links.length === 0) {
+				unlinked.push(pr);
+				continue;
+			}
+			// A PR covered by several models appears under each one. The groups
+			// are lenses over the same merge list, not a partition.
+			for (const link of links) {
+				const group = groups.get(link.modelId) ?? {
+					modelId: link.modelId,
+					modelTitle: link.modelTitle,
+					pullRequests: [],
+				};
+				group.pullRequests.push(pr);
+				groups.set(link.modelId, group);
+			}
+		}
+		const latestMerge = (prs: MergedPullRequest[]) =>
+			prs.reduce((latest, pr) => Math.max(latest, Date.parse(pr.mergedAt) || 0), 0);
+		const list = [...groups.values()].sort(
+			(a, b) => latestMerge(b.pullRequests) - latestMerge(a.pullRequests),
+		);
+		if (unlinked.length > 0) {
+			list.push({ modelId: "", modelTitle: "No subsystem model", pullRequests: unlinked });
+		}
+		return list;
+	}, [groupByModel, visiblePullRequests, modelLinksByPullRequest]);
+	const openSubsystemModel = useCallback((graphId: string) => {
+		void electrobun.rpc!.request
+			.openSubsystemModel({ graphId })
+			.catch((err) => setError(err instanceof Error ? err.message : String(err)));
+	}, []);
 	const lineSummaryByPr = useMemo(() => {
 		const byPr = new Map<
 			string,
@@ -602,6 +692,26 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 			})
 			.catch((err) => setError(err instanceof Error ? err.message : String(err)));
 	}, [orgRepos]);
+	const renderPullRequestCard = (pr: MergedPullRequest) => {
+		const id = pullRequestLayerId(pr);
+		const repoKey = `pkg:github/${pr.owner}/${pr.repo}`;
+		return (
+			<MergedPullRequestCard
+				key={id}
+				pullRequest={pr}
+				diff={fileDiffs.get(id)}
+				lineSummary={lineSummaryByPr.get(id)}
+				maxLineChanges={maxLineChanges}
+				modelLinks={modelLinksByPullRequest.get(pullRequestRefKey(pr))}
+				onOpenModel={openSubsystemModel}
+				highlighted={highlightRowsFromRepoHover && hoveredRepoKey === repoKey}
+				onHover={() => setHoveredPullRequestId(id)}
+				onLeave={() => setHoveredPullRequestId(null)}
+				onLoadFiles={() => void loadPullRequestFiles(pr)}
+				onOpen={() => void electrobun.rpc!.request.openExternal({ url: pr.url })}
+			/>
+		);
+	};
 	if (repos === null) return <CenteredMessage loading title="Loading local repositories…" />;
 	if (repos.length === 0) {
 		return (
@@ -688,6 +798,56 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 									cursor: "pointer",
 								}}
 							>
+								{label}
+							</button>
+						);
+					})}
+				</div>
+				<div
+					role="group"
+					aria-label="Group merged pull requests"
+					style={{
+						display: "flex",
+						alignItems: "center",
+						gap: 2,
+						padding: "0 8px",
+						borderLeft: `1px solid ${theme.colors.border ?? "#333"}`,
+					}}
+				>
+					{[
+						{ grouped: false, label: "Latest", title: "Newest merge first" },
+						{
+							grouped: true,
+							label: "By model",
+							title: modelLinksByPullRequest.size
+								? `Group by subsystem model · ${modelLinksByPullRequest.size} linked PR${modelLinksByPullRequest.size === 1 ? "" : "s"}`
+								: "Group by subsystem model · no linked models yet",
+						},
+					].map(({ grouped, label, title }) => {
+						const active = groupByModel === grouped;
+						return (
+							<button
+								key={label}
+								type="button"
+								aria-pressed={active}
+								title={title}
+								onClick={() => setGroupByModel(grouped)}
+								style={{
+									display: "inline-flex",
+									alignItems: "center",
+									gap: 4,
+									padding: "3px 8px",
+									border: "none",
+									borderRadius: 6,
+									background: active ? `${theme.colors.primary}22` : "transparent",
+									color: active ? theme.colors.primary : muted,
+									fontFamily: theme.fonts.body,
+									fontSize: theme.fontSizes[0],
+									fontWeight: active ? 600 : 400,
+									cursor: "pointer",
+								}}
+							>
+								{grouped && <Layers size={11} aria-hidden="true" />}
 								{label}
 							</button>
 						);
@@ -923,29 +1083,86 @@ export function MergedPullRequestsView({ active = true }: { active?: boolean } =
 											: `No merges for ${owner} in this window.`
 							}
 						/>
+					) : groupByModel ? (
+						<div style={{ maxWidth: 960, margin: "0 auto" }}>
+							{groupedPullRequests.map((group) => (
+								<section key={group.modelId || "__unlinked__"}>
+									<div
+										style={{
+											position: "sticky",
+											top: 0,
+											zIndex: 2,
+											display: "flex",
+											alignItems: "center",
+											gap: 8,
+											minHeight: 34,
+											padding: "4px 12px",
+											borderBottom: `1px solid ${theme.colors.border ?? "#333"}`,
+											background:
+												theme.colors.backgroundSecondary ?? theme.colors.background,
+											color: group.modelId ? theme.colors.text : muted,
+										}}
+									>
+										<Layers size={12} aria-hidden="true" />
+										<span
+											title={group.modelTitle}
+											style={{
+												minWidth: 0,
+												overflow: "hidden",
+												textOverflow: "ellipsis",
+												whiteSpace: "nowrap",
+												fontFamily: theme.fonts.body,
+												fontSize: theme.fontSizes[1],
+												fontWeight: 600,
+											}}
+										>
+											{group.modelTitle}
+										</span>
+										<span
+											style={{
+												flexShrink: 0,
+												color: muted,
+												fontFamily: theme.fonts.monospace,
+												fontSize: theme.fontSizes[0],
+											}}
+										>
+											{group.pullRequests.length} PR
+											{group.pullRequests.length === 1 ? "" : "s"}
+										</span>
+										{group.modelId && (
+											<button
+												type="button"
+												onClick={() => openSubsystemModel(group.modelId)}
+												style={{
+													marginLeft: "auto",
+													flexShrink: 0,
+													padding: "2px 7px",
+													border: `1px solid ${theme.colors.primary}55`,
+													borderRadius: 6,
+													background: "transparent",
+													color: theme.colors.primary,
+													fontFamily: theme.fonts.body,
+													fontSize: theme.fontSizes[0],
+													cursor: "pointer",
+												}}
+											>
+												Open model
+											</button>
+										)}
+									</div>
+									{group.pullRequests.map((pr) => (
+										<Fragment
+											key={`${group.modelId || "unlinked"}:${pullRequestLayerId(pr)}`}
+										>
+											{renderPullRequestCard(pr)}
+										</Fragment>
+									))}
+								</section>
+							))}
+						</div>
 					) : (
 						<div style={{ maxWidth: 960, margin: "0 auto" }}>
-							{visiblePullRequests.map((pr) => {
-								const id = pullRequestLayerId(pr);
-								const repoKey = `pkg:github/${pr.owner}/${pr.repo}`;
-								return (
-									<MergedPullRequestCard
-										key={id}
-										pullRequest={pr}
-										diff={fileDiffs.get(id)}
-										lineSummary={lineSummaryByPr.get(id)}
-										maxLineChanges={maxLineChanges}
-										highlighted={
-											highlightRowsFromRepoHover &&
-											hoveredRepoKey === repoKey
-										}
-										onHover={() => setHoveredPullRequestId(id)}
-										onLeave={() => setHoveredPullRequestId(null)}
-										onLoadFiles={() => void loadPullRequestFiles(pr)}
-										onOpen={() => void electrobun.rpc!.request.openExternal({ url: pr.url })}
-									/>
-								);
-							})}
+							{visiblePullRequests.map(renderPullRequestCard)}
 						</div>
 					)}
 				</main>
@@ -1296,6 +1513,8 @@ function MergedPullRequestCard({
 	diff,
 	lineSummary,
 	maxLineChanges,
+	modelLinks,
+	onOpenModel,
 	highlighted,
 	onHover,
 	onLeave,
@@ -1306,6 +1525,8 @@ function MergedPullRequestCard({
 	diff?: PullRequestDiffState;
 	lineSummary?: ReturnType<typeof summarizeFileChanges>;
 	maxLineChanges?: number;
+	modelLinks?: PullRequestModelLink[];
+	onOpenModel?: (graphId: string) => void;
 	highlighted: boolean;
 	onHover: () => void;
 	onLeave: () => void;
@@ -1455,6 +1676,44 @@ function MergedPullRequestCard({
 						{pullRequest.author && (
 							<span>· {pullRequest.author}</span>
 						)}
+						{modelLinks?.map((link) => (
+							<button
+								key={link.modelId}
+								type="button"
+								aria-label={`Open subsystem model ${link.modelTitle}`}
+								title={`Open subsystem model: ${link.modelTitle}`}
+								onClick={(event) => {
+									event.stopPropagation();
+									onOpenModel?.(link.modelId);
+								}}
+								style={{
+									display: "inline-flex",
+									alignItems: "center",
+									gap: 4,
+									maxWidth: 230,
+									padding: "1px 7px",
+									border: `1px solid ${theme.colors.primary}44`,
+									borderRadius: 999,
+									background: `${theme.colors.primary}18`,
+									color: theme.colors.primary,
+									fontFamily: theme.fonts.body,
+									fontSize: theme.fontSizes[0],
+									cursor: "pointer",
+								}}
+							>
+								<Layers size={10} aria-hidden="true" style={{ flexShrink: 0 }} />
+								<span
+									style={{
+										minWidth: 0,
+										overflow: "hidden",
+										textOverflow: "ellipsis",
+										whiteSpace: "nowrap",
+									}}
+								>
+									{link.modelTitle}
+								</span>
+							</button>
+						))}
 					</div>
 					<div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
 						<div style={{ flex: "1 1 220px", minWidth: 0 }}>

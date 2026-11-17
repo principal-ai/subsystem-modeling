@@ -524,6 +524,12 @@ export interface StoredSubsystemModel {
 	 */
 	gist?: { id: string; fileName?: string };
 	/**
+	 * Pull requests this model was authored for. Host metadata — it never
+	 * travels in the portable document. The merge tab reads these through the
+	 * index to badge and group merged PRs.
+	 */
+	pullRequests?: SubsystemModelPullRequestRef[];
+	/**
 	 * Host-binding provenance: the commit each referenced purl's repo was at
 	 * when the model was first created. Immutable — later updates never rewrite
 	 * it. Absent on records authored before this field existed.
@@ -586,6 +592,34 @@ export interface SubsystemModelFileRef {
 	lines?: number[];
 }
 
+/**
+ * A GitHub pull request a stored subsystem model was authored for.
+ *
+ * Stored on the model record (and mirrored in the index) instead of a
+ * separate association table: deleting the model deletes its links, so the
+ * merge tab can never show a badge pointing at a model that no longer exists.
+ * One model may list several PRs, and one PR may be covered by several models.
+ */
+export interface SubsystemModelPullRequestRef {
+	owner: string;
+	repo: string;
+	number: number;
+	/** GitHub web URL, when the author had it. Display-only. */
+	url?: string;
+	/** PR title at association time. Display-only. */
+	title?: string;
+	/** When this association was recorded (ISO 8601). */
+	associatedAt?: string;
+}
+
+/** One PR → model association flattened for the merge tab. */
+export interface PullRequestModelLink {
+	pullRequest: SubsystemModelPullRequestRef;
+	modelId: string;
+	modelTitle: string;
+	modelUpdatedAt: string;
+}
+
 /** Lightweight listing row for the Subsystems tab (no components/edges). */
 export interface SubsystemModelSummary {
 	id: string;
@@ -609,6 +643,8 @@ export interface SubsystemModelSummary {
 	path: string;
 	/** Host-only gist link when this model has been shared. */
 	gist?: { id: string; fileName?: string };
+	/** Pull requests this model was authored for (merge-tab badges + grouping). */
+	pullRequests?: SubsystemModelPullRequestRef[];
 	/** Graphify cache readiness for this graph's component purls. */
 	graphify?: SubsystemGraphifyReadiness;
 	/**
@@ -2059,6 +2095,28 @@ export type StudioRequests = {
 	listSubsystemModels: {
 		params: Record<string, never>;
 		response: { graphs: SubsystemModelSummary[] };
+	};
+	/**
+	 * Lightweight PR → model index for the merged-PRs tab. Reads the store
+	 * index only (no per-model graphify/audit work), so polling it while the
+	 * tab is open is cheap. Links disappear with their model.
+	 */
+	listPullRequestModelLinks: {
+		params: Record<string, never>;
+		response: { links: PullRequestModelLink[] };
+	};
+	/**
+	 * Attach or detach pull requests on an existing model. The create/update
+	 * paths accept `pullRequests` too; this is the small bot-facing mutation
+	 * that does not require resending the whole model.
+	 */
+	linkSubsystemModelPullRequests: {
+		params: {
+			graphId: string;
+			pullRequests: SubsystemModelPullRequestRef[];
+			mode?: "add" | "replace" | "remove";
+		};
+		response: { ok: boolean; graph?: StoredSubsystemModel; error?: string };
 	};
 	/**
 	 * Every fully verified construct across all stored models, grouped by repo.

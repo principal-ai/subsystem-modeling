@@ -62,6 +62,16 @@ export const SUBSYSTEM_COMPONENT_CONSTRUCTS = [
 
 export const SUBSYSTEM_DECLARATION_PROVENANCES = ['verified', 'authored'] as const;
 
+/** A GitHub PR this model was authored for (host metadata, not portable). */
+export interface SubsystemModelPullRequestRef {
+  owner: string;
+  repo: string;
+  number: number;
+  url?: string;
+  title?: string;
+  associatedAt?: string;
+}
+
 export interface SubsystemModelIndexEntry {
   id: string;
   title: string;
@@ -74,6 +84,8 @@ export interface SubsystemModelIndexEntry {
   fileName: string;
   /** Host-only gist link mirrored from the record. */
   gist?: { id: string; fileName?: string };
+  /** Pull requests mirrored from the record. */
+  pullRequests?: SubsystemModelPullRequestRef[];
 }
 
 interface IndexFile {
@@ -95,6 +107,8 @@ export interface StoredSubsystemModel {
   lastOpenedAt?: string;
   /** Host-only GitHub gist link (not portable). */
   gist?: { id: string; fileName?: string };
+  /** Pull requests this model was authored for (host metadata). */
+  pullRequests?: SubsystemModelPullRequestRef[];
   /** Per-purl commit the model was created against (see PurlCommit). */
   createdAtCommits?: Record<string, PurlCommit>;
   /** Per-purl commit when a full audit last passed (written by Studio). */
@@ -108,6 +122,7 @@ export interface CreateSubsystemModelInput {
   notes?: string;
   components: unknown[];
   trails?: unknown[];
+  pullRequests?: SubsystemModelPullRequestRef[];
 }
 
 /** Trim an optional authored field; blank means absent. */
@@ -123,6 +138,67 @@ function normalizeDescription(value: string | undefined): string | undefined {
   return trimmed.length > SUBSYSTEM_MODEL_DESCRIPTION_MAX
     ? `${trimmed.slice(0, SUBSYSTEM_MODEL_DESCRIPTION_MAX - 1)}…`
     : trimmed;
+}
+
+/** Drop malformed entries and dedupe by `owner/repo#number` (case-insensitive). */
+export function normalizePullRequestRefs(
+  value: unknown,
+): SubsystemModelPullRequestRef[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const seen = new Set<string>();
+  const refs: SubsystemModelPullRequestRef[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object') continue;
+    const record = raw as Record<string, unknown>;
+    const owner = typeof record['owner'] === 'string' ? record['owner'].trim() : '';
+    const repo = typeof record['repo'] === 'string' ? record['repo'].trim() : '';
+    const rawNumber = record['number'];
+    const number =
+      typeof rawNumber === 'number'
+        ? rawNumber
+        : typeof rawNumber === 'string'
+          ? Number.parseInt(rawNumber, 10)
+          : Number.NaN;
+    if (!owner || !repo || !Number.isInteger(number) || number <= 0) continue;
+    const key = `${owner.toLowerCase()}/${repo.toLowerCase()}#${number}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const url =
+      typeof record['url'] === 'string' && record['url'].trim()
+        ? record['url'].trim()
+        : undefined;
+    const title =
+      typeof record['title'] === 'string' && record['title'].trim()
+        ? record['title'].trim()
+        : undefined;
+    const associatedAt =
+      typeof record['associatedAt'] === 'string' && record['associatedAt'].trim()
+        ? record['associatedAt'].trim()
+        : undefined;
+    refs.push({
+      owner,
+      repo,
+      number,
+      ...(url ? { url } : {}),
+      ...(title ? { title } : {}),
+      ...(associatedAt ? { associatedAt } : {}),
+    });
+  }
+  return refs.length > 0 ? refs : undefined;
+}
+
+function pullRequestKey(ref: SubsystemModelPullRequestRef): string {
+  return `${ref.owner.trim().toLowerCase()}/${ref.repo.trim().toLowerCase()}#${ref.number}`;
+}
+
+/** Same `owner/repo#number` set, in any order. */
+function samePullRequestSet(
+  a: ReadonlyArray<SubsystemModelPullRequestRef>,
+  b: ReadonlyArray<SubsystemModelPullRequestRef>,
+): boolean {
+  if (a.length !== b.length) return false;
+  const keys = new Set(a.map(pullRequestKey));
+  return b.every((ref) => keys.has(pullRequestKey(ref)));
 }
 
 function graphId(): string {
@@ -158,6 +234,7 @@ function indexEntryFor(record: StoredSubsystemModel): SubsystemModelIndexEntry {
     lastOpenedAt: record.lastOpenedAt,
     fileName: `${record.id}.json`,
     gist: record.gist,
+    pullRequests: record.pullRequests,
   };
 }
 
@@ -228,13 +305,20 @@ export async function createSubsystemModel(
 ): Promise<StoredSubsystemModel> {
   await ensureDir();
   const now = new Date().toISOString();
-  const { description: rawDescription, notes: rawNotes, ...rest } = doc;
+  const {
+    description: rawDescription,
+    notes: rawNotes,
+    pullRequests: rawPullRequests,
+    ...rest
+  } = doc;
   const description = normalizeDescription(rawDescription);
   const notes = normalizeOptionalText(rawNotes);
+  const pullRequests = normalizePullRequestRefs(rawPullRequests);
   const record: StoredSubsystemModel = {
     ...rest,
     ...(description ? { description } : {}),
     ...(notes ? { notes } : {}),
+    ...(pullRequests ? { pullRequests } : {}),
     id: graphId(),
     createdAt: now,
     updatedAt: now,
@@ -260,16 +344,24 @@ export async function updateSubsystemModel(
       | 'components'
       | 'trails'
       | 'gist'
+      | 'pullRequests'
     >
   >,
 ): Promise<StoredSubsystemModel | null> {
   const existing = await getSubsystemModel(id);
   if (!existing) return null;
-  const { description: rawDescription, notes: rawNotes, ...rest } = patch;
+  const {
+    description: rawDescription,
+    notes: rawNotes,
+    pullRequests: rawPullRequests,
+    ...rest
+  } = patch;
   const description =
     rawDescription !== undefined ? normalizeDescription(rawDescription) : undefined;
   const notes =
     rawNotes !== undefined ? normalizeOptionalText(rawNotes) : undefined;
+  const pullRequests =
+    rawPullRequests !== undefined ? normalizePullRequestRefs(rawPullRequests) : undefined;
   const updated: StoredSubsystemModel = {
     ...existing,
     ...rest,
@@ -277,6 +369,10 @@ export async function updateSubsystemModel(
     ...(rawNotes !== undefined ? { notes } : {}),
     updatedAt: new Date().toISOString(),
   };
+  if (rawPullRequests !== undefined) {
+    if (pullRequests) updated.pullRequests = pullRequests;
+    else delete updated.pullRequests;
+  }
   await fs.writeFile(graphPath(id), JSON.stringify(updated, null, 2), 'utf8');
   await upsertIndexEntry(indexEntryFor(updated));
   return updated;
@@ -326,6 +422,7 @@ export function modelIdentityKey(
 export async function findSubsystemModelByIdentity(
   title: string | undefined,
   components: ReadonlyArray<{ purl?: string }>,
+  pullRequests?: ReadonlyArray<SubsystemModelPullRequestRef>,
 ): Promise<StoredSubsystemModel | null> {
   const key = modelIdentityKey(title, components);
   if (!key) return null;
@@ -333,17 +430,22 @@ export async function findSubsystemModelByIdentity(
   const candidates = (await listSubsystemModels())
     .filter((e) => normalizeModelTitle(e.title) === normTitle)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  const desiredRefs = pullRequests ? normalizePullRequestRefs(pullRequests) : undefined;
   for (const entry of candidates) {
     const record = await getSubsystemModel(entry.id);
     if (
-      record &&
+      !record ||
       modelIdentityKey(
         record.title,
         record.components as ReadonlyArray<{ purl?: string }>,
-      ) === key
+      ) !== key
     ) {
-      return record;
+      continue;
     }
+    if (desiredRefs && !samePullRequestSet(desiredRefs, record.pullRequests ?? [])) {
+      continue;
+    }
+    return record;
   }
   return null;
 }
@@ -362,6 +464,7 @@ export async function upsertSubsystemModel(
     const existing = await findSubsystemModelByIdentity(
       doc.title,
       doc.components as ReadonlyArray<{ purl?: string }>,
+      doc.pullRequests,
     );
     if (existing) {
       const updated = await updateSubsystemModel(existing.id, {
@@ -370,6 +473,7 @@ export async function upsertSubsystemModel(
         notes: doc.notes,
         components: doc.components,
         trails: doc.trails,
+        pullRequests: doc.pullRequests,
       });
       return { record: updated ?? existing, action: 'updated' };
     }

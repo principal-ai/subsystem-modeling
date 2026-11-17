@@ -238,6 +238,11 @@ async function createAction(options: {
         notes: typeof body['notes'] === 'string' ? body['notes'] : undefined,
         components: body['components'] as unknown[],
         trails: Array.isArray(body['trails']) ? body['trails'] : undefined,
+        pullRequests: Array.isArray(body['pullRequests'])
+          ? (body['pullRequests'] as Parameters<typeof upsertSubsystemModel>[0]['pullRequests'])
+          : body['pullRequest'] && typeof body['pullRequest'] === 'object'
+            ? ([body['pullRequest']] as Parameters<typeof upsertSubsystemModel>[0]['pullRequests'])
+            : undefined,
       },
       { force: options.force },
     );

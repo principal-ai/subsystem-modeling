@@ -8,9 +8,12 @@ import {
 	getSubsystemModel,
 	graphIdFromWatchFilename,
 	isRepoPurl,
+	linkSubsystemModelPullRequests,
+	listSubsystemModels,
 	modelIdentityKey,
 	normalizeDeclarationProvenance,
 	normalizeModelTitle,
+	normalizePullRequestRefs,
 	purlRepoKey,
 	resolveRepoRootForComponent,
 	shouldRestampOpened,
@@ -157,6 +160,108 @@ describe("description / notes", () => {
 		});
 		expect(updated?.description).toBeUndefined();
 		expect(updated?.notes).toBeUndefined();
+	});
+});
+
+describe("pull request associations", () => {
+	test("normalizes, dedupes, and drops malformed refs", () => {
+		expect(
+			normalizePullRequestRefs([
+				{ owner: " Principal-AI ", repo: "Subsystem-Modeling", number: 42 },
+				{ owner: "principal-ai", repo: "subsystem-modeling", number: "42" },
+				{ owner: "", repo: "x", number: 1 },
+				{ owner: "a", repo: "b", number: 0 },
+				"nope",
+			]),
+		).toEqual([{ owner: "Principal-AI", repo: "Subsystem-Modeling", number: 42 }]);
+	});
+
+	test("create stores refs and add / remove keep the association idempotent", async () => {
+		const created = await createSubsystemModel({
+			title: "pr-model",
+			components: [],
+			pullRequests: [{ owner: "a", repo: "b", number: 7, title: "One" }],
+		});
+		expect(created.pullRequests).toEqual([
+			{ owner: "a", repo: "b", number: 7, title: "One" },
+		]);
+
+		await Bun.sleep(5);
+		const added = await linkSubsystemModelPullRequests(created.id, [
+			{ owner: "A", repo: "B", number: 7, url: "https://github.com/a/b/pull/7" },
+			{ owner: "a", repo: "b", number: 8 },
+		]);
+		expect(added?.pullRequests).toHaveLength(2);
+		expect(added?.pullRequests?.[0]).toMatchObject({
+			owner: "A",
+			repo: "B",
+			number: 7,
+			title: "One",
+			url: "https://github.com/a/b/pull/7",
+		});
+		expect(added?.pullRequests?.[0]?.associatedAt).toBeTruthy();
+		// Linking a PR must not invalidate the audit fingerprint.
+		expect(added?.updatedAt).toBe(created.updatedAt);
+
+		const removed = await linkSubsystemModelPullRequests(
+			created.id,
+			[{ owner: "a", repo: "b", number: 7 }],
+			{ mode: "remove" },
+		);
+		expect(removed?.pullRequests).toEqual([
+			expect.objectContaining({ owner: "a", repo: "b", number: 8 }),
+		]);
+
+		const replaced = await linkSubsystemModelPullRequests(
+			created.id,
+			[{ owner: "a", repo: "b", number: 9 }],
+			{ mode: "replace" },
+		);
+		expect(replaced?.pullRequests?.map((ref) => ref.number)).toEqual([9]);
+	});
+
+	test("same title + purls under different PRs do not fold", async () => {
+		const components: SubsystemComponent[] = [
+			{
+				alias: "a",
+				name: "a",
+				construct: "function",
+				symbol: "a",
+				file: "exists.ts",
+				purl: "pkg:github/a/repo-a#exists.ts",
+			},
+		];
+		const first = await upsertSubsystemModel({
+			title: "shared-title",
+			components,
+			pullRequests: [{ owner: "a", repo: "repo-a", number: 1 }],
+		});
+		const second = await upsertSubsystemModel({
+			title: "shared-title",
+			components,
+			pullRequests: [{ owner: "a", repo: "repo-a", number: 2 }],
+		});
+		expect(second.action).toBe("created");
+		expect(second.record.id).not.toBe(first.record.id);
+
+		// A re-run for PR #1 updates its own record instead of minting a third.
+		const again = await upsertSubsystemModel({
+			title: "shared-title",
+			components,
+			pullRequests: [{ owner: "a", repo: "repo-a", number: 1 }],
+		});
+		expect(again.action).toBe("updated");
+		expect(again.record.id).toBe(first.record.id);
+	});
+
+	test("the index mirrors pull requests so the merge tab can read them cheaply", async () => {
+		await createSubsystemModel({
+			title: "pr-index",
+			components: [],
+			pullRequests: [{ owner: "a", repo: "b", number: 11 }],
+		});
+		const entry = (await listSubsystemModels()).find((row) => row.title === "pr-index");
+		expect(entry?.pullRequests).toEqual([{ owner: "a", repo: "b", number: 11 }]);
 	});
 });
 

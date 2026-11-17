@@ -70,6 +70,11 @@ npx -y @principal-ai/principal-studio-cli subsystem-model create --file model.js
   "title": "Subsystems Studio session service",        // required
   "description": "Short sidebar blurb (max 200 chars).",
   "notes": "## Overview\n\nExtended Markdown context, opened from **Show more** in the sidebar.",
+  // Host metadata, not part of the portable document: link the PR this model
+  // was authored for so the merged-PRs tab can badge and group it.
+  "pullRequests": [
+    { "owner": "principal-ai", "repo": "subsystem-modeling", "number": 42, "title": "Add the thing" }
+  ],
   "components": [                                  // required
     {
       "alias": "session-service",                  // model-local, unique; edges point here
@@ -124,6 +129,11 @@ Rules:
 - `notes` is the extended Markdown document. When set, the description's
   **Show more** link opens it in an **Overview** overlay. Omit `description`
   and the sidebar falls back to a clamped preview of `notes`.
+- `pullRequests` is **host metadata**, never part of the portable document and
+  never published to a gist. Each entry is `{ owner, repo, number, url?,
+  title? }`; duplicate `owner/repo#number` entries are collapsed. Use it when
+  the model was authored for a pull request — the merged-PRs tab shows a badge
+  that opens the model, and can group PRs by model.
 - Portable documents carry only `$schema` / `title` / `description` / `notes` /
   `components` / `trails`. Repo identity lives on each
   component's `purl` and each trail step's `purl` — there is no stored
@@ -431,7 +441,9 @@ Pass `--force` (or `"force": true` in the HTTP body) when you intentionally want
 a distinct record over the same title + purls. Prefer omitting it.
 
 While Subsystems Studio is running, the HTTP bridge still supports update/delete
-(release Studio listens on `:3045`, the dev build on `:3046`):
+(release Studio listens on `:3045`, the dev build on `:3046`). Discover the
+current surface with `GET /routes`, then batch-fetch full contracts with
+`POST /routes` (`{"routes":[{"method":"POST","path":"/api/subsystem-model"}]}`):
 
 ```bash
 curl -s -X PUT http://127.0.0.1:3045/api/subsystem-model/<id> \
@@ -445,3 +457,23 @@ also closes any tabs rendering the model. To add trails to an existing model,
 PUT `{ "trails": [ ... ] }` (or updated `module` / `process` frames). `PUT`
 accepts `title`, `description`, `notes`, `components`, and `trails`; omitted
 fields are left alone. `description` is validated at 200 characters.
+
+To attach or detach PR associations without resending the model, use the small
+association endpoint (idempotent per `owner/repo#number`):
+
+```bash
+# add (default)
+curl -s -X POST http://127.0.0.1:3045/api/subsystem-model/<id>/pull-requests \
+  -H 'Content-Type: application/json' \
+  -d '{"pullRequests":[{"owner":"principal-ai","repo":"subsystem-modeling","number":42,"title":"Add the thing"}]}'
+# replace the whole list: add "mode":"replace"; remove: DELETE with the same body
+curl -s -X DELETE http://127.0.0.1:3045/api/subsystem-model/<id>/pull-requests \
+  -H 'Content-Type: application/json' \
+  -d '{"pullRequests":[{"owner":"principal-ai","repo":"subsystem-modeling","number":42}]}'
+```
+
+`GET /api/subsystem-model/<id>/pull-requests` returns the current list. The
+hourly authoring bot should create the model with `pullRequests` in the same
+POST, and reuse `force`-less create so a re-run updates the existing record
+(make the title PR-specific, e.g. `PR #42 — <title>`, because identity is
+title + purl set).

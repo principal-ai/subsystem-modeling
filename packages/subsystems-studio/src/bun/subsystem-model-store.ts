@@ -23,10 +23,12 @@ import type {
 	SubsystemEdgeMechanism,
 	SubsystemModelDocument,
 	SubsystemTrail,
+	SubsystemModelPullRequestRef,
 	SubsystemTrailMechanism,
 	SubsystemTrailStep,
 	StudioMessages,
 } from "../shared/contract";
+import { pullRequestRefKey } from "../shared/pull-request-ref";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -199,6 +201,11 @@ export interface StoredSubsystemModel extends SubsystemDocumentBody {
 	 */
 	gist?: { id: string; fileName?: string };
 	/**
+	 * Pull requests this model was authored for. Host-only metadata: it is
+	 * never part of the portable document, and it disappears with the record.
+	 */
+	pullRequests?: SubsystemModelPullRequestRef[];
+	/**
 	 * Host-binding provenance: the commit each referenced purl's repo was at
 	 * when the model was created. Immutable. Keyed by `purlRepoKey`. Absent on
 	 * records authored before this field existed.
@@ -303,6 +310,8 @@ export interface SubsystemModelIndexEntry {
 	fileName: string;
 	/** Host-only gist link mirrored from the record for list/share UI. */
 	gist?: { id: string; fileName?: string };
+	/** Pull requests mirrored from the record for the merge-tab index. */
+	pullRequests?: SubsystemModelPullRequestRef[];
 }
 
 interface IndexFile {
@@ -644,6 +653,68 @@ function normalizeDescription(value: string | undefined): string | undefined {
 		: trimmed;
 }
 
+/**
+ * Normalize and dedupe authored PR references. Invalid entries are dropped
+ * rather than failing the whole write: a bot that discovers a malformed ref
+ * should still persist the model. Returns `undefined` when nothing survives,
+ * which callers treat as "no associations".
+ */
+export function normalizePullRequestRefs(
+	value: unknown,
+): SubsystemModelPullRequestRef[] | undefined {
+	if (!Array.isArray(value)) return undefined;
+	const seen = new Set<string>();
+	const refs: SubsystemModelPullRequestRef[] = [];
+	for (const raw of value) {
+		if (!raw || typeof raw !== "object") continue;
+		const record = raw as Record<string, unknown>;
+		const owner = typeof record["owner"] === "string" ? record["owner"].trim() : "";
+		const repo = typeof record["repo"] === "string" ? record["repo"].trim() : "";
+		const rawNumber = record["number"];
+		const number =
+			typeof rawNumber === "number"
+				? rawNumber
+				: typeof rawNumber === "string"
+					? Number.parseInt(rawNumber, 10)
+					: Number.NaN;
+		if (!owner || !repo || !Number.isInteger(number) || number <= 0) continue;
+		const key = pullRequestRefKey({ owner, repo, number });
+		if (seen.has(key)) continue;
+		seen.add(key);
+		const url =
+			typeof record["url"] === "string" && record["url"].trim()
+				? record["url"].trim()
+				: undefined;
+		const title =
+			typeof record["title"] === "string" && record["title"].trim()
+				? record["title"].trim()
+				: undefined;
+		const associatedAt =
+			typeof record["associatedAt"] === "string" && record["associatedAt"].trim()
+				? record["associatedAt"].trim()
+				: undefined;
+		refs.push({
+			owner,
+			repo,
+			number,
+			...(url ? { url } : {}),
+			...(title ? { title } : {}),
+			...(associatedAt ? { associatedAt } : {}),
+		});
+	}
+	return refs.length > 0 ? refs : undefined;
+}
+
+/** Same `owner/repo#number` set, in any order. */
+function samePullRequestSet(
+	a: ReadonlyArray<SubsystemModelPullRequestRef>,
+	b: ReadonlyArray<SubsystemModelPullRequestRef>,
+): boolean {
+	if (a.length !== b.length) return false;
+	const keys = new Set(a.map(pullRequestRefKey));
+	return b.every((ref) => keys.has(pullRequestRefKey(ref)));
+}
+
 function graphPath(id: string): string {
 	return join(modelsRoot(), `${id}.json`);
 }
@@ -685,6 +756,7 @@ function indexEntryFor(record: StoredSubsystemModel): SubsystemModelIndexEntry {
 		lastOpenedAt: record.lastOpenedAt,
 		fileName: `${record.id}.json`,
 		gist: record.gist,
+		pullRequests: record.pullRequests,
 	};
 }
 
@@ -761,18 +833,26 @@ export async function createSubsystemModel(
 		description?: string;
 		notes?: string;
 		trails?: SubsystemTrail[];
+		pullRequests?: SubsystemModelPullRequestRef[];
 	},
 ): Promise<StoredSubsystemModel> {
 	await ensureDir();
 	normalizeDeclarationProvenance(doc.components);
 	const now = new Date().toISOString();
-	const { description: rawDescription, notes: rawNotes, ...rest } = doc;
+	const {
+		description: rawDescription,
+		notes: rawNotes,
+		pullRequests: rawPullRequests,
+		...rest
+	} = doc;
 	const description = normalizeDescription(rawDescription);
 	const notes = normalizeOptionalText(rawNotes);
+	const pullRequests = normalizePullRequestRefs(rawPullRequests);
 	const record: StoredSubsystemModel = {
 		...rest,
 		...(description ? { description } : {}),
 		...(notes ? { notes } : {}),
+		...(pullRequests ? { pullRequests } : {}),
 		id: graphId(),
 		createdAt: now,
 		updatedAt: now,
@@ -799,17 +879,25 @@ export async function updateSubsystemModel(
 			| "components"
 			| "trails"
 			| "gist"
+			| "pullRequests"
 		>
 	>,
 ): Promise<StoredSubsystemModel | null> {
 	const existing = await getSubsystemModel(id);
 	if (!existing) return null;
 	if (patch.components !== undefined) normalizeDeclarationProvenance(patch.components);
-	const { description: rawDescription, notes: rawNotes, ...rest } = patch;
+	const {
+		description: rawDescription,
+		notes: rawNotes,
+		pullRequests: rawPullRequests,
+		...rest
+	} = patch;
 	const description =
 		rawDescription !== undefined ? normalizeDescription(rawDescription) : undefined;
 	const notes =
 		rawNotes !== undefined ? normalizeOptionalText(rawNotes) : undefined;
+	const pullRequests =
+		rawPullRequests !== undefined ? normalizePullRequestRefs(rawPullRequests) : undefined;
 	const updated: StoredSubsystemModel = {
 		...existing,
 		...rest,
@@ -817,6 +905,10 @@ export async function updateSubsystemModel(
 		...(rawNotes !== undefined ? { notes } : {}),
 		updatedAt: new Date().toISOString(),
 	};
+	if (rawPullRequests !== undefined) {
+		if (pullRequests) updated.pullRequests = pullRequests;
+		else delete updated.pullRequests;
+	}
 	updated.verification = await verifyModelFiles(updated);
 	noteSelfWrite(id);
 	await fs.writeFile(graphPath(id), JSON.stringify(updated, null, 2), "utf8");
@@ -833,6 +925,7 @@ export async function updateSubsystemModel(
 export async function findSubsystemModelByIdentity(
 	title: string | undefined,
 	components: ReadonlyArray<{ purl?: string }>,
+	pullRequests?: ReadonlyArray<SubsystemModelPullRequestRef>,
 ): Promise<StoredSubsystemModel | null> {
 	const key = modelIdentityKey(title, components);
 	if (!key) return null;
@@ -840,11 +933,20 @@ export async function findSubsystemModelByIdentity(
 	const candidates = (await listSubsystemModels())
 		.filter((e) => normalizeModelTitle(e.title) === normTitle)
 		.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+	// A PR-authored model is its own subject: same title + purls under a
+	// different PR must not fold (two "Update deps" PRs in one repo would
+	// otherwise share one model and both badges would point at it).
+	const desiredRefs = pullRequests ? normalizePullRequestRefs(pullRequests) : undefined;
 	for (const entry of candidates) {
 		const record = await getSubsystemModel(entry.id);
-		if (record && modelIdentityKey(record.title, record.components) === key) {
-			return record;
+		if (!record || modelIdentityKey(record.title, record.components) !== key) continue;
+		if (
+			desiredRefs &&
+			!samePullRequestSet(desiredRefs, record.pullRequests ?? [])
+		) {
+			continue;
 		}
+		return record;
 	}
 	return null;
 }
@@ -862,11 +964,16 @@ export async function upsertSubsystemModel(
 		description?: string;
 		notes?: string;
 		trails?: SubsystemTrail[];
+		pullRequests?: SubsystemModelPullRequestRef[];
 	},
 	options?: { force?: boolean },
 ): Promise<{ record: StoredSubsystemModel; action: "created" | "updated" }> {
 	if (!options?.force) {
-		const existing = await findSubsystemModelByIdentity(doc.title, doc.components);
+		const existing = await findSubsystemModelByIdentity(
+			doc.title,
+			doc.components,
+			doc.pullRequests,
+		);
 		if (existing) {
 			const updated = await updateSubsystemModel(existing.id, {
 				title: doc.title,
@@ -874,11 +981,65 @@ export async function upsertSubsystemModel(
 				notes: doc.notes,
 				components: doc.components,
 				trails: doc.trails,
+				pullRequests: doc.pullRequests,
 			});
 			return { record: updated ?? existing, action: "updated" };
 		}
 	}
 	return { record: await createSubsystemModel(doc), action: "created" };
+}
+
+/**
+ * Add, replace, or remove PR associations on a model.
+ *
+ * `add` is idempotent per `owner/repo#number` and keeps the original
+ * `associatedAt`; later calls may fill in a missing title/url. `remove` drops
+ * the listed refs (unknown refs are ignored). `replace` sets the exact list.
+ */
+export async function linkSubsystemModelPullRequests(
+	id: string,
+	refs: readonly SubsystemModelPullRequestRef[],
+	options?: { mode?: "add" | "replace" | "remove" },
+): Promise<StoredSubsystemModel | null> {
+	const existing = await getSubsystemModel(id);
+	if (!existing) return null;
+	const incoming = normalizePullRequestRefs(refs) ?? [];
+	const current = existing.pullRequests ?? [];
+	const mode = options?.mode ?? "add";
+	let next: SubsystemModelPullRequestRef[];
+	if (mode === "replace") {
+		next = incoming;
+	} else if (mode === "remove") {
+		const remove = new Set(incoming.map(pullRequestRefKey));
+		next = current.filter((ref) => !remove.has(pullRequestRefKey(ref)));
+	} else {
+		const byKey = new Map(
+			current.map((ref) => [pullRequestRefKey(ref), ref] as const),
+		);
+		const now = new Date().toISOString();
+		for (const ref of incoming) {
+			const key = pullRequestRefKey(ref);
+			const previous = byKey.get(key);
+			byKey.set(key, {
+				...previous,
+				...ref,
+				associatedAt: previous?.associatedAt ?? ref.associatedAt ?? now,
+			});
+		}
+		next = [...byKey.values()];
+	}
+	if (samePullRequestSet(current, next)) return existing;
+	// Association is provenance, not an edit: keep `updatedAt` (the audit
+	// fingerprint includes it) and skip file verification, exactly like
+	// `stampVerifiedCommits` / `touchSubsystemModelOpened`.
+	const record: StoredSubsystemModel = { ...existing };
+	if (next.length > 0) record.pullRequests = next;
+	else delete record.pullRequests;
+	noteSelfWrite(id);
+	await fs.writeFile(graphPath(id), JSON.stringify(record, null, 2), "utf8");
+	await upsertIndexEntry(indexEntryFor(record));
+	emitSubsystemModelChange({ graphId: id, reason: "updated" });
+	return record;
 }
 
 /**
