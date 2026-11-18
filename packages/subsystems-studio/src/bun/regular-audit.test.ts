@@ -7,9 +7,9 @@ import { createRegularAuditScheduler } from "./regular-audit";
 import type { RegularAuditStatus } from "../shared/contract";
 
 describe("viewer-settings regular audit", () => {
-	test("defaults enable regular audit every 5 minutes", () => {
+	test("defaults disable regular audit", () => {
 		const d = defaultViewerSettings();
-		expect(d.regularAuditEnabled).toBe(true);
+		expect(d.regularAuditEnabled).toBe(false);
 		expect(d.regularAuditIntervalMinutes).toBe(5);
 	});
 
@@ -37,7 +37,10 @@ describe("regular-audit scheduler", () => {
 			onStatusChange: (s) => statuses.push({ ...s }),
 		});
 
-		scheduler.sync(defaultViewerSettings());
+		scheduler.sync({
+			...defaultViewerSettings(),
+			regularAuditEnabled: true,
+		});
 		const idle = scheduler.getStatus();
 		expect(idle.enabled).toBe(true);
 		expect(idle.running).toBe(false);

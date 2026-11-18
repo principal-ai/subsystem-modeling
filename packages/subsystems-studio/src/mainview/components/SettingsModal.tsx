@@ -112,7 +112,7 @@ const FALLBACK_SETTINGS: ViewerSettings = {
 	autoAcceptSubsystemModelProposals: false,
 	autoAcceptSubsystemModelConfidenceThreshold: 0.85,
 	subsystemMaintainerModel: null,
-	regularAuditEnabled: true,
+	regularAuditEnabled: false,
 	regularAuditIntervalMinutes: 5,
 	autoApplyAuditFixes: true,
 	typesafeApiKey: null,
@@ -758,7 +758,7 @@ export function SettingsModal({
 								>
 									<input
 										type="checkbox"
-										checked={settings?.regularAuditEnabled ?? true}
+										checked={settings?.regularAuditEnabled ?? false}
 										disabled={!settings || savingKey === "regularAudit"}
 										onChange={() => void toggleRegularAudit()}
 										style={{

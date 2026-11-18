@@ -36,7 +36,7 @@ export function defaultViewerSettings(): ViewerSettings {
 		autoAcceptSubsystemModelProposals: false,
 		autoAcceptSubsystemModelConfidenceThreshold: AUTO_ACCEPT_CONFIDENCE_DEFAULT,
 		subsystemMaintainerModel: null,
-		regularAuditEnabled: true,
+		regularAuditEnabled: false,
 		regularAuditIntervalMinutes: REGULAR_AUDIT_INTERVAL_DEFAULT_MINUTES,
 		autoApplyAuditFixes: true,
 		typesafeApiKey: null,
