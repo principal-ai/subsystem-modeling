@@ -477,3 +477,19 @@ hourly authoring bot should create the model with `pullRequests` in the same
 POST, and reuse `force`-less create so a re-run updates the existing record
 (make the title PR-specific, e.g. `PR #42 — <title>`, because identity is
 title + purl set).
+
+When you need to discover what to model, read the same merged-PR activity the
+Merged PRs tab shows:
+
+```bash
+# Local repos + owners (the visibility boundary)
+curl -s http://127.0.0.1:3045/api/merged-pull-requests/repos
+# Recently merged PRs, with existing model associations attached
+curl -s 'http://127.0.0.1:3045/api/merged-pull-requests?owner=principal-ai&hours=24'
+# One PR with changed files and model associations
+curl -s http://127.0.0.1:3045/api/merged-pull-requests/principal-ai/subsystem-modeling/42
+```
+
+The list response includes `subsystemModels` and `modeled` on each PR, so skip
+PRs that already have a model (or update that model) instead of minting a
+duplicate. Repo objects include the local checkout `path` for reading source.

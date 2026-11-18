@@ -86,6 +86,76 @@ export const studioRouteCatalog: StudioRouteGroup[] = [
 		],
 	},
 	{
+		name: "merged-pull-requests",
+		description:
+			"Read the merged-PR activity the Merged PRs tab shows, including existing model associations and changed-file detail.",
+		routes: [
+			{
+				method: "GET",
+				path: "/api/merged-pull-requests/repos",
+				summary:
+					"List locally cloned GitHub repos and their owners — the visibility boundary for merged PRs.",
+				response:
+					"{ ok: true, owners: string[], repos: [{ owner, name, path, url }] }",
+				notes: [
+					"Only repos registered in Alexandria with an existing checkout and a resolvable HEAD are returned. Other merged-PR routes will not return activity for repos outside this set.",
+				],
+			},
+			{
+				method: "GET",
+				path: "/api/merged-pull-requests",
+				summary:
+					"List merged PRs for local repos, with model associations attached.",
+				query: {
+					owner: "string (optional): GitHub org/owner; omit to scan every local repo owner.",
+					repo: "string (optional): repo name filter; can be combined with owner.",
+					since: "string (optional): YYYY-MM-DD merge-date floor. Overrides hours.",
+					hours: `number (optional): lookback window when since is omitted (default 24, max ${24 * 90}).`,
+					author: "string (optional): case-insensitive GitHub login filter.",
+				},
+				response:
+					"{ ok: true, since, owners, repos: [{ owner, name, path, url }], pullRequests: [{ owner, repo, number, title, url, author?, authorAvatarUrl?, mergedAt, subsystemModels: [{ id, title, updatedAt }], modeled }], errors?, truncatedRepos? }",
+				errors: {
+					"400": "Invalid since/hours.",
+					"502": "GitHub search failed for the eligible repos.",
+					"503": "No GitHub CLI token; sign in with `gh auth login`.",
+				},
+				notes: [
+					"Same source data as the Merged PRs tab: completed PRs merged into locally cloned repos. Pass owner to keep the search bounded; omitting it scans each local owner in turn and can take longer.",
+					"Model associations are read from the subsystem-model index, so an agent can skip PRs that already have a model or see which model it should update.",
+					"Changed files are not inlined here — use the per-PR detail route when you need them.",
+				],
+				example: {
+					owner: "principal-ai",
+					since: "2026-11-17",
+					author: "octocat",
+				},
+			},
+			{
+				method: "GET",
+				path: "/api/merged-pull-requests/:owner/:repo/:number",
+				summary:
+					"Read one merged PR with changed files and existing model associations.",
+				parameters: {
+					owner: "GitHub org/owner.",
+					repo: "Repo name.",
+					number: "Pull request number.",
+				},
+				response:
+					"{ ok: true, repo: { owner, name, path, url }, pullRequest: { owner, repo, number, title, url, author?, authorAvatarUrl?, mergedAt, files, changes: [{ path, status, previousPath?, additions?, deletions? }], truncated, subsystemModels, modeled } }",
+				errors: {
+					"404": "Repo is not cloned locally, PR does not exist, or PR is not merged.",
+					"502": "GitHub request failed.",
+					"503": "No GitHub CLI token.",
+				},
+				notes: [
+					"Uses GitHub's single-PR endpoint, so mergedAt is the actual merge time (the list route uses search, which exposes closed_at).",
+					"files/changes cover at most the first 300 changed paths; truncated reports the cap.",
+				],
+			},
+		],
+	},
+	{
 		name: "subsystem-models",
 		description:
 			"Create, read, update, delete, and open stored subsystem models; attach PR associations.",

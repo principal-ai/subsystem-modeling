@@ -12,6 +12,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { handleRemoteModelRequest, type OpenRemoteModelsHandler } from "./remote-model-http";
+import { handleMergedPullRequestHttpRequest } from "./merged-pull-request-http";
 import { handleSettingsRequest, type SettingsHttpHandlers } from "./settings-http";
 import { handleThemeRequest } from "./theme-http";
 import {
@@ -381,6 +382,11 @@ export async function handleSubsystemModelRequest(
 	if (path === "/health" && method === "GET") {
 		return json({ status: "ok", graphify: getGraphifyStatus() });
 	}
+
+	// Agent-facing merged-PR data — the same local-repo source the Merged PRs
+	// tab reads, with existing subsystem-model associations attached.
+	const mergedPullRequests = await handleMergedPullRequestHttpRequest(req);
+	if (mergedPullRequests) return mergedPullRequests;
 
 	// Route discovery — same GET index / POST lookup shape as the desktop
 	// bridge, so agents can find Studio's HTTP surface without scraping code.

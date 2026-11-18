@@ -386,6 +386,99 @@ export async function getMergedPullRequestFiles(opts: {
 	}
 }
 
+/**
+ * Read one merged PR (metadata + changed files) for the agent HTTP API.
+ *
+ * The list endpoints come from GitHub Search, which only exposes `closed_at`.
+ * A single-PR read uses the core pulls endpoint, so `mergedAt` is the real
+ * merge time and the response is authoritative enough to author a model
+ * against. Requires a local checkout for this repo, matching the tab's
+ * "visible" rule.
+ */
+export async function getMergedPullRequestDetail(opts: {
+	owner: string;
+	repo: string;
+	number: number;
+}): Promise<{
+	ok: boolean;
+	pullRequest?: MergedPullRequest;
+	files?: string[];
+	changes?: FileChange[];
+	truncated?: boolean;
+	error?: string;
+}> {
+	const owner = opts.owner.trim();
+	const repo = opts.repo.trim();
+	if (!owner || !repo || !Number.isInteger(opts.number) || opts.number < 1) {
+		return { ok: false, error: "Invalid pull request identity." };
+	}
+	const localRepos = await listMergedPullRequestRepos();
+	const local = localRepos.find(
+		(entry) =>
+			entry.owner.toLowerCase() === owner.toLowerCase() &&
+			entry.name.toLowerCase() === repo.toLowerCase(),
+	);
+	if (!local) {
+		return { ok: false, error: "This repository is not cloned locally." };
+	}
+	const token = resolveGithubToken();
+	if (!token) {
+		return {
+			ok: false,
+			error: "No GitHub CLI token found. Sign in with `gh auth login` to load merged PRs.",
+		};
+	}
+	try {
+		const response = await fetch(
+			`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${opts.number}`,
+			{
+				headers: {
+					Accept: "application/vnd.github+json",
+					Authorization: `Bearer ${token}`,
+					"X-GitHub-Api-Version": "2022-11-28",
+				},
+			},
+		);
+		const body = (await response.json().catch(() => ({}))) as {
+			number?: number;
+			title?: string;
+			html_url?: string;
+			user?: { login?: string; avatar_url?: string } | null;
+			merged_at?: string | null;
+			closed_at?: string | null;
+			message?: string;
+		};
+		if (!response.ok) {
+			return {
+				ok: false,
+				error: body.message
+					? `GitHub API ${response.status}: ${body.message}`
+					: `GitHub API request failed (${response.status})`,
+			};
+		}
+		if (!body.merged_at) {
+			return { ok: false, error: "Pull request is not merged." };
+		}
+		const pullRequest: MergedPullRequest = {
+			owner: local.owner,
+			repo: local.name,
+			number: body.number ?? opts.number,
+			title: body.title ?? "",
+			url: body.html_url ?? `https://github.com/${local.owner}/${local.name}/pull/${opts.number}`,
+			author: body.user?.login,
+			authorAvatarUrl: body.user?.avatar_url,
+			mergedAt: body.merged_at,
+		};
+		const files = await mergedPullRequestFiles(pullRequest, token);
+		return { ok: true, pullRequest, ...files };
+	} catch (error) {
+		return {
+			ok: false,
+			error: error instanceof Error ? error.message : String(error),
+		};
+	}
+}
+
 /** Search merged PR activity for an org, then retain only repos cloned locally.
  * `since` (YYYY-MM-DD) is required — unbounded lifetime queries are rejected
  * to keep GitHub search fan-out predictable. */

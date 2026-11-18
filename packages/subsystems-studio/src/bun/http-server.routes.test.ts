@@ -48,6 +48,14 @@ describe("GET /routes", () => {
 					route.path === "/api/subsystem-model/:id/pull-requests",
 			),
 		).toBe(true);
+		const merged = body.groups.find((group) => group.name === "merged-pull-requests");
+		expect(merged).toBeTruthy();
+		expect(merged!.routes.map((route) => route.path)).toContain(
+			"/api/merged-pull-requests",
+		);
+		expect(merged!.routes.map((route) => route.path)).toContain(
+			"/api/merged-pull-requests/:owner/:repo/:number",
+		);
 	});
 });
 
