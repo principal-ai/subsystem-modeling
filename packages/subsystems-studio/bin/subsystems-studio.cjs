@@ -11,10 +11,39 @@
 
 const { spawn } = require('node:child_process');
 const { existsSync } = require('node:fs');
-const { join } = require('node:path');
+const { createRequire } = require('node:module');
+const { delimiter, dirname, join } = require('node:path');
 
 const platform = process.platform;
 const arch = process.arch;
+
+/**
+ * The app's daemon bundle is extracted outside this npm package, so its
+ * `@parcel/watcher` require can no longer walk up to the installed
+ * node_modules. Point NODE_PATH at the directory that holds Parcel so the
+ * daemon loads the native watcher instead of falling back to Chokidar.
+ */
+function parcelNodeModules() {
+  try {
+    const serverPackage = require.resolve(
+      '@principal-ai/repository-monitoring-server/package.json',
+    );
+    const serverRequire = createRequire(serverPackage);
+    const watcherPackage = serverRequire.resolve('@parcel/watcher/package.json');
+    // .../node_modules/@parcel/watcher/package.json -> .../node_modules
+    return dirname(dirname(dirname(watcherPackage)));
+  } catch {
+    return null;
+  }
+}
+
+const parcelModules = parcelNodeModules();
+const env = parcelModules
+  ? {
+      ...process.env,
+      NODE_PATH: [parcelModules, process.env.NODE_PATH].filter(Boolean).join(delimiter),
+    }
+  : process.env;
 
 if (platform !== 'darwin' || arch !== 'arm64') {
   process.stderr.write(
@@ -35,7 +64,7 @@ if (!existsSync(launcher)) {
 
 const child = spawn(launcher, process.argv.slice(2), {
   stdio: 'inherit',
-  env: process.env,
+  env,
 });
 
 child.on('error', (err) => {
