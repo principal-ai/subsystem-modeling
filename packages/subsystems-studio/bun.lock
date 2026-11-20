@@ -17,7 +17,7 @@
         "@principal-ai/codebase-composition": "0.2.58",
         "@principal-ai/principal-view-core": "^0.28.14",
         "@principal-ai/principal-view-react": "^0.15.10",
-        "@principal-ai/repository-monitoring-server": "^4.1.2",
+        "@principal-ai/repository-monitoring-server": "^4.1.3",
         "@principal-ai/subsystems-core": "^0.51.5",
         "@principal-ai/subsystems-react": "^0.56.34",
         "@react-spring/three": "^10.1.2",
@@ -395,9 +395,9 @@
 
     "@principal-ai/repository-abstraction": ["@principal-ai/repository-abstraction@0.5.7", "", { "peerDependencies": { "globby": "^16.1.0" }, "optionalPeers": ["globby"] }, "sha512-2LZ4HnaD6PKFXmM2Kwq1kqLKguna/EpHaqFI7tTqMtiwLkVCNMBPJFRMcfqihbAj66DNRiMrbMJ+E154kmFF4A=="],
 
-    "@principal-ai/repository-monitoring": ["@principal-ai/repository-monitoring@0.1.13", "", { "dependencies": { "@parcel/watcher": "^2.5.6", "chokidar": "^3.6.0", "minimatch": "^9.0.4" }, "peerDependencies": { "typescript": "^5.9.3" } }, "sha512-V5/sOE8CcCNA5rObp1XKyN35cSJL+oKmKDFsN7RKS+ixWDewOSDbztmZ27og61hWqR3t2i45VO+lEJq90Kz1Fg=="],
+    "@principal-ai/repository-monitoring": ["@principal-ai/repository-monitoring@0.1.14", "", { "dependencies": { "@parcel/watcher": "^2.5.6", "chokidar": "^3.6.0", "minimatch": "^9.0.4" }, "peerDependencies": { "typescript": "^5.9.3" } }, "sha512-msZl+rSOxdEmCPye4MUGPO9u7EEIuyTzHHaihlA42R6s8Dtce5SFKbo7hWkHU8yFgtSPEY40LWKBbDhOogWs+A=="],
 
-    "@principal-ai/repository-monitoring-server": ["@principal-ai/repository-monitoring-server@4.1.2", "", { "dependencies": { "@opentelemetry/api": "^1.9.0", "@opentelemetry/exporter-trace-otlp-http": "^0.200.0", "@opentelemetry/resources": "^2.0.0", "@opentelemetry/sdk-trace-node": "^2.0.0", "@opentelemetry/semantic-conventions": "^1.28.0", "@principal-ai/codebase-composition": "^0.2.58", "@principal-ai/codebase-quality-lenses": "latest", "@principal-ai/repository-abstraction": "^0.5.7", "@principal-ai/repository-monitoring": "^0.1.12", "async-mutex": "^0.5.0", "globby": "^16.0.0", "minimatch": "^10.1.1", "uuid": "^9.0.0" }, "bin": { "repo-monitor-daemon": "dist/daemon/repository-monitoring-daemon.js" } }, "sha512-eNn2gqHkK0OAtxv2sqFCmIxwPdRS8uLWu4jFd1JTYPI0//6NGUI/F82SNgYb8qYcKmry4djHxtfP5Qo/+urtEQ=="],
+    "@principal-ai/repository-monitoring-server": ["@principal-ai/repository-monitoring-server@4.1.3", "", { "dependencies": { "@opentelemetry/api": "^1.9.0", "@opentelemetry/exporter-trace-otlp-http": "^0.200.0", "@opentelemetry/resources": "^2.0.0", "@opentelemetry/sdk-trace-node": "^2.0.0", "@opentelemetry/semantic-conventions": "^1.28.0", "@principal-ai/codebase-composition": "^0.2.58", "@principal-ai/codebase-quality-lenses": "latest", "@principal-ai/repository-abstraction": "^0.5.7", "@principal-ai/repository-monitoring": "^0.1.14", "async-mutex": "^0.5.0", "globby": "^16.0.0", "minimatch": "^10.1.1", "uuid": "^9.0.0" }, "bin": { "repo-monitor-daemon": "dist/daemon/repository-monitoring-daemon.js" } }, "sha512-IwdbsnmnTutnOXfMl2kz34HHjgORZhcgjq3OlWnVt/OP4lg2/sgizTjx9PeGvbwsSFe3zDCaHEp2iL2pxfKQ5A=="],
 
     "@principal-ai/subsystems-core": ["@principal-ai/subsystems-core@0.51.5", "", { "dependencies": { "better-sqlite3": "^13.0.0", "tree-sitter-wasms": "^0.1.13", "web-tree-sitter": "^0.25.10" }, "peerDependencies": { "@principal-ai/agent-monitoring": "^0.3.43" } }, "sha512-7lBWyn3oyveUh1b4NYIcj9xlnsKVcFOLZr3KPON9i95EMAs4iNGBzkiuJ2DvbWPAFYN8r8In86RuSyEUJNQ1Iw=="],
 
